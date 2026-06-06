@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui
 
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +30,7 @@ fun FlowtoneApp(
 ) {
     val context = LocalContext.current
     val uiState by musicViewModel.uiState.collectAsState()
+    val playbackState by musicViewModel.playbackState.collectAsState()
     var permissionDenied by remember {
         mutableStateOf(false)
     }
@@ -63,12 +63,13 @@ fun FlowtoneApp(
     ) { innerPadding ->
         LibraryScreen(
             uiState = uiState,
+            playbackState = playbackState,
             permissionDenied = permissionDenied,
             onRequestPermission = {
                 permissionLauncher.launch(currentAudioPermission())
             },
             onSongClick = { song ->
-                Log.d("Flowtone", "Song clicked: ${song.title}")
+                musicViewModel.playSong(song)
             },
             modifier = Modifier
                 .fillMaxSize()

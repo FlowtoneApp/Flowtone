@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.AudioScanner
 import ink.tenqui.flowtone.model.Song
+import ink.tenqui.flowtone.playback.PlaybackController
+import ink.tenqui.flowtone.playback.PlaybackState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,8 +25,11 @@ data class MusicUiState(
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val audioScanner = AudioScanner(application.contentResolver)
+    private val playbackController = PlaybackController(application)
     private val _uiState = MutableStateFlow(MusicUiState())
+
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
+    val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
 
     fun setPermissionStatus(hasPermission: Boolean) {
         _uiState.update {
@@ -74,5 +79,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    fun playSong(song: Song) {
+        playbackController.play(song)
+    }
+
+    fun togglePlayPause() {
+        playbackController.togglePlayPause()
+    }
+
+    override fun onCleared() {
+        playbackController.release()
+        super.onCleared()
     }
 }

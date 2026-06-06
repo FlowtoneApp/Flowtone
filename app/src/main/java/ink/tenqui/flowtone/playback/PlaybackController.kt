@@ -64,10 +64,19 @@ class PlaybackController(context: Context) {
 
     fun play() {
         player.play()
+        _playbackState.update {
+            it.copy(
+                isPlaying = true,
+                errorMessage = null
+            )
+        }
     }
 
     fun pause() {
         player.pause()
+        _playbackState.update {
+            it.copy(isPlaying = false)
+        }
     }
 
     fun togglePlayPause() {
