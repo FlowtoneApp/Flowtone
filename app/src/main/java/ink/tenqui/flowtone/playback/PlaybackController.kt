@@ -11,7 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-class PlaybackController(context: Context) {
+class PlaybackController(
+    context: Context,
+    private val onPlaybackEnded: () -> Unit
+) {
     private val player = ExoPlayer.Builder(context.applicationContext).build()
     private val _playbackState = MutableStateFlow(PlaybackState())
 
@@ -30,6 +33,15 @@ class PlaybackController(context: Context) {
                     isPlaying = false,
                     errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
                 )
+            }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                _playbackState.update {
+                    it.copy(isPlaying = false)
+                }
+                onPlaybackEnded()
             }
         }
     }

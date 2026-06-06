@@ -25,7 +25,10 @@ data class MusicUiState(
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val audioScanner = AudioScanner(application.contentResolver)
-    private val playbackController = PlaybackController(application)
+    private val playbackController = PlaybackController(
+        context = application,
+        onPlaybackEnded = ::playNext
+    )
     private val _uiState = MutableStateFlow(MusicUiState())
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
