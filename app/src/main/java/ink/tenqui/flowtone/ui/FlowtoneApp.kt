@@ -1,45 +1,55 @@
 package ink.tenqui.flowtone.ui
 
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
+import ink.tenqui.flowtone.ui.screens.LibraryScreen
+import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FlowtoneApp() {
+fun FlowtoneApp(
+    musicViewModel: MusicViewModel = viewModel()
+) {
     val context = LocalContext.current
-    var hasPermission by remember {
-        mutableStateOf(hasAudioPermission(context))
-    }
+    val uiState by musicViewModel.uiState.collectAsState()
     var permissionDenied by remember {
         mutableStateOf(false)
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        hasPermission = granted
+        musicViewModel.setPermissionStatus(granted)
         permissionDenied = !granted
+        if (granted) {
+            musicViewModel.scanSongs()
+        }
+    }
+
+    LaunchedEffect(context) {
+        val granted = hasAudioPermission(context)
+        musicViewModel.setPermissionStatus(granted)
+        if (granted) {
+            musicViewModel.scanSongs()
+        }
     }
 
     Scaffold(
@@ -51,43 +61,18 @@ fun FlowtoneApp() {
             )
         }
     ) { innerPadding ->
-        Column(
+        LibraryScreen(
+            uiState = uiState,
+            permissionDenied = permissionDenied,
+            onRequestPermission = {
+                permissionLauncher.launch(currentAudioPermission())
+            },
+            onSongClick = { song ->
+                Log.d("Flowtone", "Song clicked: ${song.title}")
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = when {
-                    hasPermission -> "已获得音频权限"
-                    permissionDenied -> "权限被拒绝"
-                    else -> "需要音频权限才能扫描本地音乐"
-                },
-                style = MaterialTheme.typography.displayMedium,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = if (hasPermission) {
-                    "下一步将扫描本地音乐"
-                } else {
-                    "下一步将请求音频权限"
-                },
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-            if (!hasPermission) {
-                Button(
-                    modifier = Modifier.padding(top = 24.dp),
-                    onClick = {
-                        permissionLauncher.launch(currentAudioPermission())
-                    }
-                ) {
-                    Text(text = "授予权限")
-                }
-            }
-        }
+        )
     }
 }
