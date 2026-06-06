@@ -65,6 +65,7 @@ fun FlowtoneApp(
             MiniPlayer(
                 playbackState = playbackState,
                 onTogglePlayPause = musicViewModel::togglePlayPause,
+                onPlayPrevious = musicViewModel::playPrevious,
                 onPlayNext = musicViewModel::playNext
             )
         }

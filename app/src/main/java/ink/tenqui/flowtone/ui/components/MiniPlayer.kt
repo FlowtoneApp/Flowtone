@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import ink.tenqui.flowtone.playback.PlaybackState
 fun MiniPlayer(
     playbackState: PlaybackState,
     onTogglePlayPause: () -> Unit,
+    onPlayPrevious: () -> Unit,
     onPlayNext: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -54,20 +56,25 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Button(onClick = onTogglePlayPause) {
-                Text(
-                    text = if (playbackState.isPlaying) {
-                        "\u6682\u505c"
-                    } else {
-                        "\u64ad\u653e"
-                    }
-                )
-            }
-            Button(
-                modifier = Modifier.padding(start = 8.dp),
-                onClick = onPlayNext
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "\u4e0b\u4e00\u66f2")
+                Button(onClick = onPlayPrevious) {
+                    Text(text = "\u4e0a\u4e00\u66f2")
+                }
+                Button(onClick = onTogglePlayPause) {
+                    Text(
+                        text = if (playbackState.isPlaying) {
+                            "\u6682\u505c"
+                        } else {
+                            "\u64ad\u653e"
+                        }
+                    )
+                }
+                Button(onClick = onPlayNext) {
+                    Text(text = "\u4e0b\u4e00\u66f2")
+                }
             }
         }
     }
