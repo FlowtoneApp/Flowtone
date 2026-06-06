@@ -38,6 +38,7 @@ fun LibraryScreen(
 
         uiState.isLoading -> CenterMessage(
             title = "\u6b63\u5728\u626b\u63cf\u672c\u5730\u97f3\u4e50",
+            subtitle = "\u6211\u4eec\u6b63\u5728\u67e5\u627e\u8bbe\u5907\u4e2d\u7684\u97f3\u4e50\u6587\u4ef6",
             modifier = modifier,
             showProgress = true
         )
@@ -49,11 +50,13 @@ fun LibraryScreen(
 
         !uiState.hasScanned -> CenterMessage(
             title = "\u51c6\u5907\u626b\u63cf\u672c\u5730\u97f3\u4e50",
+            subtitle = "\u6388\u6743\u540e\u5c06\u81ea\u52a8\u663e\u793a\u53ef\u64ad\u653e\u7684\u6b4c\u66f2",
             modifier = modifier
         )
 
         uiState.songs.isEmpty() -> CenterMessage(
             title = "\u6ca1\u6709\u627e\u5230\u672c\u5730\u97f3\u4e50",
+            subtitle = "\u8bf7\u786e\u8ba4\u8bbe\u5907\u4e2d\u5df2\u4fdd\u5b58\u97f3\u4e50\u6587\u4ef6",
             modifier = modifier
         )
 
@@ -89,12 +92,23 @@ private fun PermissionContent(
     ) {
         Text(
             text = if (permissionDenied) {
-                "\u6743\u9650\u88ab\u62d2\u7edd"
+                "\u65e0\u6cd5\u8bbf\u95ee\u672c\u5730\u97f3\u4e50"
             } else {
-                "\u9700\u8981\u97f3\u9891\u6743\u9650\u624d\u80fd\u626b\u63cf\u672c\u5730\u97f3\u4e50"
+                "\u9700\u8981\u97f3\u9891\u6743\u9650"
             },
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
+        )
+        Text(
+            text = if (permissionDenied) {
+                "\u6743\u9650\u88ab\u62d2\u7edd\uff0c\u53ef\u4ee5\u518d\u6b21\u6388\u6743\u540e\u7ee7\u7eed\u626b\u63cf"
+            } else {
+                "\u6388\u6743\u540e\uff0cFlowtone \u624d\u80fd\u626b\u63cf\u5e76\u64ad\u653e\u672c\u5730\u97f3\u4e50"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
         )
         Button(
             modifier = Modifier.padding(top = 24.dp),
@@ -108,6 +122,7 @@ private fun PermissionContent(
 @Composable
 private fun CenterMessage(
     title: String,
+    subtitle: String? = null,
     modifier: Modifier = Modifier,
     showProgress: Boolean = false
 ) {
@@ -131,6 +146,15 @@ private fun CenterMessage(
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center
             )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
     }
 }
