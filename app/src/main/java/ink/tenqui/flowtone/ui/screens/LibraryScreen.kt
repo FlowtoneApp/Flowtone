@@ -17,14 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.model.Song
-import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
 @Composable
 fun LibraryScreen(
     uiState: MusicUiState,
-    playbackState: PlaybackState,
+    currentSong: Song?,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -67,7 +66,7 @@ fun LibraryScreen(
             ) { song ->
                 SongListItem(
                     song = song,
-                    isCurrentSong = playbackState.currentSong?.id == song.id,
+                    isCurrentSong = currentSong?.id == song.id,
                     onClick = onSongClick
                 )
             }

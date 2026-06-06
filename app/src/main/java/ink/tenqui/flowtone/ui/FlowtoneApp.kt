@@ -72,7 +72,7 @@ fun FlowtoneApp(
     ) { innerPadding ->
         LibraryScreen(
             uiState = uiState,
-            playbackState = playbackState,
+            currentSong = playbackState.currentSong,
             permissionDenied = permissionDenied,
             onRequestPermission = {
                 permissionLauncher.launch(currentAudioPermission())
