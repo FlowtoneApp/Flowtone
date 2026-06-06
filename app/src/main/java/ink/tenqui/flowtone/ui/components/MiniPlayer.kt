@@ -5,15 +5,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.playback.PlaybackState
@@ -64,20 +70,31 @@ fun MiniPlayer(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = onPlayPrevious) {
-                    Text(text = "\u4e0a\u4e00\u66f2")
+                OutlinedIconButton(onClick = onPlayPrevious) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipPrevious,
+                        contentDescription = "\u4e0a\u4e00\u66f2"
+                    )
                 }
-                FilledTonalButton(onClick = onTogglePlayPause) {
-                    Text(
-                        text = if (playbackState.isPlaying) {
+                FilledTonalIconButton(onClick = onTogglePlayPause) {
+                    Icon(
+                        imageVector = if (playbackState.isPlaying) {
+                            Icons.Filled.Pause
+                        } else {
+                            Icons.Filled.PlayArrow
+                        },
+                        contentDescription = if (playbackState.isPlaying) {
                             "\u6682\u505c"
                         } else {
                             "\u64ad\u653e"
                         }
                     )
                 }
-                OutlinedButton(onClick = onPlayNext) {
-                    Text(text = "\u4e0b\u4e00\u66f2")
+                OutlinedIconButton(onClick = onPlayNext) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipNext,
+                        contentDescription = "\u4e0b\u4e00\u66f2"
+                    )
                 }
             }
         }
