@@ -56,3 +56,16 @@ Do not implement online music services, account system, lyrics, plugin system, o
 - Keep the app buildable after each milestone.
 - Run Gradle build after code changes when possible.
 - Avoid over-engineering.
+- 
+## Maintainability
+
+This project must be maintainable by the project owner, who is still learning Android development.
+
+Rules:
+- Prefer simple, explicit code over clever abstractions.
+- Do not introduce complex architecture unless clearly necessary.
+- After adding a new file or concept, explain why it exists.
+- Keep each file small and focused.
+- Avoid dependency injection frameworks for now.
+- Avoid advanced patterns before the basic player works.
+- Every implementation step should be understandable to a beginner-intermediate Android learner.

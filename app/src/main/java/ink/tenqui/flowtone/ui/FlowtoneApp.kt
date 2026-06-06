@@ -36,12 +36,12 @@ fun FlowtoneApp() {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "声流",
+                text = "准备扫描本地音乐",
                 style = MaterialTheme.typography.displayMedium,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "本地音乐播放器",
+                text = "下一步将请求音频权限",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
