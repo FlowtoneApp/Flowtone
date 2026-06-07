@@ -191,10 +191,24 @@ playQueue(songs, startIndex)
 
 #### Step 0.6.5
 
-- 处理系统媒体控件切歌后 App UI 状态同步。
-- 重点检查当前歌曲高亮和 MiniPlayer 当前歌曲信息。
-- 判断是否需要从 `MediaController` 当前 `MediaItem.mediaId` 反推 `Song`。
-- 不在 0.6.5 之前处理复杂 UI 改造。
+- 状态：已完成播放入口切换。
+- 已将 `MusicViewModel.playSongAt(index)` 改为调用 `PlaybackController.playQueue(playbackQueue, index)`。
+- 点击歌曲通过 `playSong(song) -> playSongAt(index)` 进入 `playQueue`。
+- App 内上一曲通过 `playPrevious() -> playSongAt(index)` 进入 `playQueue`。
+- App 内下一曲通过 `playNext() -> playSongAt(index)` 进入 `playQueue`。
+- `MusicViewModel` 仍负责 `playbackQueue` 和 `currentQueueIndex`。
+- `FlowtoneMediaSessionService` 仍不主动管理业务队列。
+- `PlaybackController.play(song)` 保留，作为单曲播放能力。
+- 自然播放下一首由 ExoPlayer playlist 处理，`onMediaItemTransition` 负责把当前媒体项变化同步回 `MusicViewModel`。
+- `Player.STATE_ENDED` 通常只在 playlist 结束时触发；现有 `playNext()` 在最后一首后会安全返回，不循环。
+
+#### Step 0.6.6
+
+- 继续真机验证系统媒体控件 previous / next 展示。
+- 继续检查系统媒体控件切歌后 App UI 状态同步。
+- 重点观察当前歌曲高亮和 MiniPlayer 当前歌曲信息。
+- 如状态同步仍不足，再根据 `MediaController` 当前 `MediaItem.mediaId` 继续补齐映射。
+- 不在验证前处理复杂 UI 改造。
 
 ### 当前禁止事项
 

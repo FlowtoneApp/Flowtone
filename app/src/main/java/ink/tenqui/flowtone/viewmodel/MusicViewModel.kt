@@ -108,9 +108,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val song = playbackQueue[index]
         currentQueueIndex = index
-        playbackController.play(song)
+        playbackController.playQueue(playbackQueue, index)
     }
 
     private fun syncCurrentQueueIndex() {

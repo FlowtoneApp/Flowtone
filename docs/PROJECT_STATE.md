@@ -224,6 +224,18 @@ Flowtone 是一个 Android 本地音乐播放器。当前阶段进入 Flowtone 0
 - 本步没有修改 Composable 或 UI。
 - `FlowtoneMediaSessionService` 仍只负责持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
 
+### Step 0.6.5：MusicViewModel 使用 playQueue 播放队列
+
+- 已将 `MusicViewModel` 的集中播放入口 `playSongAt(index)` 从 `PlaybackController.play(song)` 切换为 `PlaybackController.playQueue(playbackQueue, index)`。
+- 点击列表歌曲仍通过 `playSong(song) -> playSongAt(index)`，因此现在会走 `playQueue`。
+- App 内上一曲仍通过 `playPrevious() -> playSongAt(index)`，因此现在会走 `playQueue`。
+- App 内下一曲仍通过 `playNext() -> playSongAt(index)`，因此现在会走 `playQueue`。
+- `MusicViewModel` 仍然维护 `playbackQueue` 和 `currentQueueIndex`，未迁移队列所有权。
+- `PlaybackController.play(song)` 未删除，仍保留单曲播放能力。
+- `FlowtoneMediaSessionService` 仍只持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
+- 自然播放下一首主要由 ExoPlayer playlist 处理，`onMediaItemTransition` 会同步当前歌曲状态。
+- `Player.STATE_ENDED` 通常只在 playlist 末尾触发；此时现有 `playNext()` 会发现没有下一首并返回，因此本步不需要大改自动下一首逻辑。
+
 ## 当前架构
 
 ```text
@@ -299,9 +311,9 @@ app/src/main/java/ink/tenqui/flowtone/
 
 ## 下一阶段建议
 
-1. 下一步让 `MusicViewModel` 点击歌曲时调用 `playQueue`，验证系统媒体控件 previous / next 展示。
-2. 继续观察系统媒体控件切歌后 App UI 高亮和 MiniPlayer 状态同步。
-3. 如果状态同步仍不足，再根据 `MediaController` 当前 `MediaItem.mediaId` 继续补齐映射。
+1. 真机验证点击歌曲、App 内上一曲 / 下一曲、自然下一首和最后一首结束行为。
+2. 观察系统媒体控件是否开始基于 ExoPlayer playlist 展示 previous / next。
+3. 继续观察系统媒体控件切歌后 App UI 高亮和 MiniPlayer 状态同步。
 4. 后续再处理通知栏媒体控件、锁屏媒体区、耳机按钮和蓝牙媒体按钮。
 
 ## 禁止事项
