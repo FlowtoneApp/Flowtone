@@ -2,7 +2,7 @@
 
 ## 项目目标
 
-Flowtone 是一个 Android 本地音乐播放器。当前阶段是 Flowtone 0.5 收尾：播放核心链路已迁移到 MediaSessionService，并已通过真机验证具备后台播放核心能力；完整通知栏媒体控件、锁屏媒体区、耳机按钮 / 蓝牙媒体按钮体验留到后续版本。
+Flowtone 是一个 Android 本地音乐播放器。当前阶段进入 Flowtone 0.6 调查期：0.5 已完成后台播放核心链路，0.6 将围绕系统媒体控件、通知栏、锁屏媒体区、耳机按钮 / 蓝牙按钮做分步分析和实现。
 
 ## 当前技术栈
 
@@ -156,6 +156,40 @@ Flowtone 是一个 Android 本地音乐播放器。当前阶段是 Flowtone 0.5 
 - 该现象不阻塞 `v0.5-internal`，因为 0.5 目标是完成播放核心迁移到 `MediaSessionService`，不是完成通知栏媒体控件体验。
 - `v0.5-internal` 已完成后台播放核心链路：`MusicViewModel -> PlaybackController -> MediaController -> MediaSessionService -> ExoPlayer`。
 
+## Flowtone 0.6 当前进度
+
+### Step 0.6.1：系统媒体控件现状调查
+
+- 本步只做代码阅读和文档记录，未修改播放逻辑或 UI。
+- 当前播放链路仍是：`MusicViewModel -> PlaybackController -> MediaController -> FlowtoneMediaSessionService -> ExoPlayer`。
+- `FlowtoneMediaSessionService` 只负责创建、持有和释放 `ExoPlayer + MediaSession`。
+- `PlaybackController` 负责把 App 内播放命令转换为 `MediaController` 调用，并维护 UI 所需的 `PlaybackState`。
+- `FlowtoneMediaControllerConnection` 负责通过 `SessionToken` 异步连接 `FlowtoneMediaSessionService`。
+- `Song.toMediaItem()` 负责把 `Song` 转为带 `mediaId`、`uri`、标题、歌手 metadata 的 `MediaItem`。
+- 当前 `PlaybackController.play(song)` 每次只调用 `MediaController.setMediaItem(mediaItem)` 设置一首歌。
+- 当前 ExoPlayer / MediaSessionService 只持有当前单曲 `MediaItem`，没有持有完整播放列表。
+- 当前播放队列仍只存在于 `MusicViewModel.playbackQueue`。
+- 上一曲、下一曲、自动下一首仍由 `MusicViewModel` 通过 `currentQueueIndex` 和 `playSongAt(index)` 管理。
+- 系统媒体控件上一曲 / 下一曲体验不完整的主要原因：系统侧只看到当前单曲，无法从 ExoPlayer playlist 中推导完整队列边界。
+- 系统媒体控件出现类似 seek to start 按钮的可能原因：当前 MediaSession 暴露的是单曲播放能力和 seek 能力，而不是完整队列中的 previous / next 能力。
+- 该问题不影响 App 内上一曲 / 下一曲，因为 App 内控制仍由 `MusicViewModel` 队列逻辑驱动。
+- 后续如果要完善系统媒体控件上一曲 / 下一曲，需要在“队列同步到 MediaSession / ExoPlayer playlist”或“自定义 MediaSession 命令回到 ViewModel 队列逻辑”之间选择方案。
+
+### Step 0.6.2：系统媒体控件上一曲 / 下一曲方案设计
+
+- 本步只更新文档，未修改 Kotlin 播放逻辑或 UI。
+- 0.6 采用保守方案：`MusicViewModel` 继续拥有队列逻辑，`PlaybackController` 后续同步一份队列副本给 `MediaController / ExoPlayer playlist`。
+- 暂时不迁移完整队列所有权到 `FlowtoneMediaSessionService`，因为当前 `MusicViewModel` 队列逻辑已经稳定，直接迁移会同时影响 App 内播放、自动下一首、UI 高亮和系统媒体控件，风险过大。
+- 暂时不做 MediaSession 自定义 command 回调 ViewModel，因为这会引入系统命令到 ViewModel 的反向通道，生命周期和边界更复杂，不适合 0.6 的最小验证目标。
+- 0.6 的目标只是让系统媒体控件能基于 ExoPlayer playlist 获得 previous / next 能力。
+- 0.6 阶段 `MusicViewModel` 仍然负责 `playbackQueue`、`currentQueueIndex`、App 内上一曲、App 内下一曲、当前歌曲自然结束后的自动下一首。
+- 后续 `PlaybackController` 会新增队列播放入口，例如 `playQueue(songs, startIndex)`。
+- `playQueue` 的未来职责：将 `List<Song>` 转为 `List<MediaItem>`，调用 `MediaController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)`，然后 `prepare()` 和 `play()`。
+- `FlowtoneMediaSessionService` 暂时仍只负责持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
+- 0.6.3 只允许新增 `playQueue` 入口，先不接 UI。
+- 0.6.4 再让 `MusicViewModel` 点击歌曲时调用 `playQueue`。
+- 0.6.5 再处理系统媒体控件切歌后 App UI 高亮和 MiniPlayer 状态同步问题。
+
 ## 当前架构
 
 ```text
@@ -231,10 +265,10 @@ app/src/main/java/ink/tenqui/flowtone/
 
 ## 下一阶段建议
 
-1. 可以将当前状态作为 `v0.5-internal` 收尾状态，继续真机验证 App 内播放和后台播放核心链路。
-2. 后续再处理通知栏媒体控件和系统上一曲 / 下一曲控制。
-3. 通知栏稳定后，再处理后台播放生命周期策略、锁屏媒体区、耳机按钮和蓝牙媒体按钮。
-4. 队列是否迁移到 `MediaSessionService` 或 ExoPlayer playlist，应在外部媒体控制验证后再决定。
+1. 0.6.3 新增 `PlaybackController.playQueue(songs, startIndex)`，只建立队列播放入口，不接 UI。
+2. 0.6.4 让 `MusicViewModel` 点击歌曲时调用 `playQueue`，验证系统媒体控件 previous / next 展示。
+3. 0.6.5 处理系统媒体控件切歌后 App UI 高亮和 MiniPlayer 状态同步。
+4. 后续再处理通知栏媒体控件、锁屏媒体区、耳机按钮和蓝牙媒体按钮。
 
 ## 禁止事项
 

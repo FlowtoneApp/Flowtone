@@ -36,6 +36,153 @@ Composable -> MusicViewModel -> PlaybackController -> MediaController -> MediaSe
 - 只有在系统“已开启的应用”中手动关闭 Flowtone 后，播放服务才会停止。
 - 当前系统媒体控件还没有完整上一曲 / 下一曲体验，可能出现类似 seek to start 的按钮。
 
+## 0.6.1 System Media Controls Investigation
+
+本节记录 Flowtone 0.6.1 对系统媒体控件现状的代码阅读结论。本步不修改播放逻辑，不修改 UI，不迁移队列。
+
+### 当前职责边界
+
+- `FlowtoneMediaSessionService`：唯一持有 `ExoPlayer + MediaSession`，负责 Service 生命周期内播放器创建、会话暴露和释放。
+- `FlowtoneMediaControllerConnection`：使用 `SessionToken` 指向 `FlowtoneMediaSessionService`，异步创建并释放 `MediaController`。
+- `PlaybackController`：通过 `MediaController` 执行 `setMediaItem()`、`prepare()`、`play()`、`pause()`，并监听 `Player.STATE_ENDED` 通知 `MusicViewModel`。
+- `MusicViewModel`：仍然持有 `playbackQueue` 和 `currentQueueIndex`，负责 App 内上一曲、下一曲、自动下一首。
+- `Song.toMediaItem()`：只负责把当前 `Song` 转成带 `mediaId`、`uri`、标题、歌手 metadata 的单个 `MediaItem`。
+
+### 当前 MediaItem / 队列状态
+
+- `PlaybackController.play(song)` 每次只调用 `MediaController.setMediaItem(mediaItem)`。
+- 当前没有调用 `setMediaItems(...)`。
+- 当前没有把 `MusicViewModel.playbackQueue` 同步到 `ExoPlayer` playlist。
+- 当前 `FlowtoneMediaSessionService` / ExoPlayer 只知道当前播放的单曲 `MediaItem`。
+- 当前完整播放队列仍只存在于 `MusicViewModel`。
+
+### 系统上一曲 / 下一曲不完整的判断
+
+系统媒体控件通常依赖 MediaSession 暴露的 Player 能力、当前 timeline、playlist 以及可用命令来决定显示哪些按钮。
+
+当前 Flowtone 对系统侧暴露的是“当前单曲”而不是“完整播放队列”，因此系统无法稳定推导：
+
+- 当前歌曲前面是否有上一首。
+- 当前歌曲后面是否有下一首。
+- previous / next 应该跳到哪个媒体项。
+
+App 内上一曲 / 下一曲仍然正常，是因为它们由 `MusicViewModel` 的 `playbackQueue + currentQueueIndex` 驱动，不依赖 ExoPlayer playlist。
+
+### seek to start 类按钮的可能原因
+
+当前 MediaSession / ExoPlayer 只持有单曲时，系统可能优先展示单曲级控制能力，例如暂停、播放、seek、seek to previous position 或回到开头。
+
+当系统无法确认存在完整上一曲 / 下一曲队列时，它可能不展示稳定的 previous / next，而显示类似 seek to start 的按钮。
+
+这与当前现象一致：暂停键可用，但上一曲 / 下一曲体验不完整。
+
+### 后续方向
+
+后续如果要完善系统媒体控件上一曲 / 下一曲，需要二选一或分阶段验证：
+
+1. 将 `MusicViewModel` 队列同步到 `MediaController / ExoPlayer playlist`，让系统能看到完整 timeline。
+2. 保持队列在 `MusicViewModel`，通过 MediaSession 自定义命令或回调把系统 previous / next 转回 ViewModel 队列逻辑。
+
+保守建议：
+
+- 先不要立即迁移完整队列所有权。
+- 先设计最小验证方案，确认系统媒体控件按钮展示和命令回调行为。
+- 再决定是否把队列迁移到 Service / ExoPlayer playlist。
+
+## 0.6.2 Previous / Next 方案设计
+
+本节记录 Flowtone 0.6 对系统媒体控件上一曲 / 下一曲的保守实现方案。本步只更新文档，不修改 Kotlin 播放逻辑，不修改 UI。
+
+### 方案选择
+
+0.6 采用以下方案：
+
+```text
+MusicViewModel 继续拥有业务队列
+PlaybackController 同步一份队列副本给 MediaController / ExoPlayer playlist
+FlowtoneMediaSessionService 继续只持有 ExoPlayer + MediaSession
+```
+
+目标不是在 0.6 彻底迁移队列所有权，而是让系统媒体控件能基于 ExoPlayer playlist 获得稳定的 previous / next 能力。
+
+### 为什么暂时不迁移完整队列所有权到 Service
+
+- 当前 `MusicViewModel` 已经稳定维护 `playbackQueue` 和 `currentQueueIndex`。
+- App 内上一曲、下一曲、自动下一首都依赖这套逻辑。
+- 直接把队列所有权迁移到 `FlowtoneMediaSessionService` 会同时影响播放控制、UI 高亮、MiniPlayer 状态、自动下一首和后续生命周期。
+- 对当前阶段来说，完整迁移风险大于收益。
+- 0.6 的首要目标是验证系统媒体控件 previous / next，不是重构业务队列归属。
+
+### 为什么暂时不做 MediaSession 自定义 command 回调 ViewModel
+
+- 自定义 command 需要把系统媒体命令从 `MediaSessionService` 回传到 App 侧 ViewModel 队列逻辑。
+- 这会引入 Service 到 ViewModel 的反向通道，生命周期边界更复杂。
+- App 可能在后台、前台、被划掉、重新进入等状态下接收系统命令，处理不当容易造成状态不同步。
+- 对 Android 初学者维护来说，自定义命令方案更抽象，调试成本更高。
+- 0.6 更适合先验证 ExoPlayer playlist 这种标准 Player timeline 方案。
+
+### 0.6 阶段职责边界
+
+`MusicViewModel` 继续负责：
+
+- `playbackQueue`
+- `currentQueueIndex`
+- App 内上一曲
+- App 内下一曲
+- 当前歌曲自然结束后的自动下一首
+
+`PlaybackController` 后续新增队列播放入口，例如：
+
+```text
+playQueue(songs, startIndex)
+```
+
+`playQueue` 的未来职责：
+
+- 将 `List<Song>` 转为 `List<MediaItem>`。
+- 调用 `MediaController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)`。
+- 调用 `prepare()`。
+- 调用 `play()`。
+
+`FlowtoneMediaSessionService` 暂时仍只负责：
+
+- 持有 `ExoPlayer`。
+- 持有 `MediaSession`。
+- 暴露 `MediaSession` 给系统和 `MediaController`。
+- 不主动管理业务队列。
+
+### 分步计划
+
+#### Step 0.6.3
+
+- 新增 `PlaybackController.playQueue(songs, startIndex)`。
+- 只建立队列播放入口。
+- 暂时不接 UI。
+- 暂时不修改 `MusicViewModel` 点击歌曲逻辑。
+- 验证 build 通过。
+
+#### Step 0.6.4
+
+- 让 `MusicViewModel` 点击歌曲时调用 `playQueue(songs, startIndex)`。
+- 保留 `MusicViewModel` 的 `playbackQueue` 和 `currentQueueIndex`。
+- 验证 App 内点击播放、上一曲、下一曲、自动下一首。
+- 验证系统媒体控件是否开始展示 previous / next。
+
+#### Step 0.6.5
+
+- 处理系统媒体控件切歌后 App UI 状态同步。
+- 重点检查当前歌曲高亮和 MiniPlayer 当前歌曲信息。
+- 判断是否需要从 `MediaController` 当前 `MediaItem.mediaId` 反推 `Song`。
+- 不在 0.6.5 之前处理复杂 UI 改造。
+
+### 当前禁止事项
+
+- 不迁移队列所有权到 Service。
+- 不把业务队列直接交给 Composable。
+- 不让 `MusicViewModel` 直接持有 `ExoPlayer` 或 `MediaSession`。
+- 不做 MediaSession 自定义 command 回调 ViewModel。
+- 不为了 previous / next 引入 Hilt、Room、Navigation 等新框架。
+
 ## 为什么 0.5 需要考虑 MediaSessionService
 
 基础 `MediaSession` 已能让播放器具备系统媒体会话的基础结构，但它仍然跟随当前应用界面和 ViewModel 生命周期。
