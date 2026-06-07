@@ -1,6 +1,6 @@
 ﻿# MediaSessionService 迁移方案
 
-## 当前 v0.4 / v0.5.2 架构
+## 当前 v0.4 / v0.5.3 架构
 
 当前播放链路：
 
@@ -14,9 +14,15 @@ Composable -> MusicViewModel -> PlaybackController -> ExoPlayer
 - `MusicViewModel`：持有歌曲列表、播放队列、当前索引，处理上一曲、下一曲、自动下一首。
 - `PlaybackController`：私有持有 `ExoPlayer` 和基础 `MediaSession`，负责播放、暂停、释放播放器。
 - `ExoPlayer`：执行实际播放。
-- `FlowtoneMediaSessionService`：0.5.2 新增的空壳 Service，当前不持有播放器，不接管播放。
+- `FlowtoneMediaSessionService`：0.5.3 已持有自己的 `ExoPlayer` 和 `MediaSession`，当前用于验证 Service 生命周期，尚未接管 App 内播放。
 
 当前边界是清楚的：UI 不直接接触 `ExoPlayer` 或 `MediaSession`。
+
+当前也是临时双播放器过渡状态：
+
+- `PlaybackController` 内的播放器仍负责现有 App 内实际播放。
+- `FlowtoneMediaSessionService` 内的播放器只用于建立未来 Service 生命周期。
+- 后续步骤必须移除 `PlaybackController` 内的播放器所有权，避免长期双播放器架构。
 
 ## 为什么 0.5 需要考虑 MediaSessionService
 
@@ -135,11 +141,27 @@ MusicViewModel -> PlaybackClient / MediaController -> MediaSessionService
 
 ### Step 0.5.3：将 ExoPlayer / MediaSession 所有权迁移到 Service
 
+状态：部分完成。
+
+当前 0.5.3 已完成：
+
+- Service 已在 `onCreate()` 中创建内部 `ExoPlayer`。
+- Service 已在 `onCreate()` 中创建内部 `MediaSession`。
+- `onGetSession()` 已返回 Service 内部 `MediaSession`。
+- Service 已在 `onDestroy()` 中释放 `MediaSession` 和 `ExoPlayer`，并将引用置空。
+
+当前 0.5.3 尚未完成完整迁移：
+
+- App 内实际播放仍由 `PlaybackController` 完成。
+- `MusicViewModel` 尚未通过 `MediaController` 控制 Service。
+- 队列所有权仍在 `MusicViewModel`。
+- 尚未把队列改成 ExoPlayer playlist。
+
 目标：
 
-- Service 创建并持有 `ExoPlayer`。
-- Service 创建并持有 `MediaSession`。
-- `PlaybackController` 不再拥有播放器，或被改造成 Service 内部控制器。
+- 完成 Service 创建并持有 `ExoPlayer`。
+- 完成 Service 创建并持有 `MediaSession`。
+- 后续步骤让 `PlaybackController` 不再拥有播放器，或被改造成 Service 内部控制器。
 
 风险点：
 
@@ -149,11 +171,10 @@ MusicViewModel -> PlaybackClient / MediaController -> MediaSessionService
 
 验收标准：
 
-- 点击歌曲播放正常。
-- 播放 / 暂停正常。
-- 上一曲 / 下一曲正常。
-- 自动下一首正常。
-- App 前后台切换不崩溃。
+- 当前阶段 App build 成功。
+- 当前阶段 App 内现有播放行为不变。
+- 当前阶段 App 前后台切换不崩溃。
+- 后续完整迁移后，点击歌曲、播放 / 暂停、上一曲 / 下一曲、自动下一首都应正常。
 
 ### Step 0.5.4：ViewModel 通过 MediaController 控制播放
 
