@@ -43,13 +43,14 @@ fun MiniPlayer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 22.dp),
+                .padding(horizontal = 30.dp, vertical = 22.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(end = 16.dp)
+                    .padding(end = 16.dp),
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = currentSong.title,
