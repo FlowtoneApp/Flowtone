@@ -3,13 +3,13 @@ package ink.tenqui.flowtone.ui.components
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,9 +26,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,12 +47,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import ink.tenqui.flowtone.playback.PlaybackState
+
+private const val MINI_PLAYER_ANIMATION_DURATION_MS = 390
 
 @Composable
 fun MiniPlayer(
@@ -90,10 +91,14 @@ fun MiniPlayer(
     } else {
         heightLimitedArtworkSize
     }
+    val expandedArtworkTop = 24.dp
+    val expandedMetadataTop = expandedArtworkTop + expandedArtworkSize + 14.dp
+    val expandedLyricTop = expandedMetadataTop + 72.dp
+    val expandedControlsTop = expandedLyricTop + 62.dp
     val animationProgress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
         animationSpec = tween(
-            durationMillis = 300,
+            durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = FastOutSlowInEasing
         ),
         label = "MiniPlayerProgress"
@@ -155,17 +160,6 @@ fun MiniPlayer(
     } else {
         MaterialTheme.colorScheme.primary
     }
-    val outlinedButtonBorder = BorderStroke(
-        width = 1.dp,
-        color = if (hasArtworkBackground) {
-            Color.White.copy(alpha = 0.72f)
-        } else {
-            MaterialTheme.colorScheme.outline
-        }
-    )
-    val outlinedButtonColors = IconButtonDefaults.outlinedIconButtonColors(
-        contentColor = controlIconColor
-    )
     var accumulatedDragY by remember { mutableStateOf(0f) }
     val gestureModifier = Modifier.pointerInput(expanded, swipeThresholdPx) {
         detectVerticalDragGestures(
@@ -228,12 +222,13 @@ fun MiniPlayer(
                     onExpandedChange(true)
                 }
         ) {
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(currentHeight),
                 contentAlignment = Alignment.BottomCenter
             ) {
+                val playerWidth = maxWidth
                 backgroundImageRequest?.let { request ->
                     Box(
                         modifier = Modifier
@@ -265,166 +260,79 @@ fun MiniPlayer(
                     artworkSize = expandedArtworkSize,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 36.dp)
+                        .padding(top = expandedArtworkTop)
                 )
-                ExpandedPlayerControls(
+                ExpandedOnlyContent(
                     progress = animationProgress,
                     lyricColor = expandedSecondaryColor,
                     progressTrackColor = progressTrackColor,
                     progressColor = progressColor,
-                    iconColor = controlIconColor,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = expandedLyricTop)
+                )
+                SharedSongInfo(
                     title = currentSong.title,
                     artist = currentSong.artist,
+                    progress = animationProgress,
                     titleColor = titleColor,
                     artistColor = artistColor,
+                    playerWidth = playerWidth,
+                    collapsedHeight = collapsedHeight,
+                    expandedArtworkSize = expandedArtworkSize,
+                    expandedTop = expandedMetadataTop,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                )
+                SharedPlaybackControls(
+                    progress = animationProgress,
                     isPlaying = playbackState.isPlaying,
+                    iconColor = controlIconColor,
+                    screenWidth = playerWidth,
+                    collapsedHeight = collapsedHeight,
+                    expandedTop = expandedControlsTop,
                     onPlayPrevious = onPlayPrevious,
                     onTogglePlayPause = onTogglePlayPause,
                     onPlayNext = onPlayNext,
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = expandedArtworkSize + 64.dp)
+                        .align(Alignment.TopStart)
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 30.dp, vertical = 22.dp)
-                        .graphicsLayer {
-                            alpha = 1f - animationProgress
-                        },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 16.dp),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = currentSong.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = titleColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = currentSong.artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = artistColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedIconButton(
-                            onClick = onPlayPrevious,
-                            colors = outlinedButtonColors,
-                            border = outlinedButtonBorder
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.SkipPrevious,
-                                contentDescription = "\u4e0a\u4e00\u66f2",
-                                tint = controlIconColor
-                            )
-                        }
-                        OutlinedIconButton(
-                            onClick = onTogglePlayPause,
-                            colors = outlinedButtonColors,
-                            border = outlinedButtonBorder
-                        ) {
-                            Icon(
-                                imageVector = if (playbackState.isPlaying) {
-                                    Icons.Filled.Pause
-                                } else {
-                                    Icons.Filled.PlayArrow
-                                },
-                                contentDescription = if (playbackState.isPlaying) {
-                                    "\u6682\u505c"
-                                } else {
-                                    "\u64ad\u653e"
-                                },
-                                tint = controlIconColor
-                            )
-                        }
-                        OutlinedIconButton(
-                            onClick = onPlayNext,
-                            colors = outlinedButtonColors,
-                            border = outlinedButtonBorder
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.SkipNext,
-                                contentDescription = "\u4e0b\u4e00\u66f2",
-                                tint = controlIconColor
-                            )
-                        }
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-private fun ExpandedPlayerControls(
+private fun ExpandedOnlyContent(
     progress: Float,
     lyricColor: Color,
     progressTrackColor: Color,
     progressColor: Color,
-    iconColor: Color,
-    title: String,
-    artist: String,
-    titleColor: Color,
-    artistColor: Color,
-    isPlaying: Boolean,
-    onPlayPrevious: () -> Unit,
-    onTogglePlayPause: () -> Unit,
-    onPlayNext: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    val translationY = with(density) {
-        (24.dp * (1f - progress)).toPx()
+    fun offsetPx(dp: androidx.compose.ui.unit.Dp): Float = with(density) {
+        (dp * (1f - progress)).toPx()
     }
+    val helperAlpha = 0.85f + 0.15f * progress
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                alpha = progress
-                this.translationY = translationY
-            },
+            .fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = titleColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(0.82f),
-        )
-        Text(
-            text = artist,
-            style = MaterialTheme.typography.bodyMedium,
-            color = artistColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth(0.82f)
-                .padding(top = 4.dp),
-        )
         Text(
             text = "\u266a \u6682\u65e0\u6b4c\u8bcd",
             style = MaterialTheme.typography.bodyMedium,
             color = lyricColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 14.dp)
+            modifier = Modifier
+                .padding(top = 14.dp)
+                .graphicsLayer {
+                    alpha = helperAlpha
+                    translationY = offsetPx(40.dp)
+                }
         )
         FakeProgressBar(
             progress = 0.35f,
@@ -433,53 +341,162 @@ private fun ExpandedPlayerControls(
             modifier = Modifier
                 .padding(top = 18.dp)
                 .fillMaxWidth(0.76f)
+                .graphicsLayer {
+                    alpha = helperAlpha
+                scaleX = 0.92f + (1f - 0.92f) * progress
+                translationY = offsetPx(36.dp)
+            }
         )
-        Row(
-            modifier = Modifier.padding(top = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(36.dp),
-            verticalAlignment = Alignment.CenterVertically
+    }
+}
+
+@Composable
+private fun SharedSongInfo(
+    title: String,
+    artist: String,
+    progress: Float,
+    titleColor: Color,
+    artistColor: Color,
+    playerWidth: Dp,
+    collapsedHeight: Dp,
+    expandedArtworkSize: Dp,
+    expandedTop: Dp,
+    modifier: Modifier = Modifier
+) {
+    val metadataGroupHeight = 60.dp
+    val collapsedCenterY = collapsedHeight / 2f
+    val collapsedMetadataX = 30.dp
+    val collapsedControlsReservedWidth = 48.dp * 3f + 8.dp * 2f + 30.dp
+    val collapsedMetadataWidth = playerWidth - collapsedMetadataX - collapsedControlsReservedWidth
+    val collapsedMetadataY = collapsedCenterY - metadataGroupHeight / 2f
+    val expandedMetadataWidth = expandedArtworkSize
+    val expandedMetadataX = (playerWidth - expandedArtworkSize) / 2f
+    val expandedMetadataY = expandedTop
+    val metadataX = lerpDp(collapsedMetadataX, expandedMetadataX, progress)
+    val metadataY = lerpDp(collapsedMetadataY, expandedMetadataY, progress)
+    val metadataWidth = lerpDp(collapsedMetadataWidth, expandedMetadataWidth, progress)
+    val metadataScale = lerpFloat(0.95f, 1.2f, progress)
+
+    Column(
+        modifier = modifier
+            .width(metadataWidth)
+            .height(metadataGroupHeight)
+            .graphicsLayer {
+                translationX = metadataX.toPx()
+                translationY = metadataY.toPx()
+                scaleX = metadataScale
+                scaleY = metadataScale
+            },
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = titleColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = artist,
+            style = MaterialTheme.typography.bodyMedium,
+            color = artistColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun SharedPlaybackControls(
+    progress: Float,
+    isPlaying: Boolean,
+    iconColor: Color,
+    screenWidth: Dp,
+    collapsedHeight: Dp,
+    expandedTop: Dp,
+    onPlayPrevious: () -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onPlayNext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val collapsedTouchSize = 48.dp
+    val expandedPreviousNextTouchSize = 64.dp
+    val expandedPlayPauseTouchSize = 80.dp
+    val collapsedSpacing = 8.dp
+    val expandedSpacing = 36.dp
+    val previousNextTouchSize = lerpDp(collapsedTouchSize, expandedPreviousNextTouchSize, progress)
+    val playPauseTouchSize = lerpDp(collapsedTouchSize, expandedPlayPauseTouchSize, progress)
+    val previousNextIconSize = lerpDp(24.dp, 32.dp, progress)
+    val playPauseIconSize = lerpDp(28.dp, 42.dp, progress)
+    val spacing = lerpDp(collapsedSpacing, expandedSpacing, progress)
+    val collapsedControlsWidth = collapsedTouchSize * 3f + collapsedSpacing * 2f
+    val expandedControlsWidth = expandedPreviousNextTouchSize * 2f +
+        expandedPlayPauseTouchSize +
+        expandedSpacing * 2f
+    val controlsWidth = previousNextTouchSize * 2f + playPauseTouchSize + spacing * 2f
+    val collapsedLeft = screenWidth - collapsedControlsWidth - 30.dp
+    val expandedLeft = (screenWidth - expandedControlsWidth) / 2f
+    val collapsedControlsY = (collapsedHeight - collapsedTouchSize) / 2f
+    val currentLeft = lerpDp(collapsedLeft, expandedLeft, progress)
+    val currentTop = lerpDp(collapsedControlsY, expandedTop, progress)
+
+    Row(
+        modifier = modifier
+            .width(controlsWidth)
+            .graphicsLayer {
+                translationX = currentLeft.toPx()
+                translationY = currentTop.toPx()
+            },
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TransparentControlButton(
+            onClick = onPlayPrevious,
+            modifier = Modifier.size(previousNextTouchSize)
         ) {
-            TransparentControlButton(
-                onClick = onPlayPrevious,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SkipPrevious,
-                    contentDescription = "\u4e0a\u4e00\u66f2",
-                    tint = iconColor,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            TransparentControlButton(
-                onClick = onTogglePlayPause,
-                modifier = Modifier.size(72.dp)
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) {
-                        Icons.Filled.Pause
-                    } else {
-                        Icons.Filled.PlayArrow
-                    },
-                    contentDescription = if (isPlaying) {
-                        "\u6682\u505c"
-                    } else {
-                        "\u64ad\u653e"
-                    },
-                    tint = iconColor,
-                    modifier = Modifier.size(42.dp)
-                )
-            }
-            TransparentControlButton(
-                onClick = onPlayNext,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SkipNext,
-                    contentDescription = "\u4e0b\u4e00\u66f2",
-                    tint = iconColor,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Filled.SkipPrevious,
+                contentDescription = "\u4e0a\u4e00\u66f2",
+                tint = iconColor,
+                modifier = Modifier.size(previousNextIconSize)
+            )
+        }
+        TransparentControlButton(
+            onClick = onTogglePlayPause,
+            modifier = Modifier.size(playPauseTouchSize)
+        ) {
+            Icon(
+                imageVector = if (isPlaying) {
+                    Icons.Filled.Pause
+                } else {
+                    Icons.Filled.PlayArrow
+                },
+                contentDescription = if (isPlaying) {
+                    "\u6682\u505c"
+                } else {
+                    "\u64ad\u653e"
+                },
+                tint = iconColor,
+                modifier = Modifier.size(playPauseIconSize)
+            )
+        }
+        TransparentControlButton(
+            onClick = onPlayNext,
+            modifier = Modifier.size(previousNextTouchSize)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SkipNext,
+                contentDescription = "\u4e0b\u4e00\u66f2",
+                tint = iconColor,
+                modifier = Modifier.size(previousNextIconSize)
+            )
         }
     }
 }
@@ -538,15 +555,16 @@ private fun ExpandedArtwork(
 ) {
     val shape = RoundedCornerShape(24.dp)
     val translationY = with(LocalDensity.current) {
-        (24.dp * (1f - progress)).toPx()
+        (80.dp * (1f - progress)).toPx()
     }
-    val scale = 0.92f + (1f - 0.92f) * progress
+    val scale = 0.82f + (1f - 0.82f) * progress
+    val helperAlpha = 0.9f + 0.1f * progress
 
     Box(
         modifier = modifier
             .size(artworkSize)
             .graphicsLayer {
-                alpha = progress
+                alpha = helperAlpha
                 scaleX = scale
                 scaleY = scale
                 this.translationY = translationY
@@ -570,4 +588,12 @@ private fun ExpandedArtwork(
             )
         }
     }
+}
+
+private fun lerpFloat(start: Float, end: Float, progress: Float): Float {
+    return start + (end - start) * progress.coerceIn(0f, 1f)
+}
+
+private fun lerpDp(start: Dp, end: Dp, progress: Float): Dp {
+    return start + (end - start) * progress.coerceIn(0f, 1f)
 }

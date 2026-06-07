@@ -37,6 +37,22 @@ android {
     }
 }
 
+android {
+    buildTypes {
+        create("benchmark") {
+            initWith(getByName("release"))
+
+            signingConfig = signingConfigs.getByName("debug")
+
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+
+            matchingFallbacks += listOf("release")
+        }
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
