@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 import ink.tenqui.flowtone.model.Song
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +16,7 @@ class PlaybackController(
     private val onPlaybackEnded: () -> Unit
 ) {
     private val player = ExoPlayer.Builder(context.applicationContext).build()
+    private val mediaSession = MediaSession.Builder(context.applicationContext, player).build()
     private val _playbackState = MutableStateFlow(PlaybackState())
 
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -100,6 +102,7 @@ class PlaybackController(
 
     fun release() {
         player.removeListener(listener)
+        mediaSession.release()
         player.release()
     }
 }
