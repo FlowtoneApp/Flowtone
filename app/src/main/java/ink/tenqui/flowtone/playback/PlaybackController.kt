@@ -149,6 +149,7 @@ class PlaybackController(
         }
 
         isReleased = true
+        pendingSong = null
         mediaControllerConnection.currentController?.removeListener(listener)
         mediaControllerConnection.release()
     }

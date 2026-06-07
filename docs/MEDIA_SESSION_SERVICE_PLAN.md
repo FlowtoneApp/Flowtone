@@ -1,6 +1,6 @@
 ﻿# MediaSessionService 迁移方案
 
-## 当前 v0.5.6 架构
+## 当前 v0.5 收尾架构
 
 当前播放链路：
 
@@ -25,6 +25,16 @@ Composable -> MusicViewModel -> PlaybackController -> MediaController -> MediaSe
 - `PlaybackController` 不再创建本地 `MediaSession`。
 - 实际播放由 `FlowtoneMediaSessionService` 内部 ExoPlayer 执行。
 - 队列逻辑仍保留在 `MusicViewModel`。
+
+0.5.7 真机验证后，Flowtone 已具备后台播放核心链路：
+
+- App 内播放正常。
+- Android 系统媒体控件可以识别 Flowtone。
+- 系统媒体控件暂停键可用。
+- App 切到后台后播放继续。
+- 从最近任务中划掉 Flowtone 后，音乐仍继续播放。
+- 只有在系统“已开启的应用”中手动关闭 Flowtone 后，播放服务才会停止。
+- 当前系统媒体控件还没有完整上一曲 / 下一曲体验，可能出现类似 seek to start 的按钮。
 
 ## 为什么 0.5 需要考虑 MediaSessionService
 
@@ -292,7 +302,7 @@ MusicViewModel -> PlaybackClient / MediaController -> MediaSessionService
 当前仍未完成：
 
 - 尚未实现通知栏媒体控件。
-- 尚未实现真正后台播放。
+- 当时尚未完成后台播放真机验证。
 - 尚未迁移队列所有权。
 - 尚未把队列改成 ExoPlayer playlist。
 
@@ -317,13 +327,67 @@ MusicViewModel -> PlaybackClient / MediaController -> MediaSessionService
 - 标题 / 歌手正确。
 - 不影响 App 内 MiniPlayer。
 
-### Step 0.5.7：后台播放和外部按钮验证
+### Step 0.5.7：记录 Service 播放迁移后的系统媒体行为
+
+状态：已完成验证记录，并收尾 `v0.5-internal`。
 
 目标：
 
-- 验证后台播放。
+- 记录 0.5.6 播放迁移到 `MediaController -> MediaSessionService` 后的系统媒体表现。
+- 检查 `PlaybackController`、`FlowtoneMediaControllerConnection` 和 `FlowtoneMediaSessionService` 的生命周期边界。
+- 不新增通知栏 UI。
+- 不自定义系统媒体按钮。
+- 不迁移队列所有权。
+
+已检查内容：
+
+- `PlaybackController.release()` 不直接释放 Service 内 ExoPlayer。
+- `FlowtoneMediaSessionService.onDestroy()` 会释放 `MediaSession` 和 `ExoPlayer`。
+- `Player.STATE_ENDED` 仍通过 `PlaybackController` 的 `Player.Listener` 通知 `MusicViewModel` 自动下一首。
+- `pendingSong` 逻辑保持简单，只暂存最近一次播放请求。
+- `PlaybackController.release()` 会清空 `pendingSong`。
+
+真机观察：
+
+- App 内播放正常。
+- Android 系统媒体控件能够识别 Flowtone 的播放会话。
+- 系统媒体控件中的暂停键可用。
+- App 切到后台后播放继续。
+- 从最近任务中划掉 Flowtone 后，音乐仍继续播放。
+- 只有在系统“已开启的应用”中手动关闭 Flowtone 后，播放服务才会停止。
+- 系统媒体控件暂未完成上一曲 / 下一曲控制。
+- 当前可能出现类似 seek to start 的按钮。
+- 该现象可能与当前队列仍由 `MusicViewModel` 管理，而 `MediaSessionService` / ExoPlayer 只持有当前单曲 `MediaItem` 有关。
+
+结论：
+
+- 该现象不阻塞 `v0.5-internal`。
+- `v0.5-internal` 的目标是完成播放核心迁移到 `MediaSessionService`，并验证后台播放核心链路。
+- `v0.5-internal` 已完成核心链路：`MusicViewModel -> PlaybackController -> MediaController -> MediaSessionService -> ExoPlayer`。
+- 通知栏媒体控件体验、系统上一曲 / 下一曲、队列同步应进入后续系统媒体控件 / 队列同步阶段处理。
+
+风险点：
+
+- 外部上一曲 / 下一曲与当前 ViewModel 队列逻辑尚未打通。
+- 如果后续要让系统媒体控件完整展示上一曲 / 下一曲，可能需要同步队列或自定义 MediaSession 命令。
+- 通知栏、锁屏和耳机按钮行为仍需后续真机验证。
+
+验收标准：
+
+- App build 成功。
+- App 内播放、暂停、上一曲、下一曲、自动下一首正常。
+- 最后一首结束后仍然停止，不循环。
+- `FlowtoneMediaSessionService` 仍是唯一持有 `ExoPlayer` 和 `MediaSession` 的位置。
+- 后台播放核心链路已通过真机验证。
+
+### Step 0.5.8：系统媒体控件和外部按钮验证
+
+目标：
+
+- 继续细化后台播放生命周期策略。
 - 验证锁屏媒体区。
 - 验证耳机按钮 / 蓝牙媒体按钮。
+- 处理系统媒体控件上一曲 / 下一曲。
 
 风险点：
 
@@ -333,14 +397,14 @@ MusicViewModel -> PlaybackClient / MediaController -> MediaSessionService
 
 验收标准：
 
-- 后台播放稳定。
+- 后台播放生命周期策略稳定。
 - 锁屏媒体区显示正确。
 - 耳机或蓝牙播放 / 暂停可用。
 - App 退出行为符合预期。
 
 ## 结论
 
-不建议一次性完成完整后台播放。
+不建议一次性完成完整系统媒体体验。
 
 推荐保守路线：
 
@@ -348,6 +412,6 @@ MusicViewModel -> PlaybackClient / MediaController -> MediaSessionService
 2. 再迁移 `ExoPlayer` 和 `MediaSession` 所有权。
 3. 再让 UI 层通过 ViewModel / MediaController 控制播放。
 4. 再处理通知栏媒体控件。
-5. 最后处理后台播放、锁屏和耳机 / 蓝牙按钮。
+5. 最后处理后台播放生命周期策略、锁屏和耳机 / 蓝牙按钮。
 
 每一步都应保持项目可编译，并手动验证现有播放行为不回退。

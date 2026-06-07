@@ -13,7 +13,9 @@ class FlowtoneMediaSessionService : MediaSessionService() {
 
         val servicePlayer = ExoPlayer.Builder(applicationContext).build()
         player = servicePlayer
-        mediaSession = MediaSession.Builder(this, servicePlayer).build()
+        mediaSession = MediaSession.Builder(this, servicePlayer)
+            .setId("flowtone_service_session")
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
