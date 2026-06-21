@@ -19,7 +19,8 @@ data class PlaybackSnapshot(
     val queueMediaItems: List<MediaItem>,
     val isPlaying: Boolean,
     val positionMs: Long,
-    val durationMs: Long
+    val durationMs: Long,
+    val playbackOrderMode: PlaybackOrderMode
 )
 
 class PlaybackController(
@@ -32,6 +33,7 @@ class PlaybackController(
     private var pendingSong: Song? = null
     private var pendingQueueSongs: List<Song>? = null
     private var pendingQueueStartIndex: Int? = null
+    private var pendingPlaybackOrderMode: PlaybackOrderMode? = null
     private var isReleased = false
 
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -68,6 +70,14 @@ class PlaybackController(
                 onMediaItemChanged(mediaId)
             }
         }
+
+        override fun onRepeatModeChanged(repeatMode: Int) {
+            syncPlaybackOrderMode()
+        }
+
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            syncPlaybackOrderMode()
+        }
     }
 
     init {
@@ -78,6 +88,11 @@ class PlaybackController(
                 }
 
                 controller.addListener(listener)
+                pendingPlaybackOrderMode?.let { mode ->
+                    pendingPlaybackOrderMode = null
+                    applyPlaybackOrderMode(controller, mode)
+                }
+                syncPlaybackOrderMode(controller)
                 val queuedSongs = pendingQueueSongs
                 val queuedStartIndex = pendingQueueStartIndex
                 if (queuedSongs != null && queuedStartIndex != null) {
@@ -210,11 +225,18 @@ class PlaybackController(
         }
     }
 
+    fun updatePlaybackOrderMode(mode: PlaybackOrderMode) {
+        _playbackState.update {
+            it.copy(playbackOrderMode = mode)
+        }
+    }
+
     fun updateFromSnapshot(
         currentSong: Song,
         isPlaying: Boolean,
         positionMs: Long,
-        durationMs: Long
+        durationMs: Long,
+        playbackOrderMode: PlaybackOrderMode = getPlaybackOrderMode()
     ) {
         _playbackState.update {
             it.copy(
@@ -222,6 +244,7 @@ class PlaybackController(
                 isPlaying = isPlaying,
                 positionMs = positionMs.coerceAtLeast(0L),
                 durationMs = durationMs.coerceAtLeast(0L),
+                playbackOrderMode = playbackOrderMode,
                 errorMessage = null
             )
         }
@@ -255,8 +278,61 @@ class PlaybackController(
             queueMediaItems = queueMediaItems,
             isPlaying = controller.isPlaying,
             positionMs = controller.currentPosition.coerceAtLeast(0L),
-            durationMs = safeDuration(controller.duration)
+            durationMs = safeDuration(controller.duration),
+            playbackOrderMode = playbackOrderModeFromController(controller)
         )
+    }
+
+    fun playNext(): Boolean {
+        val controller = mediaControllerConnection.currentController ?: return false
+        return if (controller.hasNextMediaItem()) {
+            controller.seekToNextMediaItem()
+            true
+        } else {
+            false
+        }
+    }
+
+    fun playPrevious(): Boolean {
+        val controller = mediaControllerConnection.currentController ?: return false
+        return if (controller.hasPreviousMediaItem()) {
+            controller.seekToPreviousMediaItem()
+            true
+        } else {
+            false
+        }
+    }
+
+    fun getPlaybackOrderMode(): PlaybackOrderMode {
+        val controller = mediaControllerConnection.currentController
+        pendingPlaybackOrderMode?.let { pendingMode ->
+            if (controller != null) {
+                pendingPlaybackOrderMode = null
+                applyPlaybackOrderMode(controller, pendingMode)
+                return pendingMode
+            }
+            return pendingMode
+        }
+
+        return controller?.let(::playbackOrderModeFromController)
+            ?: playbackState.value.playbackOrderMode
+    }
+
+    fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
+        val controller = mediaControllerConnection.currentController
+        if (controller == null) {
+            pendingPlaybackOrderMode = mode
+            updatePlaybackOrderMode(mode)
+            return
+        }
+
+        pendingPlaybackOrderMode = null
+        applyPlaybackOrderMode(controller, mode)
+        updatePlaybackOrderMode(mode)
+    }
+
+    fun togglePlaybackOrderMode() {
+        setPlaybackOrderMode(nextPlaybackOrderMode(getPlaybackOrderMode()))
     }
 
     fun play() {
@@ -297,6 +373,7 @@ class PlaybackController(
         pendingSong = null
         pendingQueueSongs = null
         pendingQueueStartIndex = null
+        pendingPlaybackOrderMode = null
         mediaControllerConnection.currentController?.removeListener(listener)
         mediaControllerConnection.release()
     }
@@ -306,6 +383,48 @@ class PlaybackController(
             0L
         } else {
             durationMs
+        }
+    }
+
+    private fun syncPlaybackOrderMode(
+        controller: MediaController? = mediaControllerConnection.currentController
+    ) {
+        controller ?: return
+        updatePlaybackOrderMode(playbackOrderModeFromController(controller))
+    }
+
+    private fun applyPlaybackOrderMode(controller: MediaController, mode: PlaybackOrderMode) {
+        when (mode) {
+            PlaybackOrderMode.Sequence -> {
+                controller.shuffleModeEnabled = false
+                controller.repeatMode = Player.REPEAT_MODE_OFF
+            }
+
+            PlaybackOrderMode.RepeatOne -> {
+                controller.repeatMode = Player.REPEAT_MODE_ONE
+                controller.shuffleModeEnabled = false
+            }
+
+            PlaybackOrderMode.Shuffle -> {
+                controller.shuffleModeEnabled = true
+                controller.repeatMode = Player.REPEAT_MODE_OFF
+            }
+        }
+    }
+
+    private fun playbackOrderModeFromController(controller: MediaController): PlaybackOrderMode {
+        return when {
+            controller.repeatMode == Player.REPEAT_MODE_ONE -> PlaybackOrderMode.RepeatOne
+            controller.shuffleModeEnabled -> PlaybackOrderMode.Shuffle
+            else -> PlaybackOrderMode.Sequence
+        }
+    }
+
+    private fun nextPlaybackOrderMode(mode: PlaybackOrderMode): PlaybackOrderMode {
+        return when (mode) {
+            PlaybackOrderMode.Sequence -> PlaybackOrderMode.RepeatOne
+            PlaybackOrderMode.RepeatOne -> PlaybackOrderMode.Shuffle
+            PlaybackOrderMode.Shuffle -> PlaybackOrderMode.Sequence
         }
     }
 }

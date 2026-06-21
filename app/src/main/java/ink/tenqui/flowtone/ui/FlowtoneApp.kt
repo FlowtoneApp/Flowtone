@@ -159,6 +159,7 @@ fun FlowtoneApp(
             onPlayPrevious = musicViewModel::playPrevious,
             onPlayNext = musicViewModel::playNext,
             onSeekTo = musicViewModel::seekTo,
+            onTogglePlaybackOrderMode = musicViewModel::togglePlaybackOrderMode,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }

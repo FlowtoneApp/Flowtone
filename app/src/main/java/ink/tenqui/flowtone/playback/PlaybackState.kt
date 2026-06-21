@@ -7,5 +7,6 @@ data class PlaybackState(
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
+    val playbackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
     val errorMessage: String? = null
 )

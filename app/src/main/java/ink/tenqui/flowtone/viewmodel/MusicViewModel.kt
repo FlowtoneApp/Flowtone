@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.AudioScanner
 import ink.tenqui.flowtone.model.Song
 import ink.tenqui.flowtone.playback.PlaybackController
+import ink.tenqui.flowtone.playback.PlaybackOrderMode
 import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.playback.toSongOrNull
 import kotlinx.coroutines.Dispatchers
@@ -195,7 +196,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentSong = currentSong,
             isPlaying = snapshot.isPlaying,
             positionMs = position,
-            durationMs = duration
+            durationMs = duration,
+            playbackOrderMode = snapshot.playbackOrderMode
         )
     }
 
@@ -218,12 +220,24 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             isPlaying = playbackState.value.isPlaying,
             positionMs = playbackState.value.positionMs,
             durationMs = playbackState.value.durationMs.takeIf { it > 0L }
-                ?: officialSong.durationMs.coerceAtLeast(0L)
+                ?: officialSong.durationMs.coerceAtLeast(0L),
+            playbackOrderMode = playbackState.value.playbackOrderMode
         )
     }
 
     fun togglePlayPause() {
         playbackController.togglePlayPause()
+    }
+
+    fun togglePlaybackOrderMode() {
+        val currentMode = playbackState.value.playbackOrderMode
+        val nextMode = when (currentMode) {
+            PlaybackOrderMode.Sequence -> PlaybackOrderMode.RepeatOne
+            PlaybackOrderMode.RepeatOne -> PlaybackOrderMode.Shuffle
+            PlaybackOrderMode.Shuffle -> PlaybackOrderMode.Sequence
+        }
+        playbackController.updatePlaybackOrderMode(nextMode)
+        playbackController.setPlaybackOrderMode(nextMode)
     }
 
     fun seekTo(positionMs: Long) {
@@ -242,6 +256,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNext() {
+        if (playbackController.playNext()) {
+            return
+        }
+
         syncCurrentQueueIndex()
         if (playbackQueue.isEmpty() || currentQueueIndex !in playbackQueue.indices) {
             return
@@ -256,6 +274,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playPrevious() {
+        if (playbackController.playPrevious()) {
+            return
+        }
+
         syncCurrentQueueIndex()
         if (playbackQueue.isEmpty() || currentQueueIndex !in playbackQueue.indices) {
             return
@@ -279,6 +301,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun updateProgressFromController() {
+        val playbackOrderMode = playbackController.getPlaybackOrderMode()
+        if (playbackState.value.playbackOrderMode != playbackOrderMode) {
+            playbackController.updatePlaybackOrderMode(playbackOrderMode)
+        }
+
         val currentSong = playbackState.value.currentSong
         if (currentSong == null) {
             playbackController.updateProgress(
