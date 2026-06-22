@@ -111,7 +111,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val MINI_PLAYER_ANIMATION_DURATION_MS = 400
-private val MiniPlayerEasing = CubicBezierEasing(0.20f, 0.00f, 0.08f, 1.00f)
+private val MiniPlayerEasing = CubicBezierEasing(0.12f, 0.34f, 0.16f, 1f)
 private val SoftElementEasing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 private val HeavyElementEasing = CubicBezierEasing(0.3f, 0.0f, 0.0f, 1.0f)
 private val MiniPlayerMotionEasing = CubicBezierEasing(0.16f, 1.0f, 0.30f, 1.0f)
@@ -319,6 +319,7 @@ fun MiniPlayer(
     var isProgressScrubbing by remember { mutableStateOf(false) }
     var lockedIsPlayingDuringScrub by remember { mutableStateOf(playbackState.isPlaying) }
     var keepPlayPauseVisualLockedAfterSeek by remember { mutableStateOf(false) }
+    var playPauseVisualLockToken by remember { mutableStateOf(0) }
     val currentSongKey = currentSong?.id?.toString()
     var likedSongKeys by rememberSaveable {
         mutableStateOf(emptyList<String>())
@@ -326,18 +327,25 @@ fun MiniPlayer(
     val isCurrentSongLiked = currentSongKey != null && likedSongKeys.contains(currentSongKey)
     LaunchedEffect(currentSong?.id) {
         isProgressScrubbing = false
-        keepPlayPauseVisualLockedAfterSeek = false
-    }
-    LaunchedEffect(isProgressScrubbing, keepPlayPauseVisualLockedAfterSeek) {
-        if (keepPlayPauseVisualLockedAfterSeek && !isProgressScrubbing) {
-            delay(500)
-            keepPlayPauseVisualLockedAfterSeek = false
-        }
     }
     val visualIsPlaying = if (isProgressScrubbing || keepPlayPauseVisualLockedAfterSeek) {
         lockedIsPlayingDuringScrub
     } else {
         playbackState.isPlaying
+    }
+    fun lockPlayPauseVisual() {
+        lockedIsPlayingDuringScrub = visualIsPlaying
+        keepPlayPauseVisualLockedAfterSeek = true
+        playPauseVisualLockToken += 1
+    }
+    LaunchedEffect(playPauseVisualLockToken) {
+        val token = playPauseVisualLockToken
+        if (keepPlayPauseVisualLockedAfterSeek) {
+            delay(650L)
+            if (playPauseVisualLockToken == token) {
+                keepPlayPauseVisualLockedAfterSeek = false
+            }
+        }
     }
     var accumulatedDragY by remember { mutableStateOf(0f) }
     val gestureModifier = Modifier.pointerInput(hasCurrentSong, expanded, swipeThresholdPx) {
@@ -528,14 +536,10 @@ fun MiniPlayer(
                         progressTrackColor = progressTrackColor,
                         progressColor = progressColor,
                         onSeekTo = onSeekTo,
-                        onTapSeekVisualLock = {
-                            lockedIsPlayingDuringScrub = visualIsPlaying
-                            keepPlayPauseVisualLockedAfterSeek = true
-                        },
+                        onLockPlayPauseVisual = ::lockPlayPauseVisual,
                         onScrubbingChange = { scrubbing ->
                             if (scrubbing) {
-                                lockedIsPlayingDuringScrub = playbackState.isPlaying
-                                keepPlayPauseVisualLockedAfterSeek = true
+                                lockPlayPauseVisual()
                             }
                             isProgressScrubbing = scrubbing
                         },
@@ -552,6 +556,7 @@ fun MiniPlayer(
                         expandedTop = expandedControlsTop,
                         onPlayPrevious = {
                             if (hasCurrentSong) {
+                                lockPlayPauseVisual()
                                 onPlayPrevious()
                             }
                         },
@@ -564,6 +569,7 @@ fun MiniPlayer(
                         },
                         onPlayNext = {
                             if (hasCurrentSong) {
+                                lockPlayPauseVisual()
                                 onPlayNext()
                             }
                         },
@@ -1036,7 +1042,7 @@ private fun ExpandedOnlyContent(
     progressTrackColor: Color,
     progressColor: Color,
     onSeekTo: (Long) -> Unit,
-    onTapSeekVisualLock: () -> Unit,
+    onLockPlayPauseVisual: () -> Unit,
     onScrubbingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1056,7 +1062,7 @@ private fun ExpandedOnlyContent(
             trackColor = progressTrackColor,
             progressColor = progressColor,
             onSeekTo = onSeekTo,
-            onTapSeekVisualLock = onTapSeekVisualLock,
+            onLockPlayPauseVisual = onLockPlayPauseVisual,
             onScrubbingChange = onScrubbingChange,
             enterProgress = progressEnterProgress,
             modifier = Modifier
@@ -1315,7 +1321,7 @@ private fun PlaybackProgressBar(
     trackColor: Color,
     progressColor: Color,
     onSeekTo: (Long) -> Unit,
-    onTapSeekVisualLock: () -> Unit,
+    onLockPlayPauseVisual: () -> Unit,
     onScrubbingChange: (Boolean) -> Unit,
     enterProgress: Float,
     modifier: Modifier = Modifier
@@ -1597,6 +1603,7 @@ private fun PlaybackProgressBar(
                             smoothPositionMs = targetPositionMs
                             anchorPositionMs = targetPositionMs
                             anchorFrameTimeNanos = 0L
+                            onLockPlayPauseVisual()
                             onSeekTo(targetPositionMs)
                             isScrubbing = false
                             onScrubbingChange(false)
@@ -1608,7 +1615,7 @@ private fun PlaybackProgressBar(
 
                             tapSeekJob?.cancel()
                             isTapSeeking = true
-                            onTapSeekVisualLock()
+                            onLockPlayPauseVisual()
                             onSeekTo(targetPositionMs)
                             smoothPositionMs = targetPositionMs
                             anchorPositionMs = targetPositionMs
