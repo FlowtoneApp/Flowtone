@@ -109,6 +109,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val MINI_PLAYER_ANIMATION_DURATION_MS = 400
 private val MiniPlayerEasing = CubicBezierEasing(0.12f, 0.34f, 0.16f, 1f)
@@ -1574,13 +1575,46 @@ private fun PlaybackProgressBar(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var dragStarted = false
+                        var longPressStarted = false
                         var lastX = down.position.x
+                        val progressLongPressTimeoutMillis = 260L
+                        val longPressDeadlineMillis =
+                            down.uptimeMillis + progressLongPressTimeoutMillis
+                        var lastEventTimeMillis = down.uptimeMillis
+
+                        fun enterScrubbing(x: Float) {
+                            isTapSeeking = false
+                            isScrubbing = true
+                            updateScrubProgress(x)
+                            onLockPlayPauseVisual()
+                            onScrubbingChange(true)
+                        }
 
                         while (true) {
-                            val event = awaitPointerEvent()
+                            val event = if (!dragStarted && !longPressStarted) {
+                                val remainingMillis =
+                                    longPressDeadlineMillis - lastEventTimeMillis
+                                if (remainingMillis <= 0L) {
+                                    null
+                                } else {
+                                    withTimeoutOrNull(remainingMillis) {
+                                        awaitPointerEvent()
+                                    }
+                                }
+                            } else {
+                                awaitPointerEvent()
+                            }
+
+                            if (event == null) {
+                                longPressStarted = true
+                                enterScrubbing(lastX)
+                                continue
+                            }
+
                             val change = event.changes.firstOrNull { it.id == down.id }
                                 ?: event.changes.firstOrNull()
                                 ?: continue
+                            lastEventTimeMillis = change.uptimeMillis
 
                             if (!change.pressed) {
                                 break
@@ -1588,20 +1622,22 @@ private fun PlaybackProgressBar(
 
                             lastX = change.position.x
                             val distanceFromDown = (change.position - down.position).getDistance()
-                            if (!dragStarted && distanceFromDown > viewConfiguration.touchSlop) {
+                            if (
+                                !dragStarted &&
+                                !longPressStarted &&
+                                distanceFromDown > viewConfiguration.touchSlop
+                            ) {
                                 dragStarted = true
-                                isTapSeeking = false
-                                isScrubbing = true
-                                onScrubbingChange(true)
+                                enterScrubbing(change.position.x)
                             }
 
-                            if (dragStarted) {
+                            if (dragStarted || longPressStarted) {
                                 updateScrubProgress(change.position.x)
                                 change.consume()
                             }
                         }
 
-                        if (dragStarted) {
+                        if (dragStarted || longPressStarted) {
                             val targetPositionMs = (durationMs * scrubProgress)
                                 .toLong()
                                 .coerceIn(0L, durationMs)
