@@ -286,20 +286,38 @@ class PlaybackController(
         )
     }
 
-    fun playNext(): Boolean {
+    fun playNext(playWhenReady: Boolean = false): Boolean {
         val controller = mediaControllerConnection.currentController ?: return false
         return if (controller.hasNextMediaItem()) {
             controller.seekToNextMediaItem()
+            if (playWhenReady) {
+                controller.play()
+                _playbackState.update {
+                    it.copy(
+                        isPlaying = true,
+                        errorMessage = null
+                    )
+                }
+            }
             true
         } else {
             false
         }
     }
 
-    fun playPrevious(): Boolean {
+    fun playPrevious(playWhenReady: Boolean = false): Boolean {
         val controller = mediaControllerConnection.currentController ?: return false
         return if (controller.hasPreviousMediaItem()) {
             controller.seekToPreviousMediaItem()
+            if (playWhenReady) {
+                controller.play()
+                _playbackState.update {
+                    it.copy(
+                        isPlaying = true,
+                        errorMessage = null
+                    )
+                }
+            }
             true
         } else {
             false

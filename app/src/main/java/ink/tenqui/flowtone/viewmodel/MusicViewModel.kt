@@ -35,7 +35,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val playbackController = PlaybackController(
         context = application,
         initialPlaybackOrderMode = playbackSettingsStore.getPlaybackOrderMode(),
-        onPlaybackEnded = ::playNext,
+        onPlaybackEnded = ::handlePlaybackEnded,
         onMediaItemChanged = ::syncCurrentSongFromMediaId
     )
     private val _uiState = MutableStateFlow(MusicUiState())
@@ -260,7 +260,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playNext() {
-        if (playbackController.playNext()) {
+        playNext(playWhenReady = true)
+    }
+
+    private fun handlePlaybackEnded() {
+        playNext(playWhenReady = false)
+    }
+
+    private fun playNext(playWhenReady: Boolean) {
+        if (playbackController.playNext(playWhenReady = playWhenReady)) {
             return
         }
 
@@ -278,7 +286,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playPrevious() {
-        if (playbackController.playPrevious()) {
+        if (playbackController.playPrevious(playWhenReady = true)) {
             return
         }
 

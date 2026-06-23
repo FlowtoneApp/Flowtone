@@ -581,6 +581,7 @@ fun MiniPlayer(
                         positionMs = playbackState.positionMs,
                         durationMs = durationMs,
                         isPlaying = playbackState.isPlaying,
+                        isPlayingForVisualLock = visualIsPlaying,
                         currentSongKey = currentSong?.id,
                         hasCurrentSong = hasCurrentSong,
                         progressTrackColor = progressTrackColor,
@@ -604,7 +605,7 @@ fun MiniPlayer(
                         onPlayPrevious = {
                             if (hasCurrentSong) {
                                 collapsedMetadataSwitchDirection = -1
-                                lockPlayPauseVisual(playbackState.isPlaying)
+                                lockPlayPauseVisual(true)
                                 onPlayPrevious()
                             }
                         },
@@ -618,7 +619,7 @@ fun MiniPlayer(
                         onPlayNext = {
                             if (hasCurrentSong) {
                                 collapsedMetadataSwitchDirection = 1
-                                lockPlayPauseVisual(playbackState.isPlaying)
+                                lockPlayPauseVisual(true)
                                 onPlayNext()
                             }
                         },
@@ -1069,6 +1070,7 @@ private fun ExpandedOnlyContent(
     positionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
+    isPlayingForVisualLock: Boolean,
     currentSongKey: Long?,
     hasCurrentSong: Boolean,
     progressTrackColor: Color,
@@ -1089,6 +1091,7 @@ private fun ExpandedOnlyContent(
             positionMs = positionMs,
             durationMs = durationMs,
             isPlaying = isPlaying,
+            isPlayingForVisualLock = isPlayingForVisualLock,
             currentSongKey = currentSongKey,
             enabled = hasCurrentSong && durationMs > 0L,
             trackColor = progressTrackColor,
@@ -1499,6 +1502,7 @@ private fun PlaybackProgressBar(
     positionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
+    isPlayingForVisualLock: Boolean,
     currentSongKey: Long?,
     enabled: Boolean,
     trackColor: Color,
@@ -1608,7 +1612,7 @@ private fun PlaybackProgressBar(
         else -> trackSwitchVisualProgress
     }.coerceIn(0f, 1f)
     val currentVisibleProgress by rememberUpdatedState(visibleProgress)
-    val currentIsPlayingForVisualLock by rememberUpdatedState(isPlaying)
+    val currentIsPlayingForVisualLock by rememberUpdatedState(isPlayingForVisualLock)
     SideEffect {
         if (!isScrubbing && !isTapSeeking) {
             lastRenderedProgress = visibleProgress.coerceIn(0f, 1f)
