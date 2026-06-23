@@ -33,9 +33,7 @@ class PlaybackController(
     private val _playbackState = MutableStateFlow(
         PlaybackState(playbackOrderMode = initialPlaybackOrderMode)
     )
-    private var pendingSong: Song? = null
-    private var pendingQueueSongs: List<Song>? = null
-    private var pendingQueueStartIndex: Int? = null
+    private var pendingPlaybackRequest: PendingPlaybackRequest? = null
     private var pendingPlaybackOrderMode: PlaybackOrderMode? = initialPlaybackOrderMode
     private var isReleased = false
 
@@ -96,26 +94,14 @@ class PlaybackController(
                     applyPlaybackOrderMode(controller, mode)
                 }
                 syncPlaybackOrderMode(controller)
-                val queuedSongs = pendingQueueSongs
-                val queuedStartIndex = pendingQueueStartIndex
-                if (queuedSongs != null && queuedStartIndex != null) {
-                    pendingQueueSongs = null
-                    pendingQueueStartIndex = null
-                    playQueue(queuedSongs, queuedStartIndex)
-                    return@connect
-                }
-
-                pendingSong?.let { song ->
-                    pendingSong = null
-                    play(song)
-                }
+                playPendingRequest()
             },
             onConnectionFailed = { error ->
                 if (isReleased) {
                     return@connect
                 }
 
-                if (pendingSong != null) {
+                if (pendingPlaybackRequest is PendingPlaybackRequest.SingleSong) {
                     _playbackState.update {
                         it.copy(
                             isPlaying = false,
@@ -128,18 +114,9 @@ class PlaybackController(
     }
 
     fun play(song: Song) {
-        val controller = mediaControllerConnection.currentController
+        val controller = currentControllerOrNull()
         if (controller == null) {
-            pendingSong = song
-            _playbackState.update {
-                it.copy(
-                    currentSong = song,
-                    isPlaying = false,
-                    positionMs = 0L,
-                    durationMs = song.durationMs.coerceAtLeast(0L),
-                    errorMessage = null
-                )
-            }
+            setPendingSingleSong(song)
             return
         }
 
@@ -148,24 +125,9 @@ class PlaybackController(
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
-            _playbackState.update {
-                it.copy(
-                    currentSong = song,
-                    isPlaying = true,
-                    positionMs = 0L,
-                    durationMs = song.durationMs.coerceAtLeast(0L),
-                    errorMessage = null
-                )
-            }
+            updatePlaybackStarted(song)
         }.onFailure { error ->
-            _playbackState.update {
-                it.copy(
-                    currentSong = song,
-                    isPlaying = false,
-                    durationMs = song.durationMs.coerceAtLeast(0L),
-                    errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
-                )
-            }
+            updatePlaybackFailed(song, error)
         }
     }
 
@@ -174,10 +136,9 @@ class PlaybackController(
             return
         }
 
-        val controller = mediaControllerConnection.currentController
+        val controller = currentControllerOrNull()
         if (controller == null) {
-            pendingQueueSongs = songs
-            pendingQueueStartIndex = startIndex
+            pendingPlaybackRequest = PendingPlaybackRequest.Queue(songs, startIndex)
             return
         }
 
@@ -188,24 +149,9 @@ class PlaybackController(
             controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
             controller.prepare()
             controller.play()
-            _playbackState.update {
-                it.copy(
-                    currentSong = startSong,
-                    isPlaying = true,
-                    positionMs = 0L,
-                    durationMs = startSong.durationMs.coerceAtLeast(0L),
-                    errorMessage = null
-                )
-            }
+            updatePlaybackStarted(startSong)
         }.onFailure { error ->
-            _playbackState.update {
-                it.copy(
-                    currentSong = startSong,
-                    isPlaying = false,
-                    durationMs = startSong.durationMs.coerceAtLeast(0L),
-                    errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
-                )
-            }
+            updatePlaybackFailed(startSong, error)
         }
     }
 
@@ -254,21 +200,21 @@ class PlaybackController(
     }
 
     fun getCurrentPositionMs(): Long {
-        val position = mediaControllerConnection.currentController?.currentPosition ?: 0L
+        val position = currentControllerOrNull()?.currentPosition ?: 0L
         return position.coerceAtLeast(0L)
     }
 
     fun getDurationMs(): Long {
-        val duration = mediaControllerConnection.currentController?.duration ?: 0L
+        val duration = currentControllerOrNull()?.duration ?: 0L
         return safeDuration(duration)
     }
 
     fun seekTo(positionMs: Long) {
-        mediaControllerConnection.currentController?.seekTo(positionMs.coerceAtLeast(0L))
+        currentControllerOrNull()?.seekTo(positionMs.coerceAtLeast(0L))
     }
 
     fun getPlaybackSnapshot(): PlaybackSnapshot? {
-        val controller = mediaControllerConnection.currentController ?: return null
+        val controller = currentControllerOrNull() ?: return null
         val mediaItemCount = controller.mediaItemCount
         val queueMediaItems = (0 until mediaItemCount).mapNotNull { index ->
             runCatching { controller.getMediaItemAt(index) }.getOrNull()
@@ -287,17 +233,15 @@ class PlaybackController(
     }
 
     fun playNext(playWhenReady: Boolean = false): Boolean {
-        val controller = mediaControllerConnection.currentController ?: return false
+        return skipToNext(playWhenReady)
+    }
+
+    fun skipToNext(playWhenReady: Boolean = false): Boolean {
+        val controller = currentControllerOrNull() ?: return false
         return if (controller.hasNextMediaItem()) {
             controller.seekToNextMediaItem()
             if (playWhenReady) {
-                controller.play()
-                _playbackState.update {
-                    it.copy(
-                        isPlaying = true,
-                        errorMessage = null
-                    )
-                }
+                resume()
             }
             true
         } else {
@@ -306,17 +250,15 @@ class PlaybackController(
     }
 
     fun playPrevious(playWhenReady: Boolean = false): Boolean {
-        val controller = mediaControllerConnection.currentController ?: return false
+        return skipToPrevious(playWhenReady)
+    }
+
+    fun skipToPrevious(playWhenReady: Boolean = false): Boolean {
+        val controller = currentControllerOrNull() ?: return false
         return if (controller.hasPreviousMediaItem()) {
             controller.seekToPreviousMediaItem()
             if (playWhenReady) {
-                controller.play()
-                _playbackState.update {
-                    it.copy(
-                        isPlaying = true,
-                        errorMessage = null
-                    )
-                }
+                resume()
             }
             true
         } else {
@@ -325,7 +267,7 @@ class PlaybackController(
     }
 
     fun getPlaybackOrderMode(): PlaybackOrderMode {
-        val controller = mediaControllerConnection.currentController
+        val controller = currentControllerOrNull()
         pendingPlaybackOrderMode?.let { pendingMode ->
             if (controller != null) {
                 pendingPlaybackOrderMode = null
@@ -340,7 +282,7 @@ class PlaybackController(
     }
 
     fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
-        val controller = mediaControllerConnection.currentController
+        val controller = currentControllerOrNull()
         if (controller == null) {
             pendingPlaybackOrderMode = mode
             updatePlaybackOrderMode(mode)
@@ -357,7 +299,11 @@ class PlaybackController(
     }
 
     fun play() {
-        val controller = mediaControllerConnection.currentController ?: return
+        resume()
+    }
+
+    fun resume() {
+        val controller = currentControllerOrNull() ?: return
         controller.play()
         _playbackState.update {
             it.copy(
@@ -368,7 +314,7 @@ class PlaybackController(
     }
 
     fun pause() {
-        val controller = mediaControllerConnection.currentController ?: return
+        val controller = currentControllerOrNull() ?: return
         controller.pause()
         _playbackState.update {
             it.copy(isPlaying = false)
@@ -376,7 +322,7 @@ class PlaybackController(
     }
 
     fun togglePlayPause() {
-        val controller = mediaControllerConnection.currentController
+        val controller = currentControllerOrNull()
         val isPlaying = controller?.isPlaying ?: playbackState.value.isPlaying
         if (isPlaying) {
             pause()
@@ -391,12 +337,66 @@ class PlaybackController(
         }
 
         isReleased = true
-        pendingSong = null
-        pendingQueueSongs = null
-        pendingQueueStartIndex = null
+        pendingPlaybackRequest = null
         pendingPlaybackOrderMode = null
-        mediaControllerConnection.currentController?.removeListener(listener)
+        currentControllerOrNull()?.removeListener(listener)
         mediaControllerConnection.release()
+    }
+
+    private fun currentControllerOrNull(): MediaController? {
+        return mediaControllerConnection.currentController
+    }
+
+    private fun setPendingSingleSong(song: Song) {
+        pendingPlaybackRequest = PendingPlaybackRequest.SingleSong(song)
+        _playbackState.update {
+            it.copy(
+                currentSong = song,
+                isPlaying = false,
+                positionMs = 0L,
+                durationMs = song.durationMs.coerceAtLeast(0L),
+                errorMessage = null
+            )
+        }
+    }
+
+    private fun playPendingRequest() {
+        when (val request = pendingPlaybackRequest) {
+            is PendingPlaybackRequest.Queue -> {
+                pendingPlaybackRequest = null
+                playQueue(request.songs, request.startIndex)
+            }
+
+            is PendingPlaybackRequest.SingleSong -> {
+                pendingPlaybackRequest = null
+                play(request.song)
+            }
+
+            null -> Unit
+        }
+    }
+
+    private fun updatePlaybackStarted(song: Song) {
+        _playbackState.update {
+            it.copy(
+                currentSong = song,
+                isPlaying = true,
+                positionMs = 0L,
+                durationMs = song.durationMs.coerceAtLeast(0L),
+                errorMessage = null
+            )
+        }
+    }
+
+    private fun updatePlaybackFailed(song: Song, error: Throwable) {
+        _playbackState.update {
+            it.copy(
+                currentSong = song,
+                isPlaying = false,
+                durationMs = song.durationMs.coerceAtLeast(0L),
+                errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
+            )
+        }
     }
 
     private fun safeDuration(durationMs: Long): Long {
@@ -408,7 +408,7 @@ class PlaybackController(
     }
 
     private fun syncPlaybackOrderMode(
-        controller: MediaController? = mediaControllerConnection.currentController
+        controller: MediaController? = currentControllerOrNull()
     ) {
         controller ?: return
         updatePlaybackOrderMode(playbackOrderModeFromController(controller))
@@ -447,5 +447,10 @@ class PlaybackController(
             PlaybackOrderMode.RepeatOne -> PlaybackOrderMode.Shuffle
             PlaybackOrderMode.Shuffle -> PlaybackOrderMode.Sequence
         }
+    }
+
+    private sealed interface PendingPlaybackRequest {
+        data class SingleSong(val song: Song) : PendingPlaybackRequest
+        data class Queue(val songs: List<Song>, val startIndex: Int) : PendingPlaybackRequest
     }
 }
