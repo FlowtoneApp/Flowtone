@@ -16,3 +16,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+# Kotlin / Gradle local state
+.kotlin/
+/.kotlin/
