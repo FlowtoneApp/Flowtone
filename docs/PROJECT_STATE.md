@@ -1,8 +1,12 @@
 ﻿# Flowtone 项目状态
 
-## 项目目标
+## 当前阶段
 
-Flowtone 是一个 Android 本地音乐播放器。当前阶段已完成 Flowtone 0.6 收尾记录，准备 `v0.6-internal` tag。0.6 的目标是完善系统媒体控件基础体验，重点是让系统侧能看到完整 ExoPlayer playlist。
+Flowtone 当前进入 0.8 收尾阶段。
+
+0.8 主题：**Online-Ready Refactor**。
+
+本阶段目标是整理项目结构和核心边界，为未来在线音乐来源接入做准备，但当前仍然只支持本地音乐播放，未接入任何真实在线 API。
 
 ## 当前技术栈
 
@@ -16,378 +20,214 @@ Flowtone 是一个 Android 本地音乐播放器。当前阶段已完成 Flowton
 - AndroidX Media3 MediaSessionService
 - Gradle Version Catalog
 
-## 已完成基础能力
-
-- 已请求音频读取权限。
-- 已使用 `ContentResolver + MediaStore.Audio.Media` 扫描本地音乐。
-- 已显示本地歌曲列表。
-- 已使用 `PlaybackController` 封装 Media3 ExoPlayer。
-- `ExoPlayer` 只在非 Composable 层创建和操作。
-- 已将播放控制和播放状态接入 `MusicViewModel`。
-- 点击歌曲可以播放本地音频。
-- 底部 MiniPlayer 显示当前歌曲标题、艺术家，并支持播放 / 暂停 / 上一曲 / 下一曲。
-
-## Flowtone 0.2 Internal
-
-- 已建立基础播放队列：`playbackQueue`。
-- 点击歌曲后会记录当前队列索引：`currentQueueIndex`。
-- 已实现下一曲和上一曲。
-- 当前歌曲自然结束后会自动播放下一首。
-- 最后一首播放结束后停止，不循环。
-- 队列逻辑保留在 `MusicViewModel`，不写进 Composable。
-
-## Flowtone 0.3 Internal
-
-- 已整理 UI 状态传递。
-- 歌曲列表项已调整为 Material 3 风格。
-- 当前播放歌曲在列表中有高亮状态。
-- MiniPlayer 已完成视觉优化，保留贴底播放器结构。
-- 空状态 / 无权限状态文案已优化。
-- 主页面背景、顶栏、列表区域和 MiniPlayer 的视觉层次已统一。
-- MiniPlayer 控制按钮已改为 Material 图标按钮。
-
-## Flowtone 0.4 Internal
-
-- 已检查播放架构边界。
-- 已新增集中转换入口：`Song.toMediaItem()`。
-- `MediaItem` 已携带 `mediaId`、`uri`、标题和歌手 metadata。
-- 已接入基础 `MediaSession`。
-- 0.4 阶段 `MediaSession` 曾由 `PlaybackController` 内部创建，并绑定内部私有持有的 `ExoPlayer`。
-- 0.4 阶段 `PlaybackController.release()` 会释放 `MediaSession` 和 `ExoPlayer`，并已有重复释放防护。
-- 0.5.6 后，实际播放已迁移到 `MediaController -> FlowtoneMediaSessionService`。
-- 系统媒体控制表现仍需要以真机实测为准。
-
-## Flowtone 0.5 当前进度
-
-### Step 0.5.1
-
-- 只完成设计文档，不修改 Kotlin 播放代码。
-- 已新增设计文档：`docs/MEDIA_SESSION_SERVICE_PLAN.md`。
-- 文档记录了从当前架构迁移到 `MediaSessionService` 的保守分步方案。
-- 尚未新增 Service、通知栏、后台播放或权限。
-
-### Step 0.5.2
-
-- 已新增 `FlowtoneMediaSessionService` 最小骨架。
-- 该 Service 继承 `androidx.media3.session.MediaSessionService`。
-- 已在 `AndroidManifest.xml` 中声明该 Service 和 `androidx.media3.session.MediaSessionService` action。
-- 0.5.2 当时播放仍然由 `PlaybackController` 内部的 ExoPlayer 完成。
-- 尚未迁移播放器所有权、队列所有权或 UI 控制链路。
-- 尚未实现后台播放、通知栏媒体控件、锁屏媒体区或耳机按钮支持。
-
-### Step 0.5.3
-
-- 已在 `FlowtoneMediaSessionService.onCreate()` 中创建 Service 内部的 `ExoPlayer`。
-- 已在 `FlowtoneMediaSessionService.onCreate()` 中基于该播放器创建 Service 内部的 `MediaSession`。
-- `onGetSession()` 当前返回 Service 内部持有的 `MediaSession`。
-- `onDestroy()` 会释放 Service 内部的 `MediaSession` 和 `ExoPlayer`，并将引用置空。
-- 0.5.3 当时 App 内实际播放仍然由 `PlaybackController` 内部的 ExoPlayer 完成。
-- 当前是临时双播放器过渡状态：`PlaybackController` 用于现有 App 内播放，`FlowtoneMediaSessionService` 用于验证未来 Service 生命周期。
-- 后续步骤应移除 `PlaybackController` 内的播放器所有权，避免长期保留双播放器架构。
-- 尚未让 UI / ViewModel 连接 `MediaController`。
-- 尚未迁移队列所有权，也未把队列改成 ExoPlayer playlist。
-- 尚未实现后台播放、通知栏媒体控件、锁屏媒体区或耳机按钮支持。
-
-### Step 0.5.4
-
-- 已新增 `FlowtoneMediaControllerConnection`，作为 App 侧连接 `FlowtoneMediaSessionService` 的准备层。
-- 连接类使用 `SessionToken` 指向 `FlowtoneMediaSessionService`。
-- 连接类使用 `MediaController.Builder(...).buildAsync()` 异步创建 `MediaController`。
-- 连接类持有 `MediaController` 引用，并在 `release()` 中释放 controller future / controller。
-- `PlaybackController` 当前只持有并释放该连接类，不使用它执行播放、暂停、上一曲、下一曲。
-- 0.5.4 当时 App 内实际播放仍然由 `PlaybackController` 内部的 ExoPlayer 完成。
-- 当前是临时双播放器 / 双控制过渡状态：Service 内播放器用于未来架构验证，`PlaybackController` 内播放器继续负责现有播放，`MediaController` 连接只做准备。
-- 尚未让 `MediaController` 接管任何播放行为。
-- 后续步骤应逐步把播放控制迁移到 `MediaController -> MediaSessionService`，并移除长期双播放器 / 双控制架构。
-
-### Step 0.5.4.1
-
-- 已修复临时双 `MediaSession` 过渡状态下的 session id 冲突。
-- `PlaybackController` 内的过渡期 `MediaSession` 使用显式 id：`flowtone_local_transition_session`。
-- `FlowtoneMediaSessionService` 内的 `MediaSession` 使用显式 id：`flowtone_service_session`。
-- 修复目标是避免两个 `MediaSession` 都使用默认空 id 导致 `Session ID must be unique` 崩溃。
-- 0.5.4.1 当时播放行为不变，实际播放仍由 `PlaybackController` 内部 ExoPlayer 完成。
-- 后续 0.5.5 应移除 `PlaybackController` 内旧播放器 / 旧 Session 所有权，避免长期双 Session 架构。
-
-### Step 0.5.5
-
-- 已补齐未来媒体播放前台服务所需的 Manifest 声明。
-- 已新增权限：`android.permission.FOREGROUND_SERVICE`。
-- 已新增权限：`android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`。
-- 已为 `FlowtoneMediaSessionService` 添加 `android:foregroundServiceType="mediaPlayback"`。
-- 保留现有 `androidx.media3.session.MediaSessionService` intent action。
-- 未新增 `POST_NOTIFICATIONS` 权限，通知权限留到通知栏阶段处理。
-- 本步只是播放迁移前的 Manifest 准备。
-- 0.5.5 当时实际播放仍由 `PlaybackController` 内部 ExoPlayer 完成。
-- 尚未实现通知栏媒体控件或真正后台播放。
-
-### Step 0.5.6
-
-- 已将 `PlaybackController` 的实际播放控制迁移到 `MediaController`。
-- `PlaybackController` 不再创建本地 `ExoPlayer`。
-- `PlaybackController` 不再创建本地 `MediaSession`。
-- `FlowtoneMediaSessionService` 是当前唯一持有 `ExoPlayer` 和 `MediaSession` 的位置。
-- `play(song)` 通过 `Song.toMediaItem()` 创建 `MediaItem`，再调用 `MediaController.setMediaItem()`、`prepare()`、`play()`。
-- `pause()` 通过 `MediaController.pause()` 执行。
-- `play()` / 恢复播放通过 `MediaController.play()` 执行。
-- 播放结束监听已迁移到 `MediaController` 的 `Player.Listener`，进入 `Player.STATE_ENDED` 时继续调用 `MusicViewModel` 提供的 `onPlaybackEnded` 回调。
-- 如果 `MediaController` 尚未连接完成，`play(song)` 会暂存最近一次要播放的歌曲，连接完成后自动执行。
-- `MusicViewModel` 仍然负责播放队列、当前索引、上一曲、下一曲和自动下一首。
-- 队列尚未迁移到 `MediaSessionService`，也未改成 ExoPlayer playlist。
-- 双播放器过渡状态已结束，但当时通知栏媒体控件和后台播放真机验证尚未完成。
-
-### Step 0.5.7
-
-- 本步是 0.5.6 播放迁移后的真机验证和 0.5 收尾记录步骤。
-- 已检查 `PlaybackController` 与 `FlowtoneMediaControllerConnection` 生命周期。
-- `PlaybackController.release()` 只释放 `MediaController` 连接资源，不直接释放 Service 内 ExoPlayer。
-- `FlowtoneMediaSessionService.onDestroy()` 负责释放 Service 内部的 `MediaSession` 和 `ExoPlayer`。
-- `Player.STATE_ENDED` 仍通过 `PlaybackController` 中挂到 `MediaController` 的 `Player.Listener` 通知 `MusicViewModel` 自动下一首。
-- 已做一个小修复：`PlaybackController.release()` 时清空 `pendingSong`，避免释放后保留待播歌曲引用。
-- 真机验证 App 内播放正常。
-- 真机已观察到 Android 系统媒体控件能够识别 Flowtone 播放会话。
-- 系统媒体控件中的暂停键可用。
-- App 切到后台后播放继续。
-- 从最近任务中划掉 Flowtone 后，音乐仍继续播放。
-- 只有在系统“已开启的应用”中手动关闭 Flowtone 后，播放服务才会停止。
-- 系统媒体控件暂未完成上一曲 / 下一曲控制。
-- 系统媒体控件目前可能出现类似 seek to start 的按钮。
-- 该现象可能与当前队列仍由 `MusicViewModel` 管理，而 `MediaSessionService` / ExoPlayer 只持有当前单曲 `MediaItem` 有关。
-- 该现象不阻塞 `v0.5-internal`，因为 0.5 目标是完成播放核心迁移到 `MediaSessionService`，不是完成通知栏媒体控件体验。
-- `v0.5-internal` 已完成后台播放核心链路：`MusicViewModel -> PlaybackController -> MediaController -> MediaSessionService -> ExoPlayer`。
-
-## Flowtone 0.6 当前进度
-
-### Step 0.6.1：系统媒体控件现状调查
-
-- 本步只做代码阅读和文档记录，未修改播放逻辑或 UI。
-- 当前播放链路仍是：`MusicViewModel -> PlaybackController -> MediaController -> FlowtoneMediaSessionService -> ExoPlayer`。
-- `FlowtoneMediaSessionService` 只负责创建、持有和释放 `ExoPlayer + MediaSession`。
-- `PlaybackController` 负责把 App 内播放命令转换为 `MediaController` 调用，并维护 UI 所需的 `PlaybackState`。
-- `FlowtoneMediaControllerConnection` 负责通过 `SessionToken` 异步连接 `FlowtoneMediaSessionService`。
-- `Song.toMediaItem()` 负责把 `Song` 转为带 `mediaId`、`uri`、标题、歌手 metadata 的 `MediaItem`。
-- 当前 `PlaybackController.play(song)` 每次只调用 `MediaController.setMediaItem(mediaItem)` 设置一首歌。
-- 当前 ExoPlayer / MediaSessionService 只持有当前单曲 `MediaItem`，没有持有完整播放列表。
-- 当前播放队列仍只存在于 `MusicViewModel.playbackQueue`。
-- 上一曲、下一曲、自动下一首仍由 `MusicViewModel` 通过 `currentQueueIndex` 和 `playSongAt(index)` 管理。
-- 系统媒体控件上一曲 / 下一曲体验不完整的主要原因：系统侧只看到当前单曲，无法从 ExoPlayer playlist 中推导完整队列边界。
-- 系统媒体控件出现类似 seek to start 按钮的可能原因：当前 MediaSession 暴露的是单曲播放能力和 seek 能力，而不是完整队列中的 previous / next 能力。
-- 该问题不影响 App 内上一曲 / 下一曲，因为 App 内控制仍由 `MusicViewModel` 队列逻辑驱动。
-- 后续如果要完善系统媒体控件上一曲 / 下一曲，需要在“队列同步到 MediaSession / ExoPlayer playlist”或“自定义 MediaSession 命令回到 ViewModel 队列逻辑”之间选择方案。
-
-### Step 0.6.2：系统媒体控件上一曲 / 下一曲方案设计
-
-- 本步只更新文档，未修改 Kotlin 播放逻辑或 UI。
-- 0.6 采用保守方案：`MusicViewModel` 继续拥有队列逻辑，`PlaybackController` 后续同步一份队列副本给 `MediaController / ExoPlayer playlist`。
-- 暂时不迁移完整队列所有权到 `FlowtoneMediaSessionService`，因为当前 `MusicViewModel` 队列逻辑已经稳定，直接迁移会同时影响 App 内播放、自动下一首、UI 高亮和系统媒体控件，风险过大。
-- 暂时不做 MediaSession 自定义 command 回调 ViewModel，因为这会引入系统命令到 ViewModel 的反向通道，生命周期和边界更复杂，不适合 0.6 的最小验证目标。
-- 0.6 的目标只是让系统媒体控件能基于 ExoPlayer playlist 获得 previous / next 能力。
-- 0.6 阶段 `MusicViewModel` 仍然负责 `playbackQueue`、`currentQueueIndex`、App 内上一曲、App 内下一曲、当前歌曲自然结束后的自动下一首。
-- 后续 `PlaybackController` 会新增队列播放入口，例如 `playQueue(songs, startIndex)`。
-- `playQueue` 的未来职责：将 `List<Song>` 转为 `List<MediaItem>`，调用 `MediaController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)`，然后 `prepare()` 和 `play()`。
-- `FlowtoneMediaSessionService` 暂时仍只负责持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
-- 0.6.3 只允许新增 `playQueue` 入口，先不接 UI。
-- 0.6.4 再让 `MusicViewModel` 点击歌曲时调用 `playQueue`。
-- 0.6.5 再处理系统媒体控件切歌后 App UI 高亮和 MiniPlayer 状态同步问题。
-
-### Step 0.6.3：新增 PlaybackController.playQueue 入口
-
-- 已在 `PlaybackController` 中新增 `playQueue(songs, startIndex)`。
-- 本步未修改 `MusicViewModel`，因此 App 当前点击歌曲播放逻辑仍然走现有 `play(song)`。
-- 本步未修改 Composable 或 UI。
-- `playQueue` 会对空队列和越界 `startIndex` 做直接返回保护。
-- `playQueue` 会将 `List<Song>` 转为 `List<MediaItem>`。
-- `playQueue` 使用 `MediaController.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)` 设置 playlist。
-- `playQueue` 随后调用 `prepare()` 和 `play()`。
-- 当前暂不为 `playQueue` 增加复杂 pending 队列逻辑，避免影响现有 `play(song)` 的 pending 行为。
-- `FlowtoneMediaSessionService` 仍只负责持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
-
-### Step 0.6.3.1：为 playQueue 增加简单 pending queue
-
-- 已为 `PlaybackController.playQueue(songs, startIndex)` 增加简单 pending queue 支持。
-- 当 `MediaController` 尚未连接完成时，`playQueue` 会保存最近一次 `songs` 和 `startIndex`。
-- pending queue 只保留最近一次请求，不实现复杂队列缓存。
-- `MediaController` 连接完成后，优先执行 pending queue。
-- 如果没有 pending queue，再执行现有 `pendingSong`。
-- `release()` 会同时清空 `pendingSong`、`pendingQueueSongs` 和 `pendingQueueStartIndex`。
-- 本步未修改 `MusicViewModel`，未接 UI，当前 App 点击歌曲播放逻辑不变。
-
-### Step 0.6.4：建立 MediaItem 变化到 ViewModel 的同步通道
-
-- 已在 `PlaybackController` 的 `Player.Listener` 中监听 `onMediaItemTransition(mediaItem, reason)`。
-- 当当前 `MediaItem` 变化且 `mediaId` 非空时，`PlaybackController` 会通过回调上报 `mediaId`。
-- `MusicViewModel` 初始化 `PlaybackController` 时注册 `onMediaItemChanged` 回调。
-- `MusicViewModel` 收到 `mediaId` 后，会在 `playbackQueue` 中按 `Song.id` 查找对应歌曲。
-- 找到歌曲后，`MusicViewModel` 会同步 `currentQueueIndex`，并让 `PlaybackController` 更新 `PlaybackState.currentSong`。
-- `mediaId` 为空、无法转换为 Long、或在 `playbackQueue` 中找不到对应歌曲时会直接忽略，不崩溃。
-- 本步没有把点击歌曲播放改成 `playQueue`。
-- 本步没有修改 Composable 或 UI。
-- `FlowtoneMediaSessionService` 仍只负责持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
-
-### Step 0.6.5：MusicViewModel 使用 playQueue 播放队列
-
-- 已将 `MusicViewModel` 的集中播放入口 `playSongAt(index)` 从 `PlaybackController.play(song)` 切换为 `PlaybackController.playQueue(playbackQueue, index)`。
-- 点击列表歌曲仍通过 `playSong(song) -> playSongAt(index)`，因此现在会走 `playQueue`。
-- App 内上一曲仍通过 `playPrevious() -> playSongAt(index)`，因此现在会走 `playQueue`。
-- App 内下一曲仍通过 `playNext() -> playSongAt(index)`，因此现在会走 `playQueue`。
-- `MusicViewModel` 仍然维护 `playbackQueue` 和 `currentQueueIndex`，未迁移队列所有权。
-- `PlaybackController.play(song)` 未删除，仍保留单曲播放能力。
-- `FlowtoneMediaSessionService` 仍只持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
-- 自然播放下一首主要由 ExoPlayer playlist 处理，`onMediaItemTransition` 会同步当前歌曲状态。
-- `Player.STATE_ENDED` 通常只在 playlist 末尾触发；此时现有 `playNext()` 会发现没有下一首并返回，因此本步不需要大改自动下一首逻辑。
-
-### Step 0.6.6：记录 playlist 接入后的真机验证结果
-
-- 本步只更新文档，未修改 Kotlin 播放逻辑或 UI。
-- 点击歌曲播放正常。
-- App 内播放 / 暂停正常。
-- App 内上一曲 / 下一曲正常。
-- 当前播放歌曲高亮正常。
-- MiniPlayer 标题 / 歌手显示正常。
-- 当前歌曲自然结束后可以继续下一首。
-- 最后一首结束后停止，不循环。
-- 系统媒体控件已能基于 ExoPlayer playlist 工作。
-- 系统媒体控件中的下一曲可用。
-- 系统媒体控件中的上一曲符合 Media3 / ExoPlayer 默认 previous 行为：当前歌曲播放超过一小段时间后，上一曲会先回到当前歌曲开头；当前歌曲接近开头时，再点上一曲会切到上一首。
-- 该上一曲行为属于 Media3 / ExoPlayer 默认行为，不作为 0.6 bug 处理。
-- `FlowtoneMediaSessionService` 仍只持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
-- `MusicViewModel` 仍是业务队列所有者。
-
-### Flowtone 0.6 Internal 总结
-
-0.6 目标：
-
-- 完善系统媒体控件基础体验。
-- 重点让系统侧能看到完整 playlist，而不是只看到当前单曲 `MediaItem`。
-
-0.6 已完成：
-
-- `PlaybackController.playQueue(songs, startIndex)`。
-- `playQueue` 使用 `MediaController.setMediaItems(...)` 同步完整 playlist。
-- `playQueue` 支持简单 pending queue，避免 `MediaController` 未连接时丢弃首次队列播放请求。
-- `PlaybackController` 监听 `onMediaItemTransition`。
-- `MusicViewModel` 根据 `mediaId` 同步 `currentQueueIndex` 和当前歌曲状态。
-- `MusicViewModel.playSongAt(index)` 已切换为 `PlaybackController.playQueue(playbackQueue, index)`。
-- ExoPlayer / MediaSessionService 已获得完整 playlist。
-- 系统媒体控件下一曲可用。
-- 系统媒体控件上一曲符合 Media3 / ExoPlayer 默认 previous 行为。
-- 当前歌曲自然结束后可以继续下一首。
-- 最后一首结束后停止，不循环。
-
-0.6 保持不变：
-
-- `MusicViewModel` 仍是业务队列所有者。
-- `FlowtoneMediaSessionService` 仍只持有 `ExoPlayer + MediaSession`，不主动管理业务队列。
-- Composable 仍不接触 `ExoPlayer`、`MediaSession` 或 `MediaController`。
-- 未引入 Hilt、Room、Navigation。
-- 未做 UI 大改。
-
-0.6 真机验证结果：
-
-- 点击歌曲播放正常。
-- App 内播放 / 暂停正常。
-- App 内上一曲 / 下一曲正常。
-- MiniPlayer 显示正常。
-- 列表当前播放高亮正常。
-- 后台播放保持正常。
-- 系统媒体控件下一曲可用。
-- 系统媒体控件上一曲行为符合预期：播放超过一小段时间后先回到当前歌曲开头，接近开头时再点会切到上一首。
-
-0.7 候选方向：
-
-- 播放进度条。
-- 专辑封面。
-- 通知栏 / 锁屏 metadata 进一步完善。
-- 耳机按钮 / 蓝牙按钮专项验证。
-- 搜索。
-- 播放模式：随机、单曲循环、列表循环。
-
-## 当前架构
+## 当前播放架构
 
 ```text
-Composable -> MusicViewModel -> PlaybackController -> MediaController -> MediaSessionService -> ExoPlayer
+Composable -> MusicViewModel -> PlaybackController -> MediaController -> FlowtoneMediaSessionService -> ExoPlayer
 ```
 
 当前职责：
 
-- `Composable`：显示 UI，触发 ViewModel 方法。
-- `MusicViewModel`：持有歌曲列表、播放队列、当前索引，处理上一曲、下一曲、自动下一首。
-- `PlaybackController`：通过 `MediaController` 控制播放，并向 ViewModel 暴露播放状态。
-- `FlowtoneMediaSessionService`：当前唯一持有 `ExoPlayer` 和 `MediaSession` 的位置。
+- `Composable`：显示 UI，触发 `MusicViewModel` 方法。
+- `MusicViewModel`：持有歌曲列表、播放队列、当前索引，处理上一曲、下一曲、自动下一首和 UI 状态组装。
+- `PlaybackController`：通过 `MediaController` 控制播放，并维护播放状态。
+- `FlowtoneMediaSessionService`：唯一持有 `ExoPlayer + MediaSession` 的位置。
 - `ExoPlayer`：在 `FlowtoneMediaSessionService` 内执行实际播放。
 
-## 未来目标架构
+架构边界：
+
+- Composable 不直接接触 `ExoPlayer`。
+- Composable 不直接接触 `MediaSession`。
+- Composable 不直接接触 `MediaController`。
+- `FlowtoneMediaSessionService` 是唯一持有 `ExoPlayer + MediaSession` 的地方。
+- `PlaybackController` 通过 `MediaController` 控制播放。
+
+## Flowtone 0.8 已完成
+
+### 0.8.1：Package 结构整理
+
+- 已整理项目 package 结构。
+- 应用入口移动到 `app`。
+- 核心模型移动到 `core/model`。
+- 本地扫描相关代码移动到 `data/local`。
+- 播放器 UI 移动到 `ui/player`。
+- 列表页移动到 `ui/library`。
+- 播放控制链路保持不变。
+
+### 0.8.2：SourceType
+
+- 已新增 `SourceType`：
+  - `Local`
+  - `Online`
+- `Song` 已新增 `sourceType` 字段。
+- 当前本地扫描得到的歌曲统一设置为 `SourceType.Local`。
+- 当前仍未创建在线 `Song`。
+
+### 0.8.3：Repository 层
+
+- 已新增 `LocalMusicRepository`。
+- 已新增 `MusicRepository`。
+- 当前本地歌曲加载链路：
 
 ```text
-Composable -> MusicViewModel -> MediaController -> MediaSessionService -> ExoPlayer
+MusicViewModel
+-> MusicRepository.loadLocalSongs()
+-> LocalMusicRepository.loadSongs()
+-> AudioScanner.scanSongs()
+-> MediaStore
 ```
 
-迁移原则：
+- `MusicViewModel` 不再直接调用 `AudioScanner.scanSongs()`。
 
-- 不让 Composable 直接接触 `ExoPlayer` 或 `MediaSession`。
-- 不一次性完成完整后台播放。
-- 先新增 `MediaSessionService` 骨架。
-- 再迁移 `ExoPlayer` / `MediaSession` 所有权。
-- 再让 ViewModel 通过 `MediaController` 控制播放。
-- 再处理通知栏、锁屏、耳机按钮和后台播放。
+### 0.8.4：MediaItemMapper
+
+- 已新增 `MediaItemMapper`。
+- `Song -> MediaItem` 映射集中到 `MediaItemMapper.toMediaItem(song)`。
+- `MediaItem -> Song` 还原集中到 `MediaItemMapper.toSongOrNull(mediaItem, scannedSongs)`。
+- `SongMediaItem.kt` 保留为兼容扩展入口，内部委托给 `MediaItemMapper`。
+- 当前本地歌曲仍然使用现有 `Song.uri` 播放。
+- `MediaItem` 还原 `Song` 时，兜底 `sourceType` 仍为 `SourceType.Local`。
+
+### 0.8.5：PlaybackController 整理
+
+- 已整理 `PlaybackController` 内部重复逻辑。
+- pending 单曲和 pending 队列请求已收敛为内部 `PendingPlaybackRequest`。
+- 已保留播放控制入口：
+  - `play(song)`
+  - `playQueue(songs, index)`
+  - `pause()`
+  - `resume()`
+  - `skipToNext()`
+  - `skipToPrevious()`
+  - `seekTo(positionMs)`
+- 兼容入口仍保留：
+  - `play()`
+  - `playNext(playWhenReady)`
+  - `playPrevious(playWhenReady)`
+- controller 未连接时等待可用后继续播放的行为保持不变。
+- `onMediaItemTransition` 与 `currentSong` 同步逻辑保持不变。
+
+### 0.8.6：PlayerUiState
+
+- 已新增 `PlayerUiState`。
+- `MiniPlayer` 优先接收 `PlayerUiState`，减少直接传递分散播放器状态。
+- `PlayerUiState` 当前字段：
+  - `currentSong`
+  - `isPlaying`
+  - `positionMs`
+  - `durationMs`
+  - `artworkUri`
+  - `playbackOrderMode`
+  - `hasCurrentSong`
+  - `canPlay`
+- UI 表现、动画、进度条和播放行为保持不变。
+
+### 0.8.7：MusicProvider 抽象
+
+- 已新增 `MusicProvider` 接口。
+- 已新增 `ProviderSong` 数据模型。
+- 已新增 `NoopMusicProvider` 空实现。
+- `MusicRepository` 默认持有 `NoopMusicProvider`。
+- 已预留 `MusicRepository.searchOnlineSongs(keyword)`。
+- 当前在线搜索入口返回空结果。
+- 当前未接入任何真实在线 Provider。
 
 ## 当前文件结构概览
 
 ```text
 app/src/main/java/ink/tenqui/flowtone/
-|-- MainActivity.kt
+|-- app/
+|   |-- FlowtoneApp.kt
+|   `-- MainActivity.kt
+|-- core/
+|   `-- model/
+|       |-- Song.kt
+|       `-- SourceType.kt
 |-- data/
-|   `-- AudioScanner.kt
-|-- model/
-|   `-- Song.kt
+|   |-- local/
+|   |   |-- AudioScanner.kt
+|   |   |-- LocalMusicRepository.kt
+|   |   `-- PlaybackSettingsStore.kt
+|   |-- online/
+|   |   |-- MusicProvider.kt
+|   |   |-- NoopMusicProvider.kt
+|   |   `-- ProviderSong.kt
+|   `-- repository/
+|       `-- MusicRepository.kt
 |-- permissions/
 |   `-- AudioPermission.kt
 |-- playback/
 |   |-- FlowtoneMediaControllerConnection.kt
 |   |-- FlowtoneMediaSessionService.kt
+|   |-- MediaItemMapper.kt
 |   |-- PlaybackController.kt
+|   |-- PlaybackOrderMode.kt
 |   |-- PlaybackState.kt
 |   `-- SongMediaItem.kt
 |-- ui/
-|   |-- FlowtoneApp.kt
 |   |-- components/
-|   |   |-- MiniPlayer.kt
 |   |   `-- SongListItem.kt
-|   |-- screens/
+|   |-- library/
 |   |   `-- LibraryScreen.kt
+|   |-- player/
+|   |   |-- MiniPlayer.kt
+|   |   `-- PlayerUiState.kt
 |   `-- theme/
+|       |-- Color.kt
+|       |-- Theme.kt
+|       `-- Type.kt
 `-- viewmodel/
     `-- MusicViewModel.kt
 ```
 
+## 当前已完成能力
+
+- 音频读取权限请求。
+- 本地音乐扫描。
+- 本地歌曲列表展示。
+- 点击歌曲播放。
+- 播放队列。
+- 上一首 / 下一首。
+- 暂停 / 继续。
+- 后台播放。
+- Android 系统媒体控件。
+- 系统媒体控件上一首 / 下一首。
+- 播放顺序：
+  - Sequence
+  - RepeatOne
+  - Shuffle
+- MiniPlayer 展开 / 收起。
+- MiniPlayer 展开态封面、背景、进度条、时间文本和播放控件。
+- 真实播放进度和 seek。
+
 ## 当前仍未实现
 
-- Android 通知栏媒体控件。
-- 锁屏媒体区稳定支持。
-- 耳机按钮 / 蓝牙媒体按钮。
-- 自定义系统媒体控件上一曲行为；当前使用 Media3 / ExoPlayer 默认 previous 行为。
-- 搜索。
-- 歌单 / 收藏。
-- 专辑封面。
+- 真实在线音乐 Provider。
+- 在线 API。
+- 网络请求。
+- 登录。
+- Cookie / Header / MUSIC_U。
+- 在线搜索 UI。
+- 在线播放 URL 获取。
+- 缓存。
+- 下载。
 - 歌词。
-- 随机播放。
-- 单曲循环 / 列表循环。
-- 播放进度条。
-- 动画和更现代的交互过渡。
-
-## 下一阶段建议
-
-1. 可以基于当前状态打 `v0.6-internal` tag。
-2. 0.7 可从播放进度条、专辑封面、通知栏 / 锁屏 metadata、耳机 / 蓝牙按钮、搜索或播放模式中选择一个方向分步推进。
-3. 如未来产品上需要覆盖 Media3 / ExoPlayer 默认 previous 行为，再单独设计自定义控制方案。
+- 歌单系统。
+- 收藏持久化。
 
 ## 禁止事项
 
-- 不要在 Composable 中创建或直接操作 ExoPlayer。
-- 不要在 Composable 中创建或直接操作 MediaSession。
+- 不要在 Composable 中创建或直接操作 `ExoPlayer`。
+- 不要在 Composable 中创建或直接操作 `MediaSession`。
+- 不要在 Composable 中创建或直接操作 `MediaController`。
 - 不要把播放队列逻辑写进 Composable。
-- 不要把 UI、权限、扫描、播放控制混在同一个文件里。
-- UI 优化应保持简单，不要为了视觉效果引入复杂框架。
-- 不要引入 Hilt、Room、Navigation 等额外框架，除非后续有明确需求。
-- 不要一次性实现完整后台播放。
-- 不要在没有分步验证前迁移播放队列所有权。
+- 不要让 `FlowtoneMediaSessionService` 之外的类持有 `ExoPlayer + MediaSession`。
+- 不要引入 Hilt、Room、Navigation，除非后续有明确需求。
+- 不要在没有分步验证前接入真实在线 API。
+- 不要在 0.8 收尾阶段新增功能。
+
+## 下一阶段建议
+
+1. 可以基于当前状态打 0.8 内部里程碑。
+2. 后续如果进入在线音乐方向，先从一个 Noop 之外的实验 Provider 开始，不要直接改播放核心。
+3. 在线歌曲接入播放前，需要先明确 `ProviderSong -> Song` 或 `ProviderSong -> MediaItem` 的转换边界。
