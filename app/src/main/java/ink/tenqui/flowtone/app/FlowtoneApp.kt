@@ -1,4 +1,4 @@
-package ink.tenqui.flowtone.ui
+package ink.tenqui.flowtone.app
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,8 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
-import ink.tenqui.flowtone.ui.components.MiniPlayer
-import ink.tenqui.flowtone.ui.screens.LibraryScreen
+import ink.tenqui.flowtone.ui.player.MiniPlayer
+import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
 private const val MINI_PLAYER_EXPAND_ANIMATION_DURATION_MS = 300

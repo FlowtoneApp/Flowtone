@@ -14,7 +14,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import ink.tenqui.flowtone.MainActivity
+import ink.tenqui.flowtone.app.MainActivity
 import ink.tenqui.flowtone.R
 
 class FlowtoneMediaSessionService : MediaSessionService() {

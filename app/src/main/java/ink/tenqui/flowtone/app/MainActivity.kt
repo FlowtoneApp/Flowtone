@@ -1,4 +1,4 @@
-package ink.tenqui.flowtone
+package ink.tenqui.flowtone.app
 
 import android.content.Intent
 import android.os.Bundle
@@ -8,7 +8,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import ink.tenqui.flowtone.ui.FlowtoneApp
 import ink.tenqui.flowtone.ui.theme.FlowtoneTheme
 
 class MainActivity : ComponentActivity() {

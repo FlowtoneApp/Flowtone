@@ -1,4 +1,4 @@
-package ink.tenqui.flowtone.model
+package ink.tenqui.flowtone.core.model
 
 import android.net.Uri
 

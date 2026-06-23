@@ -1,4 +1,4 @@
-﻿package ink.tenqui.flowtone.ui.components
+package ink.tenqui.flowtone.ui.player
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
@@ -1896,9 +1896,9 @@ private fun FavoriteButton(
                 Icons.Outlined.FavoriteBorder
             },
             contentDescription = if (liked) {
-                "鍙栨秷鍠滄"
+                "取消喜欢"
             } else {
-                "鍠滄"
+                "喜欢"
             },
             tint = if (liked) {
                 Color(0xFFFF4D67)
@@ -1924,9 +1924,9 @@ private fun PlaybackOrderButton(
         PlaybackOrderMode.Shuffle -> Icons.Rounded.Shuffle
     }
     val description = when (mode) {
-        PlaybackOrderMode.Sequence -> "顺序播放"
-        PlaybackOrderMode.RepeatOne -> "单曲循环"
-        PlaybackOrderMode.Shuffle -> "随机播放"
+        PlaybackOrderMode.Sequence -> "˳�򲥷�"
+        PlaybackOrderMode.RepeatOne -> "����ѭ��"
+        PlaybackOrderMode.Shuffle -> "�������"
     }
     TransparentControlButton(
         onClick = onClick,

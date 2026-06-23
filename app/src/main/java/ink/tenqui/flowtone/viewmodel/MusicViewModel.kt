@@ -3,9 +3,9 @@ package ink.tenqui.flowtone.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import ink.tenqui.flowtone.data.AudioScanner
-import ink.tenqui.flowtone.data.PlaybackSettingsStore
-import ink.tenqui.flowtone.model.Song
+import ink.tenqui.flowtone.data.local.AudioScanner
+import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
+import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
 import ink.tenqui.flowtone.playback.PlaybackState

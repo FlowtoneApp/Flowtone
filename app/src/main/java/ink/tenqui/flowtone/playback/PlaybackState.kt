@@ -1,6 +1,6 @@
 package ink.tenqui.flowtone.playback
 
-import ink.tenqui.flowtone.model.Song
+import ink.tenqui.flowtone.core.model.Song
 
 data class PlaybackState(
     val currentSong: Song? = null,

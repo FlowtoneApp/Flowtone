@@ -1,4 +1,4 @@
-package ink.tenqui.flowtone.ui.screens
+package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import ink.tenqui.flowtone.model.Song
+import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 

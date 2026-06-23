@@ -1,4 +1,4 @@
-package ink.tenqui.flowtone.data
+package ink.tenqui.flowtone.data.local
 
 import android.content.Context
 import ink.tenqui.flowtone.playback.PlaybackOrderMode

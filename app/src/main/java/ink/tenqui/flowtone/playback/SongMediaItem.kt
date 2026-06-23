@@ -1,10 +1,10 @@
-package ink.tenqui.flowtone.playback
+﻿package ink.tenqui.flowtone.playback
 
 import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import ink.tenqui.flowtone.model.Song
+import ink.tenqui.flowtone.core.model.Song
 
 private const val EXTRA_SONG_ID = "song_id"
 private const val EXTRA_SONG_URI = "song_uri"

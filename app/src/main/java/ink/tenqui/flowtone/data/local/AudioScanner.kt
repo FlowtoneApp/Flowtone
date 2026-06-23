@@ -1,11 +1,11 @@
-package ink.tenqui.flowtone.data
+package ink.tenqui.flowtone.data.local
 
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import ink.tenqui.flowtone.model.Song
+import ink.tenqui.flowtone.core.model.Song
 
 class AudioScanner(
     private val contentResolver: ContentResolver
