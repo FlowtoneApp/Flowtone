@@ -6,6 +6,7 @@ import android.graphics.BlurMaskFilter
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint as NativePaint
 import android.graphics.RectF
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.CubicBezierEasing
@@ -119,6 +120,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val MINI_PLAYER_ANIMATION_DURATION_MS = 400
+private const val FLOWTONE_CLOUD_COLORS_TAG = "FlowtoneCloudColors"
 private val MiniPlayerEasing = CubicBezierEasing(0.12f, 0.34f, 0.16f, 1f)
 private val SoftElementEasing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 private val HeavyElementEasing = CubicBezierEasing(0.3f, 0.0f, 0.0f, 1.0f)
@@ -244,33 +246,91 @@ fun MiniPlayer(
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val fallbackSeedColor = MaterialTheme.colorScheme.primary.toArgb()
     val fallbackCloudColors = materialYouCloudColors(
-        seedColor = fallbackSeedColor,
+        seedColors = listOf(fallbackSeedColor, fallbackSeedColor, fallbackSeedColor),
         isDarkTheme = isDarkTheme
     )
     var extractedCloudColors by remember {
         mutableStateOf<List<Color>?>(null)
     }
-    LaunchedEffect(paletteImageRequest, fallbackSeedColor, isDarkTheme) {
-        extractedCloudColors = paletteImageRequest?.let { request ->
-            runCatching {
-                withContext(Dispatchers.Default) {
-                    val result = context.imageLoader.execute(request)
-                    val bitmap = (result as? SuccessResult)?.image?.toBitmap(128, 128)
-                    bitmap?.let { sourceBitmap ->
-                        val seedColor = extractMaterialYouSeedColor(
-                            bitmap = sourceBitmap,
-                            fallbackColor = fallbackSeedColor
-                        )
-                        materialYouCloudColors(
-                            seedColor = seedColor,
-                            isDarkTheme = isDarkTheme
-                        )
-                    }
-                }
-            }.getOrNull()
+    LaunchedEffect(currentSong?.id, artworkUri, fallbackSeedColor, isDarkTheme) {
+        extractedCloudColors = null
+        Log.d(
+            FLOWTONE_CLOUD_COLORS_TAG,
+            "start songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+                "requestData=${paletteImageRequest?.data}"
+        )
+
+        if (artworkUri == null || paletteImageRequest == null) {
+            Log.d(
+                FLOWTONE_CLOUD_COLORS_TAG,
+                "fallback used for songId=${currentSong?.id}, song=${title}, reason=artworkUri is null, " +
+                    "path=${CloudColorPath.ThemeFallback.logName}, " +
+                    "colors=${fallbackCloudColors.joinToString { it.toArgbHex() }}"
+            )
+            return@LaunchedEffect
         }
+
+        extractedCloudColors = runCatching {
+            withContext(Dispatchers.Default) {
+                val result = context.imageLoader.execute(paletteImageRequest)
+                Log.d(
+                    FLOWTONE_CLOUD_COLORS_TAG,
+                    "coil result songId=${currentSong?.id}, song=${title}, success=${result is SuccessResult}"
+                )
+
+                val bitmap = (result as? SuccessResult)?.image?.toBitmap(128, 128)
+                    ?: error("Coil did not return a bitmap image")
+                val seedResult = extractMaterialYouSeedColors(
+                    bitmap = bitmap,
+                    fallbackColor = fallbackSeedColor,
+                    count = 3
+                )
+                val colors = when (seedResult.colorPath) {
+                    CloudColorPath.MaterialYouSeeds -> materialYouCloudColors(
+                        seedColors = seedResult.seedColors,
+                        isDarkTheme = isDarkTheme
+                    )
+
+                    CloudColorPath.NeutralLowChroma -> neutralCloudColorsFromCover(
+                        averageLuminance = seedResult.averageLuminance,
+                        isDarkTheme = isDarkTheme
+                    )
+
+                    CloudColorPath.ThemeFallback -> fallbackCloudColors
+                }
+                Log.d(
+                    FLOWTONE_CLOUD_COLORS_TAG,
+                    "success songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+                        "requestData=${paletteImageRequest.data}, bitmap=${bitmap.width}x${bitmap.height}, " +
+                        "opaque=${seedResult.opaquePixelCount}, quantized=${seedResult.quantizedColorCount}, " +
+                        "sat=${seedResult.averageSaturation}, lum=${seedResult.averageLuminance}, " +
+                        "lowChroma=${seedResult.isLowChromaCover}, path=${seedResult.colorPath.logName}, " +
+                        "seeds=${seedResult.seedColors.joinToString { it.toArgbHex() }}, " +
+                        "colors=${colors.joinToString { it.toArgbHex() }}, " +
+                        "fallback=${seedResult.usedFallback}, reason=${seedResult.fallbackReason.orEmpty()}"
+                )
+                colors
+            }
+        }.onFailure { throwable ->
+            Log.w(
+                FLOWTONE_CLOUD_COLORS_TAG,
+                "fallback used for songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+                    "requestData=${paletteImageRequest.data}, reason=${throwable.message}, " +
+                    "path=${CloudColorPath.ThemeFallback.logName}, " +
+                    "colors=${fallbackCloudColors.joinToString { it.toArgbHex() }}",
+                throwable
+            )
+        }.getOrNull()
     }
     val cloudColors = extractedCloudColors ?: fallbackCloudColors
+    LaunchedEffect(currentSong?.id, artworkUri, cloudColors) {
+        Log.d(
+            FLOWTONE_CLOUD_COLORS_TAG,
+            "render songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+                "colors=${cloudColors.joinToString { it.toArgbHex() }}, " +
+                "usingFallback=${extractedCloudColors == null}"
+        )
+    }
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val titleColor = if (hasArtworkBackground) {
         Color.White
@@ -554,13 +614,17 @@ fun MiniPlayer(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                     )
-                    val sideButtonProgress = easeMiniPlayerMotion(
-                        delayedProgress(animationProgress, 0.28f, 0.92f)
-                    )
-                    FavoriteButton(
-                        liked = isCurrentSongLiked,
-                        enabled = hasCurrentSong && sideButtonProgress > 0.55f,
-                        onClick = {
+                    SideButtonsOverlay(
+                        progress = animationProgress,
+                        playerWidth = playerWidth,
+                        currentHeight = currentHeight,
+                        expandedHeight = expandedHeight,
+                        expandedControlsTop = expandedControlsTop,
+                        hasCurrentSong = hasCurrentSong,
+                        isCurrentSongLiked = isCurrentSongLiked,
+                        playbackOrderMode = playbackState.playbackOrderMode,
+                        iconColor = controlIconColor,
+                        onToggleLiked = {
                             currentSongKey?.let { key ->
                                 likedSongKeys = if (likedSongKeys.contains(key)) {
                                     likedSongKeys - key
@@ -571,52 +635,8 @@ fun MiniPlayer(
                         },
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .graphicsLayer {
-                                val buttonSize = 48.dp
-                                val progressWidth = playerWidth * 0.76f
-                                val progressLeft = (playerWidth - progressWidth) / 2f
-                                val targetX = progressLeft
-                                val hiddenX = -buttonSize - 32.dp
-                                val buttonX = lerpDp(hiddenX, targetX, sideButtonProgress)
-                                val targetY = expandedControlsTop + 16.dp
-                                val hiddenY = targetY + 96.dp
-                                val buttonY = lerpDp(hiddenY, targetY, sideButtonProgress)
-                                val buttonScale = lerpFloat(2.0f, 1.0f, sideButtonProgress)
-                                translationX = buttonX.toPx()
-                                translationY = buttonY.toPx()
-                                scaleX = buttonScale
-                                scaleY = buttonScale
-                                alpha = sideButtonProgress
-                            }
-                            .size(48.dp)
-                    )
-                    PlaybackOrderButton(
-                        mode = playbackState.playbackOrderMode,
-                        iconColor = controlIconColor,
-                        enabled = hasCurrentSong && sideButtonProgress > 0.55f,
-                        onClick = {
-                            onTogglePlaybackOrderMode()
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .graphicsLayer {
-                                val buttonSize = 48.dp
-                                val progressWidth = playerWidth * 0.76f
-                                val progressLeft = (playerWidth - progressWidth) / 2f
-                                val targetX = progressLeft + progressWidth - buttonSize
-                                val hiddenX = playerWidth + 32.dp
-                                val buttonX = lerpDp(hiddenX, targetX, sideButtonProgress)
-                                val targetY = expandedControlsTop + 16.dp
-                                val hiddenY = targetY + 96.dp
-                                val buttonY = lerpDp(hiddenY, targetY, sideButtonProgress)
-                                val buttonScale = lerpFloat(2.0f, 1.0f, sideButtonProgress)
-                                translationX = buttonX.toPx()
-                                translationY = buttonY.toPx()
-                                scaleX = buttonScale
-                                scaleY = buttonScale
-                                alpha = sideButtonProgress
-                            }
-                            .size(48.dp)
+                            .fillMaxWidth(),
+                        onTogglePlaybackOrderMode = onTogglePlaybackOrderMode
                     )
                 }
             }
@@ -938,6 +958,7 @@ private fun MorphArtworkLayer(
     val shadowPadding = 32.dp
     val shadowProgress = progress.coerceIn(0f, 1f)
     val imageScale = lerpFloat(1.22f, 1f, progress)
+    val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
     val blurModifier = if (blurRadius > 0.5.dp) {
         Modifier.blur(blurRadius)
@@ -1012,6 +1033,13 @@ private fun MorphArtworkLayer(
                     }
                     .then(blurModifier)
             )
+            if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = collapsedArtworkDimAlpha))
+                )
+            }
             if (imageRequest == null) {
                 Icon(
                     imageVector = Icons.Filled.MusicNote,
@@ -1304,6 +1332,80 @@ private fun SharedPlaybackControls(
                 contentDescription = "\u4e0b\u4e00\u66f2",
                 tint = iconColor,
                 modifier = Modifier.size(previousNextIconSize)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SideButtonsOverlay(
+    progress: Float,
+    playerWidth: Dp,
+    currentHeight: Dp,
+    expandedHeight: Dp,
+    expandedControlsTop: Dp,
+    hasCurrentSong: Boolean,
+    isCurrentSongLiked: Boolean,
+    playbackOrderMode: PlaybackOrderMode,
+    iconColor: Color,
+    onToggleLiked: () -> Unit,
+    onTogglePlaybackOrderMode: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val enterProgress = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
+    val buttonSize = 48.dp
+    val sideButtonHorizontalOffset = 48.dp
+    val progressWidth = playerWidth * 0.76f
+    val progressLeft = (playerWidth - progressWidth) / 2f
+    val buttonEndY = expandedControlsTop + 16.dp
+    val parentGrowthCompensationY = currentHeight - expandedHeight
+    val buttonY = parentGrowthCompensationY + buttonEndY + 300.dp * (1f - enterProgress)
+    val scale = lerpFloat(2.6f, 1.0f, enterProgress)
+    val buttonAlpha = lerpFloat(0.18f, 1.0f, enterProgress)
+
+    Box(modifier = modifier) {
+        val favoriteEndX = progressLeft
+        val favoriteStartX = favoriteEndX - sideButtonHorizontalOffset
+        val favoriteX = lerpDp(favoriteStartX, favoriteEndX, enterProgress)
+        Box(
+            modifier = Modifier
+                .offset(x = favoriteX, y = buttonY)
+                .size(buttonSize)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = buttonAlpha
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            FavoriteButton(
+                liked = isCurrentSongLiked,
+                enabled = hasCurrentSong && enterProgress > 0.55f,
+                onClick = onToggleLiked,
+                modifier = Modifier.size(buttonSize)
+            )
+        }
+
+        val orderEndX = progressLeft + progressWidth - buttonSize
+        val orderStartX = orderEndX + sideButtonHorizontalOffset
+        val orderX = lerpDp(orderStartX, orderEndX, enterProgress)
+        Box(
+            modifier = Modifier
+                .offset(x = orderX, y = buttonY)
+                .size(buttonSize)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = buttonAlpha
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            PlaybackOrderButton(
+                mode = playbackOrderMode,
+                iconColor = iconColor,
+                enabled = hasCurrentSong && enterProgress > 0.55f,
+                onClick = onTogglePlaybackOrderMode,
+                modifier = Modifier.size(buttonSize)
             )
         }
     }
@@ -1822,11 +1924,30 @@ private fun ExpandedArtwork(
     }
 }
 
+private enum class CloudColorPath(val logName: String) {
+    MaterialYouSeeds("materialYouSeeds"),
+    NeutralLowChroma("neutralLowChroma"),
+    ThemeFallback("themeFallback")
+}
+
+private data class MaterialYouSeedColorResult(
+    val seedColors: List<Int>,
+    val opaquePixelCount: Int,
+    val quantizedColorCount: Int,
+    val averageSaturation: Float,
+    val averageLuminance: Float,
+    val isLowChromaCover: Boolean,
+    val colorPath: CloudColorPath,
+    val usedFallback: Boolean,
+    val fallbackReason: String?
+)
+
 @SuppressLint("RestrictedApi")
-private fun extractMaterialYouSeedColor(
+private fun extractMaterialYouSeedColors(
     bitmap: Bitmap,
-    fallbackColor: Int
-): Int {
+    fallbackColor: Int,
+    count: Int = 3
+): MaterialYouSeedColorResult {
     return runCatching {
         val width = bitmap.width
         val height = bitmap.height
@@ -1838,33 +1959,205 @@ private fun extractMaterialYouSeedColor(
         }.toIntArray()
 
         if (opaquePixels.isEmpty()) {
-            fallbackColor
+            MaterialYouSeedColorResult(
+                seedColors = listOf(fallbackColor, fallbackColor, fallbackColor).take(count),
+                opaquePixelCount = 0,
+                quantizedColorCount = 0,
+                averageSaturation = 0f,
+                averageLuminance = 0f,
+                isLowChromaCover = true,
+                colorPath = CloudColorPath.ThemeFallback,
+                usedFallback = true,
+                fallbackReason = "no opaque pixels"
+            )
         } else {
+            val stats = calculateCoverColorStats(opaquePixels)
             val quantized = QuantizerCelebi.quantize(opaquePixels, 128)
-            Score.score(quantized).firstOrNull() ?: fallbackColor
+            val isLowChromaCover = stats.averageSaturation < 0.12f ||
+                (stats.averageSaturation < 0.16f && stats.averageLuminance < 0.35f)
+
+            if (isLowChromaCover) {
+                MaterialYouSeedColorResult(
+                    seedColors = emptyList(),
+                    opaquePixelCount = opaquePixels.size,
+                    quantizedColorCount = quantized.size,
+                    averageSaturation = stats.averageSaturation,
+                    averageLuminance = stats.averageLuminance,
+                    isLowChromaCover = true,
+                    colorPath = CloudColorPath.NeutralLowChroma,
+                    usedFallback = false,
+                    fallbackReason = "low chroma cover"
+                )
+            } else {
+                val rankedColors = Score.score(quantized)
+                if (rankedColors.isEmpty()) {
+                    MaterialYouSeedColorResult(
+                        seedColors = emptyList(),
+                        opaquePixelCount = opaquePixels.size,
+                        quantizedColorCount = quantized.size,
+                        averageSaturation = stats.averageSaturation,
+                        averageLuminance = stats.averageLuminance,
+                        isLowChromaCover = false,
+                        colorPath = CloudColorPath.NeutralLowChroma,
+                        usedFallback = false,
+                        fallbackReason = "score returned no seed colors"
+                    )
+                } else {
+                    MaterialYouSeedColorResult(
+                        seedColors = normalizeSeedColors(
+                            seedColors = rankedColors,
+                            fallbackColor = fallbackColor,
+                            count = count
+                        ),
+                        opaquePixelCount = opaquePixels.size,
+                        quantizedColorCount = quantized.size,
+                        averageSaturation = stats.averageSaturation,
+                        averageLuminance = stats.averageLuminance,
+                        isLowChromaCover = false,
+                        colorPath = CloudColorPath.MaterialYouSeeds,
+                        usedFallback = false,
+                        fallbackReason = null
+                    )
+                }
+            }
         }
-    }.getOrDefault(fallbackColor)
+    }.getOrDefault(
+        MaterialYouSeedColorResult(
+            seedColors = listOf(fallbackColor, fallbackColor, fallbackColor).take(count),
+            opaquePixelCount = 0,
+            quantizedColorCount = 0,
+            averageSaturation = 0f,
+            averageLuminance = 0f,
+            isLowChromaCover = false,
+            colorPath = CloudColorPath.ThemeFallback,
+            usedFallback = true,
+            fallbackReason = "seed extraction failed"
+        )
+    )
+}
+
+private data class CoverColorStats(
+    val averageSaturation: Float,
+    val averageLuminance: Float
+)
+
+private fun calculateCoverColorStats(pixels: IntArray): CoverColorStats {
+    if (pixels.isEmpty()) {
+        return CoverColorStats(
+            averageSaturation = 0f,
+            averageLuminance = 0f
+        )
+    }
+
+    val hsv = FloatArray(3)
+    var saturationSum = 0f
+    var luminanceSum = 0f
+
+    pixels.forEach { color ->
+        AndroidColor.colorToHSV(color, hsv)
+        saturationSum += hsv[1]
+        luminanceSum += approximateLuminance(color)
+    }
+
+    return CoverColorStats(
+        averageSaturation = saturationSum / pixels.size.toFloat(),
+        averageLuminance = luminanceSum / pixels.size.toFloat()
+    )
+}
+
+private fun approximateLuminance(color: Int): Float {
+    val red = AndroidColor.red(color) / 255f
+    val green = AndroidColor.green(color) / 255f
+    val blue = AndroidColor.blue(color) / 255f
+    return 0.2126f * red + 0.7152f * green + 0.0722f * blue
+}
+
+private fun normalizeSeedColors(
+    seedColors: List<Int>,
+    fallbackColor: Int,
+    count: Int
+): List<Int> {
+    return if (seedColors.size >= count) {
+        seedColors.take(count)
+    } else {
+        seedColors + List(count - seedColors.size) {
+            seedColors.lastOrNull() ?: fallbackColor
+        }
+    }
+}
+
+private fun neutralCloudColorsFromCover(
+    averageLuminance: Float,
+    isDarkTheme: Boolean
+): List<Color> {
+    val base = averageLuminance.coerceIn(0.08f, 0.82f)
+
+    return if (isDarkTheme) {
+        listOf(
+            Color(
+                red = (base * 0.72f).coerceIn(0f, 1f),
+                green = (base * 0.76f).coerceIn(0f, 1f),
+                blue = (base * 0.82f).coerceIn(0f, 1f)
+            ),
+            Color(
+                red = (base * 0.92f).coerceIn(0f, 1f),
+                green = (base * 0.94f).coerceIn(0f, 1f),
+                blue = (base * 0.98f).coerceIn(0f, 1f)
+            ),
+            Color(
+                red = (base + 0.18f).coerceAtMost(0.88f),
+                green = (base + 0.19f).coerceAtMost(0.90f),
+                blue = (base + 0.22f).coerceAtMost(0.96f)
+            )
+        )
+    } else {
+        listOf(
+            Color(
+                red = (base + 0.20f).coerceAtMost(0.86f),
+                green = (base + 0.21f).coerceAtMost(0.88f),
+                blue = (base + 0.23f).coerceAtMost(0.92f)
+            ),
+            Color(
+                red = (base + 0.30f).coerceAtMost(0.92f),
+                green = (base + 0.31f).coerceAtMost(0.94f),
+                blue = (base + 0.33f).coerceAtMost(0.96f)
+            ),
+            Color(
+                red = (base + 0.12f).coerceAtMost(0.80f),
+                green = (base + 0.13f).coerceAtMost(0.82f),
+                blue = (base + 0.15f).coerceAtMost(0.86f)
+            )
+        )
+    }
+}
+
+private fun Int.toArgbHex(): String {
+    return "#${toUInt().toString(16).padStart(8, '0')}"
+}
+
+private fun Color.toArgbHex(): String {
+    return toArgb().toArgbHex()
 }
 
 @SuppressLint("RestrictedApi")
 private fun materialYouCloudColors(
-    seedColor: Int,
+    seedColors: List<Int>,
     isDarkTheme: Boolean
 ): List<Color> {
-    val corePalette = CorePalette.of(seedColor)
-
-    return if (isDarkTheme) {
-        listOf(
-            Color(corePalette.a1.tone(68)),
-            Color(corePalette.a2.tone(78)),
-            Color(corePalette.a3.tone(88))
-        )
+    val fallbackSeed = seedColors.lastOrNull() ?: AndroidColor.GRAY
+    val normalizedSeeds = if (seedColors.size >= 3) {
+        seedColors.take(3)
     } else {
-        listOf(
-            Color(corePalette.a1.tone(62)),
-            Color(corePalette.a2.tone(72)),
-            Color(corePalette.a3.tone(82))
-        )
+        seedColors + List(3 - seedColors.size) { fallbackSeed }
+    }
+    val tones = if (isDarkTheme) {
+        listOf(68, 78, 88)
+    } else {
+        listOf(62, 72, 82)
+    }
+
+    return normalizedSeeds.zip(tones).map { (seed, tone) ->
+        Color(CorePalette.of(seed).a1.tone(tone))
     }
 }
 
