@@ -117,7 +117,6 @@ import com.google.android.material.color.utilities.CorePalette
 import com.google.android.material.color.utilities.QuantizerCelebi
 import com.google.android.material.color.utilities.Score
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
-import ink.tenqui.flowtone.playback.PlaybackState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -136,7 +135,7 @@ private val TrackSwitchProgressEasing = CubicBezierEasing(0.20f, 0.0f, 0.0f, 1.0
 
 @Composable
 fun MiniPlayer(
-    playbackState: PlaybackState,
+    playerUiState: PlayerUiState,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -146,17 +145,13 @@ fun MiniPlayer(
     onTogglePlaybackOrderMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currentSong = playbackState.currentSong
-    val hasCurrentSong = currentSong != null
+    val currentSong = playerUiState.currentSong
+    val hasCurrentSong = playerUiState.hasCurrentSong
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
     var collapsedMetadataSwitchDirection by remember { mutableStateOf(1) }
-    val artworkUri = currentSong?.artworkUri
-    val durationMs = when {
-        playbackState.durationMs > 0L -> playbackState.durationMs
-        currentSong?.durationMs != null && currentSong.durationMs > 0L -> currentSong.durationMs
-        else -> 0L
-    }
+    val artworkUri = playerUiState.artworkUri
+    val durationMs = playerUiState.durationMs
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -366,7 +361,7 @@ fun MiniPlayer(
         MaterialTheme.colorScheme.primary
     }
     var isProgressScrubbing by remember { mutableStateOf(false) }
-    var lockedIsPlayingDuringScrub by remember { mutableStateOf(playbackState.isPlaying) }
+    var lockedIsPlayingDuringScrub by remember { mutableStateOf(playerUiState.isPlaying) }
     var keepPlayPauseVisualLockedAfterSeek by remember { mutableStateOf(false) }
     var playPauseVisualLockToken by remember { mutableStateOf(0) }
     val currentSongKey = currentSong?.id?.toString()
@@ -380,7 +375,7 @@ fun MiniPlayer(
     val visualIsPlaying = if (isProgressScrubbing || keepPlayPauseVisualLockedAfterSeek) {
         lockedIsPlayingDuringScrub
     } else {
-        playbackState.isPlaying
+        playerUiState.isPlaying
     }
     fun lockPlayPauseVisual(isPlayingToLock: Boolean) {
         lockedIsPlayingDuringScrub = isPlayingToLock
@@ -578,9 +573,9 @@ fun MiniPlayer(
                     )
                     ExpandedOnlyContent(
                         progress = animationProgress,
-                        positionMs = playbackState.positionMs,
+                        positionMs = playerUiState.positionMs,
                         durationMs = durationMs,
-                        isPlaying = playbackState.isPlaying,
+                        isPlaying = playerUiState.isPlaying,
                         isPlayingForVisualLock = visualIsPlaying,
                         currentSongKey = currentSong?.id,
                         hasCurrentSong = hasCurrentSong,
@@ -634,7 +629,7 @@ fun MiniPlayer(
                         expandedControlsTop = expandedControlsTop,
                         hasCurrentSong = hasCurrentSong,
                         isCurrentSongLiked = isCurrentSongLiked,
-                        playbackOrderMode = playbackState.playbackOrderMode,
+                        playbackOrderMode = playerUiState.playbackOrderMode,
                         iconColor = controlIconColor,
                         onToggleLiked = {
                             currentSongKey?.let { key ->
@@ -1896,9 +1891,9 @@ private fun FavoriteButton(
                 Icons.Outlined.FavoriteBorder
             },
             contentDescription = if (liked) {
-                "取消喜欢"
+                "鍙栨秷鍠滄"
             } else {
-                "喜欢"
+                "鍠滄"
             },
             tint = if (liked) {
                 Color(0xFFFF4D67)
@@ -1924,9 +1919,9 @@ private fun PlaybackOrderButton(
         PlaybackOrderMode.Shuffle -> Icons.Rounded.Shuffle
     }
     val description = when (mode) {
-        PlaybackOrderMode.Sequence -> "˳�򲥷�"
-        PlaybackOrderMode.RepeatOne -> "����ѭ��"
-        PlaybackOrderMode.Shuffle -> "�������"
+        PlaybackOrderMode.Sequence -> "顺序播放"
+        PlaybackOrderMode.RepeatOne -> "单曲循环"
+        PlaybackOrderMode.Shuffle -> "随机播放"
     }
     TransparentControlButton(
         onClick = onClick,

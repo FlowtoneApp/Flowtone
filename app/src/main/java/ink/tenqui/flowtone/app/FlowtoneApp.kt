@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.ui.player.MiniPlayer
+import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
@@ -53,13 +54,14 @@ fun FlowtoneApp(
     val context = LocalContext.current
     val uiState by musicViewModel.uiState.collectAsState()
     val playbackState by musicViewModel.playbackState.collectAsState()
+    val playerUiState = PlayerUiState.from(playbackState)
     var permissionDenied by remember {
         mutableStateOf(false)
     }
     var miniPlayerExpanded by rememberSaveable {
         mutableStateOf(false)
     }
-    val hasCurrentSong = playbackState.currentSong != null
+    val hasCurrentSong = playerUiState.hasCurrentSong
     val backgroundBlurProgress by animateFloatAsState(
         targetValue = if (hasCurrentSong && miniPlayerExpanded) 1f else 0f,
         animationSpec = tween(
@@ -91,8 +93,8 @@ fun FlowtoneApp(
         miniPlayerExpanded = false
     }
 
-    LaunchedEffect(playbackState.currentSong) {
-        if (playbackState.currentSong == null) {
+    LaunchedEffect(playerUiState.currentSong) {
+        if (playerUiState.currentSong == null) {
             miniPlayerExpanded = false
         }
     }
@@ -142,7 +144,7 @@ fun FlowtoneApp(
         ) { innerPadding ->
             LibraryScreen(
                 uiState = uiState,
-                currentSong = playbackState.currentSong,
+                currentSong = playerUiState.currentSong,
                 permissionDenied = permissionDenied,
                 onRequestPermission = {
                     permissionLauncher.launch(currentAudioPermission())
@@ -169,7 +171,7 @@ fun FlowtoneApp(
             )
         }
         MiniPlayer(
-            playbackState = playbackState,
+            playerUiState = playerUiState,
             expanded = miniPlayerExpanded,
             onExpandedChange = { miniPlayerExpanded = it },
             onTogglePlayPause = musicViewModel::togglePlayPause,
