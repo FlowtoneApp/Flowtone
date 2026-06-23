@@ -25,15 +25,18 @@ data class PlaybackSnapshot(
 
 class PlaybackController(
     context: Context,
+    initialPlaybackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
     private val onPlaybackEnded: () -> Unit,
     private val onMediaItemChanged: (String) -> Unit = {}
 ) {
     private val mediaControllerConnection = FlowtoneMediaControllerConnection(context.applicationContext)
-    private val _playbackState = MutableStateFlow(PlaybackState())
+    private val _playbackState = MutableStateFlow(
+        PlaybackState(playbackOrderMode = initialPlaybackOrderMode)
+    )
     private var pendingSong: Song? = null
     private var pendingQueueSongs: List<Song>? = null
     private var pendingQueueStartIndex: Int? = null
-    private var pendingPlaybackOrderMode: PlaybackOrderMode? = null
+    private var pendingPlaybackOrderMode: PlaybackOrderMode? = initialPlaybackOrderMode
     private var isReleased = false
 
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()

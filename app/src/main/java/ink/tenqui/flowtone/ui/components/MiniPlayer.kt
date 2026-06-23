@@ -1142,7 +1142,11 @@ private fun SharedSongInfo(
     val artistLineBoxWidth = (artistWidth + metadataLineHorizontalPadding * 2f)
         .coerceIn(minMetadataLineWidth, expandedViewportWidth)
     val collapsedTitleX = 0.dp
-    val expandedTitleAbsoluteX = expandedViewportCenterX - titleLineBoxWidth / 2f
+    val expandedTitleContentWidth = titleWidth.coerceAtMost(
+        expandedViewportWidth - metadataLineHorizontalPadding * 2f
+    )
+    val expandedTitleAbsoluteX =
+        expandedViewportCenterX - expandedTitleContentWidth / 2f - metadataLineHorizontalPadding
     val expandedTitleRelativeX = expandedTitleAbsoluteX - expandedViewportX
     val expandedTitleX = if (expandedTitleRelativeX < 0.dp) {
         0.dp
@@ -1150,7 +1154,11 @@ private fun SharedSongInfo(
         expandedTitleRelativeX
     }
     val collapsedArtistX = 0.dp
-    val expandedArtistAbsoluteX = expandedViewportCenterX - artistLineBoxWidth / 2f
+    val expandedArtistContentWidth = artistWidth.coerceAtMost(
+        expandedViewportWidth - metadataLineHorizontalPadding * 2f
+    )
+    val expandedArtistAbsoluteX =
+        expandedViewportCenterX - expandedArtistContentWidth / 2f - metadataLineHorizontalPadding
     val expandedArtistRelativeX = expandedArtistAbsoluteX - expandedViewportX
     val expandedArtistX = if (expandedArtistRelativeX < 0.dp) {
         0.dp
@@ -1160,11 +1168,7 @@ private fun SharedSongInfo(
     val titleX = lerpDp(collapsedTitleX, expandedTitleX, progress)
     val artistX = lerpDp(collapsedArtistX, expandedArtistX, progress)
     val lineHorizontalPadding = lerpDp(0.dp, metadataLineHorizontalPadding, progress)
-    val metadataTextAlign = if (progress > 0.85f) {
-        TextAlign.Center
-    } else {
-        TextAlign.Start
-    }
+    val metadataTextAlign = TextAlign.Start
 
     Box(
         modifier = modifier
