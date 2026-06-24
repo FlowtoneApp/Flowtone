@@ -153,7 +153,7 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             "dist/Flowtone-${GITHUB_REF_NAME}-signed.apk#Flowtone ${GITHUB_REF_NAME} signed APK" \
             --title "Flowtone ${GITHUB_REF_NAME}" \
-            --generate-notes \
+            --notes-from-tag \
             --prerelease \
             --latest=false \
             --verify-tag
