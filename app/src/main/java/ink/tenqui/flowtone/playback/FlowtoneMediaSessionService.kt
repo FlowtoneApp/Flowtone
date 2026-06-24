@@ -3,11 +3,14 @@ package ink.tenqui.flowtone.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.annotation.OptIn
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -25,6 +28,18 @@ class FlowtoneMediaSessionService : MediaSessionService() {
         Bundle.EMPTY
     )
     private val playerListener = object : Player.Listener {
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            logPlayerState("onIsPlayingChanged")
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            logPlayerState("onPlaybackStateChanged")
+        }
+
+        override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
+            logPlayerState("onMediaMetadataChanged")
+        }
+
         override fun onRepeatModeChanged(repeatMode: Int) {
             updatePlaybackOrderButton()
         }
@@ -51,6 +66,10 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
+            Log.d(
+                MEDIA_SESSION_LOG_TAG,
+                "onConnect: packageName=${controller.packageName}"
+            )
             val connectionResult = super.onConnect(session, controller)
             val sessionCommands = connectionResult.availableSessionCommands
                 .buildUpon()
@@ -92,6 +111,11 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .build()
+        )
+
         val servicePlayer = ExoPlayer.Builder(applicationContext)
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -108,6 +132,11 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        Log.d(
+            MEDIA_SESSION_LOG_TAG,
+            "onGetSession: packageName=${controllerInfo.packageName}, " +
+                "hasSession=${mediaSession != null}"
+        )
         return mediaSession
     }
 
@@ -196,6 +225,23 @@ class FlowtoneMediaSessionService : MediaSessionService() {
         }
     }
 
+    private fun logPlayerState(event: String) {
+        val servicePlayer = player
+        val playerMetadata = servicePlayer?.mediaMetadata
+        val currentMediaItemMetadata = servicePlayer?.currentMediaItem?.mediaMetadata
+        Log.d(
+            MEDIA_SESSION_LOG_TAG,
+            "$event: isPlaying=${servicePlayer?.isPlaying}, " +
+                "playbackState=${servicePlayer?.playbackState}, " +
+                "playerTitle=${playerMetadata?.title}, " +
+                "playerArtist=${playerMetadata?.artist}, " +
+                "playerArtworkUri=${playerMetadata?.artworkUri}, " +
+                "currentMediaItemTitle=${currentMediaItemMetadata?.title}, " +
+                "currentMediaItemArtist=${currentMediaItemMetadata?.artist}, " +
+                "currentMediaItemArtworkUri=${currentMediaItemMetadata?.artworkUri}"
+        )
+    }
+
     private fun Int.isUserSkipCommand(): Boolean {
         return this == Player.COMMAND_SEEK_TO_NEXT ||
             this == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM ||
@@ -204,6 +250,7 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     }
 
     private companion object {
+        const val MEDIA_SESSION_LOG_TAG = "FlowtoneMediaSession"
         const val OPEN_EXPANDED_PLAYER_REQUEST_CODE = 1001
     }
 }
