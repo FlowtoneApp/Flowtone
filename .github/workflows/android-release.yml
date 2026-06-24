@@ -123,7 +123,7 @@ jobs:
           "$apksigner" verify --verbose "$signed_apk"
 
           mkdir -p dist
-          final_apk="dist/Flowtone-${GITHUB_REF_NAME}-signed.apk"
+          final_apk="dist/Flowtone-${GITHUB_REF_NAME}.apk"
           cp "$signed_apk" "$final_apk"
 
           echo "apk_path=$final_apk" >> "$GITHUB_OUTPUT"
@@ -131,8 +131,8 @@ jobs:
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Flowtone-${{ github.ref_name }}-signed-apk
-          path: dist/Flowtone-${{ github.ref_name }}-signed.apk
+          name: Flowtone-${{ github.ref_name }}-apk
+          path: dist/Flowtone-${{ github.ref_name }}.apk
           if-no-files-found: error
 
       - name: Create GitHub Pre-release
@@ -151,7 +151,7 @@ jobs:
           # This is a Pre-release, not a stable production Release.
           # The Release asset intentionally uploads only the signed APK.
           gh release create "${GITHUB_REF_NAME}" \
-            "dist/Flowtone-${GITHUB_REF_NAME}-signed.apk#Flowtone ${GITHUB_REF_NAME} signed APK" \
+            "dist/Flowtone-${GITHUB_REF_NAME}.apk#Flowtone-${GITHUB_REF_NAME}.apk" \
             --title "Flowtone ${GITHUB_REF_NAME}" \
             --notes-from-tag \
             --prerelease \
