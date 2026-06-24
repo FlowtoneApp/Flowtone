@@ -132,6 +132,25 @@ MusicViewModel
 - 当前在线搜索入口返回空结果。
 - 当前未接入任何真实在线 Provider。
 
+### 0.8.2：OriginOS 媒体控件兼容性兜底
+
+- 已确认系统媒体控制应以 `MediaSession` 状态为准。
+- `FlowtoneMediaSessionService.onGetSession()` 始终返回当前 `MediaSession`，不按 controller 包名拒绝系统控制器。
+- `MediaSession.Callback.onConnect()` 不做本应用包名白名单过滤，允许 System UI、Bluetooth、Android Auto、通知控制器等连接。
+- `MediaSession.Builder` 已配置指向 `MainActivity` 的 `sessionActivity`。
+- `MediaItem.mediaId` 使用稳定值：优先 `song.id`，无有效 id 时使用 `song.uri`。
+- `MediaItem.mediaMetadata` 写入标题、艺术家和封面 URI；当前 `Song` 暂无专辑名字段，因此不填 albumTitle。
+- 播放新歌顺序保持为 `setMediaItem(s) -> prepare() -> play()`。
+- 通知保持 Media3 默认媒体通知和 MediaStyle。
+- 调试命令：
+
+```powershell
+adb shell dumpsys media_session | findstr /i "flowtone ink.tenqui state playback active"
+adb shell dumpsys notification | findstr /i "flowtone ink.tenqui media"
+```
+
+- 如果 dumpsys 中 Flowtone 已为 `active=true` 且 `state=PLAYING`，但 OriginOS 控制中心仍显示“未播放”，先记录为 OriginOS 控制中心兼容问题，不继续重构 MediaSession 架构。
+
 ## 当前文件结构概览
 
 ```text

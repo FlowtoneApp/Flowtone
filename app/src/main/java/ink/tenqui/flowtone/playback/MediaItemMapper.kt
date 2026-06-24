@@ -14,6 +14,8 @@ object MediaItemMapper {
     private const val EXTRA_DURATION_MS = "duration_ms"
 
     fun toMediaItem(song: Song): MediaItem {
+        val mediaId = song.id.takeIf { it > 0L }?.toString()
+            ?: song.uri.toString()
         val extras = Bundle().apply {
             putLong(EXTRA_SONG_ID, song.id)
             putString(EXTRA_SONG_URI, song.uri.toString())
@@ -28,7 +30,7 @@ object MediaItemMapper {
             .build()
 
         return MediaItem.Builder()
-            .setMediaId(song.id.toString())
+            .setMediaId(mediaId)
             .setUri(song.uri)
             .setMediaMetadata(mediaMetadata)
             .build()
