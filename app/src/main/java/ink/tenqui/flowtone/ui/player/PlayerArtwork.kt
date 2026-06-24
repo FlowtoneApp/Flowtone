@@ -1,0 +1,267 @@
+package ink.tenqui.flowtone.ui.player
+
+import android.graphics.BlurMaskFilter
+import android.graphics.Paint as NativePaint
+import android.graphics.RectF
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+
+@Composable
+internal fun CrossfadeArtworkImage(
+    imageRequest: ImageRequest?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    alpha: Float = 1f
+) {
+    var previousImageRequest by remember { mutableStateOf<ImageRequest?>(null) }
+    var displayedImageRequest by remember { mutableStateOf(imageRequest) }
+    val crossfadeProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(imageRequest) {
+        if (imageRequest == displayedImageRequest) {
+            return@LaunchedEffect
+        }
+
+        previousImageRequest = displayedImageRequest
+        displayedImageRequest = imageRequest
+
+        crossfadeProgress.snapTo(0f)
+        crossfadeProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = 320,
+                easing = FastOutSlowInEasing
+            )
+        )
+
+        previousImageRequest = null
+    }
+
+    Box(modifier = modifier) {
+        previousImageRequest?.let { oldRequest ->
+            AsyncImage(
+                model = oldRequest,
+                contentDescription = contentDescription,
+                contentScale = contentScale,
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        this.alpha = alpha * (1f - crossfadeProgress.value)
+                    }
+            )
+        }
+
+        displayedImageRequest?.let { request ->
+            AsyncImage(
+                model = request,
+                contentDescription = contentDescription,
+                contentScale = contentScale,
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        this.alpha = alpha * crossfadeProgress.value
+                    }
+            )
+        }
+    }
+}
+
+@Composable
+internal fun MorphArtworkLayer(
+    imageRequest: ImageRequest?,
+    progress: Float,
+    playerWidth: Dp,
+    collapsedHeight: Dp,
+    expandedArtworkSize: Dp,
+    expandedArtworkTop: Dp,
+    modifier: Modifier = Modifier
+) {
+    val collapsedX = 0.dp
+    val collapsedY = 0.dp
+    val collapsedWidth = playerWidth
+    val expandedX = (playerWidth - expandedArtworkSize) / 2f
+    val expandedY = expandedArtworkTop
+    val artworkX = lerpDp(collapsedX, expandedX, progress)
+    val artworkY = lerpDp(collapsedY, expandedY, progress)
+    val artworkWidth = lerpDp(collapsedWidth, expandedArtworkSize, progress)
+    val artworkHeight = lerpDp(collapsedHeight, expandedArtworkSize, progress)
+    val blurRadius = lerpDp(16.dp, 0.dp, progress)
+    val cornerRadius = lerpDp(24.dp, 28.dp, progress)
+    val shadowPadding = 32.dp
+    val shadowProgress = progress.coerceIn(0f, 1f)
+    val imageScale = lerpFloat(1.22f, 1f, progress)
+    val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
+    val coverShape = RoundedCornerShape(cornerRadius)
+    val blurModifier = if (blurRadius > 0.5.dp) {
+        Modifier.blur(blurRadius)
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = modifier
+            .offset(x = artworkX - shadowPadding, y = artworkY - shadowPadding)
+            .width(artworkWidth + shadowPadding * 2)
+            .height(artworkHeight + shadowPadding * 2)
+            .graphicsLayer {
+                alpha = 1f
+            }
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            if (shadowProgress > 0f) {
+                val shadowPaddingPx = shadowPadding.toPx()
+                val shadowAlpha = 0.20f * shadowProgress
+                val shadowBlur = 22.dp.toPx() * shadowProgress
+                val shadowOffsetY = 10.dp.toPx() * shadowProgress
+                drawIntoCanvas { canvas ->
+                    val paint = NativePaint().apply {
+                        isAntiAlias = true
+                        color = Color.Black.copy(alpha = shadowAlpha).toArgb()
+                        maskFilter = BlurMaskFilter(
+                            shadowBlur.coerceAtLeast(0.1f),
+                            BlurMaskFilter.Blur.NORMAL
+                        )
+                    }
+                    val rect = RectF(
+                        shadowPaddingPx,
+                        shadowPaddingPx + shadowOffsetY,
+                        shadowPaddingPx + artworkWidth.toPx(),
+                        shadowPaddingPx + artworkHeight.toPx() + shadowOffsetY
+                    )
+                    canvas.nativeCanvas.drawRoundRect(
+                        rect,
+                        cornerRadius.toPx(),
+                        cornerRadius.toPx(),
+                        paint
+                    )
+                }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .offset(x = shadowPadding, y = shadowPadding)
+                .width(artworkWidth)
+                .height(artworkHeight)
+                .graphicsLayer {
+                    shape = coverShape
+                    clip = true
+                }
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = coverShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            CrossfadeArtworkImage(
+                imageRequest = imageRequest,
+                contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        scaleX = imageScale
+                        scaleY = imageScale
+                        transformOrigin = TransformOrigin.Center
+                    }
+                    .then(blurModifier)
+            )
+            if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = collapsedArtworkDimAlpha))
+                )
+            }
+            if (imageRequest == null) {
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(42.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ExpandedArtwork(
+    imageRequest: ImageRequest?,
+    progress: Float,
+    artworkSize: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(24.dp)
+    val translationY = with(LocalDensity.current) {
+        (80.dp * (1f - progress)).toPx()
+    }
+    val scale = 0.82f + (1f - 0.82f) * progress
+    val helperAlpha = 0.9f + 0.1f * progress
+
+    Box(
+        modifier = modifier
+            .size(artworkSize)
+            .graphicsLayer {
+                alpha = helperAlpha
+                scaleX = scale
+                scaleY = scale
+                this.translationY = translationY
+            }
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageRequest != null) {
+            AsyncImage(
+                model = imageRequest,
+                contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
