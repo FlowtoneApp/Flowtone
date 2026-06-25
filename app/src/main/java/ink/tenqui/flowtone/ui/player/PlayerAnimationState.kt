@@ -4,8 +4,10 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.unit.Dp
 
 internal const val MINI_PLAYER_ANIMATION_DURATION_MS = 400
+internal const val ARTWORK_ANIMATION_DURATION_MS = 400
 internal const val FLOWTONE_CLOUD_COLORS_TAG = "FlowtoneCloudColors"
 internal val MiniPlayerEasing = CubicBezierEasing(0.16f, 0.28f, 0.18f, 1f)
+internal val ArtworkEasing = CubicBezierEasing(0.16f, 0.28f, 0.18f, 1f)
 internal val SoftElementEasing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 internal val HeavyElementEasing = CubicBezierEasing(0.3f, 0.0f, 0.0f, 1.0f)
 internal val MiniPlayerMotionEasing = CubicBezierEasing(0.16f, 1.0f, 0.30f, 1.0f)
