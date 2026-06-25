@@ -108,6 +108,7 @@ internal fun CrossfadeArtworkImage(
 internal fun MorphArtworkLayer(
     imageRequest: ImageRequest?,
     progress: Float,
+    scaleProgress: Float,
     currentHeight: Dp,
     viewportHeight: Dp,
     collapsedHeight: Dp,
@@ -129,7 +130,7 @@ internal fun MorphArtworkLayer(
     val cornerRadius = lerpDp(24.dp, 28.dp, progress)
     val shadowPadding = 32.dp
     val shadowProgress = progress.coerceIn(0f, 1f)
-    val containerScale = lerpFloat(collapsedContainerScale, 1f, progress)
+    val containerScale = lerpFloat(collapsedContainerScale, 1f, scaleProgress)
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
     val blurModifier = if (blurRadius > 0.5.dp) {

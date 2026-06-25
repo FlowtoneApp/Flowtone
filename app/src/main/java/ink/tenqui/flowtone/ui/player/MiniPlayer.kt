@@ -110,6 +110,18 @@ fun MiniPlayer(
         ),
         label = "MiniPlayerArtworkProgress"
     )
+    val artworkScaleProgress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = ARTWORK_ANIMATION_DURATION_MS,
+            easing = if (expanded) {
+                ArtworkScaleShrinkEasing
+            } else {
+                ArtworkScaleEasing
+            }
+        ),
+        label = "MiniPlayerArtworkScaleProgress"
+    )
     val currentHeight = collapsedHeight + (expandedHeight - collapsedHeight) * animationProgress
     val visibleProgress by animateFloatAsState(
         targetValue = if (hasCurrentSong) 1f else 0f,
@@ -421,6 +433,7 @@ fun MiniPlayer(
                 MorphArtworkLayer(
                     imageRequest = coverImageRequest,
                     progress = artworkAnimationProgress,
+                    scaleProgress = artworkScaleProgress,
                     currentHeight = currentHeight,
                     viewportHeight = currentHeight,
                     collapsedHeight = collapsedHeight,
