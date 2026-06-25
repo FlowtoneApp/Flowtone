@@ -1,5 +1,9 @@
 package ink.tenqui.flowtone.app
 
+import android.content.pm.ApplicationInfo
+import android.os.Build
+import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,7 +17,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -32,7 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.permissions.currentAudioPermission
@@ -43,6 +51,7 @@ import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
 private const val MINI_PLAYER_EXPAND_ANIMATION_DURATION_MS = 300
+private const val FLOWTONE_INSETS_TAG = "FlowtoneInsets"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +61,8 @@ fun FlowtoneApp(
     onOpenExpandedPlayerRequestConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
     val uiState by musicViewModel.uiState.collectAsState()
     val playbackState by musicViewModel.playbackState.collectAsState()
     val playerUiState = PlayerUiState.from(playbackState)
@@ -79,6 +90,52 @@ fun FlowtoneApp(
         label = "MiniPlayerBackgroundBlur"
     )
     val noRippleInteractionSource = remember { MutableInteractionSource() }
+    val navMode = remember(context, configuration) {
+        val resourceId = context.resources.getIdentifier(
+            "config_navBarInteractionMode",
+            "integer",
+            "android"
+        )
+        val resourceNavMode = if (resourceId > 0) {
+            context.resources.getInteger(resourceId)
+        } else {
+            -1
+        }
+        val secureNavMode = Settings.Secure.getInt(
+            context.contentResolver,
+            "navigation_mode",
+            -1
+        )
+
+        if (secureNavMode >= 0) {
+            secureNavMode
+        } else {
+            resourceNavMode
+        }
+    }
+    val isThreeButtonNavigation = navMode == 0
+    val isDebuggable = remember(context) {
+        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    }
+    val miniPlayerBottomProtection = with(density) {
+        val tappableBottom = WindowInsets.tappableElement.getBottom(this)
+        val navigationBottom = WindowInsets.navigationBars.getBottom(this)
+        val bottomProtection = when {
+            Build.VERSION.SDK_INT <= Build.VERSION_CODES.P -> navigationBottom
+            isThreeButtonNavigation -> navigationBottom
+            else -> tappableBottom
+        }
+        if (isDebuggable) {
+            Log.d(
+                FLOWTONE_INSETS_TAG,
+                "navMode=$navMode, isThreeButton=$isThreeButtonNavigation, " +
+                    "navigationBottom=$navigationBottom, tappableBottom=$tappableBottom, " +
+                    "bottomProtection=$bottomProtection"
+            )
+        }
+
+        bottomProtection.toDp()
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -179,7 +236,9 @@ fun FlowtoneApp(
             onPlayNext = musicViewModel::playNext,
             onSeekTo = musicViewModel::seekTo,
             onTogglePlaybackOrderMode = musicViewModel::togglePlaybackOrderMode,
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = miniPlayerBottomProtection)
         )
     }
 }

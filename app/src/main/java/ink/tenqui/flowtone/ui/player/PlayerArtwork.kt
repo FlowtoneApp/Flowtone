@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
@@ -107,26 +108,29 @@ internal fun CrossfadeArtworkImage(
 internal fun MorphArtworkLayer(
     imageRequest: ImageRequest?,
     progress: Float,
-    playerWidth: Dp,
+    scaleProgress: Float,
+    currentHeight: Dp,
+    viewportHeight: Dp,
     collapsedHeight: Dp,
+    playerWidth: Dp,
     expandedArtworkSize: Dp,
     expandedArtworkTop: Dp,
     modifier: Modifier = Modifier
 ) {
-    val collapsedX = 0.dp
-    val collapsedY = 0.dp
-    val collapsedWidth = playerWidth
     val expandedX = (playerWidth - expandedArtworkSize) / 2f
-    val expandedY = expandedArtworkTop
-    val artworkX = lerpDp(collapsedX, expandedX, progress)
-    val artworkY = lerpDp(collapsedY, expandedY, progress)
-    val artworkWidth = lerpDp(collapsedWidth, expandedArtworkSize, progress)
-    val artworkHeight = lerpDp(collapsedHeight, expandedArtworkSize, progress)
+    val artworkX = expandedX
+    val artworkSize = expandedArtworkSize
+    val collapsedContainerScale = 2f
+    val collapsedAnchorFraction = 0.382f
+    val collapsedArtworkCenterY = collapsedHeight * 0.5f
+    val collapsedArtworkTop = collapsedArtworkCenterY -
+        artworkSize * (0.5f + (collapsedAnchorFraction - 0.5f) * collapsedContainerScale)
+    val artworkY = lerpDp(collapsedArtworkTop, expandedArtworkTop, progress)
     val blurRadius = lerpDp(16.dp, 0.dp, progress)
     val cornerRadius = lerpDp(24.dp, 28.dp, progress)
     val shadowPadding = 32.dp
     val shadowProgress = progress.coerceIn(0f, 1f)
-    val imageScale = lerpFloat(1.22f, 1f, progress)
+    val containerScale = lerpFloat(collapsedContainerScale, 1f, scaleProgress)
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
     val blurModifier = if (blurRadius > 0.5.dp) {
@@ -138,8 +142,12 @@ internal fun MorphArtworkLayer(
     Box(
         modifier = modifier
             .offset(x = artworkX - shadowPadding, y = artworkY - shadowPadding)
-            .width(artworkWidth + shadowPadding * 2)
-            .height(artworkHeight + shadowPadding * 2)
+            .wrapContentSize(
+                align = Alignment.TopStart,
+                unbounded = true
+            )
+            .width(artworkSize + shadowPadding * 2)
+            .height(artworkSize + shadowPadding * 2)
             .graphicsLayer {
                 alpha = 1f
             }
@@ -162,8 +170,8 @@ internal fun MorphArtworkLayer(
                     val rect = RectF(
                         shadowPaddingPx,
                         shadowPaddingPx + shadowOffsetY,
-                        shadowPaddingPx + artworkWidth.toPx(),
-                        shadowPaddingPx + artworkHeight.toPx() + shadowOffsetY
+                        shadowPaddingPx + artworkSize.toPx(),
+                        shadowPaddingPx + artworkSize.toPx() + shadowOffsetY
                     )
                     canvas.nativeCanvas.drawRoundRect(
                         rect,
@@ -177,11 +185,14 @@ internal fun MorphArtworkLayer(
         Box(
             modifier = Modifier
                 .offset(x = shadowPadding, y = shadowPadding)
-                .width(artworkWidth)
-                .height(artworkHeight)
+                .width(artworkSize)
+                .height(artworkSize)
                 .graphicsLayer {
                     shape = coverShape
                     clip = true
+                    scaleX = containerScale
+                    scaleY = containerScale
+                    transformOrigin = TransformOrigin.Center
                 }
                 .background(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -189,33 +200,34 @@ internal fun MorphArtworkLayer(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            CrossfadeArtworkImage(
-                imageRequest = imageRequest,
-                contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                contentScale = ContentScale.Crop,
+            Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .graphicsLayer {
-                        scaleX = imageScale
-                        scaleY = imageScale
-                        transformOrigin = TransformOrigin.Center
-                    }
-                    .then(blurModifier)
-            )
-            if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
-                Box(
+                    .then(blurModifier),
+                contentAlignment = Alignment.Center
+            ) {
+                CrossfadeArtworkImage(
+                    imageRequest = imageRequest,
+                    contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .matchParentSize()
-                        .background(Color.Black.copy(alpha = collapsedArtworkDimAlpha))
                 )
-            }
-            if (imageRequest == null) {
-                Icon(
-                    imageVector = Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(42.dp)
-                )
+                if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = collapsedArtworkDimAlpha))
+                    )
+                }
+                if (imageRequest == null) {
+                    Icon(
+                        imageVector = Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
             }
         }
     }
@@ -264,4 +276,3 @@ internal fun ExpandedArtwork(
         }
     }
 }
-

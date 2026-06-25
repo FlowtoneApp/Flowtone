@@ -102,6 +102,26 @@ fun MiniPlayer(
         ),
         label = "MiniPlayerProgress"
     )
+    val artworkAnimationProgress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = ARTWORK_ANIMATION_DURATION_MS,
+            easing = ArtworkEasing
+        ),
+        label = "MiniPlayerArtworkProgress"
+    )
+    val artworkScaleProgress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = ARTWORK_ANIMATION_DURATION_MS,
+            easing = if (expanded) {
+                ArtworkScaleShrinkEasing
+            } else {
+                ArtworkScaleEasing
+            }
+        ),
+        label = "MiniPlayerArtworkScaleProgress"
+    )
     val currentHeight = collapsedHeight + (expandedHeight - collapsedHeight) * animationProgress
     val visibleProgress by animateFloatAsState(
         targetValue = if (hasCurrentSong) 1f else 0f,
@@ -343,7 +363,7 @@ fun MiniPlayer(
             }
             .then(gestureModifier)
     ) {
-        val playerShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        val playerShape = RoundedCornerShape(24.dp)
         val playerShadowElevation = lerpDp(0.dp, 18.dp, animationProgress)
         PlayerDragHandle(
             animationProgress = animationProgress,
@@ -375,20 +395,21 @@ fun MiniPlayer(
                     onExpandedChange(true)
                 }
         ) {
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height(currentHeight)
-                    .clip(playerShape)
-                    .then(
-                        if (hasArtworkBackground) {
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(currentHeight)
+                .clip(playerShape)
+                .then(
+                    if (hasArtworkBackground) {
                             Modifier
                         } else {
                             Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         }
                     )
             ) {
+                val playerWidth = maxWidth
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -409,31 +430,25 @@ fun MiniPlayer(
                         .matchParentSize()
                         .background(Color.Black.copy(alpha = lerpFloat(0.24f, 0.36f, animationProgress)))
                 )
-            }
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(currentHeight)
-                    .align(Alignment.TopCenter),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                val playerWidth = maxWidth
+                MorphArtworkLayer(
+                    imageRequest = coverImageRequest,
+                    progress = artworkAnimationProgress,
+                    scaleProgress = artworkScaleProgress,
+                    currentHeight = currentHeight,
+                    viewportHeight = currentHeight,
+                    collapsedHeight = collapsedHeight,
+                    playerWidth = playerWidth,
+                    expandedArtworkSize = expandedArtworkSize,
+                    expandedArtworkTop = expandedArtworkTop,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(currentHeight)
                         .align(Alignment.TopCenter)
                 ) {
-                    MorphArtworkLayer(
-                        imageRequest = coverImageRequest,
-                        progress = animationProgress,
-                        playerWidth = playerWidth,
-                        collapsedHeight = collapsedHeight,
-                        expandedArtworkSize = expandedArtworkSize,
-                        expandedArtworkTop = expandedArtworkTop,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                    )
                     SharedSongInfo(
                         title = title,
                         artist = artist,
