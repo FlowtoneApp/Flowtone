@@ -38,14 +38,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -85,6 +91,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.ui.library.LibraryScreen
+import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AboutScreen
@@ -104,6 +111,7 @@ private enum class SecondaryPage(
 ) {
     Settings("\u8bbe\u7f6e"),
     About("\u5173\u4e8e"),
+    LocalLibrary("\u672c\u5730\u66f2\u5e93"),
     OpenSource("\u5f00\u6e90\u7ec4\u4ef6", secondaryTitle = "\u5173\u4e8e")
 }
 
@@ -257,7 +265,8 @@ fun FlowtoneApp(
         secondaryPage = when (secondaryPage) {
             SecondaryPage.OpenSource -> SecondaryPage.About
             SecondaryPage.Settings,
-            SecondaryPage.About -> null
+            SecondaryPage.About,
+            SecondaryPage.LocalLibrary -> null
             null -> null
         }
     }
@@ -314,7 +323,8 @@ fun FlowtoneApp(
                     secondaryPage = secondaryPage,
                     secondaryProgress = secondaryProgress,
                     tertiaryProgress = tertiaryProgress,
-                    backgroundAlpha = topBarBackgroundAlpha
+                    backgroundAlpha = topBarBackgroundAlpha,
+                    onBack = { secondaryPage = null }
                 )
             }
         ) { innerPadding ->
@@ -342,6 +352,9 @@ fun FlowtoneApp(
                     },
                     onOpenAbout = {
                         secondaryPage = SecondaryPage.About
+                    },
+                    onOpenLocalLibrary = {
+                        secondaryPage = SecondaryPage.LocalLibrary
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -401,6 +414,19 @@ fun FlowtoneApp(
                             modifier = Modifier.fillMaxSize()
                         )
 
+                        SecondaryPage.LocalLibrary -> LocalLibraryScreen(
+                            uiState = uiState,
+                            currentSong = playerUiState.currentSong,
+                            permissionDenied = permissionDenied,
+                            onRequestPermission = {
+                                permissionLauncher.launch(currentAudioPermission())
+                            },
+                            onSongClick = { song -> musicViewModel.playSong(song) },
+                            modifier = elementModifier(0)
+                                .fillMaxSize()
+                                .rightSwipeToGoBack { secondaryPage = null }
+                        )
+
                         null -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -443,8 +469,10 @@ private fun FlowtoneTopBar(
     secondaryProgress: Float,
     tertiaryProgress: Float,
     backgroundAlpha: Float,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val inLocalLibrary = secondaryPage == SecondaryPage.LocalLibrary
     var displayedSecondaryTitle by remember {
         mutableStateOf(secondaryPage?.title.orEmpty())
     }
@@ -460,7 +488,8 @@ private fun FlowtoneTopBar(
     val childHiddenOffsetYPx = with(density) { 48.dp.toPx() }
     val pathGapPx = with(density) { 2.dp.toPx() }
     val pathBaselineCorrectionPx = with(density) { 1.dp.toPx() }
-    val separatorEnterOffsetPx = with(density) { -8.dp.toPx() }
+    val navigationShiftPx = with(density) { 40.dp.toPx() } *
+        if (inLocalLibrary) secondaryProgress else 0f
     val parentWidthPx = textMeasurer.measure(
         text = selectedTopLevelPage.title,
         style = MaterialTheme.typography.titleLarge
@@ -499,6 +528,25 @@ private fun FlowtoneTopBar(
             .padding(start = 20.dp, end = 24.dp),
         contentAlignment = Alignment.CenterStart
     ) {
+        AnimatedVisibility(
+            visible = inLocalLibrary,
+            enter = fadeIn(tween(180, easing = FlowtonePageEasing)) +
+                slideInHorizontally(tween(260, easing = FlowtonePageEasing)) { -it },
+            exit = fadeOut(tween(140, easing = FlowtonePageEasing)) +
+                slideOutHorizontally(tween(240, easing = FlowtonePageEasing)) { -it },
+            modifier = Modifier.offset(x = (-16).dp)
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "\u8fd4\u56de",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
         ContinuousTopTitle(
             pagerState = pagerState,
             parentPage = selectedTopLevelPage,
@@ -506,22 +554,35 @@ private fun FlowtoneTopBar(
             parentOffsetXPx = parentOffsetXPx,
             parentOffsetYPx = parentOffsetYPx,
             modifier = Modifier.graphicsLayer {
+                translationX = navigationShiftPx
                 translationY = titleOffsetYPx
             }
         )
-        Text(
-            text = "/",
-            maxLines = 1,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        AnimatedVisibility(
+            visible = secondaryPage != null && !inLocalLibrary,
+            enter = fadeIn(
+                tween(durationMillis = 220, easing = FlowtonePageEasing)
+            ) + slideInVertically(
+                animationSpec = tween(300, easing = FlowtonePageEasing)
+            ) { it },
+            exit = fadeOut(
+                tween(durationMillis = 180, easing = FlowtonePageEasing)
+            ) + slideOutVertically(
+                animationSpec = tween(300, easing = FlowtonePageEasing)
+            ) { it },
             modifier = Modifier.graphicsLayer {
-                translationX = separatorTargetXPx +
-                    separatorEnterOffsetPx * (1f - tertiaryProgress)
+                translationX = separatorTargetXPx
                 translationY = topPathOffsetYPx + pathBaselineCorrectionPx
-                alpha = tertiaryProgress
             }
-        )
+        ) {
+            Text(
+                text = "/",
+                maxLines = 1,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Text(
             text = displayedSecondaryTitle,
             maxLines = 1,
@@ -535,7 +596,8 @@ private fun FlowtoneTopBar(
             ),
             modifier = Modifier.graphicsLayer {
                 transformOrigin = TransformOrigin(0f, 0.5f)
-                translationX = secondaryPathTargetXPx * tertiaryProgress
+                translationX = navigationShiftPx +
+                    secondaryPathTargetXPx * tertiaryProgress
                 val secondaryOffsetY = childHiddenOffsetYPx +
                     (childRestingOffsetYPx - childHiddenOffsetYPx) * secondaryProgress
                 translationY = secondaryOffsetY +
@@ -572,6 +634,7 @@ private fun TopLevelPagerContent(
     onSongClick: (Song) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenLocalLibrary: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -586,11 +649,8 @@ private fun TopLevelPagerContent(
                 )
 
                 TopLevelPage.Library -> LibraryScreen(
-                    uiState = uiState,
-                    currentSong = playerUiState.currentSong,
-                    permissionDenied = permissionDenied,
-                    onRequestPermission = onRequestPermission,
-                    onSongClick = onSongClick,
+                    songCount = uiState.songs.size,
+                    onOpenLocalLibrary = onOpenLocalLibrary,
                     modifier = Modifier.fillMaxSize()
                 )
 
@@ -747,10 +807,10 @@ private fun SettingsScreen(
                     onDragStart = { horizontalDrag = 0f },
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        horizontalDrag = (horizontalDrag + dragAmount).coerceAtMost(0f)
+                        horizontalDrag = (horizontalDrag + dragAmount).coerceAtLeast(0f)
                     },
                     onDragEnd = {
-                        if (horizontalDrag <= -72.dp.toPx()) {
+                        if (horizontalDrag >= 72.dp.toPx()) {
                             onBack()
                         }
                         horizontalDrag = 0f
@@ -801,6 +861,24 @@ private fun SettingsScreen(
             }
         }
     }
+}
+
+private fun Modifier.rightSwipeToGoBack(onBack: () -> Unit): Modifier = pointerInput(onBack) {
+    var horizontalDrag = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { horizontalDrag = 0f },
+        onHorizontalDrag = { change, dragAmount ->
+            change.consume()
+            horizontalDrag = (horizontalDrag + dragAmount).coerceAtLeast(0f)
+        },
+        onDragEnd = {
+            if (horizontalDrag >= 72.dp.toPx()) {
+                onBack()
+            }
+            horizontalDrag = 0f
+        },
+        onDragCancel = { horizontalDrag = 0f }
+    )
 }
 
 @Composable

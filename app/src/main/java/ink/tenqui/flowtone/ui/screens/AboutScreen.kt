@@ -223,10 +223,10 @@ private fun Modifier.secondaryBackGesture(onBack: () -> Unit): Modifier = pointe
         onDragStart = { horizontalDrag = 0f },
         onHorizontalDrag = { change, dragAmount ->
             change.consume()
-            horizontalDrag = (horizontalDrag + dragAmount).coerceAtMost(0f)
+            horizontalDrag = (horizontalDrag + dragAmount).coerceAtLeast(0f)
         },
         onDragEnd = {
-            if (horizontalDrag <= -72.dp.toPx()) {
+            if (horizontalDrag >= 72.dp.toPx()) {
                 onBack()
             }
             horizontalDrag = 0f

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,11 +21,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.ui.components.LibraryCollectionCard
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
+private val LibraryInfoCardHeight = 112.dp
+
 @Composable
 fun LibraryScreen(
+    songCount: Int,
+    onOpenLocalLibrary: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+    ) {
+        LibraryCollectionCard(
+            title = "\u672c\u5730\u66f2\u5e93",
+            subtitle = "$songCount \u9996\u6b4c\u66f2",
+            onClick = onOpenLocalLibrary,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(LibraryInfoCardHeight)
+        )
+    }
+}
+
+@Composable
+fun LocalLibraryScreen(
     uiState: MusicUiState,
     currentSong: Song?,
     permissionDenied: Boolean,
@@ -67,7 +94,7 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 8.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(
