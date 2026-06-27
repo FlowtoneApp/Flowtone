@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <style name="Theme.Flowtone" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/flowtone_window_background</item>
+        <item name="android:windowSplashScreenBackground">@color/flowtone_window_background</item>
     </style>
 </resources>

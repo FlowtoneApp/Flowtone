@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="flowtone_icon_background">#FFF4F4F1</color>
+    <color name="flowtone_window_background">#FFFFFBFE</color>
 </resources>

@@ -111,10 +111,10 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        setMediaNotificationProvider(
-            DefaultMediaNotificationProvider.Builder(this)
-                .build()
-        )
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this).build().apply {
+            setSmallIcon(R.drawable.ic_media_notification)
+        }
+        setMediaNotificationProvider(notificationProvider)
 
         val servicePlayer = ExoPlayer.Builder(applicationContext)
             .setHandleAudioBecomingNoisy(true)
