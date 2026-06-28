@@ -94,6 +94,7 @@ import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.player.MiniPlayer
+import ink.tenqui.flowtone.ui.player.MiniPlayerCollapsedHeight
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
@@ -243,6 +244,11 @@ fun FlowtoneApp(
 
         bottomProtection.toDp()
     }
+    val miniPlayerContentBottomPadding = if (hasCurrentSong) {
+        MiniPlayerCollapsedHeight + miniPlayerBottomProtection
+    } else {
+        0.dp
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -339,6 +345,7 @@ fun FlowtoneApp(
                     .fillMaxSize()
                     .nestedScroll(topBarScrollConnection)
                     .padding(innerPadding)
+                    .padding(bottom = miniPlayerContentBottomPadding)
             ) {
                 TopLevelPagerContent(
                     pagerState = pagerState,

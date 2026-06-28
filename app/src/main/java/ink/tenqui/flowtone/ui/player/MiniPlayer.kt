@@ -48,6 +48,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+internal val MiniPlayerCollapsedHeight = 92.dp
+internal val MiniPlayerDragHotZoneHeight = 20.dp
+
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
@@ -70,8 +73,8 @@ fun MiniPlayer(
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
-    val collapsedHeight = 92.dp
-    val dragHotZoneHeight = 40.dp
+    val collapsedHeight = MiniPlayerCollapsedHeight
+    val dragHotZoneHeight = MiniPlayerDragHotZoneHeight
     val swipeThresholdPx = with(density) { 40.dp.toPx() }
     val targetExpandedHeight = configuration.screenHeightDp.dp * 0.618f
     val widthBasedArtworkSize = if (configuration.screenWidthDp.dp * 0.76f < 340.dp) {
