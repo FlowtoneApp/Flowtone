@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -18,9 +20,13 @@ import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import ink.tenqui.flowtone.app.MainActivity
+import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.R
 
 class FlowtoneMediaSessionService : MediaSessionService() {
+    private val appPreferences by lazy {
+        AppPreferences(applicationContext)
+    }
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private val togglePlaybackOrderCommand = SessionCommand(
@@ -34,6 +40,18 @@ class FlowtoneMediaSessionService : MediaSessionService() {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             logPlayerState("onPlaybackStateChanged")
+        }
+
+        override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+            if (
+                playbackSuppressionReason ==
+                    Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS &&
+                player?.playWhenReady == true &&
+                !appPreferences.shouldResumePlaybackAfterCall()
+            ) {
+                player?.pause()
+            }
+            logPlayerState("onPlaybackSuppressionReasonChanged")
         }
 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
@@ -116,7 +134,12 @@ class FlowtoneMediaSessionService : MediaSessionService() {
         }
         setMediaNotificationProvider(notificationProvider)
 
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
         val servicePlayer = ExoPlayer.Builder(applicationContext)
+            .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
         servicePlayer.addListener(playerListener)

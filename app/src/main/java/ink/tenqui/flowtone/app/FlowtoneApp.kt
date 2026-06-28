@@ -157,6 +157,9 @@ fun FlowtoneApp(
     var hideSecondaryBackButton by rememberSaveable {
         mutableStateOf(appPreferences.shouldHideSecondaryBackButton())
     }
+    var resumePlaybackAfterCall by rememberSaveable {
+        mutableStateOf(appPreferences.shouldResumePlaybackAfterCall())
+    }
     val pagerState = rememberPagerState(
         initialPage = defaultStartPage.index,
         pageCount = { TopLevelPage.entries.size }
@@ -447,6 +450,11 @@ fun FlowtoneApp(
                             onHideSecondaryBackButtonChange = { hide ->
                                 hideSecondaryBackButton = hide
                                 appPreferences.setHideSecondaryBackButton(hide)
+                            },
+                            resumePlaybackAfterCall = resumePlaybackAfterCall,
+                            onResumePlaybackAfterCallChange = { resume ->
+                                resumePlaybackAfterCall = resume
+                                appPreferences.setResumePlaybackAfterCall(resume)
                             },
                             elementModifier = ::elementModifier,
                             modifier = Modifier.fillMaxSize()
@@ -741,6 +749,8 @@ private fun SettingsScreen(
     onBack: () -> Unit,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
+    resumePlaybackAfterCall: Boolean,
+    onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -888,6 +898,36 @@ private fun SettingsScreen(
                 Switch(
                     checked = hideSecondaryBackButton,
                     onCheckedChange = onHideSecondaryBackButtonChange
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .clickable {
+                        onResumePlaybackAfterCallChange(!resumePlaybackAfterCall)
+                    }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "来电后恢复播放",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "仅在来电前正在播放且音频焦点短暂丢失时恢复",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                Switch(
+                    checked = resumePlaybackAfterCall,
+                    onCheckedChange = onResumePlaybackAfterCallChange
                 )
             }
         }
