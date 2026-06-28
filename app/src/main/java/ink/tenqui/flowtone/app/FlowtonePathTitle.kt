@@ -1,9 +1,11 @@
 package ink.tenqui.flowtone.app
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -11,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -20,9 +23,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @Composable
@@ -34,6 +40,9 @@ internal fun FlowtonePathTitle(
     modifier: Modifier = Modifier
 ) {
     val retainedSegments = remember { mutableStateListOf<String>() }
+    val levelAnimations = remember {
+        mutableStateListOf<Animatable<Float, AnimationVector1D>>()
+    }
     LaunchedEffect(segments) {
         segments.forEachIndexed { index, title ->
             if (index < retainedSegments.size) {
@@ -42,20 +51,26 @@ internal fun FlowtonePathTitle(
                 retainedSegments += title
             }
         }
-    }
+        while (levelAnimations.size < retainedSegments.size) {
+            levelAnimations += Animatable(0f)
+        }
 
-    val levelProgress = mutableListOf<Float>()
-    retainedSegments.forEachIndexed { index, _ ->
-        val progress = animateFloatAsState(
-            targetValue = if (index < segments.size) 1f else 0f,
-            animationSpec = tween(
-                durationMillis = FlowtoneMotion.DurationMillis,
-                easing = FlowtoneMotion.Easing
-            ),
-            label = "PathLevelProgress$index"
-        ).value
-        levelProgress += progress
+        withFrameNanos { }
+        coroutineScope {
+            levelAnimations.forEachIndexed { index, animation ->
+                launch {
+                    animation.animateTo(
+                        targetValue = if (index < segments.size) 1f else 0f,
+                        animationSpec = tween(
+                            durationMillis = FlowtoneMotion.DurationMillis,
+                            easing = FlowtoneMotion.Easing
+                        )
+                    )
+                }
+            }
+        }
     }
+    val levelProgress = levelAnimations.map { it.value }
 
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
@@ -78,6 +93,10 @@ internal fun FlowtonePathTitle(
     val rootCompactWidthPx = textMeasurer.measure(
         text = rootPage.title,
         style = compactStyle
+    ).size.width.toFloat()
+    val rootExpandedWidthPx = textMeasurer.measure(
+        text = rootPage.title,
+        style = expandedRootStyle
     ).size.width.toFloat()
     val separatorWidthPx = textMeasurer.measure(
         text = "/",
@@ -106,10 +125,15 @@ internal fun FlowtonePathTitle(
             val distance = page.index - pagePosition
             val isRoot = page == rootPage
             val pageAlpha = (1f - abs(distance)).coerceIn(0f, 1f)
+            val rootTitleAnimating = isRoot && rootProgress > 0.001f && rootProgress < 0.999f
             Text(
                 text = page.title,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = if (rootTitleAnimating) {
+                    TextOverflow.Clip
+                } else {
+                    TextOverflow.Ellipsis
+                },
                 style = if (isRoot) rootStyle else expandedRootStyle,
                 fontWeight = FontWeight.Medium,
                 color = if (isRoot) {
@@ -121,7 +145,9 @@ internal fun FlowtonePathTitle(
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },
-                modifier = Modifier.graphicsLayer {
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
                     translationX = distance * slideDistancePx +
                         if (isRoot) {
                             navigationShiftPx + rootOpticalOffsetXPx * rootProgress
@@ -146,13 +172,14 @@ internal fun FlowtonePathTitle(
                 compactStyle,
                 promotionProgress
             )
+            val segmentAnimating =
+                ownProgress > 0.001f && ownProgress < 0.999f ||
+                    promotionProgress > 0.001f && promotionProgress < 0.999f
             val parentBoundSeparatorX: Float
             val parentBoundSeparatorY: Float
             if (index == 0) {
-                val parentWidth = textMeasurer.measure(
-                    text = rootPage.title,
-                    style = rootStyle
-                ).size.width.toFloat()
+                val parentWidth = rootExpandedWidthPx +
+                    (rootCompactWidthPx - rootExpandedWidthPx) * rootProgress
                 parentBoundSeparatorX = navigationShiftPx +
                     rootOpticalOffsetXPx * rootProgress +
                     parentWidth +
@@ -162,15 +189,13 @@ internal fun FlowtonePathTitle(
                     pathBaselineCorrectionPx
             } else {
                 val parentOwnProgress = levelProgress.getOrElse(index - 1) { 0f }
-                val parentStyle = interpolateTextStyle(
-                    expandedChildStyle,
-                    compactStyle,
-                    ownProgress
-                )
-                val parentWidth = textMeasurer.measure(
+                val parentExpandedWidth = textMeasurer.measure(
                     text = retainedSegments[index - 1],
-                    style = parentStyle
+                    style = expandedChildStyle
                 ).size.width.toFloat()
+                val parentCompactWidth = compactSegmentWidths[index - 1]
+                val parentWidth = parentExpandedWidth +
+                    (parentCompactWidth - parentExpandedWidth) * ownProgress
                 val parentX = navigationShiftPx +
                     (segmentAncestorTargetX[index - 1] - navigationShiftPx) * ownProgress
                 val parentChildOffsetY = childHiddenOffsetYPx +
@@ -200,7 +225,11 @@ internal fun FlowtonePathTitle(
             Text(
                 text = title,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = if (segmentAnimating) {
+                    TextOverflow.Clip
+                } else {
+                    TextOverflow.Ellipsis
+                },
                 style = segmentStyle,
                 fontWeight = FontWeight.Medium,
                 color = lerp(
@@ -208,7 +237,9 @@ internal fun FlowtonePathTitle(
                     MaterialTheme.colorScheme.onSurfaceVariant,
                     promotionProgress
                 ),
-                modifier = Modifier.graphicsLayer {
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
                     translationX = navigationShiftPx +
                         (segmentAncestorTargetX[index] - navigationShiftPx) *
                         promotionProgress
@@ -230,6 +261,7 @@ private fun interpolateTextStyle(
         fontSize = (from.fontSize.value + (to.fontSize.value - from.fontSize.value) * progress).sp,
         lineHeight = (
             from.lineHeight.value + (to.lineHeight.value - from.lineHeight.value) * progress
-            ).sp
+            ).sp,
+        textMotion = TextMotion.Animated
     )
 }
