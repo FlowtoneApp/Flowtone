@@ -43,6 +43,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.tappableElement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -90,6 +92,7 @@ import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
@@ -99,6 +102,7 @@ import ink.tenqui.flowtone.ui.player.MiniPlayerMinimizedHeight
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
+import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
@@ -118,6 +122,8 @@ private enum class SecondaryPage(val title: String) {
 @Composable
 fun FlowtoneApp(
     musicViewModel: MusicViewModel = viewModel(),
+    themeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
     openExpandedPlayerRequest: Int = 0,
     onOpenExpandedPlayerRequestConsumed: () -> Unit = {}
 ) {
@@ -445,6 +451,8 @@ fun FlowtoneApp(
                     when (page) {
                         SecondaryPage.Settings -> SettingsScreen(
                             appPreferences = appPreferences,
+                            themeMode = themeMode,
+                            onThemeModeChange = onThemeModeChange,
                             onBack = { secondaryPage = null },
                             hideSecondaryBackButton = hideSecondaryBackButton,
                             onHideSecondaryBackButtonChange = { hide ->
@@ -746,6 +754,8 @@ private fun MineMenuItem(
 @Composable
 private fun SettingsScreen(
     appPreferences: AppPreferences,
+    themeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
     onBack: () -> Unit,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
@@ -791,11 +801,21 @@ private fun SettingsScreen(
                     onDragCancel = { horizontalDrag = 0f }
                 )
             }
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
         OptionGroup(
-            title = "\u5e94\u7528\u884c\u4e3a",
+            title = "外观",
             modifier = elementModifier(0)
+        ) {
+            ThemeModeSelector(
+                selectedMode = themeMode,
+                onModeSelected = onThemeModeChange
+            )
+        }
+        OptionGroup(
+            title = "\u5e94\u7528\u884c\u4e3a",
+            modifier = elementModifier(1).padding(top = 24.dp)
         ) {
             Column(
                 modifier = Modifier

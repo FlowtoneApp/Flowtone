@@ -67,7 +67,7 @@ fun AboutScreen(
         Column(
             modifier = elementModifier(0)
                 .fillMaxWidth()
-                .height(168.dp)
+                .height(144.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
                 .padding(16.dp)
@@ -103,9 +103,10 @@ fun AboutScreen(
             }
             Spacer(modifier = Modifier.weight(1f))
             Row(
-                modifier = Modifier.clickable {
-                    context.openUrl(GITHUB_URL)
-                },
+                modifier = Modifier
+                    .clickable {
+                        context.openUrl(GITHUB_URL)
+                    },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(

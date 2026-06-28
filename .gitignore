@@ -25,3 +25,6 @@ keystore.properties
 # Release artifacts
 *.apk
 *.aab
+
+# Codex
+/.codex/
