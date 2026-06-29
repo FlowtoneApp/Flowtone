@@ -444,7 +444,13 @@ fun FlowtoneApp(
                                     delayMillis = delayMillis,
                                     easing = FlowtonePageEasing
                                 )
-                            )
+                            ) + slideOutVertically(
+                                animationSpec = tween(
+                                    durationMillis = durationMillis,
+                                    delayMillis = delayMillis,
+                                    easing = FlowtonePageEasing
+                                )
+                            ) { -it / 6 }
                         )
                     }
                     when (page) {
