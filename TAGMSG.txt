@@ -1,0 +1,25 @@
+﻿# Flowtone 0.10.1
+
+此版本包含以下修改：
+
+## fix
+
+-
+
+## feat
+
+-
+
+## style
+
+-
+
+## chore
+
+-
+
+## 安装
+
+下载 `Flowtone-v0.10.1.apk` 后安装即可。
+
+该文件为通用 APK（universal APK），可在不同架构的 Android 设备上安装。
