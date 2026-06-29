@@ -397,7 +397,12 @@ fun MiniPlayer(
             }
             .then(gestureModifier)
     ) {
-        val playerShape = RoundedCornerShape(24.dp)
+        val playerShape = RoundedCornerShape(
+            topStart = 24.dp,
+            topEnd = 24.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp
+        )
         val playerShadowElevation = lerpDp(0.dp, 18.dp, animationProgress)
         PlayerDragHandle(
             animationProgress = animationProgress,
