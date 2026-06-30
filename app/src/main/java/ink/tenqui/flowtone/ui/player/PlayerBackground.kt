@@ -68,7 +68,7 @@ internal fun FlowCloudBackground(
             withFrameNanos { frameNanos ->
                 if (previousFrameNanos != 0L) {
                     val elapsedMs = (frameNanos - previousFrameNanos) / 1_000_000.0
-                    motionTimeMs += elapsedMs * motionSpeed.value
+                    motionTimeMs += elapsedMs * motionSpeed.value * FLOW_CLOUD_SPEED_MULTIPLIER
                 }
                 previousFrameNanos = frameNanos
             }
@@ -239,7 +239,8 @@ private fun reverseDrift(timeMs: Double, oneWayDurationMs: Int): Float {
     }
 }
 
-private const val FLOW_CLOUD_STOP_DURATION_MS = 300
+private const val FLOW_CLOUD_STOP_DURATION_MS = 2_000
+private const val FLOW_CLOUD_SPEED_MULTIPLIER = 0.5
 
 @Composable
 internal fun BlurredArtworkBackground(
