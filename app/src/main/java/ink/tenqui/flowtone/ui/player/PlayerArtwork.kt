@@ -164,7 +164,6 @@ internal fun MorphArtworkLayer(
     } else {
         Modifier
     }
-
     Box(
         modifier = modifier
             .offset(x = artworkX - shadowPadding, y = artworkY - shadowPadding)
@@ -237,8 +236,7 @@ internal fun MorphArtworkLayer(
                     contentDescription = "\u4e13\u8f91\u5c01\u9762",
                     contentScale = ContentScale.Crop,
                     waitForImageLoad = waitForArtworkLoad,
-                    modifier = Modifier
-                        .matchParentSize()
+                    modifier = Modifier.matchParentSize()
                 )
                 if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
                     Box(

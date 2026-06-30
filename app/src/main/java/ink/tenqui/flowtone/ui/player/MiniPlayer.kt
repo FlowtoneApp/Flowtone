@@ -101,6 +101,7 @@ fun MiniPlayer(
     val dragHotZoneHeight = MiniPlayerDragHotZoneHeight
     val swipeThresholdPx = with(density) { 40.dp.toPx() }
     val fullscreenSwipeThresholdPx = with(density) { 72.dp.toPx() }
+    val songSwipeThresholdPx = with(density) { 64.dp.toPx() }
     val targetExpandedHeight = configuration.screenHeightDp.dp * 0.618f
     val widthBasedArtworkSize = if (configuration.screenWidthDp.dp * 0.76f < 340.dp) {
         configuration.screenWidthDp.dp * 0.76f
@@ -185,7 +186,7 @@ fun MiniPlayer(
     val fullscreenCoverCenterY = fullscreenTargetHeight * 0.4f
     val fullscreenStationaryControlsOffsetY =
         (fullscreenTargetHeight - currentHeight) * fullscreenProgress
-    val fullscreenControlsLiftY = 46.dp * fullscreenProgress
+    val fullscreenControlsLiftY = 50.dp * fullscreenProgress
     val visibleProgress by animateFloatAsState(
         targetValue = if (hasCurrentSong) 1f else 0f,
         animationSpec = tween(
@@ -396,6 +397,20 @@ fun MiniPlayer(
         keepPlayPauseVisualLockedAfterSeek = true
         playPauseVisualLockToken += 1
     }
+    fun playPreviousFromMiniPlayer() {
+        if (hasCurrentSong) {
+            collapsedMetadataSwitchDirection = -1
+            lockPlayPauseVisual(true)
+            onPlayPrevious()
+        }
+    }
+    fun playNextFromMiniPlayer() {
+        if (hasCurrentSong) {
+            collapsedMetadataSwitchDirection = 1
+            lockPlayPauseVisual(true)
+            onPlayNext()
+        }
+    }
     LaunchedEffect(playPauseVisualLockToken) {
         val token = playPauseVisualLockToken
         if (keepPlayPauseVisualLockedAfterSeek) {
@@ -469,6 +484,19 @@ fun MiniPlayer(
             }
         )
     }
+    val progressGestureStartY =
+        expandedProgressTop + fullscreenStationaryControlsOffsetY - fullscreenControlsLiftY
+    val progressGestureEndY = progressGestureStartY + 64.dp
+    val progressGestureIgnoreRangePx = with(density) {
+        progressGestureStartY.toPx()..progressGestureEndY.toPx()
+    }
+    val songSwipeModifier = Modifier.swipeToChangeSong(
+        enabled = hasCurrentSong,
+        thresholdPx = songSwipeThresholdPx,
+        ignoredStartYRangePx = progressGestureIgnoreRangePx,
+        onSwipeLeft = ::playNextFromMiniPlayer,
+        onSwipeRight = ::playPreviousFromMiniPlayer
+    )
 
     Box(
         modifier = modifier
@@ -541,6 +569,7 @@ fun MiniPlayer(
                     clip = true
                     compositingStrategy = CompositingStrategy.Offscreen
                 }
+                .then(songSwipeModifier)
                 .then(
                     if (hasArtworkBackground) {
                             Modifier
@@ -607,6 +636,7 @@ fun MiniPlayer(
                     SharedSongInfo(
                         title = title,
                         artist = artist,
+                        currentSongKey = currentSong?.id,
                         progress = animationProgress,
                         titleColor = titleColor,
                         artistColor = artistColor,
@@ -655,13 +685,7 @@ fun MiniPlayer(
                         collapsedHeight = collapsedHeight,
                         expandedTop = expandedControlsTop,
                         fullscreenProgress = fullscreenProgress,
-                        onPlayPrevious = {
-                            if (hasCurrentSong) {
-                                collapsedMetadataSwitchDirection = -1
-                                lockPlayPauseVisual(true)
-                                onPlayPrevious()
-                            }
-                        },
+                        onPlayPrevious = ::playPreviousFromMiniPlayer,
                         onTogglePlayPause = {
                             if (hasCurrentSong) {
                                 isProgressScrubbing = false
@@ -669,13 +693,7 @@ fun MiniPlayer(
                                 onTogglePlayPause()
                             }
                         },
-                        onPlayNext = {
-                            if (hasCurrentSong) {
-                                collapsedMetadataSwitchDirection = 1
-                                lockPlayPauseVisual(true)
-                                onPlayNext()
-                            }
-                        },
+                        onPlayNext = ::playNextFromMiniPlayer,
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .graphicsLayer {

@@ -1,11 +1,6 @@
 package ink.tenqui.flowtone.ui.player
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +13,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -33,11 +32,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 @Composable
 internal fun SharedSongInfo(
     title: String,
     artist: String,
+    currentSongKey: Long?,
     progress: Float,
     titleColor: Color,
     artistColor: Color,
@@ -99,14 +100,20 @@ internal fun SharedSongInfo(
         fullscreenProgress
     )
     val metadataTextAlign = TextAlign.Start
-    val metadataState = remember(title, artist) {
-        CollapsedMetadataState(title = title, artist = artist)
-    }
-    val shouldAnimateCollapsedMetadataChange = progress <= 0.01f
-    val metadataSwitchDistancePx = with(density) { 20.dp.roundToPx() }
+    val metadataState = SongMetadataState(
+        key = currentSongKey,
+        title = title,
+        artist = artist
+    )
+    val metadataSwitchDistance = 20.dp
+    val metadataSwitchDistancePx = with(density) { metadataSwitchDistance.roundToPx() }
 
     @Composable
-    fun MetadataTextBlock(blockTitle: String, blockArtist: String) {
+    fun MetadataTextBlock(
+        blockTitle: String,
+        blockArtist: String,
+        contentAlpha: Float
+    ) {
         val titleWidth = with(density) {
             textMeasurer.measure(
                 text = AnnotatedString(blockTitle),
@@ -188,7 +195,7 @@ internal fun SharedSongInfo(
                 Text(
                     text = blockTitle,
                     style = titleStyle,
-                    color = titleColor,
+                    color = titleColor.copy(alpha = titleColor.alpha * contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = metadataTextAlign,
@@ -212,7 +219,7 @@ internal fun SharedSongInfo(
                 Text(
                     text = blockArtist,
                     style = artistStyle,
-                    color = artistColor,
+                    color = artistColor.copy(alpha = artistColor.alpha * contentAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = metadataTextAlign,
@@ -226,70 +233,106 @@ internal fun SharedSongInfo(
 
     Box(
         modifier = modifier
-            .width(viewportClipWidth)
+            .width(viewportClipWidth + metadataSwitchDistance * 2f)
             .height(viewportClipHeight)
             .graphicsLayer {
-                translationX = viewportX.toPx()
+                translationX = viewportX.toPx() - metadataSwitchDistance.toPx()
                 translationY = viewportY.toPx()
             }
             .clipToBounds()
     ) {
-        if (shouldAnimateCollapsedMetadataChange) {
-            AnimatedContent(
-                targetState = metadataState,
-                modifier = Modifier
-                    .width(viewportWidth)
-                    .height(metadataGroupHeight),
-                transitionSpec = {
-                    val direction = if (switchDirection < 0) {
-                        -1
-                    } else {
-                        1
-                    }
-                    val animationSpec = tween<IntOffset>(
-                        durationMillis = 260,
-                        easing = TrackSwitchProgressEasing
-                    )
-                    (
-                        slideInHorizontally(
-                            animationSpec = animationSpec,
-                            initialOffsetX = { metadataSwitchDistancePx * direction }
-                        ) + fadeIn(
-                            animationSpec = tween(
-                                durationMillis = 260,
-                                easing = TrackSwitchProgressEasing
-                            )
-                        )
-                    ).togetherWith(
-                        slideOutHorizontally(
-                            animationSpec = animationSpec,
-                            targetOffsetX = { -metadataSwitchDistancePx * direction }
-                        ) + fadeOut(
-                            animationSpec = tween(
-                                durationMillis = 260,
-                                easing = TrackSwitchProgressEasing
-                            )
-                        )
-                    )
-                },
-                contentAlignment = Alignment.CenterStart,
-                label = "CollapsedMetadataSwitch"
-            ) { state ->
-                MetadataTextBlock(
-                    blockTitle = state.title,
-                    blockArtist = state.artist
-                )
-            }
-        } else {
+        AnimatedSongMetadata(
+            state = metadataState,
+            switchDirection = switchDirection,
+            switchDistancePx = metadataSwitchDistancePx,
+            modifier = Modifier
+                .offset(x = metadataSwitchDistance)
+                .width(viewportWidth)
+                .height(metadataGroupHeight)
+        ) { state, alpha ->
             MetadataTextBlock(
-                blockTitle = title,
-                blockArtist = artist
+                blockTitle = state.title,
+                blockArtist = state.artist,
+                contentAlpha = alpha
             )
         }
     }
 }
 
-internal data class CollapsedMetadataState(
+@Composable
+internal fun AnimatedSongMetadata(
+    state: SongMetadataState,
+    switchDirection: Int,
+    switchDistancePx: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable (SongMetadataState, Float) -> Unit
+) {
+    var displayedState by remember { mutableStateOf(state) }
+    var previousState by remember { mutableStateOf<SongMetadataState?>(null) }
+    val switchProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(state) {
+        if (state == displayedState) {
+            return@LaunchedEffect
+        }
+
+        previousState = displayedState
+        displayedState = state
+        switchProgress.snapTo(0f)
+        switchProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = 320,
+                easing = TrackSwitchProgressEasing
+            )
+        )
+        previousState = null
+    }
+
+    val progress = switchProgress.value.coerceIn(0f, 1f)
+    val direction = if (switchDirection < 0) {
+        -1
+    } else {
+        1
+    }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.CenterStart
+    ) {
+        previousState?.let { oldState ->
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .offset {
+                        IntOffset(
+                            x = (-switchDistancePx * direction * progress).roundToInt(),
+                            y = 0
+                        )
+                    },
+                contentAlignment = Alignment.CenterStart
+            ) {
+                content(oldState, 1f - progress)
+            }
+        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .offset {
+                    IntOffset(
+                        x = (switchDistancePx * direction * (1f - progress)).roundToInt(),
+                        y = 0
+                    )
+                },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            content(displayedState, progress)
+        }
+    }
+}
+
+internal data class SongMetadataState(
+    val key: Long?,
     val title: String,
     val artist: String
 )
