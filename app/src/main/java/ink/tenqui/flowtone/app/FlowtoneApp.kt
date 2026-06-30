@@ -40,6 +40,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.MiniPlayerCollapsedHeight
 import ink.tenqui.flowtone.ui.player.MiniPlayerMinimizedHeight
 import ink.tenqui.flowtone.ui.player.PlayerUiState
+import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
@@ -106,6 +107,9 @@ fun FlowtoneApp(
     }
     var preloadSongMetadataCount by rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
+    }
+    var playbackQueueDisplayOrder by rememberSaveable {
+        mutableStateOf(appPreferences.getPlaybackQueueDisplayOrder())
     }
 
     val pagerState = rememberPagerState(
@@ -338,6 +342,11 @@ fun FlowtoneApp(
         onPreloadSongMetadataCountChange = { count ->
             preloadSongMetadataCount = count
             appPreferences.setSongMetadataPreloadCount(count)
+        },
+        playbackQueueDisplayOrder = playbackQueueDisplayOrder,
+        onPlaybackQueueDisplayOrderChange = { order ->
+            playbackQueueDisplayOrder = order
+            appPreferences.setPlaybackQueueDisplayOrder(order)
         },
         openSourceBackActionChange = { action ->
             openSourceBackAction = action

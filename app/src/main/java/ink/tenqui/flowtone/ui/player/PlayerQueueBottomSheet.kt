@@ -38,7 +38,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +61,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-internal enum class QueueDisplayOrder(val label: String) {
+enum class QueueDisplayOrder(val label: String) {
     PlaybackOrder("\u64ad\u653e\u987a\u5e8f"),
     ListOrder("\u5217\u8868\u987a\u5e8f")
 }
@@ -75,6 +74,8 @@ internal fun PlayerQueueBottomSheet(
     sourceQueue: List<Song>,
     currentQueueIndex: Int,
     currentSong: Song?,
+    displayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
+    onDisplayOrderChange: (QueueDisplayOrder) -> Unit = {},
     backgroundImageRequest: ImageRequest?,
     cloudColors: List<Color>,
     backgroundProgress: Float,
@@ -85,9 +86,6 @@ internal fun PlayerQueueBottomSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var displayOrder by rememberSaveable {
-        mutableStateOf(QueueDisplayOrder.PlaybackOrder)
-    }
     val displayedQueue = queueForDisplayOrder(
         displayOrder = displayOrder,
         playbackQueue = playbackQueue,
@@ -269,7 +267,7 @@ internal fun PlayerQueueBottomSheet(
                         }
                         QueueDisplayOrderSelector(
                             selectedOrder = displayOrder,
-                            onOrderSelected = { displayOrder = it }
+                            onOrderSelected = onDisplayOrderChange
                         )
                     }
 

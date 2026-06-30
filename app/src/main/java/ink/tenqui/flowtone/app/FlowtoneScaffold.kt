@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.player.PlayerUiState
+import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
@@ -44,6 +45,8 @@ internal fun FlowtoneScaffold(
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
+    playbackQueueDisplayOrder: QueueDisplayOrder,
+    onPlaybackQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit,
     openSourceBackActionChange: ((() -> Unit)?) -> Unit,
     onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     permissionDenied: Boolean,
@@ -180,6 +183,8 @@ internal fun FlowtoneScaffold(
             sourceQueue = uiState.sourceQueue,
             playbackQueue = uiState.playbackQueue,
             currentQueueIndex = uiState.currentQueueIndex,
+            queueDisplayOrder = playbackQueueDisplayOrder,
+            onQueueDisplayOrderChange = onPlaybackQueueDisplayOrderChange,
             onPlayQueueSong = onPlayQueueSong,
             modifier = Modifier
                 .align(Alignment.BottomCenter)

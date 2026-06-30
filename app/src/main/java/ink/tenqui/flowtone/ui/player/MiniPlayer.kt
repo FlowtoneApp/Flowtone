@@ -86,6 +86,8 @@ fun MiniPlayer(
     sourceQueue: List<Song> = emptyList(),
     playbackQueue: List<Song> = emptyList(),
     currentQueueIndex: Int = -1,
+    queueDisplayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
+    onQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit = {},
     onPlayQueueSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -773,6 +775,8 @@ fun MiniPlayer(
                 sourceQueue = sourceQueue,
                 currentQueueIndex = currentQueueIndex,
                 currentSong = currentSong,
+                displayOrder = queueDisplayOrder,
+                onDisplayOrderChange = onQueueDisplayOrderChange,
                 backgroundImageRequest = backgroundImageRequest,
                 cloudColors = cloudColors,
                 backgroundProgress = animationProgress,

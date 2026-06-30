@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import android.content.Context
+import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 
 class AppPreferences(context: Context) {
@@ -95,6 +96,21 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getPlaybackQueueDisplayOrder(): QueueDisplayOrder {
+        val savedValue = prefs.getString(PLAYBACK_QUEUE_DISPLAY_ORDER_KEY, null)
+            ?: return QueueDisplayOrder.PlaybackOrder
+
+        return runCatching {
+            QueueDisplayOrder.valueOf(savedValue)
+        }.getOrDefault(QueueDisplayOrder.PlaybackOrder)
+    }
+
+    fun setPlaybackQueueDisplayOrder(order: QueueDisplayOrder) {
+        prefs.edit()
+            .putString(PLAYBACK_QUEUE_DISPLAY_ORDER_KEY, order.name)
+            .apply()
+    }
+
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
@@ -102,6 +118,7 @@ class AppPreferences(context: Context) {
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
+        const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val DEFAULT_PRELOAD_COUNT = 5
         const val HOME_VALUE = "home"
         const val LIBRARY_VALUE = "library"
