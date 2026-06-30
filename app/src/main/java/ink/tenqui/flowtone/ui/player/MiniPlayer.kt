@@ -12,11 +12,17 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -178,7 +185,7 @@ fun MiniPlayer(
     val fullscreenCoverCenterY = fullscreenTargetHeight * 0.4f
     val fullscreenStationaryControlsOffsetY =
         (fullscreenTargetHeight - currentHeight) * fullscreenProgress
-    val fullscreenControlsLiftY = 64.dp * fullscreenProgress
+    val fullscreenControlsLiftY = 46.dp * fullscreenProgress
     val visibleProgress by animateFloatAsState(
         targetValue = if (hasCurrentSong) 1f else 0f,
         animationSpec = tween(
@@ -700,6 +707,21 @@ fun MiniPlayer(
                         onTogglePlaybackOrderMode = onTogglePlaybackOrderMode
                     )
                 }
+                FullscreenCollapseArrow(
+                    progress = fullscreenProgress,
+                    interactionSource = noRippleInteractionSource,
+                    onClick = {
+                        if (allowFullscreenFromCollapsed) {
+                            onFullscreenChange(false)
+                            onExpandedChange(false)
+                        } else {
+                            onFullscreenChange(false)
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(10f)
+                )
             }
         }
     }
@@ -714,4 +736,39 @@ fun MiniPlayer(
             }
         )
     }
+}
+
+@Composable
+private fun FullscreenCollapseArrow(
+    progress: Float,
+    interactionSource: MutableInteractionSource,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val visibleProgress = SoftElementEasing.transform(progress.coerceIn(0f, 1f))
+    val density = LocalDensity.current
+    val safeTopPadding = with(density) {
+        WindowInsets.statusBars.getTop(this).toDp()
+    }
+    val arrowOffsetY = lerpDp((-32).dp, safeTopPadding + 18.dp, visibleProgress)
+
+    Icon(
+        imageVector = Icons.Rounded.KeyboardArrowDown,
+        contentDescription = "\u6536\u8d77\u5168\u5c4f\u64ad\u653e\u5668",
+        tint = Color.White,
+        modifier = modifier
+            .offset(y = arrowOffsetY)
+            .size(width = 42.dp, height = 30.dp)
+            .clickable(
+                enabled = progress > 0.72f,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .graphicsLayer {
+                alpha = visibleProgress
+                scaleX = lerpFloat(0.72f, 1f, visibleProgress)
+                scaleY = lerpFloat(0.72f, 1f, visibleProgress)
+            }
+    )
 }
