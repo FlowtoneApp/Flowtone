@@ -498,7 +498,6 @@ fun MiniPlayer(
         onSwipeLeft = ::playNextFromMiniPlayer,
         onSwipeRight = ::playPreviousFromMiniPlayer
     )
-
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -743,18 +742,26 @@ fun MiniPlayer(
                 )
             }
         }
-    }
-    if (showQueueSheet) {
-        PlayerQueueBottomSheet(
-            playbackQueue = playbackQueue,
-            sourceQueue = sourceQueue,
-            currentQueueIndex = currentQueueIndex,
-            currentSong = currentSong,
-            onSongClick = onPlayQueueSong,
-            onDismiss = {
-                showQueueSheet = false
-            }
-        )
+        if (showQueueSheet) {
+            PlayerQueueBottomSheet(
+                playbackQueue = playbackQueue,
+                sourceQueue = sourceQueue,
+                currentQueueIndex = currentQueueIndex,
+                currentSong = currentSong,
+                backgroundImageRequest = backgroundImageRequest,
+                cloudColors = cloudColors,
+                backgroundProgress = animationProgress,
+                isPlaying = playerUiState.isPlaying,
+                waitForArtworkLoad = useLocalArtworkLoading,
+                onSongClick = onPlayQueueSong,
+                onDismiss = {
+                    showQueueSheet = false
+                },
+                modifier = Modifier
+                    .matchParentSize()
+                    .zIndex(20f)
+            )
+        }
     }
 }
 
