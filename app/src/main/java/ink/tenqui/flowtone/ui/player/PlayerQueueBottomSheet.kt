@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,7 +39,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.request.ImageRequest
@@ -77,6 +83,9 @@ internal fun PlayerQueueBottomSheet(
     var sheetVisible by remember { mutableStateOf(false) }
     var dismissStarted by remember { mutableStateOf(false) }
     val noRippleInteractionSource = remember { MutableInteractionSource() }
+    val queueListState = rememberLazyListState()
+    val density = LocalDensity.current
+    val pullToDismissThresholdPx = with(density) { 64.dp.toPx() }
 
     fun requestDismiss() {
         if (!dismissStarted) {
@@ -96,6 +105,31 @@ internal fun PlayerQueueBottomSheet(
         if (dismissStarted && !sheetVisible) {
             delay(220L)
             onDismiss()
+        }
+    }
+    val pullToDismissConnection = remember(queueListState, pullToDismissThresholdPx) {
+        var pullDistancePx = 0f
+
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                val listAtTop = queueListState.firstVisibleItemIndex == 0 &&
+                    queueListState.firstVisibleItemScrollOffset == 0
+
+                if (!dismissStarted && listAtTop && available.y > 0f) {
+                    pullDistancePx += available.y
+                    if (pullDistancePx >= pullToDismissThresholdPx) {
+                        requestDismiss()
+                    }
+                } else if (!listAtTop || available.y < 0f || consumed.y < 0f) {
+                    pullDistancePx = 0f
+                }
+
+                return Offset.Zero
+            }
         }
     }
 
@@ -197,9 +231,11 @@ internal fun PlayerQueueBottomSheet(
                         }
                     } else {
                         LazyColumn(
+                            state = queueListState,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
+                                .nestedScroll(pullToDismissConnection)
                         ) {
                             itemsIndexed(
                                 items = displayedQueue,
