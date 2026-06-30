@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -173,6 +174,7 @@ internal fun SideButtonsOverlay(
     playerWidth: Dp,
     currentHeight: Dp,
     expandedHeight: Dp,
+    expandedProgressTop: Dp,
     expandedControlsTop: Dp,
     hasCurrentSong: Boolean,
     isCurrentSongLiked: Boolean,
@@ -181,6 +183,7 @@ internal fun SideButtonsOverlay(
     fullscreenProgress: Float,
     onToggleLiked: () -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
+    onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val enterProgress = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
@@ -194,23 +197,46 @@ internal fun SideButtonsOverlay(
     val scale = lerpFloat(2.6f, 1.0f, enterProgress)
     val fullscreenScale = lerpFloat(1f, 1.08f, fullscreenProgress)
     val buttonAlpha = lerpFloat(0.18f, 1.0f, enterProgress)
+    val sideButtonsVisualEnabled = hasCurrentSong && enterProgress > 0.55f
+    val favoriteExitProgress = fullscreenProgress.coerceIn(0f, 1f)
+    val favoriteEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
+    val queueEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
 
     Box(modifier = modifier) {
         val favoriteEndX = progressLeft
         val favoriteStartX = favoriteEndX - sideButtonHorizontalOffset
         val favoriteX = lerpDp(favoriteStartX, favoriteEndX, enterProgress)
+        val bottomFavoriteAlpha = buttonAlpha * (1f - favoriteExitProgress)
+        val bottomFavoriteOffsetY = lerpDp(0.dp, (-24).dp, favoriteExitProgress)
         FavoriteButton(
             liked = isCurrentSongLiked,
-            enabled = hasCurrentSong && enterProgress > 0.55f,
+            enabled = sideButtonsVisualEnabled && fullscreenProgress < 0.45f,
             onClick = onToggleLiked,
             modifier = Modifier
-                .offset(x = favoriteX, y = buttonY)
+                .offset(x = favoriteX, y = buttonY + bottomFavoriteOffsetY)
                 .size(buttonSize)
                 .graphicsLayer {
                     scaleX = scale * fullscreenScale
                     scaleY = scale * fullscreenScale
-                    alpha = buttonAlpha
-                }
+                    alpha = bottomFavoriteAlpha
+                },
+            visualEnabled = sideButtonsVisualEnabled
+        )
+
+        val fullscreenFavoriteX = progressLeft + progressWidth - buttonSize
+        val fullscreenFavoriteY =
+            expandedProgressTop - 56.dp + lerpDp(12.dp, 0.dp, favoriteEnterProgress)
+        FavoriteButton(
+            liked = isCurrentSongLiked,
+            enabled = hasCurrentSong && fullscreenProgress > 0.72f,
+            onClick = onToggleLiked,
+            modifier = Modifier
+                .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
+                .size(buttonSize)
+                .graphicsLayer {
+                    alpha = favoriteEnterProgress
+                },
+            visualEnabled = hasCurrentSong
         )
 
         val orderEndX = progressLeft + progressWidth - buttonSize
@@ -219,7 +245,7 @@ internal fun SideButtonsOverlay(
         PlaybackOrderButton(
             mode = playbackOrderMode,
             iconColor = iconColor,
-            enabled = hasCurrentSong && enterProgress > 0.55f,
+            enabled = sideButtonsVisualEnabled,
             onClick = onTogglePlaybackOrderMode,
             modifier = Modifier
                 .offset(x = orderX, y = buttonY)
@@ -228,7 +254,23 @@ internal fun SideButtonsOverlay(
                     scaleX = scale * fullscreenScale
                     scaleY = scale * fullscreenScale
                     alpha = buttonAlpha
-                }
+                },
+            visualEnabled = sideButtonsVisualEnabled
+        )
+
+        QueueButton(
+            iconColor = iconColor,
+            enabled = hasCurrentSong && fullscreenProgress > 0.72f,
+            onClick = onOpenQueue,
+            modifier = Modifier
+                .offset(x = favoriteEndX, y = buttonY)
+                .size(buttonSize)
+                .graphicsLayer {
+                    scaleX = fullscreenScale
+                    scaleY = fullscreenScale
+                    alpha = buttonAlpha * queueEnterProgress
+                },
+            visualEnabled = hasCurrentSong
         )
     }
 }
@@ -238,14 +280,15 @@ internal fun FavoriteButton(
     liked: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    visualEnabled: Boolean = enabled
 ) {
     TransparentControlButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
             .graphicsLayer {
-                alpha = if (enabled) 1f else 0.45f
+                alpha = if (visualEnabled) 1f else 0.45f
             }
     ) {
         Icon(
@@ -275,7 +318,8 @@ internal fun PlaybackOrderButton(
     iconColor: Color,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    visualEnabled: Boolean = enabled
 ) {
     val icon = when (mode) {
         PlaybackOrderMode.Sequence -> Icons.Rounded.Repeat
@@ -292,12 +336,37 @@ internal fun PlaybackOrderButton(
         enabled = enabled,
         modifier = modifier
             .graphicsLayer {
-                alpha = if (enabled) 1f else 0.45f
+                alpha = if (visualEnabled) 1f else 0.45f
             }
     ) {
         Icon(
             imageVector = icon,
             contentDescription = description,
+            tint = iconColor,
+            modifier = Modifier.size(30.dp)
+        )
+    }
+}
+
+@Composable
+internal fun QueueButton(
+    iconColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    visualEnabled: Boolean = enabled
+) {
+    TransparentControlButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier
+            .graphicsLayer {
+                alpha = if (visualEnabled) 1f else 0.45f
+            }
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+            contentDescription = "\u64ad\u653e\u961f\u5217",
             tint = iconColor,
             modifier = Modifier.size(30.dp)
         )

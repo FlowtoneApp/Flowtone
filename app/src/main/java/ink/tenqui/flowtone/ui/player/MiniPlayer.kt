@@ -45,6 +45,7 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.toBitmap
+import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +73,9 @@ fun MiniPlayer(
     onPlayNext: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
+    playbackQueue: List<Song> = emptyList(),
+    currentQueueIndex: Int = -1,
+    onPlayQueueSong: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentSong = playerUiState.currentSong
@@ -356,11 +360,22 @@ fun MiniPlayer(
     var lockedIsPlayingDuringScrub by remember { mutableStateOf(playerUiState.isPlaying) }
     var keepPlayPauseVisualLockedAfterSeek by remember { mutableStateOf(false) }
     var playPauseVisualLockToken by remember { mutableStateOf(0) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     val currentSongKey = currentSong?.id?.toString()
     var likedSongKeys by rememberSaveable {
         mutableStateOf(emptyList<String>())
     }
     val isCurrentSongLiked = currentSongKey != null && likedSongKeys.contains(currentSongKey)
+    val onToggleCurrentSongLiked: () -> Unit = {
+        currentSongKey?.let { key ->
+            likedSongKeys = if (likedSongKeys.contains(key)) {
+                likedSongKeys - key
+            } else {
+                likedSongKeys + key
+            }
+        }
+        Unit
+    }
     LaunchedEffect(currentSong?.id) {
         isProgressScrubbing = false
     }
@@ -665,20 +680,16 @@ fun MiniPlayer(
                         playerWidth = playerWidth,
                         currentHeight = currentHeight,
                         expandedHeight = expandedHeight,
+                        expandedProgressTop = expandedProgressTop,
                         expandedControlsTop = expandedControlsTop,
                         hasCurrentSong = hasCurrentSong,
                         isCurrentSongLiked = isCurrentSongLiked,
                         playbackOrderMode = playerUiState.playbackOrderMode,
                         iconColor = controlIconColor,
                         fullscreenProgress = fullscreenProgress,
-                        onToggleLiked = {
-                            currentSongKey?.let { key ->
-                                likedSongKeys = if (likedSongKeys.contains(key)) {
-                                    likedSongKeys - key
-                                } else {
-                                    likedSongKeys + key
-                                }
-                            }
+                        onToggleLiked = onToggleCurrentSongLiked,
+                        onOpenQueue = {
+                            showQueueSheet = true
                         },
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -691,5 +702,16 @@ fun MiniPlayer(
                 }
             }
         }
+    }
+    if (showQueueSheet) {
+        PlayerQueueBottomSheet(
+            queue = playbackQueue,
+            currentQueueIndex = currentQueueIndex,
+            currentSong = currentSong,
+            onSongClick = onPlayQueueSong,
+            onDismiss = {
+                showQueueSheet = false
+            }
+        )
     }
 }

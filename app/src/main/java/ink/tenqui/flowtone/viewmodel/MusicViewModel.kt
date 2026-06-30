@@ -27,6 +27,8 @@ data class MusicUiState(
     val hasPermission: Boolean = false,
     val isLoading: Boolean = false,
     val songs: List<Song> = emptyList(),
+    val playbackQueue: List<Song> = emptyList(),
+    val currentQueueIndex: Int = -1,
     val errorMessage: String? = null,
     val hasScanned: Boolean = false
 )
@@ -92,6 +94,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         currentState.copy(
                             isLoading = false,
                             songs = songs,
+                            playbackQueue = playbackQueue,
+                            currentQueueIndex = currentQueueIndex,
                             errorMessage = null,
                             hasScanned = true
                         )
@@ -126,14 +130,20 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playSongAt(index = songIndex)
     }
 
+    fun playQueueSong(index: Int) {
+        playSongAt(index)
+    }
+
     private fun playSongAt(index: Int) {
         if (playbackQueue.isEmpty() || index !in playbackQueue.indices) {
             currentQueueIndex = -1
+            publishPlaybackQueue()
             return
         }
 
         currentQueueIndex = index
         playbackController.playQueue(playbackQueue, index)
+        publishPlaybackQueue()
     }
 
     private fun syncCurrentQueueIndex() {
@@ -154,6 +164,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         currentQueueIndex = songIndex
         playbackController.updateCurrentSong(playbackQueue[songIndex])
+        publishPlaybackQueue()
     }
 
     private fun observeControllerConnection() {
@@ -208,6 +219,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             durationMs = duration,
             playbackOrderMode = snapshot.playbackOrderMode
         )
+        publishPlaybackQueue()
     }
 
     private fun reconcileCurrentSongWithLibrary() {
@@ -232,6 +244,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 ?: officialSong.durationMs.coerceAtLeast(0L),
             playbackOrderMode = playbackState.value.playbackOrderMode
         )
+        publishPlaybackQueue()
+    }
+
+    private fun publishPlaybackQueue() {
+        _uiState.update {
+            it.copy(
+                playbackQueue = playbackQueue,
+                currentQueueIndex = currentQueueIndex
+            )
+        }
     }
 
     fun togglePlayPause() {

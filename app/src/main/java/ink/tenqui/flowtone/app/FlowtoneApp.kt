@@ -287,14 +287,6 @@ fun FlowtoneApp(
         }
     }
 
-    BackHandler(enabled = hasCurrentSong && (miniPlayerExpanded || miniPlayerFullscreen)) {
-        if (miniPlayerFullscreen) {
-            miniPlayerFullscreen = false
-        } else {
-            miniPlayerExpanded = false
-        }
-    }
-
     val navigateBack: () -> Unit = {
         if (secondaryPage == SecondaryPage.OpenSource) {
             val nestedBackAction = openSourceBackAction
@@ -314,6 +306,13 @@ fun FlowtoneApp(
         }
     }
     BackHandler(enabled = secondaryPage != null, onBack = navigateBack)
+    BackHandler(enabled = hasCurrentSong && (miniPlayerExpanded || miniPlayerFullscreen)) {
+        if (miniPlayerFullscreen) {
+            miniPlayerFullscreen = false
+        } else {
+            miniPlayerExpanded = false
+        }
+    }
 
     LaunchedEffect(selectedTopLevelPage, secondaryPage) {
         contentScrollOffsetPx = 0f
@@ -530,8 +529,11 @@ fun FlowtoneApp(
                         interactionSource = noRippleInteractionSource,
                         indication = null
                     ) {
-                        miniPlayerExpanded = false
-                        miniPlayerFullscreen = false
+                        if (miniPlayerFullscreen) {
+                            miniPlayerFullscreen = false
+                        } else {
+                            miniPlayerExpanded = false
+                        }
                     }
             )
         }
@@ -539,12 +541,14 @@ fun FlowtoneApp(
             playerUiState = playerUiState,
             expanded = miniPlayerExpanded,
             onExpandedChange = { expanded ->
-                if (expanded) {
-                    miniPlayerMinimized = false
-                } else {
+                if (!expanded && miniPlayerFullscreen) {
                     miniPlayerFullscreen = false
+                } else {
+                    if (expanded) {
+                        miniPlayerMinimized = false
+                    }
+                    miniPlayerExpanded = expanded
                 }
-                miniPlayerExpanded = expanded
             },
             fullscreen = miniPlayerFullscreen,
             onFullscreenChange = { fullscreen ->
@@ -570,6 +574,9 @@ fun FlowtoneApp(
             onPlayNext = musicViewModel::playNext,
             onSeekTo = musicViewModel::seekTo,
             onTogglePlaybackOrderMode = musicViewModel::togglePlaybackOrderMode,
+            playbackQueue = uiState.playbackQueue,
+            currentQueueIndex = uiState.currentQueueIndex,
+            onPlayQueueSong = musicViewModel::playQueueSong,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = miniPlayerBottomProtection)
