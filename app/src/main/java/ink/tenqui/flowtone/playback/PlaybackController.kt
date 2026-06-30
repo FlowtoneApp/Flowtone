@@ -35,6 +35,7 @@ class PlaybackController(
     )
     private var pendingPlaybackRequest: PendingPlaybackRequest? = null
     private var pendingPlaybackOrderMode: PlaybackOrderMode? = initialPlaybackOrderMode
+    private var logicalPlaybackOrderMode: PlaybackOrderMode = initialPlaybackOrderMode
     private var isReleased = false
 
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
@@ -155,6 +156,46 @@ class PlaybackController(
         }
     }
 
+    fun replaceQueueKeepingCurrent(
+        songs: List<Song>,
+        startIndex: Int,
+        positionMs: Long,
+        playWhenReady: Boolean
+    ) {
+        if (songs.isEmpty() || startIndex !in songs.indices) {
+            return
+        }
+
+        val controller = currentControllerOrNull()
+        if (controller == null) {
+            pendingPlaybackRequest = PendingPlaybackRequest.Queue(songs, startIndex)
+            return
+        }
+
+        val mediaItems = songs.map { it.toMediaItem() }
+        val startSong = songs[startIndex]
+        val safePositionMs = positionMs.coerceAtLeast(0L)
+
+        runCatching {
+            controller.setMediaItems(mediaItems, startIndex, safePositionMs)
+            controller.prepare()
+            if (playWhenReady) {
+                controller.play()
+            } else {
+                controller.pause()
+            }
+            updateFromSnapshot(
+                currentSong = startSong,
+                isPlaying = playWhenReady,
+                positionMs = safePositionMs,
+                durationMs = startSong.durationMs.coerceAtLeast(0L),
+                playbackOrderMode = logicalPlaybackOrderMode
+            )
+        }.onFailure { error ->
+            updatePlaybackFailed(startSong, error)
+        }
+    }
+
     fun updateCurrentSong(song: Song) {
         _playbackState.update {
             it.copy(
@@ -175,6 +216,7 @@ class PlaybackController(
     }
 
     fun updatePlaybackOrderMode(mode: PlaybackOrderMode) {
+        logicalPlaybackOrderMode = mode
         _playbackState.update {
             it.copy(playbackOrderMode = mode)
         }
@@ -278,7 +320,7 @@ class PlaybackController(
         }
 
         return controller?.let(::playbackOrderModeFromController)
-            ?: playbackState.value.playbackOrderMode
+            ?: logicalPlaybackOrderMode
     }
 
     fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
@@ -427,13 +469,21 @@ class PlaybackController(
             }
 
             PlaybackOrderMode.Shuffle -> {
-                controller.shuffleModeEnabled = true
+                controller.shuffleModeEnabled = false
                 controller.repeatMode = Player.REPEAT_MODE_OFF
             }
         }
     }
 
     private fun playbackOrderModeFromController(controller: MediaController): PlaybackOrderMode {
+        if (
+            logicalPlaybackOrderMode == PlaybackOrderMode.Shuffle &&
+            controller.repeatMode == Player.REPEAT_MODE_OFF &&
+            !controller.shuffleModeEnabled
+        ) {
+            return PlaybackOrderMode.Shuffle
+        }
+
         return when {
             controller.repeatMode == Player.REPEAT_MODE_ONE -> PlaybackOrderMode.RepeatOne
             controller.shuffleModeEnabled -> PlaybackOrderMode.Shuffle

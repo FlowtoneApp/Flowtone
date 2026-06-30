@@ -36,6 +36,8 @@ internal fun SecondaryPageHost(
     onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     allowFullscreenFromCollapsed: Boolean,
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
+    preloadSongMetadataCount: Int,
+    onPreloadSongMetadataCountChange: (Int) -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
     permissionDenied: Boolean,
@@ -117,6 +119,8 @@ internal fun SecondaryPageHost(
                 onResumePlaybackAfterCallChange = onResumePlaybackAfterCallChange,
                 allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
                 onAllowFullscreenFromCollapsedChange = onAllowFullscreenFromCollapsedChange,
+                preloadSongMetadataCount = preloadSongMetadataCount,
+                onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
                 elementModifier = ::elementModifier,
                 modifier = Modifier.fillMaxSize()
             )

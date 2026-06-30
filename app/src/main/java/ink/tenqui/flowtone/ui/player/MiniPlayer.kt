@@ -80,9 +80,10 @@ fun MiniPlayer(
     onPlayNext: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
+    sourceQueue: List<Song> = emptyList(),
     playbackQueue: List<Song> = emptyList(),
     currentQueueIndex: Int = -1,
-    onPlayQueueSong: (Int) -> Unit = {},
+    onPlayQueueSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentSong = playerUiState.currentSong
@@ -745,7 +746,8 @@ fun MiniPlayer(
     }
     if (showQueueSheet) {
         PlayerQueueBottomSheet(
-            queue = playbackQueue,
+            playbackQueue = playbackQueue,
+            sourceQueue = sourceQueue,
             currentQueueIndex = currentQueueIndex,
             currentSong = currentSong,
             onSongClick = onPlayQueueSong,

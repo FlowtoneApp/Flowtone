@@ -79,17 +79,36 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getSongMetadataPreloadCount(): Int {
+        val savedValue = prefs.getInt(SONG_METADATA_PRELOAD_COUNT_KEY, DEFAULT_PRELOAD_COUNT)
+        return PRELOAD_COUNT_OPTIONS.minBy { option ->
+            kotlin.math.abs(option - savedValue)
+        }
+    }
+
+    fun setSongMetadataPreloadCount(count: Int) {
+        val value = PRELOAD_COUNT_OPTIONS.minBy { option ->
+            kotlin.math.abs(option - count)
+        }
+        prefs.edit()
+            .putInt(SONG_METADATA_PRELOAD_COUNT_KEY, value)
+            .apply()
+    }
+
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
         const val HIDE_SECONDARY_BACK_BUTTON_KEY = "hide_secondary_back_button"
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
+        const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
+        const val DEFAULT_PRELOAD_COUNT = 5
         const val HOME_VALUE = "home"
         const val LIBRARY_VALUE = "library"
         const val MINE_VALUE = "mine"
         const val FOLLOW_SYSTEM_VALUE = "follow_system"
         const val LIGHT_VALUE = "light"
         const val DARK_VALUE = "dark"
+        val PRELOAD_COUNT_OPTIONS = listOf(1, 3, 5, 7, 10)
     }
 }

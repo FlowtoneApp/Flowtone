@@ -104,6 +104,9 @@ fun FlowtoneApp(
     var allowFullscreenFromCollapsed by rememberSaveable {
         mutableStateOf(appPreferences.shouldAllowFullscreenFromCollapsed())
     }
+    var preloadSongMetadataCount by rememberSaveable {
+        mutableStateOf(appPreferences.getSongMetadataPreloadCount())
+    }
 
     val pagerState = rememberPagerState(
         initialPage = defaultStartPage.index,
@@ -302,6 +305,10 @@ fun FlowtoneApp(
         showSwipeHint = false
     }
 
+    LaunchedEffect(preloadSongMetadataCount) {
+        musicViewModel.setPreloadSongMetadataCount(preloadSongMetadataCount)
+    }
+
     FlowtoneScaffold(
         uiState = uiState,
         playerUiState = playerUiState,
@@ -326,6 +333,11 @@ fun FlowtoneApp(
         onAllowFullscreenFromCollapsedChange = { allow ->
             allowFullscreenFromCollapsed = allow
             appPreferences.setAllowFullscreenFromCollapsed(allow)
+        },
+        preloadSongMetadataCount = preloadSongMetadataCount,
+        onPreloadSongMetadataCountChange = { count ->
+            preloadSongMetadataCount = count
+            appPreferences.setSongMetadataPreloadCount(count)
         },
         openSourceBackActionChange = { action ->
             openSourceBackAction = action

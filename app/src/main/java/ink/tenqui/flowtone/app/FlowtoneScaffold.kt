@@ -42,6 +42,8 @@ internal fun FlowtoneScaffold(
     onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     allowFullscreenFromCollapsed: Boolean,
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
+    preloadSongMetadataCount: Int,
+    onPreloadSongMetadataCountChange: (Int) -> Unit,
     openSourceBackActionChange: ((() -> Unit)?) -> Unit,
     onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     permissionDenied: Boolean,
@@ -75,7 +77,7 @@ internal fun FlowtoneScaffold(
     onPlayNext: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
-    onPlayQueueSong: (Int) -> Unit,
+    onPlayQueueSong: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val hasCurrentSong = playerUiState.hasCurrentSong
@@ -131,6 +133,8 @@ internal fun FlowtoneScaffold(
                     onResumePlaybackAfterCallChange = onResumePlaybackAfterCallChange,
                     allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
                     onAllowFullscreenFromCollapsedChange = onAllowFullscreenFromCollapsedChange,
+                    preloadSongMetadataCount = preloadSongMetadataCount,
+                    onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
                     uiState = uiState,
                     currentSong = playerUiState.currentSong,
                     permissionDenied = permissionDenied,
@@ -173,6 +177,7 @@ internal fun FlowtoneScaffold(
             onPlayNext = onPlayNext,
             onSeekTo = onSeekTo,
             onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
+            sourceQueue = uiState.sourceQueue,
             playbackQueue = uiState.playbackQueue,
             currentQueueIndex = uiState.currentQueueIndex,
             onPlayQueueSong = onPlayQueueSong,

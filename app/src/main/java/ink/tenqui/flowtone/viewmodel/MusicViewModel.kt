@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.local.AudioScanner
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
+import ink.tenqui.flowtone.data.local.SongMetadataPreloader
 import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackController
@@ -13,6 +14,7 @@ import ink.tenqui.flowtone.playback.PlaybackOrderMode
 import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.playback.toSongOrNull
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,7 @@ data class MusicUiState(
     val hasPermission: Boolean = false,
     val isLoading: Boolean = false,
     val songs: List<Song> = emptyList(),
+    val sourceQueue: List<Song> = emptyList(),
     val playbackQueue: List<Song> = emptyList(),
     val currentQueueIndex: Int = -1,
     val errorMessage: String? = null,
@@ -46,9 +49,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         onPlaybackEnded = ::handlePlaybackEnded,
         onMediaItemChanged = ::syncCurrentSongFromMediaId
     )
+    private val songMetadataPreloader = SongMetadataPreloader(application)
     private val _uiState = MutableStateFlow(MusicUiState())
+    private var sourceQueue: List<Song> = emptyList()
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
+    private var preloadSongMetadataCount: Int = 5
+    private var preloadJob: Job? = null
 
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
@@ -65,6 +72,57 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 errorMessage = null
             )
         }
+    }
+
+    fun setPreloadSongMetadataCount(count: Int) {
+        val allowedValues = listOf(1, 3, 5, 7, 10)
+        val sanitizedCount = allowedValues.minBy { kotlin.math.abs(it - count) }
+        if (preloadSongMetadataCount == sanitizedCount) {
+            return
+        }
+
+        preloadSongMetadataCount = sanitizedCount
+        scheduleNextSongsPreload()
+    }
+
+    private fun rebuildPlaybackQueueForMode(
+        mode: PlaybackOrderMode,
+        currentSong: Song?
+    ) {
+        playbackQueue = when (mode) {
+            PlaybackOrderMode.Shuffle -> buildShuffledPlaybackQueue(currentSong)
+            PlaybackOrderMode.Sequence,
+            PlaybackOrderMode.RepeatOne -> sourceQueue
+        }
+        currentQueueIndex = findSongIndex(playbackQueue, currentSong)
+    }
+
+    private fun buildShuffledPlaybackQueue(currentSong: Song?): List<Song> {
+        if (sourceQueue.isEmpty()) {
+            return emptyList()
+        }
+
+        val officialCurrentSong = currentSong?.let { findSong(sourceQueue, it) }
+        return if (officialCurrentSong == null) {
+            sourceQueue.shuffled()
+        } else {
+            listOf(officialCurrentSong) + sourceQueue
+                .filterNot { isSameSong(it, officialCurrentSong) }
+                .shuffled()
+        }
+    }
+
+    private fun findSong(queue: List<Song>, song: Song): Song? {
+        return queue.firstOrNull { isSameSong(it, song) }
+    }
+
+    private fun findSongIndex(queue: List<Song>, song: Song?): Int {
+        song ?: return -1
+        return queue.indexOfFirst { isSameSong(it, song) }
+    }
+
+    private fun isSameSong(first: Song, second: Song): Boolean {
+        return first.id == second.id || first.uri == second.uri
     }
 
     fun scanSongs() {
@@ -89,11 +147,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { currentState ->
                 result.fold(
                     onSuccess = { songs ->
-                        playbackQueue = songs
-                        syncCurrentQueueIndex()
+                        sourceQueue = songs
+                        rebuildPlaybackQueueForMode(
+                            mode = playbackState.value.playbackOrderMode,
+                            currentSong = playbackState.value.currentSong
+                        )
                         currentState.copy(
                             isLoading = false,
                             songs = songs,
+                            sourceQueue = sourceQueue,
                             playbackQueue = playbackQueue,
                             currentQueueIndex = currentQueueIndex,
                             errorMessage = null,
@@ -121,17 +183,26 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         val queue = _uiState.value.songs
         val songIndex = queue.indexOfFirst { it.id == song.id || it.uri == song.uri }
         if (songIndex == -1) {
+            sourceQueue = listOf(song)
             playbackQueue = listOf(song)
             playSongAt(index = 0)
             return
         }
 
-        playbackQueue = queue
-        playSongAt(index = songIndex)
+        sourceQueue = queue
+        rebuildPlaybackQueueForMode(
+            mode = playbackState.value.playbackOrderMode,
+            currentSong = song
+        )
+        val playbackIndex = findSongIndex(playbackQueue, song)
+        playSongAt(index = playbackIndex)
     }
 
-    fun playQueueSong(index: Int) {
-        playSongAt(index)
+    fun playQueueSong(song: Song) {
+        val playbackIndex = findSongIndex(playbackQueue, song)
+        if (playbackIndex != -1) {
+            playSongAt(playbackIndex)
+        }
     }
 
     private fun playSongAt(index: Int) {
@@ -144,6 +215,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         currentQueueIndex = index
         playbackController.playQueue(playbackQueue, index)
         publishPlaybackQueue()
+        scheduleNextSongsPreload()
     }
 
     private fun syncCurrentQueueIndex() {
@@ -151,7 +223,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         currentQueueIndex = if (currentSong == null) {
             -1
         } else {
-            playbackQueue.indexOfFirst { it.id == currentSong.id || it.uri == currentSong.uri }
+            findSongIndex(playbackQueue, currentSong)
         }
     }
 
@@ -165,6 +237,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         currentQueueIndex = songIndex
         playbackController.updateCurrentSong(playbackQueue[songIndex])
         publishPlaybackQueue()
+        scheduleNextSongsPreload()
     }
 
     private fun observeControllerConnection() {
@@ -194,6 +267,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        sourceQueue = if (scannedSongs.isNotEmpty()) {
+            scannedSongs
+        } else {
+            restoredQueue
+        }
         playbackQueue = restoredQueue
         currentQueueIndex = when {
             snapshot.currentMediaItemIndex in restoredQueue.indices -> snapshot.currentMediaItemIndex
@@ -220,6 +298,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             playbackOrderMode = snapshot.playbackOrderMode
         )
         publishPlaybackQueue()
+        scheduleNextSongsPreload()
     }
 
     private fun reconcileCurrentSongWithLibrary() {
@@ -229,6 +308,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             it.id == currentSong.id || it.uri == currentSong.uri
         } ?: return
 
+        sourceQueue = sourceQueue.map { queuedSong ->
+            scannedSongs.firstOrNull { it.id == queuedSong.id || it.uri == queuedSong.uri }
+                ?: queuedSong
+        }.ifEmpty {
+            scannedSongs
+        }
         playbackQueue = playbackQueue.map { queuedSong ->
             scannedSongs.firstOrNull { it.id == queuedSong.id || it.uri == queuedSong.uri }
                 ?: queuedSong
@@ -245,14 +330,39 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             playbackOrderMode = playbackState.value.playbackOrderMode
         )
         publishPlaybackQueue()
+        scheduleNextSongsPreload()
     }
 
     private fun publishPlaybackQueue() {
         _uiState.update {
             it.copy(
+                sourceQueue = sourceQueue,
                 playbackQueue = playbackQueue,
                 currentQueueIndex = currentQueueIndex
             )
+        }
+    }
+
+    private fun scheduleNextSongsPreload() {
+        preloadJob?.cancel()
+        val startIndex = currentQueueIndex + 1
+        if (
+            preloadSongMetadataCount <= 0 ||
+            playbackQueue.isEmpty() ||
+            startIndex !in playbackQueue.indices
+        ) {
+            return
+        }
+
+        val songsToPreload = playbackQueue
+            .drop(startIndex)
+            .take(preloadSongMetadataCount)
+        if (songsToPreload.isEmpty()) {
+            return
+        }
+
+        preloadJob = viewModelScope.launch {
+            songMetadataPreloader.preload(songsToPreload)
         }
     }
 
@@ -267,9 +377,38 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             PlaybackOrderMode.RepeatOne -> PlaybackOrderMode.Shuffle
             PlaybackOrderMode.Shuffle -> PlaybackOrderMode.Sequence
         }
-        playbackController.updatePlaybackOrderMode(nextMode)
-        playbackController.setPlaybackOrderMode(nextMode)
-        playbackSettingsStore.setPlaybackOrderMode(nextMode)
+        applyPlaybackOrderMode(nextMode)
+    }
+
+    private fun applyPlaybackOrderMode(mode: PlaybackOrderMode) {
+        val currentSong = playbackState.value.currentSong
+        val positionMs = playbackController.getCurrentPositionMs()
+        val wasPlaying = playbackState.value.isPlaying
+
+        if (sourceQueue.isEmpty() && playbackQueue.isNotEmpty()) {
+            sourceQueue = playbackQueue
+        }
+
+        playbackController.updatePlaybackOrderMode(mode)
+        playbackController.setPlaybackOrderMode(mode)
+        playbackSettingsStore.setPlaybackOrderMode(mode)
+
+        rebuildPlaybackQueueForMode(
+            mode = mode,
+            currentSong = currentSong
+        )
+
+        if (currentSong != null && currentQueueIndex in playbackQueue.indices) {
+            playbackController.replaceQueueKeepingCurrent(
+                songs = playbackQueue,
+                startIndex = currentQueueIndex,
+                positionMs = positionMs,
+                playWhenReady = wasPlaying
+            )
+        }
+
+        publishPlaybackQueue()
+        scheduleNextSongsPreload()
     }
 
     fun seekTo(positionMs: Long) {
