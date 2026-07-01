@@ -41,6 +41,7 @@ internal fun TopLevelPagerContent(
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
+    aboutSharedTransitionActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -66,6 +67,7 @@ internal fun TopLevelPagerContent(
                     onOpenAbout = onOpenAbout,
                     secondaryOpen = secondaryOpen,
                     sharedTransitionScope = sharedTransitionScope,
+                    aboutSharedTransitionActive = aboutSharedTransitionActive,
                     modifier = Modifier.fillMaxSize()
                 )
             }

@@ -52,6 +52,7 @@ fun AboutScreen(
     elementModifier: (Int) -> Modifier,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
+    aboutCardElementMotion: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -68,11 +69,19 @@ fun AboutScreen(
             versionName = versionName,
             description = "@Tenqui Noir",
             animatedVisibilityScope = animatedVisibilityScope,
-            modifier = Modifier
+            modifier = (if (aboutCardElementMotion) {
+                elementModifier(0)
+            } else {
+                Modifier
+            })
                 .fillMaxWidth()
                 .height(144.dp)
                 .flowtoneAboutCardSharedBounds(
-                    sharedTransitionScope = sharedTransitionScope,
+                    sharedTransitionScope = if (aboutCardElementMotion) {
+                        null
+                    } else {
+                        sharedTransitionScope
+                    },
                     animatedVisibilityScope = animatedVisibilityScope
                 )
         ) {

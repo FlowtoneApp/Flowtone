@@ -41,6 +41,7 @@ internal fun MineScreen(
     onOpenAbout: () -> Unit,
     secondaryOpen: Boolean,
     sharedTransitionScope: SharedTransitionScope? = null,
+    aboutSharedTransitionActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val versionName = rememberFlowtoneVersionName()
@@ -53,7 +54,7 @@ internal fun MineScreen(
         StaggeredPageElement(
             visible = !secondaryOpen,
             animationIndex = 0,
-            applyElementMotion = false
+            applyElementMotion = !aboutSharedTransitionActive
         ) {
             FlowtoneAboutCard(
                 versionName = versionName,
@@ -64,7 +65,11 @@ internal fun MineScreen(
                     .fillMaxWidth()
                     .height(MineAboutPreviewCardHeight)
                     .flowtoneAboutCardSharedBounds(
-                        sharedTransitionScope = sharedTransitionScope,
+                        sharedTransitionScope = if (aboutSharedTransitionActive) {
+                            sharedTransitionScope
+                        } else {
+                            null
+                        },
                         animatedVisibilityScope = this
                     )
             )
