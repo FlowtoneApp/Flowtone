@@ -58,6 +58,7 @@ internal fun TopLevelPagerContent(
                 )
 
                 TopLevelPage.Mine -> MineScreen(
+                    listeningStats = uiState.listeningStats,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout,
                     secondaryOpen = secondaryOpen,

@@ -27,13 +27,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
 private val MineListeningRecordCardHeight = 132.dp
 
 @Composable
 internal fun MineScreen(
+    listeningStats: ListeningStatsSnapshot,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     secondaryOpen: Boolean,
@@ -55,15 +58,15 @@ internal fun MineScreen(
             ) {
                 MineListeningRecordCard(
                     title = "今日听歌",
-                    value = "0 首",
+                    value = "${listeningStats.todaySongCount} 首",
                     subtitle = "今日播放记录",
                     icon = Icons.Rounded.History,
                     modifier = Modifier.weight(1f)
                 )
                 MineListeningRecordCard(
                     title = "累计时长",
-                    value = "0 分钟",
-                    subtitle = "听歌时长统计",
+                    value = formatListeningDuration(listeningStats.totalListeningDurationMs),
+                    subtitle = "本地记录统计",
                     icon = Icons.Rounded.Schedule,
                     modifier = Modifier.weight(1f)
                 )
@@ -123,7 +126,9 @@ private fun MineListeningRecordCard(
             text = value,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
@@ -131,6 +136,21 @@ private fun MineListeningRecordCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp)
         )
+    }
+}
+
+private fun formatListeningDuration(durationMs: Long): String {
+    val totalMinutes = (durationMs / 60_000L).coerceAtLeast(0L)
+    if (totalMinutes < 60L) {
+        return "$totalMinutes 分钟"
+    }
+
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return if (minutes == 0L) {
+        "$hours 小时"
+    } else {
+        "$hours 小时 $minutes 分"
     }
 }
 

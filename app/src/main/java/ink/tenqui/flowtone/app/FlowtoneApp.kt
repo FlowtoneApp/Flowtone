@@ -111,6 +111,9 @@ fun FlowtoneApp(
     var preloadSongMetadataCount by rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
     }
+    var songRecordThresholdSeconds by rememberSaveable {
+        mutableStateOf(appPreferences.getSongRecordThresholdSeconds())
+    }
     var playbackQueueDisplayOrder by rememberSaveable {
         mutableStateOf(appPreferences.getPlaybackQueueDisplayOrder())
     }
@@ -323,6 +326,10 @@ fun FlowtoneApp(
         musicViewModel.setPreloadSongMetadataCount(preloadSongMetadataCount)
     }
 
+    LaunchedEffect(songRecordThresholdSeconds) {
+        musicViewModel.setSongRecordThresholdSeconds(songRecordThresholdSeconds)
+    }
+
     FlowtoneScaffold(
         uiState = uiState,
         playerUiState = playerUiState,
@@ -352,6 +359,11 @@ fun FlowtoneApp(
         onPreloadSongMetadataCountChange = { count ->
             preloadSongMetadataCount = count
             appPreferences.setSongMetadataPreloadCount(count)
+        },
+        songRecordThresholdSeconds = songRecordThresholdSeconds,
+        onSongRecordThresholdSecondsChange = { seconds ->
+            songRecordThresholdSeconds = seconds
+            appPreferences.setSongRecordThresholdSeconds(seconds)
         },
         playbackQueueDisplayOrder = playbackQueueDisplayOrder,
         onPlaybackQueueDisplayOrderChange = { order ->

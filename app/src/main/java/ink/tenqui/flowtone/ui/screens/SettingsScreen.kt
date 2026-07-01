@@ -30,16 +30,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -54,7 +58,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.app.FlowtonePageEasing
@@ -69,9 +75,13 @@ import kotlin.math.roundToInt
 private enum class SettingsSection(val title: String) {
     Appearance("外观"),
     Playback("播放"),
+    Record("记录"),
     Advanced("高级"),
     General("通用")
 }
+
+private const val MinSongRecordThresholdSeconds = 1
+private const val MaxSongRecordThresholdSeconds = 60
 
 @Composable
 internal fun SettingsScreen(
@@ -89,6 +99,8 @@ internal fun SettingsScreen(
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
+    songRecordThresholdSeconds: Int,
+    onSongRecordThresholdSecondsChange: (Int) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -153,6 +165,12 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
             )
 
+            SettingsSection.Record -> RecordSettingsPage(
+                songRecordThresholdSeconds = songRecordThresholdSeconds,
+                onSongRecordThresholdSecondsChange = onSongRecordThresholdSecondsChange,
+                elementModifier = ::viewElementModifier
+            )
+
             SettingsSection.Advanced -> AdvancedSettingsPage(
                 preloadSongMetadataCount = preloadSongMetadataCount,
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
@@ -202,18 +220,25 @@ private fun SettingsSectionList(
             modifier = elementModifier(1).padding(top = 12.dp)
         )
         SettingsSectionRow(
+            title = "记录",
+            subtitle = "听歌记录规则",
+            icon = Icons.Rounded.History,
+            onClick = { onSectionClick(SettingsSection.Record) },
+            modifier = elementModifier(2).padding(top = 12.dp)
+        )
+        SettingsSectionRow(
             title = "高级",
             subtitle = "预载与性能",
             icon = Icons.Rounded.Tune,
             onClick = { onSectionClick(SettingsSection.Advanced) },
-            modifier = elementModifier(2).padding(top = 12.dp)
+            modifier = elementModifier(3).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "通用",
             subtitle = "启动与界面行为",
             icon = Icons.Rounded.Settings,
             onClick = { onSectionClick(SettingsSection.General) },
-            modifier = elementModifier(3).padding(top = 12.dp)
+            modifier = elementModifier(4).padding(top = 12.dp)
         )
     }
 }
@@ -255,6 +280,26 @@ private fun PlaybackSettingsPage(
                 subtitle = "仅在来电前正在播放且音频焦点短暂丢失时恢复",
                 checked = resumePlaybackAfterCall,
                 onCheckedChange = onResumePlaybackAfterCallChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordSettingsPage(
+    songRecordThresholdSeconds: Int,
+    onSongRecordThresholdSecondsChange: (Int) -> Unit,
+    elementModifier: (Int) -> Modifier,
+    modifier: Modifier = Modifier
+) {
+    SettingsPageColumn(modifier = modifier) {
+        OptionGroup(
+            title = "记录",
+            modifier = elementModifier(0)
+        ) {
+            SongRecordThresholdRow(
+                selectedSeconds = songRecordThresholdSeconds,
+                onSelectedSecondsChange = onSongRecordThresholdSecondsChange
             )
         }
     }
@@ -376,6 +421,174 @@ private fun SettingsSectionRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+@Composable
+private fun SongRecordThresholdRow(
+    selectedSeconds: Int,
+    onSelectedSecondsChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+    val seconds = selectedSeconds.coerceSongRecordThreshold()
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable { showDialog = true }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "歌曲记录阈值",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "当前：$seconds 秒，播放满后才计入今日听歌",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Icon(
+            imageVector = Icons.Rounded.ChevronRight,
+            contentDescription = "设置歌曲记录阈值",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    if (showDialog) {
+        SongRecordThresholdDialog(
+            selectedSeconds = seconds,
+            onDismiss = { showDialog = false },
+            onConfirm = { value ->
+                onSelectedSecondsChange(value)
+                showDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun SongRecordThresholdDialog(
+    selectedSeconds: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var draftSeconds by rememberSaveable(selectedSeconds) {
+        mutableStateOf(selectedSeconds.coerceSongRecordThreshold())
+    }
+    var inputText by rememberSaveable(selectedSeconds) {
+        mutableStateOf(draftSeconds.toString())
+    }
+    val inputSeconds = inputText.toIntOrNull()
+    val inputInvalid = inputSeconds == null ||
+        inputSeconds !in MinSongRecordThresholdSeconds..MaxSongRecordThresholdSeconds
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = "歌曲记录阈值")
+        },
+        text = {
+            Column {
+                Text(
+                    text = "同一首歌真实播放达到这个时间后，才会计入今日听歌。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "$draftSeconds 秒",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 18.dp)
+                )
+                Slider(
+                    value = draftSeconds.toFloat(),
+                    onValueChange = { value ->
+                        val seconds = value
+                            .roundToInt()
+                            .coerceSongRecordThreshold()
+                        draftSeconds = seconds
+                        inputText = seconds.toString()
+                    },
+                    valueRange = MinSongRecordThresholdSeconds.toFloat()..
+                        MaxSongRecordThresholdSeconds.toFloat(),
+                    steps = MaxSongRecordThresholdSeconds - MinSongRecordThresholdSeconds - 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${MinSongRecordThresholdSeconds} 秒",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${MaxSongRecordThresholdSeconds} 秒",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { value ->
+                        val digits = value.filter { it.isDigit() }.take(2)
+                        inputText = digits
+                        digits.toIntOrNull()
+                            ?.takeIf {
+                                it in MinSongRecordThresholdSeconds..MaxSongRecordThresholdSeconds
+                            }
+                            ?.let { draftSeconds = it }
+                    },
+                    label = { Text("秒数") },
+                    isError = inputInvalid,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    supportingText = {
+                        Text(
+                            text = if (inputInvalid) {
+                                "请输入 1-60 秒"
+                            } else {
+                                "也可以直接输入数字"
+                            }
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !inputInvalid,
+                onClick = {
+                    val confirmedSeconds = inputSeconds
+                        ?.coerceSongRecordThreshold()
+                        ?: draftSeconds
+                    onConfirm(confirmedSeconds)
+                }
+            ) {
+                Text(text = "确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "取消")
+            }
+        }
+    )
 }
 
 @Composable
@@ -629,4 +842,11 @@ private fun SettingSwitchRow(
             onCheckedChange = onCheckedChange
         )
     }
+}
+
+private fun Int.coerceSongRecordThreshold(): Int {
+    return coerceIn(
+        MinSongRecordThresholdSeconds,
+        MaxSongRecordThresholdSeconds
+    )
 }

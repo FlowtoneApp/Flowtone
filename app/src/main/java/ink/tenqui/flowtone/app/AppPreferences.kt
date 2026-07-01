@@ -96,6 +96,28 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getSongRecordThresholdSeconds(): Int {
+        return prefs.getInt(
+            SONG_RECORD_THRESHOLD_SECONDS_KEY,
+            DEFAULT_SONG_RECORD_THRESHOLD_SECONDS
+        ).coerceIn(
+            MIN_SONG_RECORD_THRESHOLD_SECONDS,
+            MAX_SONG_RECORD_THRESHOLD_SECONDS
+        )
+    }
+
+    fun setSongRecordThresholdSeconds(seconds: Int) {
+        prefs.edit()
+            .putInt(
+                SONG_RECORD_THRESHOLD_SECONDS_KEY,
+                seconds.coerceIn(
+                    MIN_SONG_RECORD_THRESHOLD_SECONDS,
+                    MAX_SONG_RECORD_THRESHOLD_SECONDS
+                )
+            )
+            .apply()
+    }
+
     fun getPlaybackQueueDisplayOrder(): QueueDisplayOrder {
         val savedValue = prefs.getString(PLAYBACK_QUEUE_DISPLAY_ORDER_KEY, null)
             ?: return QueueDisplayOrder.PlaybackOrder
@@ -118,8 +140,12 @@ class AppPreferences(context: Context) {
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
+        const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val DEFAULT_PRELOAD_COUNT = 5
+        const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30
+        const val MIN_SONG_RECORD_THRESHOLD_SECONDS = 1
+        const val MAX_SONG_RECORD_THRESHOLD_SECONDS = 60
         const val HOME_VALUE = "home"
         const val LIBRARY_VALUE = "library"
         const val MINE_VALUE = "mine"

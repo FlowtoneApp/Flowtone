@@ -38,6 +38,8 @@ internal fun SecondaryPageHost(
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
+    songRecordThresholdSeconds: Int,
+    onSongRecordThresholdSecondsChange: (Int) -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
     permissionDenied: Boolean,
@@ -143,6 +145,8 @@ internal fun SecondaryPageHost(
                 onAllowFullscreenFromCollapsedChange = onAllowFullscreenFromCollapsedChange,
                 preloadSongMetadataCount = preloadSongMetadataCount,
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
+                songRecordThresholdSeconds = songRecordThresholdSeconds,
+                onSongRecordThresholdSecondsChange = onSongRecordThresholdSecondsChange,
                 elementModifier = ::elementModifier,
                 modifier = Modifier.fillMaxSize()
             )

@@ -1,12 +1,16 @@
 package ink.tenqui.flowtone.viewmodel
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.local.AudioScanner
+import ink.tenqui.flowtone.data.local.ListeningStatsStore
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
 import ink.tenqui.flowtone.data.local.SongMetadataPreloader
+import ink.tenqui.flowtone.data.listening.ListeningStatsRepository
+import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackController
@@ -33,7 +37,8 @@ data class MusicUiState(
     val playbackQueue: List<Song> = emptyList(),
     val currentQueueIndex: Int = -1,
     val errorMessage: String? = null,
-    val hasScanned: Boolean = false
+    val hasScanned: Boolean = false,
+    val listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot()
 )
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,6 +48,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)
+    private val listeningStatsRepository = ListeningStatsRepository(
+        localStore = ListeningStatsStore(application)
+    )
     private val playbackController = PlaybackController(
         context = application,
         initialPlaybackOrderMode = playbackSettingsStore.getPlaybackOrderMode(),
@@ -50,12 +58,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         onMediaItemChanged = ::syncCurrentSongFromMediaId
     )
     private val songMetadataPreloader = SongMetadataPreloader(application)
-    private val _uiState = MutableStateFlow(MusicUiState())
+    private val _uiState = MutableStateFlow(
+        MusicUiState(listeningStats = listeningStatsRepository.getStats())
+    )
     private var sourceQueue: List<Song> = emptyList()
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
     private var preloadJob: Job? = null
+    private var activeListeningSongKey: String? = null
+    private var lastListeningTickElapsedMs: Long? = null
+    private var pendingListeningDurationMs: Long = 0L
+    private var lastPlaybackPositionMs: Long = 0L
+    private var activeSongListeningDurationMs: Long = 0L
+    private var activeSongRecorded: Boolean = false
+    private var songRecordThresholdMs: Long = DEFAULT_SONG_RECORD_THRESHOLD_SECONDS * 1_000L
 
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
@@ -83,6 +100,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         preloadSongMetadataCount = sanitizedCount
         scheduleNextSongsPreload()
+    }
+
+    fun setSongRecordThresholdSeconds(seconds: Int) {
+        songRecordThresholdMs = seconds
+            .coerceIn(
+                MIN_SONG_RECORD_THRESHOLD_SECONDS,
+                MAX_SONG_RECORD_THRESHOLD_SECONDS
+            )
+            .toLong() * 1_000L
     }
 
     private fun rebuildPlaybackQueueForMode(
@@ -474,6 +500,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             while (isActive) {
                 updateProgressFromController()
+                updateListeningStatsFromPlayback()
                 delay(500)
             }
         }
@@ -513,8 +540,112 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    private fun updateListeningStatsFromPlayback() {
+        val state = playbackState.value
+        val currentSong = state.currentSong
+        if (currentSong == null) {
+            flushPendingListeningDuration()
+            activeListeningSongKey = null
+            lastListeningTickElapsedMs = null
+            lastPlaybackPositionMs = 0L
+            activeSongListeningDurationMs = 0L
+            activeSongRecorded = false
+            publishListeningStats(listeningStatsRepository.getStats())
+            return
+        }
+
+        if (!state.isPlaying) {
+            val songKey = currentSong.listeningStatsKey()
+            if (activeListeningSongKey != songKey) {
+                activeListeningSongKey = songKey
+                activeSongListeningDurationMs = 0L
+                activeSongRecorded = false
+            }
+            flushPendingListeningDuration()
+            lastListeningTickElapsedMs = null
+            lastPlaybackPositionMs = state.positionMs
+            publishListeningStats(listeningStatsRepository.getStats())
+            return
+        }
+
+        val nowElapsedMs = SystemClock.elapsedRealtime()
+        val songKey = currentSong.listeningStatsKey()
+        val isNewSong = activeListeningSongKey != songKey
+        val restartedSameSong = !isNewSong &&
+            lastPlaybackPositionMs > LISTENING_RESTART_PREVIOUS_POSITION_MS &&
+            state.positionMs <= LISTENING_RESTART_POSITION_MS
+
+        if (isNewSong || restartedSameSong) {
+            flushPendingListeningDuration()
+            activeListeningSongKey = songKey
+            activeSongListeningDurationMs = 0L
+            activeSongRecorded = false
+            lastListeningTickElapsedMs = nowElapsedMs
+            lastPlaybackPositionMs = state.positionMs
+            return
+        }
+
+        val previousTickElapsedMs = lastListeningTickElapsedMs
+        if (previousTickElapsedMs != null) {
+            val elapsedMs = nowElapsedMs - previousTickElapsedMs
+            if (elapsedMs in 1..LISTENING_MAX_TICK_INTERVAL_MS) {
+                pendingListeningDurationMs += elapsedMs
+                activeSongListeningDurationMs += elapsedMs
+                if (pendingListeningDurationMs >= LISTENING_FLUSH_INTERVAL_MS) {
+                    flushPendingListeningDuration()
+                }
+                recordActiveSongIfNeeded(currentSong)
+            } else {
+                flushPendingListeningDuration()
+            }
+        }
+
+        lastListeningTickElapsedMs = nowElapsedMs
+        lastPlaybackPositionMs = state.positionMs
+    }
+
+    private fun recordActiveSongIfNeeded(song: Song) {
+        if (activeSongRecorded || activeSongListeningDurationMs < songRecordThresholdMs) {
+            return
+        }
+
+        activeSongRecorded = true
+        publishListeningStats(listeningStatsRepository.recordSongPlayed(song))
+    }
+
+    private fun flushPendingListeningDuration() {
+        val durationMs = pendingListeningDurationMs
+        if (durationMs <= 0L) {
+            return
+        }
+
+        pendingListeningDurationMs = 0L
+        publishListeningStats(listeningStatsRepository.addListeningDuration(durationMs))
+    }
+
+    private fun publishListeningStats(snapshot: ListeningStatsSnapshot) {
+        _uiState.update {
+            it.copy(listeningStats = snapshot)
+        }
+    }
+
     override fun onCleared() {
+        flushPendingListeningDuration()
         playbackController.release()
         super.onCleared()
     }
+
+    private companion object {
+        const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30
+        const val MIN_SONG_RECORD_THRESHOLD_SECONDS = 1
+        const val MAX_SONG_RECORD_THRESHOLD_SECONDS = 60
+        const val LISTENING_FLUSH_INTERVAL_MS = 5_000L
+        const val LISTENING_MAX_TICK_INTERVAL_MS = 5_000L
+        const val LISTENING_RESTART_PREVIOUS_POSITION_MS = 5_000L
+        const val LISTENING_RESTART_POSITION_MS = 1_500L
+    }
+}
+
+private fun Song.listeningStatsKey(): String {
+    return "${sourceType.name}:$id:$uri"
 }
