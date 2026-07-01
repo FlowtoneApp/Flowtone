@@ -135,6 +135,8 @@ internal fun MorphArtworkLayer(
     fullscreenProgress: Float = 0f,
     fullscreenArtworkSize: Dp = expandedArtworkSize,
     fullscreenArtworkCenterY: Dp = expandedArtworkTop + expandedArtworkSize / 2f,
+    playbackScale: Float = 1f,
+    playbackRotationDegrees: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     val baseArtworkSize = expandedArtworkSize
@@ -213,8 +215,9 @@ internal fun MorphArtworkLayer(
                 .graphicsLayer {
                     shape = coverShape
                     clip = true
-                    scaleX = containerScale
-                    scaleY = containerScale
+                    scaleX = containerScale * playbackScale
+                    scaleY = containerScale * playbackScale
+                    rotationZ = playbackRotationDegrees
                     transformOrigin = TransformOrigin.Center
                 }
                 .background(

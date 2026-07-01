@@ -67,6 +67,10 @@ internal val MiniPlayerCollapsedHeight = 92.dp
 internal val MiniPlayerMinimizedHeight = 52.dp
 internal val MiniPlayerDragHotZoneHeight = 20.dp
 private const val ARTIST_SELECTION_TAG = "FlowtoneArtistSelection"
+private const val PAUSED_ARTWORK_SCALE = 0.965f
+private const val PAUSE_ARTWORK_SCALE_DURATION_MS = 300
+private const val PAUSED_ARTWORK_ROTATION_DEGREES = 3f
+private const val PAUSE_ARTWORK_ROTATION_DURATION_MS = 300
 
 @Composable
 fun MiniPlayer(
@@ -445,6 +449,30 @@ fun MiniPlayer(
     } else {
         playerUiState.isPlaying
     }
+    val artworkPlaybackScale by animateFloatAsState(
+        targetValue = if (visualIsPlaying || !hasCurrentSong) {
+            1f
+        } else {
+            PAUSED_ARTWORK_SCALE
+        },
+        animationSpec = tween(
+            durationMillis = PAUSE_ARTWORK_SCALE_DURATION_MS,
+            easing = FastOutSlowInEasing
+        ),
+        label = "ArtworkPlaybackScale"
+    )
+    val artworkPlaybackRotationDegrees by animateFloatAsState(
+        targetValue = if (visualIsPlaying || !hasCurrentSong) {
+            0f
+        } else {
+            PAUSED_ARTWORK_ROTATION_DEGREES
+        },
+        animationSpec = tween(
+            durationMillis = PAUSE_ARTWORK_ROTATION_DURATION_MS,
+            easing = FastOutSlowInEasing
+        ),
+        label = "ArtworkPlaybackRotation"
+    )
     fun lockPlayPauseVisual(isPlayingToLock: Boolean) {
         lockedIsPlayingDuringScrub = isPlayingToLock
         keepPlayPauseVisualLockedAfterSeek = true
@@ -695,6 +723,8 @@ fun MiniPlayer(
                         fullscreenProgress = fullscreenProgress,
                         fullscreenArtworkSize = fullscreenProgressTrackWidth,
                         fullscreenArtworkCenterY = fullscreenCoverCenterY,
+                        playbackScale = artworkPlaybackScale,
+                        playbackRotationDegrees = artworkPlaybackRotationDegrees,
                         modifier = Modifier
                             .align(Alignment.TopStart)
                         .graphicsLayer {
