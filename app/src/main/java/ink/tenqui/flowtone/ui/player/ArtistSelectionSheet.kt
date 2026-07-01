@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.ui.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -58,6 +60,14 @@ internal fun ArtistSelectionSheet(
     var sheetVisible by remember { mutableStateOf(false) }
     var dismissStarted by remember { mutableStateOf(false) }
     val noRippleInteractionSource = remember { MutableInteractionSource() }
+    val scrimProgress by animateFloatAsState(
+        targetValue = if (sheetVisible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
+            easing = LinearEasing
+        ),
+        label = "ArtistSelectionScrimProgress"
+    )
 
     fun requestDismiss() {
         if (!dismissStarted) {
@@ -99,7 +109,7 @@ internal fun ArtistSelectionSheet(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = scrimAlpha))
+                .background(Color.Black.copy(alpha = scrimAlpha * scrimProgress))
         )
 
         AnimatedVisibility(
