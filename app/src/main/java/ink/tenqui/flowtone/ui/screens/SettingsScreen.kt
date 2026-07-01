@@ -88,6 +88,8 @@ internal fun SettingsScreen(
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
+    disablePausedArtworkTilt: Boolean,
+    onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onBackActionChange: ((() -> Unit)?) -> Unit,
     onPathSegmentsChange: (List<String>) -> Unit,
@@ -156,6 +158,8 @@ internal fun SettingsScreen(
             SettingsSection.Appearance -> AppearanceSettingsPage(
                 themeMode = themeMode,
                 onThemeModeChange = onThemeModeChange,
+                disablePausedArtworkTilt = disablePausedArtworkTilt,
+                onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
                 elementModifier = ::viewElementModifier
             )
 
@@ -247,6 +251,8 @@ private fun SettingsSectionList(
 private fun AppearanceSettingsPage(
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
+    disablePausedArtworkTilt: Boolean,
+    onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -258,6 +264,13 @@ private fun AppearanceSettingsPage(
             ThemeModeSelector(
                 selectedMode = themeMode,
                 onModeSelected = onThemeModeChange
+            )
+            SettingSwitchRow(
+                title = "取消暂停时封面倾斜",
+                subtitle = "打开后，暂停时封面仅缩小，不再倾斜",
+                checked = disablePausedArtworkTilt,
+                onCheckedChange = onDisablePausedArtworkTiltChange,
+                modifier = Modifier.padding(top = 12.dp)
             )
         }
     }

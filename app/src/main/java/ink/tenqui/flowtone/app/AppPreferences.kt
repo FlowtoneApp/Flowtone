@@ -50,6 +50,16 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun shouldDisablePausedArtworkTilt(): Boolean {
+        return prefs.getBoolean(DISABLE_PAUSED_ARTWORK_TILT_KEY, false)
+    }
+
+    fun setDisablePausedArtworkTilt(disable: Boolean) {
+        prefs.edit()
+            .putBoolean(DISABLE_PAUSED_ARTWORK_TILT_KEY, disable)
+            .apply()
+    }
+
     fun shouldHideSecondaryBackButton(): Boolean {
         return prefs.getBoolean(HIDE_SECONDARY_BACK_BUTTON_KEY, false)
     }
@@ -136,6 +146,7 @@ class AppPreferences(context: Context) {
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
+        const val DISABLE_PAUSED_ARTWORK_TILT_KEY = "disable_paused_artwork_tilt"
         const val HIDE_SECONDARY_BACK_BUTTON_KEY = "hide_secondary_back_button"
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"

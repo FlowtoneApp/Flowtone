@@ -82,6 +82,7 @@ fun MiniPlayer(
     fullscreenHeight: Dp,
     allowFullscreenFromCollapsed: Boolean = false,
     allowFullscreenFromExpanded: Boolean = true,
+    disablePausedArtworkTilt: Boolean = false,
     minimized: Boolean,
     onMinimizedChange: (Boolean) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -462,7 +463,11 @@ fun MiniPlayer(
         label = "ArtworkPlaybackScale"
     )
     val artworkPlaybackRotationDegrees by animateFloatAsState(
-        targetValue = if (visualIsPlaying || !hasCurrentSong) {
+        targetValue = if (
+            visualIsPlaying ||
+            !hasCurrentSong ||
+            disablePausedArtworkTilt
+        ) {
             0f
         } else {
             PAUSED_ARTWORK_ROTATION_DEGREES

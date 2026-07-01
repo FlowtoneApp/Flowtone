@@ -108,6 +108,9 @@ fun FlowtoneApp(
     var allowFullscreenFromCollapsed by rememberSaveable {
         mutableStateOf(appPreferences.shouldAllowFullscreenFromCollapsed())
     }
+    var disablePausedArtworkTilt by rememberSaveable {
+        mutableStateOf(appPreferences.shouldDisablePausedArtworkTilt())
+    }
     var preloadSongMetadataCount by rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
     }
@@ -336,6 +339,11 @@ fun FlowtoneApp(
         appPreferences = appPreferences,
         themeMode = themeMode,
         onThemeModeChange = onThemeModeChange,
+        disablePausedArtworkTilt = disablePausedArtworkTilt,
+        onDisablePausedArtworkTiltChange = { disable ->
+            disablePausedArtworkTilt = disable
+            appPreferences.setDisablePausedArtworkTilt(disable)
+        },
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
         secondaryPage = secondaryPage,
