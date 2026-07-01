@@ -8,6 +8,8 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,6 +17,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -35,21 +39,22 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -58,9 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.app.FlowtonePageEasing
@@ -71,6 +74,10 @@ import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 
 private enum class SettingsSection(val title: String) {
     Appearance("外观"),
@@ -82,6 +89,8 @@ private enum class SettingsSection(val title: String) {
 
 private const val MinSongRecordThresholdSeconds = 1
 private const val MaxSongRecordThresholdSeconds = 60
+private const val DialogScaleEnterDurationMillis = 180
+private const val DialogScaleExitDurationMillis = 120
 
 @Composable
 internal fun SettingsScreen(
@@ -210,38 +219,38 @@ private fun SettingsSectionList(
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
         SettingsSectionRow(
+            title = "通用",
+            subtitle = "启动与界面行为",
+            icon = Icons.Rounded.Settings,
+            onClick = { onSectionClick(SettingsSection.General) },
+            modifier = elementModifier(0)
+        )
+        SettingsSectionRow(
             title = "外观",
             subtitle = "主题模式",
             icon = Icons.Rounded.Palette,
             onClick = { onSectionClick(SettingsSection.Appearance) },
-            modifier = elementModifier(0)
+            modifier = elementModifier(1).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "播放",
             subtitle = "播放恢复行为",
             icon = Icons.Rounded.PlayCircle,
             onClick = { onSectionClick(SettingsSection.Playback) },
-            modifier = elementModifier(1).padding(top = 12.dp)
+            modifier = elementModifier(2).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "记录",
             subtitle = "听歌记录规则",
             icon = Icons.Rounded.History,
             onClick = { onSectionClick(SettingsSection.Record) },
-            modifier = elementModifier(2).padding(top = 12.dp)
+            modifier = elementModifier(3).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "高级",
             subtitle = "预载与性能",
             icon = Icons.Rounded.Tune,
             onClick = { onSectionClick(SettingsSection.Advanced) },
-            modifier = elementModifier(3).padding(top = 12.dp)
-        )
-        SettingsSectionRow(
-            title = "通用",
-            subtitle = "启动与界面行为",
-            icon = Icons.Rounded.Settings,
-            onClick = { onSectionClick(SettingsSection.General) },
             modifier = elementModifier(4).padding(top = 12.dp)
         )
     }
@@ -497,111 +506,180 @@ private fun SongRecordThresholdDialog(
     var draftSeconds by rememberSaveable(selectedSeconds) {
         mutableStateOf(selectedSeconds.coerceSongRecordThreshold())
     }
-    var inputText by rememberSaveable(selectedSeconds) {
-        mutableStateOf(draftSeconds.toString())
+    var visible by remember {
+        mutableStateOf(false)
     }
-    val inputSeconds = inputText.toIntOrNull()
-    val inputInvalid = inputSeconds == null ||
-        inputSeconds !in MinSongRecordThresholdSeconds..MaxSongRecordThresholdSeconds
+    var closing by remember {
+        mutableStateOf(false)
+    }
+    val scope = rememberCoroutineScope()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = "歌曲记录阈值")
+    fun closeAfterAnimation(action: () -> Unit) {
+        if (closing) {
+            return
+        }
+
+        closing = true
+        visible = false
+        scope.launch {
+            delay(DialogScaleExitDurationMillis.toLong())
+            action()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        visible = true
+    }
+
+    Popup(
+        alignment = Alignment.Center,
+        onDismissRequest = {
+            closeAfterAnimation(onDismiss)
         },
-        text = {
-            Column {
-                Text(
-                    text = "同一首歌真实播放达到这个时间后，才会计入今日听歌。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "$draftSeconds 秒",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 18.dp)
-                )
-                Slider(
-                    value = draftSeconds.toFloat(),
-                    onValueChange = { value ->
-                        val seconds = value
-                            .roundToInt()
-                            .coerceSongRecordThreshold()
-                        draftSeconds = seconds
-                        inputText = seconds.toString()
-                    },
-                    valueRange = MinSongRecordThresholdSeconds.toFloat()..
-                        MaxSongRecordThresholdSeconds.toFloat(),
-                    steps = MaxSongRecordThresholdSeconds - MinSongRecordThresholdSeconds - 1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "${MinSongRecordThresholdSeconds} 秒",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        properties = PopupProperties(focusable = true)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(
+                    animationSpec = tween(
+                        durationMillis = DialogScaleEnterDurationMillis,
+                        easing = FlowtonePageEasing
                     )
-                    Text(
-                        text = "${MaxSongRecordThresholdSeconds} 秒",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                exit = fadeOut(
+                    animationSpec = tween(
+                        durationMillis = DialogScaleExitDurationMillis,
+                        easing = FlowtonePageEasing
                     )
-                }
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { value ->
-                        val digits = value.filter { it.isDigit() }.take(2)
-                        inputText = digits
-                        digits.toIntOrNull()
-                            ?.takeIf {
-                                it in MinSongRecordThresholdSeconds..MaxSongRecordThresholdSeconds
-                            }
-                            ?.let { draftSeconds = it }
-                    },
-                    label = { Text("秒数") },
-                    isError = inputInvalid,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    supportingText = {
-                        Text(
-                            text = if (inputInvalid) {
-                                "请输入 1-60 秒"
-                            } else {
-                                "也可以直接输入数字"
-                            }
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
                 )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !inputInvalid,
-                onClick = {
-                    val confirmedSeconds = inputSeconds
-                        ?.coerceSongRecordThreshold()
-                        ?: draftSeconds
-                    onConfirm(confirmedSeconds)
-                }
             ) {
-                Text(text = "确定")
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
+                        .clickable {
+                            closeAfterAnimation(onDismiss)
+                        }
+                )
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = "取消")
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(
+                    animationSpec = tween(
+                        durationMillis = DialogScaleEnterDurationMillis,
+                        easing = FlowtonePageEasing
+                    )
+                ) + scaleIn(
+                    initialScale = 0.92f,
+                    animationSpec = tween(
+                        durationMillis = DialogScaleEnterDurationMillis,
+                        easing = FlowtonePageEasing
+                    )
+                ),
+                exit = fadeOut(
+                    animationSpec = tween(
+                        durationMillis = DialogScaleExitDurationMillis,
+                        easing = FlowtonePageEasing
+                    )
+                ) + scaleOut(
+                    targetScale = 0.96f,
+                    animationSpec = tween(
+                        durationMillis = DialogScaleExitDurationMillis,
+                        easing = FlowtonePageEasing
+                    )
+                )
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 28.dp)
+                        .widthIn(max = 360.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 6.dp
+                ) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Text(
+                            text = "歌曲记录阈值",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "同一首歌真实播放达到这个时间后，才会计入今日听歌。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                        Text(
+                            text = "$draftSeconds 秒",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 18.dp)
+                        )
+                        Slider(
+                            value = draftSeconds.toFloat(),
+                            onValueChange = { value ->
+                                val seconds = value
+                                    .roundToInt()
+                                    .coerceSongRecordThreshold()
+                                draftSeconds = seconds
+                            },
+                            valueRange = MinSongRecordThresholdSeconds.toFloat()..
+                                MaxSongRecordThresholdSeconds.toFloat(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${MinSongRecordThresholdSeconds} 秒",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${MaxSongRecordThresholdSeconds} 秒",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    closeAfterAnimation(onDismiss)
+                                }
+                            ) {
+                                Text(text = "取消")
+                            }
+                            TextButton(
+                                onClick = {
+                                    val confirmedSeconds = draftSeconds
+                                    closeAfterAnimation {
+                                        onConfirm(confirmedSeconds)
+                                    }
+                                }
+                            ) {
+                                Text(text = "确定")
+                            }
+                        }
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
