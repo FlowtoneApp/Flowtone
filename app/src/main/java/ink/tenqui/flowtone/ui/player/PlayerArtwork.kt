@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
@@ -159,6 +160,11 @@ internal fun MorphArtworkLayer(
     val containerScale = lerpFloat(collapsedContainerScale, 1f, scaleProgress)
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
+    val coverBackgroundColor = if (imageRequest == null) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        Color.Black.copy(alpha = 0.08f)
+    }
     val blurModifier = if (blurRadius > 0.5.dp) {
         Modifier.blur(blurRadius)
     } else {
@@ -174,7 +180,11 @@ internal fun MorphArtworkLayer(
             .width(artworkSize + shadowPadding * 2)
             .height(artworkSize + shadowPadding * 2)
             .graphicsLayer {
-                alpha = 1f
+                scaleX = containerScale * playbackScale
+                scaleY = containerScale * playbackScale
+                rotationZ = playbackRotationDegrees
+                transformOrigin = TransformOrigin.Center
+                compositingStrategy = CompositingStrategy.Offscreen
             }
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
@@ -212,18 +222,8 @@ internal fun MorphArtworkLayer(
                 .offset(x = shadowPadding, y = shadowPadding)
                 .width(artworkSize)
                 .height(artworkSize)
-                .graphicsLayer {
-                    shape = coverShape
-                    clip = true
-                    scaleX = containerScale * playbackScale
-                    scaleY = containerScale * playbackScale
-                    rotationZ = playbackRotationDegrees
-                    transformOrigin = TransformOrigin.Center
-                }
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = coverShape
-                ),
+                .clip(coverShape)
+                .background(coverBackgroundColor),
             contentAlignment = Alignment.Center
         ) {
             Box(
