@@ -1,8 +1,20 @@
 package ink.tenqui.flowtone.ui.player
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -14,7 +26,10 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Repeat
@@ -22,15 +37,23 @@ import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import kotlin.math.roundToInt
 
 @Composable
 internal fun SharedPlaybackControls(
@@ -202,6 +225,12 @@ internal fun SideButtonsOverlay(
     val favoriteExitProgress = fullscreenProgress.coerceIn(0f, 1f)
     val favoriteEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
     val queueEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
+    var moreMenuExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(hasCurrentSong, fullscreenProgress) {
+        if (!hasCurrentSong || fullscreenProgress <= 0.01f) {
+            moreMenuExpanded = false
+        }
+    }
 
     Box(modifier = modifier) {
         val favoriteEndX = progressLeft
@@ -229,9 +258,11 @@ internal fun SideButtonsOverlay(
         val fullscreenFavoriteX = fullscreenMenuX - buttonSize - fullscreenMenuSpacing
         val fullscreenFavoriteY =
             expandedProgressTop - 56.dp + lerpDp(12.dp, 0.dp, favoriteEnterProgress)
+        val fullscreenActionsEnabled = hasCurrentSong && fullscreenProgress > 0.72f
+        val moreMenuVisible = hasCurrentSong
         FavoriteButton(
             liked = isCurrentSongLiked,
-            enabled = hasCurrentSong && fullscreenProgress > 0.72f,
+            enabled = fullscreenActionsEnabled,
             onClick = onToggleLiked,
             modifier = Modifier
                 .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
@@ -241,17 +272,38 @@ internal fun SideButtonsOverlay(
             },
             visualEnabled = hasCurrentSong
         )
-        MoreMenuButton(
-            iconColor = iconColor,
-            enabled = hasCurrentSong && fullscreenProgress > 0.72f,
-            onClick = {},
+        AnimatedVisibility(
+            visible = moreMenuVisible && !moreMenuExpanded,
+            enter = fullscreenMoreButtonEnterTransition(),
+            exit = fullscreenMoreButtonExitTransition(),
             modifier = Modifier
                 .offset(x = fullscreenMenuX, y = fullscreenFavoriteY)
                 .size(buttonSize)
                 .graphicsLayer {
                     alpha = favoriteEnterProgress
+                }
+        ) {
+            MoreMenuButton(
+                iconColor = iconColor,
+                enabled = fullscreenActionsEnabled,
+                onClick = {
+                    moreMenuExpanded = true
                 },
-            visualEnabled = hasCurrentSong
+                modifier = Modifier.size(buttonSize),
+                visualEnabled = hasCurrentSong
+            )
+        }
+        FullscreenMoreMenu(
+            visible = moreMenuExpanded && moreMenuVisible,
+            iconColor = iconColor,
+            alpha = favoriteEnterProgress,
+            onCollapse = {
+                moreMenuExpanded = false
+            },
+            modifier = Modifier.offset(
+                x = fullscreenMenuX,
+                y = fullscreenFavoriteY - buttonSize * 2f
+            )
         )
 
         val orderEndX = progressLeft + progressWidth - buttonSize
@@ -386,6 +438,192 @@ internal fun QueueButton(
             modifier = Modifier.size(30.dp)
         )
     }
+}
+
+@Composable
+private fun FullscreenMoreMenu(
+    visible: Boolean,
+    iconColor: Color,
+    alpha: Float,
+    onCollapse: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val capsuleHeight by animateDpAsState(
+        targetValue = if (visible) 96.dp else 0.dp,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "FullscreenMoreMenuCapsuleHeight"
+    )
+    val capsuleIconAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "FullscreenMoreMenuIconAlpha"
+    )
+    val capsuleIconScale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.82f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "FullscreenMoreMenuIconScale"
+    )
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fullscreenMenuEnterTransition(),
+        exit = fullscreenMenuExitTransition(),
+        modifier = modifier
+            .graphicsLayer {
+                this.alpha = alpha
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(144.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Column(
+                modifier = Modifier.width(48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                FullscreenMoreMenuAction(
+                    icon = Icons.Rounded.ExpandMore,
+                    contentDescription = "\u6536\u8d77\u66f4\u591a\u64cd\u4f5c",
+                    iconColor = iconColor,
+                    iconSize = 28.dp,
+                    onClick = onCollapse
+                )
+                Column(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(capsuleHeight)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.Gray.copy(alpha = 0.26f)),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    FullscreenMoreMenuAction(
+                        icon = Icons.Outlined.CreateNewFolder,
+                        contentDescription = "\u6dfb\u52a0\u5230\u6b4c\u5355",
+                        iconColor = iconColor,
+                        iconAlpha = capsuleIconAlpha,
+                        iconScale = capsuleIconScale,
+                        onClick = {}
+                    )
+                    FullscreenMoreMenuAction(
+                        icon = Icons.Outlined.Info,
+                        contentDescription = "\u4fe1\u606f",
+                        iconColor = iconColor,
+                        iconAlpha = capsuleIconAlpha,
+                        iconScale = capsuleIconScale,
+                        onClick = {}
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullscreenMoreMenuAction(
+    icon: ImageVector,
+    contentDescription: String,
+    iconColor: Color,
+    onClick: () -> Unit,
+    iconSize: Dp = 30.dp,
+    iconAlpha: Float = 1f,
+    iconScale: Float = 1f
+) {
+    TransparentControlButton(
+        onClick = onClick,
+        modifier = Modifier.size(48.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconColor,
+            modifier = Modifier
+                .size(iconSize)
+                .graphicsLayer {
+                    alpha = iconAlpha
+                    scaleX = iconScale
+                    scaleY = iconScale
+                }
+        )
+    }
+}
+
+@Composable
+private fun fullscreenMenuEnterTransition(): EnterTransition {
+    val density = LocalDensity.current
+    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
+    return fadeIn(
+        tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) + slideInVertically(
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) { slideDistancePx }
+}
+
+@Composable
+private fun fullscreenMenuExitTransition(): ExitTransition {
+    val density = LocalDensity.current
+    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
+    return fadeOut(
+        tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) + slideOutVertically(
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) { slideDistancePx }
+}
+
+@Composable
+private fun fullscreenMoreButtonEnterTransition(): EnterTransition {
+    val density = LocalDensity.current
+    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
+    return fadeIn(
+        tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) + slideInVertically(
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) { -slideDistancePx }
+}
+
+@Composable
+private fun fullscreenMoreButtonExitTransition(): ExitTransition {
+    val density = LocalDensity.current
+    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
+    return fadeOut(
+        tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) + slideOutVertically(
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        )
+    ) { -slideDistancePx }
 }
 
 @Composable
