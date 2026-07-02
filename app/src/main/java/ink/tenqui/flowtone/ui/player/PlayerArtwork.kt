@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -57,7 +58,8 @@ internal fun CrossfadeArtworkImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     alpha: Float = 1f,
-    waitForImageLoad: Boolean = false
+    waitForImageLoad: Boolean = false,
+    fallbackContent: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     var previousPainter by remember { mutableStateOf<Painter?>(null) }
@@ -93,6 +95,10 @@ internal fun CrossfadeArtworkImage(
     }
 
     Box(modifier = modifier) {
+        if (displayedPainter == null) {
+            fallbackContent?.invoke()
+        }
+
         previousPainter?.let { oldPainter ->
             Image(
                 painter = oldPainter,
@@ -161,7 +167,7 @@ internal fun MorphArtworkLayer(
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
     val coverBackgroundColor = if (imageRequest == null) {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+        missingArtworkBackgroundColor()
     } else {
         Color.Black.copy(alpha = 0.08f)
     }
@@ -237,21 +243,18 @@ internal fun MorphArtworkLayer(
                     contentDescription = "\u4e13\u8f91\u5c01\u9762",
                     contentScale = ContentScale.Crop,
                     waitForImageLoad = waitForArtworkLoad,
-                    modifier = Modifier.matchParentSize()
+                    modifier = Modifier.matchParentSize(),
+                    fallbackContent = {
+                        MissingArtworkPlaceholder(
+                            iconModifier = Modifier.size(42.dp)
+                        )
+                    }
                 )
                 if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
                     Box(
                         modifier = Modifier
                             .matchParentSize()
                             .background(Color.Black.copy(alpha = collapsedArtworkDimAlpha))
-                    )
-                }
-                if (imageRequest == null) {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(42.dp)
                     )
                 }
             }
@@ -283,7 +286,7 @@ internal fun ExpandedArtwork(
                 this.translationY = translationY
             }
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            .background(missingArtworkBackgroundColor()),
         contentAlignment = Alignment.Center
     ) {
         if (imageRequest != null) {
@@ -294,11 +297,47 @@ internal fun ExpandedArtwork(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            Icon(
-                imageVector = Icons.Filled.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            missingArtworkIcon()
         }
     }
+}
+
+@Composable
+private fun MissingArtworkPlaceholder(
+    modifier: Modifier = Modifier,
+    iconModifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(missingArtworkBackgroundColor()),
+        contentAlignment = Alignment.Center
+    ) {
+        missingArtworkIcon(modifier = iconModifier)
+    }
+}
+
+@Composable
+internal fun missingArtworkBackgroundColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        Color.Black
+    } else {
+        Color.White
+    }
+}
+
+@Composable
+private fun missingArtworkIcon(
+    modifier: Modifier = Modifier
+) {
+    Icon(
+        imageVector = Icons.Filled.MusicNote,
+        contentDescription = null,
+        tint = if (isSystemInDarkTheme()) {
+            Color.White.copy(alpha = 0.78f)
+        } else {
+            Color.Black.copy(alpha = 0.72f)
+        },
+        modifier = modifier
+    )
 }

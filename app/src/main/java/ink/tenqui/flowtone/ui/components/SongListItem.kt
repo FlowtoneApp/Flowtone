@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -141,15 +142,16 @@ private fun AlbumArtwork(
         }
     }
     val shape = MaterialTheme.shapes.medium
-    val placeholderColor = if (isCurrentSong) {
-        MaterialTheme.colorScheme.secondary
+    val isSystemDark = isSystemInDarkTheme()
+    val placeholderColor = if (isSystemDark) {
+        Color.Black
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        Color.White
     }
-    val iconColor = if (isCurrentSong) {
-        MaterialTheme.colorScheme.onSecondary
+    val iconColor = if (isSystemDark) {
+        Color.White.copy(alpha = 0.78f)
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        Color.Black.copy(alpha = 0.72f)
     }
 
     Box(
