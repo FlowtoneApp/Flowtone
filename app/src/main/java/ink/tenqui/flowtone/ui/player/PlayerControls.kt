@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
@@ -223,7 +224,9 @@ internal fun SideButtonsOverlay(
             visualEnabled = sideButtonsVisualEnabled
         )
 
-        val fullscreenFavoriteX = progressLeft + progressWidth - buttonSize
+        val fullscreenMenuSpacing = 4.dp
+        val fullscreenMenuX = progressLeft + progressWidth - buttonSize
+        val fullscreenFavoriteX = fullscreenMenuX - buttonSize - fullscreenMenuSpacing
         val fullscreenFavoriteY =
             expandedProgressTop - 56.dp + lerpDp(12.dp, 0.dp, favoriteEnterProgress)
         FavoriteButton(
@@ -232,6 +235,18 @@ internal fun SideButtonsOverlay(
             onClick = onToggleLiked,
             modifier = Modifier
                 .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
+                .size(buttonSize)
+                .graphicsLayer {
+                    alpha = favoriteEnterProgress
+            },
+            visualEnabled = hasCurrentSong
+        )
+        MoreMenuButton(
+            iconColor = iconColor,
+            enabled = hasCurrentSong && fullscreenProgress > 0.72f,
+            onClick = {},
+            modifier = Modifier
+                .offset(x = fullscreenMenuX, y = fullscreenFavoriteY)
                 .size(buttonSize)
                 .graphicsLayer {
                     alpha = favoriteEnterProgress
@@ -367,6 +382,31 @@ internal fun QueueButton(
         Icon(
             imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
             contentDescription = "\u64ad\u653e\u961f\u5217",
+            tint = iconColor,
+            modifier = Modifier.size(30.dp)
+        )
+    }
+}
+
+@Composable
+internal fun MoreMenuButton(
+    iconColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    visualEnabled: Boolean = enabled
+) {
+    TransparentControlButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier
+            .graphicsLayer {
+                alpha = if (visualEnabled) 1f else 0.45f
+            }
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.MoreVert,
+            contentDescription = "\u66f4\u591a",
             tint = iconColor,
             modifier = Modifier.size(30.dp)
         )
