@@ -11,7 +11,10 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -397,6 +400,7 @@ fun MiniPlayer(
     var keepPlayPauseVisualLockedAfterSeek by remember { mutableStateOf(false) }
     var playPauseVisualLockToken by remember { mutableStateOf(0) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var expandedMoreMenu by remember { mutableStateOf(false) }
     var queueSheetBackgroundBlurred by remember { mutableStateOf(false) }
     var artistSelectionRequest by remember { mutableStateOf<ArtistSelectionRequest?>(null) }
     val currentSongKey = currentSong?.id?.toString()
@@ -673,6 +677,19 @@ fun MiniPlayer(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(visualPanelHeight)
+                    .pointerInput(expandedMoreMenu) {
+                        if (!expandedMoreMenu) {
+                            return@pointerInput
+                        }
+
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            val up = waitForUpOrCancellation()
+                            if (up != null) {
+                                expandedMoreMenu = false
+                            }
+                        }
+                    }
                     .graphicsLayer {
                         shape = playerShape
                         clip = true
@@ -797,15 +814,22 @@ fun MiniPlayer(
                         collapsedHeight = collapsedHeight,
                         expandedTop = expandedControlsTop,
                         fullscreenProgress = fullscreenProgress,
-                        onPlayPrevious = ::playPreviousFromMiniPlayer,
+                        onPlayPrevious = {
+                            expandedMoreMenu = false
+                            playPreviousFromMiniPlayer()
+                        },
                         onTogglePlayPause = {
+                            expandedMoreMenu = false
                             if (hasCurrentSong) {
                                 isProgressScrubbing = false
                                 keepPlayPauseVisualLockedAfterSeek = false
                                 onTogglePlayPause()
                             }
                         },
-                        onPlayNext = ::playNextFromMiniPlayer,
+                        onPlayNext = {
+                            expandedMoreMenu = false
+                            playNextFromMiniPlayer()
+                        },
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .graphicsLayer {
@@ -824,6 +848,10 @@ fun MiniPlayer(
                         playbackOrderMode = playerUiState.playbackOrderMode,
                         iconColor = controlIconColor,
                         fullscreenProgress = fullscreenProgress,
+                        moreMenuExpanded = expandedMoreMenu,
+                        onMoreMenuExpandedChange = { expanded ->
+                            expandedMoreMenu = expanded
+                        },
                         onToggleLiked = onToggleCurrentSongLiked,
                         onOpenQueue = {
                             artistSelectionRequest = null

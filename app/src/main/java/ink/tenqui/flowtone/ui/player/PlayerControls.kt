@@ -205,6 +205,8 @@ internal fun SideButtonsOverlay(
     playbackOrderMode: PlaybackOrderMode,
     iconColor: Color,
     fullscreenProgress: Float,
+    moreMenuExpanded: Boolean,
+    onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
     onOpenQueue: () -> Unit,
@@ -225,10 +227,14 @@ internal fun SideButtonsOverlay(
     val favoriteExitProgress = fullscreenProgress.coerceIn(0f, 1f)
     val favoriteEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
     val queueEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
-    var moreMenuExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(hasCurrentSong, fullscreenProgress) {
         if (!hasCurrentSong || fullscreenProgress <= 0.01f) {
-            moreMenuExpanded = false
+            onMoreMenuExpandedChange(false)
+        }
+    }
+    fun collapseMoreMenu() {
+        if (moreMenuExpanded) {
+            onMoreMenuExpandedChange(false)
         }
     }
 
@@ -241,7 +247,10 @@ internal fun SideButtonsOverlay(
         FavoriteButton(
             liked = isCurrentSongLiked,
             enabled = sideButtonsVisualEnabled && fullscreenProgress < 0.45f,
-            onClick = onToggleLiked,
+            onClick = {
+                collapseMoreMenu()
+                onToggleLiked()
+            },
             modifier = Modifier
                 .offset(x = favoriteX, y = buttonY + bottomFavoriteOffsetY)
                 .size(buttonSize)
@@ -263,7 +272,10 @@ internal fun SideButtonsOverlay(
         FavoriteButton(
             liked = isCurrentSongLiked,
             enabled = fullscreenActionsEnabled,
-            onClick = onToggleLiked,
+            onClick = {
+                collapseMoreMenu()
+                onToggleLiked()
+            },
             modifier = Modifier
                 .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
                 .size(buttonSize)
@@ -287,7 +299,7 @@ internal fun SideButtonsOverlay(
                 iconColor = iconColor,
                 enabled = fullscreenActionsEnabled,
                 onClick = {
-                    moreMenuExpanded = true
+                    onMoreMenuExpandedChange(true)
                 },
                 modifier = Modifier.size(buttonSize),
                 visualEnabled = hasCurrentSong
@@ -298,7 +310,7 @@ internal fun SideButtonsOverlay(
             iconColor = iconColor,
             alpha = favoriteEnterProgress,
             onCollapse = {
-                moreMenuExpanded = false
+                onMoreMenuExpandedChange(false)
             },
             modifier = Modifier.offset(
                 x = fullscreenMenuX,
@@ -313,7 +325,10 @@ internal fun SideButtonsOverlay(
             mode = playbackOrderMode,
             iconColor = iconColor,
             enabled = sideButtonsVisualEnabled,
-            onClick = onTogglePlaybackOrderMode,
+            onClick = {
+                collapseMoreMenu()
+                onTogglePlaybackOrderMode()
+            },
             modifier = Modifier
                 .offset(x = orderX, y = buttonY)
                 .size(buttonSize)
@@ -328,7 +343,10 @@ internal fun SideButtonsOverlay(
         QueueButton(
             iconColor = iconColor,
             enabled = hasCurrentSong && fullscreenProgress > 0.72f,
-            onClick = onOpenQueue,
+            onClick = {
+                collapseMoreMenu()
+                onOpenQueue()
+            },
             modifier = Modifier
                 .offset(x = favoriteEndX, y = buttonY)
                 .size(buttonSize)
