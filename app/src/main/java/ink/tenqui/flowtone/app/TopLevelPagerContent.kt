@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.library.LibraryScreen
+import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.HomeScreen
 import ink.tenqui.flowtone.ui.screens.MineScreen
@@ -29,6 +30,7 @@ internal fun TopLevelPagerContent(
     pagerState: PagerState,
     uiState: MusicUiState,
     playerUiState: PlayerUiState,
+    libraryPlaylistController: LibraryPlaylistController,
     permissionDenied: Boolean,
     showSwipeHint: Boolean,
     secondaryOpen: Boolean,
@@ -54,6 +56,7 @@ internal fun TopLevelPagerContent(
                     songCount = uiState.songs.size,
                     onOpenLocalLibrary = onOpenLocalLibrary,
                     visible = !secondaryOpen,
+                    playlistController = libraryPlaylistController,
                     modifier = Modifier.fillMaxSize()
                 )
 

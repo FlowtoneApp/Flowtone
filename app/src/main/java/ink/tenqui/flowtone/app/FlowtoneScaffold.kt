@@ -22,10 +22,12 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -93,6 +95,7 @@ internal fun FlowtoneScaffold(
     modifier: Modifier = Modifier
 ) {
     val hasCurrentSong = playerUiState.hasCurrentSong
+    val libraryPlaylistController = rememberLibraryPlaylistController()
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         Scaffold(
@@ -126,6 +129,7 @@ internal fun FlowtoneScaffold(
                         pagerState = pagerState,
                         uiState = uiState,
                         playerUiState = playerUiState,
+                        libraryPlaylistController = libraryPlaylistController,
                         permissionDenied = permissionDenied,
                         showSwipeHint = showSwipeHint,
                         secondaryOpen = secondaryOpen,
@@ -208,6 +212,10 @@ internal fun FlowtoneScaffold(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = miniPlayerBottomProtection)
+        )
+        CreatePlaylistOverlay(
+            playlistController = libraryPlaylistController,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
