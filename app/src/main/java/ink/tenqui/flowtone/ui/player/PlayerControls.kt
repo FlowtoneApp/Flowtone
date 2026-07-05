@@ -217,6 +217,7 @@ internal fun SideButtonsOverlay(
     onToggleLiked: () -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onOpenSongInfo: () -> Unit,
     onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -326,6 +327,9 @@ internal fun SideButtonsOverlay(
             },
             onAddToPlaylist = {
                 onAddToPlaylist()
+            },
+            onOpenSongInfo = {
+                onOpenSongInfo()
             },
             modifier = Modifier.offset(
                 x = fullscreenMenuX,
@@ -481,6 +485,7 @@ private fun FullscreenMoreMenu(
     enabled: Boolean,
     onCollapse: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onOpenSongInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val capsuleHeight by animateDpAsState(
@@ -559,7 +564,7 @@ private fun FullscreenMoreMenu(
                         iconAlpha = capsuleIconAlpha,
                         iconScale = capsuleIconScale,
                         enabled = enabled,
-                        onClick = {}
+                        onClick = onOpenSongInfo
                     )
                 }
             }

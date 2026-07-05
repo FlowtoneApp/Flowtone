@@ -142,7 +142,7 @@ internal fun MorphArtworkLayer(
     fullscreenProgress: Float = 0f,
     fullscreenArtworkSize: Dp = expandedArtworkSize,
     fullscreenArtworkCenterY: Dp = expandedArtworkTop + expandedArtworkSize / 2f,
-    addToPlaylistProgress: Float = 0f,
+    contentExitProgress: Float = 0f,
     addToPlaylistArtworkSize: Dp = 56.dp,
     addToPlaylistArtworkX: Dp = 20.dp,
     addToPlaylistArtworkTop: Dp = expandedArtworkTop,
@@ -163,7 +163,7 @@ internal fun MorphArtworkLayer(
     val baseArtworkY = lerpDp(collapsedArtworkTop, expandedArtworkTop, progress)
     val fullscreenArtworkY = fullscreenArtworkCenterY - fullscreenArtworkSize / 2f
     val normalArtworkY = lerpDp(baseArtworkY, fullscreenArtworkY, fullscreenProgress)
-    val addProgress = addToPlaylistProgress.coerceIn(0f, 1f)
+    val addProgress = contentExitProgress.coerceIn(0f, 1f)
     val artworkX = lerpDp(normalArtworkX, addToPlaylistArtworkX, addProgress)
     val artworkSize = lerpDp(normalArtworkSize, addToPlaylistArtworkSize, addProgress)
     val artworkY = lerpDp(normalArtworkY, addToPlaylistArtworkTop, addProgress)

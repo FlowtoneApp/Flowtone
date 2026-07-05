@@ -39,15 +39,8 @@ internal fun FlowCloudBackground(
     isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val cloudColors = if (colors.size >= 3) {
-        colors
-    } else {
-        listOf(
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.tertiaryContainer
-        )
-    }
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val cloudColors = colors.toOpaqueCloudColors(isDarkTheme)
     val motionSpeed = remember { Animatable(if (isPlaying) 1f else 0f) }
     var motionTimeMs by remember { mutableDoubleStateOf(0.0) }
     LaunchedEffect(isPlaying) {
@@ -79,8 +72,6 @@ internal fun FlowCloudBackground(
     val blob2Drift = reverseDrift(motionTimeMs, 1_560)
     val blob3Drift = reverseDrift(motionTimeMs, 1_800)
     val blob4Drift = reverseDrift(motionTimeMs, 2_300)
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
-
     Canvas(
         modifier = modifier.graphicsLayer {
             compositingStrategy = CompositingStrategy.Offscreen
@@ -180,12 +171,14 @@ internal fun CrossfadeFlowCloudBackground(
     modifier: Modifier = Modifier,
     alpha: Float = 1f
 ) {
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val targetColors = colors.toOpaqueCloudColors(isDarkTheme)
     var previousColors by remember { mutableStateOf<List<Color>?>(null) }
-    var displayedColors by remember { mutableStateOf(colors) }
+    var displayedColors by remember { mutableStateOf(targetColors) }
     val crossfadeProgress = remember { Animatable(1f) }
 
-    LaunchedEffect(colors) {
-        if (colors == displayedColors) {
+    LaunchedEffect(targetColors) {
+        if (targetColors == displayedColors) {
             return@LaunchedEffect
         }
 
@@ -196,7 +189,7 @@ internal fun CrossfadeFlowCloudBackground(
                 fraction = crossfadeProgress.value
             )
         } ?: displayedColors
-        displayedColors = colors
+        displayedColors = targetColors
 
         crossfadeProgress.snapTo(0f)
         crossfadeProgress.animateTo(
@@ -210,7 +203,7 @@ internal fun CrossfadeFlowCloudBackground(
         previousColors = null
     }
 
-    val baseColors = previousColors?.let { oldColors ->
+    val blendedColors = previousColors?.let { oldColors ->
         blendCloudColors(
             from = oldColors,
             to = displayedColors,
@@ -218,38 +211,20 @@ internal fun CrossfadeFlowCloudBackground(
         )
     } ?: displayedColors
 
-    Box(modifier = modifier) {
-        FlowCloudBaseBackground(
-            colors = baseColors,
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    this.alpha = alpha
-                }
-        )
-
-        previousColors?.let { oldColors ->
-            FlowCloudBackground(
-                colors = oldColors,
-                progress = progress,
-                isPlaying = isPlaying,
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer {
-                        this.alpha = alpha * (1f - crossfadeProgress.value)
-                    }
-            )
+    Box(
+        modifier = modifier.graphicsLayer {
+            this.alpha = alpha
         }
-
+    ) {
+        FlowCloudBaseBackground(
+            colors = blendedColors,
+            modifier = Modifier.matchParentSize()
+        )
         FlowCloudBackground(
-            colors = displayedColors,
+            colors = blendedColors,
             progress = progress,
             isPlaying = isPlaying,
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    this.alpha = alpha * crossfadeProgress.value
-                }
+            modifier = Modifier.matchParentSize()
         )
     }
 }
@@ -259,16 +234,8 @@ private fun FlowCloudBaseBackground(
     colors: List<Color>,
     modifier: Modifier = Modifier
 ) {
-    val cloudColors = if (colors.size >= 3) {
-        colors
-    } else {
-        listOf(
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.tertiaryContainer
-        )
-    }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val cloudColors = colors.toOpaqueCloudColors(isDarkTheme)
     val anchorColor = if (isDarkTheme) {
         Color(0xFF202431)
     } else {
@@ -305,7 +272,7 @@ private fun blendCloudColors(
     fraction: Float
 ): List<Color> {
     val safeFraction = fraction.coerceIn(0f, 1f)
-    val fromFallback = from.lastOrNull() ?: Color.Transparent
+    val fromFallback = from.lastOrNull() ?: Color(0xFF5D6C8F)
     val toFallback = to.lastOrNull() ?: fromFallback
     val colorCount = maxOf(from.size, to.size, 3)
 
@@ -315,6 +282,28 @@ private fun blendCloudColors(
             stop = to.getOrElse(index) { toFallback },
             fraction = safeFraction
         )
+    }
+}
+
+private fun List<Color>.toOpaqueCloudColors(isDarkTheme: Boolean): List<Color> {
+    val fallbackColors = if (isDarkTheme) {
+        listOf(
+            Color(0xFF5D6C8F),
+            Color(0xFF77658E),
+            Color(0xFF4E7A73)
+        )
+    } else {
+        listOf(
+            Color(0xFF7185B7),
+            Color(0xFF9B7EB3),
+            Color(0xFF72A79C)
+        )
+    }
+    val sourceColors = ifEmpty { fallbackColors }
+    val lastColor = sourceColors.lastOrNull() ?: fallbackColors.last()
+
+    return List(3) { index ->
+        sourceColors.getOrElse(index) { lastColor }.copy(alpha = 1f)
     }
 }
 

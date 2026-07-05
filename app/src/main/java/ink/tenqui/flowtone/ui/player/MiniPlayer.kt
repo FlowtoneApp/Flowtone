@@ -100,9 +100,32 @@ private const val PAUSE_ARTWORK_ROTATION_DURATION_MS = 300
 private val AddToPlaylistCardHeight = 148.dp
 private val AddToPlaylistCardSpacing = 12.dp
 
-private enum class FullPlayerMode {
-    Normal,
-    AddToPlaylist
+private enum class FullscreenContentMode {
+    Playback,
+    AddToPlaylist,
+    SongInfo
+}
+
+private sealed interface PlayerBackdropState {
+    val key: String
+    val colors: List<Color>
+    val backgroundImageRequest: ImageRequest?
+    val coverImageRequest: ImageRequest?
+
+    data class Artwork(
+        override val key: String,
+        override val colors: List<Color>,
+        override val backgroundImageRequest: ImageRequest,
+        override val coverImageRequest: ImageRequest
+    ) : PlayerBackdropState
+
+    data class Fallback(
+        override val key: String,
+        override val colors: List<Color>
+    ) : PlayerBackdropState {
+        override val backgroundImageRequest: ImageRequest? = null
+        override val coverImageRequest: ImageRequest? = null
+    }
 }
 
 private sealed class AddToPlaylistCardItem {
@@ -150,7 +173,9 @@ fun MiniPlayer(
     val hasCurrentSong = playerUiState.hasCurrentSong
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
-    var fullPlayerMode by rememberSaveable { mutableStateOf(FullPlayerMode.Normal) }
+    var fullscreenContentMode by rememberSaveable {
+        mutableStateOf(FullscreenContentMode.Playback)
+    }
     var collapsedMetadataSwitchDirection by remember { mutableStateOf(1) }
     val artworkUri = playerUiState.artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
@@ -243,9 +268,26 @@ fun MiniPlayer(
         }
     )
     val fullscreenInteractionActive = fullscreen || fullscreenProgress > 0.01f
+    val fullscreenContentExitProgress by animateFloatAsState(
+        targetValue = if (
+            fullscreenContentMode != FullscreenContentMode.Playback &&
+            fullscreen &&
+            expanded &&
+            hasCurrentSong
+        ) {
+            1f
+        } else {
+            0f
+        },
+        animationSpec = tween(
+            durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
+            easing = MiniPlayerEasing
+        ),
+        label = "FullscreenContentExitProgress"
+    )
     val addToPlaylistProgress by animateFloatAsState(
         targetValue = if (
-            fullPlayerMode == FullPlayerMode.AddToPlaylist &&
+            fullscreenContentMode == FullscreenContentMode.AddToPlaylist &&
             fullscreen &&
             expanded &&
             hasCurrentSong
@@ -259,6 +301,23 @@ fun MiniPlayer(
             easing = MiniPlayerEasing
         ),
         label = "AddToPlaylistProgress"
+    )
+    val songInfoProgress by animateFloatAsState(
+        targetValue = if (
+            fullscreenContentMode == FullscreenContentMode.SongInfo &&
+            fullscreen &&
+            expanded &&
+            hasCurrentSong
+        ) {
+            1f
+        } else {
+            0f
+        },
+        animationSpec = tween(
+            durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
+            easing = MiniPlayerEasing
+        ),
+        label = "FullscreenSongInfoProgress"
     )
     val hostHeight = lerpDp(
         currentHeight + dragHotZoneHeight,
@@ -296,7 +355,6 @@ fun MiniPlayer(
         ),
         label = "MiniPlayerSlideOffsetY"
     )
-    val hasArtworkBackground = artworkUri != null
     val backgroundImageRequest: ImageRequest? = remember(artworkUri, context) {
         artworkUri?.let { uri ->
             ImageRequest.Builder(context)
@@ -342,13 +400,30 @@ fun MiniPlayer(
         seedColors = fallbackSeedColors,
         isDarkTheme = isDarkTheme
     )
-    var cloudColors by remember {
-        mutableStateOf(fallbackCloudColors)
+    val fallbackBackdrop = remember(
+        currentSong?.id,
+        title,
+        artist,
+        currentSong?.uri,
+        fallbackSeedColor,
+        isDarkTheme
+    ) {
+        PlayerBackdropState.Fallback(
+            key = currentSong.toBackdropKey(),
+            colors = normalizeBackdropColors(
+                colors = fallbackCloudColors,
+                isDarkTheme = isDarkTheme
+            )
+        )
+    }
+    var lastStableBackdrop by remember {
+        mutableStateOf<PlayerBackdropState>(fallbackBackdrop)
     }
     var usingFallbackCloudColors by remember {
         mutableStateOf(true)
     }
-    LaunchedEffect(currentSong?.id, artworkUri, fallbackSeedColor, isDarkTheme) {
+
+    LaunchedEffect(currentSong?.id, currentSong?.uri, artworkUri, fallbackSeedColor, isDarkTheme) {
         Log.d(
             FLOWTONE_CLOUD_COLORS_TAG,
             "start songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
@@ -356,7 +431,7 @@ fun MiniPlayer(
         )
 
         if (artworkUri == null || paletteImageRequest == null) {
-            cloudColors = fallbackCloudColors
+            lastStableBackdrop = fallbackBackdrop
             usingFallbackCloudColors = true
             Log.d(
                 FLOWTONE_CLOUD_COLORS_TAG,
@@ -382,19 +457,22 @@ fun MiniPlayer(
                     fallbackColor = fallbackSeedColors.first(),
                     count = 3
                 )
-                val colors = when (seedResult.colorPath) {
-                    CloudColorPath.MaterialYouSeeds -> materialYouCloudColors(
-                        seedColors = seedResult.seedColors,
-                        isDarkTheme = isDarkTheme
-                    )
+                val colors = normalizeBackdropColors(
+                    colors = when (seedResult.colorPath) {
+                        CloudColorPath.MaterialYouSeeds -> materialYouCloudColors(
+                            seedColors = seedResult.seedColors,
+                            isDarkTheme = isDarkTheme
+                        )
 
-                    CloudColorPath.NeutralLowChroma -> neutralCloudColorsFromCover(
-                        averageLuminance = seedResult.averageLuminance,
-                        isDarkTheme = isDarkTheme
-                    )
+                        CloudColorPath.NeutralLowChroma -> neutralCloudColorsFromCover(
+                            averageLuminance = seedResult.averageLuminance,
+                            isDarkTheme = isDarkTheme
+                        )
 
-                    CloudColorPath.ThemeFallback -> fallbackCloudColors
-                }
+                        CloudColorPath.ThemeFallback -> fallbackCloudColors
+                    },
+                    isDarkTheme = isDarkTheme
+                )
                 val usedFallback = seedResult.usedFallback ||
                     seedResult.colorPath == CloudColorPath.ThemeFallback
                 Log.d(
@@ -411,13 +489,24 @@ fun MiniPlayer(
                 colors to usedFallback
             }
         }.onSuccess { (colors, usedFallback) ->
-            cloudColors = colors
+            val nextBackgroundRequest = backgroundImageRequest
+            val nextCoverRequest = coverImageRequest
+            lastStableBackdrop = if (nextBackgroundRequest != null && nextCoverRequest != null) {
+                PlayerBackdropState.Artwork(
+                    key = currentSong.toBackdropKey(),
+                    colors = colors,
+                    backgroundImageRequest = nextBackgroundRequest,
+                    coverImageRequest = nextCoverRequest
+                )
+            } else {
+                fallbackBackdrop
+            }
             usingFallbackCloudColors = usedFallback
         }.onFailure { throwable ->
             if (throwable is CancellationException) {
                 throw throwable
             }
-            cloudColors = fallbackCloudColors
+            lastStableBackdrop = fallbackBackdrop
             usingFallbackCloudColors = true
             Log.w(
                 FLOWTONE_CLOUD_COLORS_TAG,
@@ -429,46 +518,31 @@ fun MiniPlayer(
             )
         }
     }
-    LaunchedEffect(currentSong?.id, artworkUri, cloudColors) {
+    LaunchedEffect(currentSong?.id, artworkUri, lastStableBackdrop) {
+        val backdropName = when (lastStableBackdrop) {
+            is PlayerBackdropState.Artwork -> "Artwork"
+            is PlayerBackdropState.Fallback -> "Fallback"
+        }
         Log.d(
             FLOWTONE_CLOUD_COLORS_TAG,
             "render songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
-                "colors=${cloudColors.joinToString { it.toArgbHex() }}, " +
+                "backdrop=$backdropName, " +
+                "colors=${lastStableBackdrop.colors.joinToString { it.toArgbHex() }}, " +
                 "usingFallback=$usingFallbackCloudColors"
         )
     }
-    val addToPlaylistDialogBackgroundColor = remember(cloudColors) {
-        coverTintDialogBackgroundColor(cloudColors)
+    val addToPlaylistDialogBackgroundColor = remember(lastStableBackdrop.colors) {
+        coverTintDialogBackgroundColor(lastStableBackdrop.colors)
     }
     LaunchedEffect(addToPlaylistDialogBackgroundColor) {
         onAddToPlaylistDialogBackgroundColorChange(addToPlaylistDialogBackgroundColor)
     }
     val noRippleInteractionSource = remember { MutableInteractionSource() }
-    val titleColor = if (hasArtworkBackground) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val artistColor = if (hasArtworkBackground) {
-        Color.White.copy(alpha = 0.78f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val controlIconColor = if (hasArtworkBackground) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val progressTrackColor = if (hasArtworkBackground) {
-        Color(0xFF9E9E9E)
-    } else {
-        Color(0xFF8A8A8A)
-    }
-    val progressColor = if (hasArtworkBackground) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.primary
-    }
+    val titleColor = Color.White
+    val artistColor = Color.White
+    val controlIconColor = Color.White
+    val progressTrackColor = Color(0xFF9E9E9E)
+    val progressColor = Color.White
     var isProgressScrubbing by remember { mutableStateOf(false) }
     var lockedIsPlayingDuringScrub by remember { mutableStateOf(playerUiState.isPlaying) }
     var keepPlayPauseVisualLockedAfterSeek by remember { mutableStateOf(false) }
@@ -495,28 +569,56 @@ fun MiniPlayer(
     fun enterAddToPlaylistMode() {
         artistSelectionRequest = null
         expandedMoreMenu = false
-        fullPlayerMode = FullPlayerMode.AddToPlaylist
+        fullscreenContentMode = FullscreenContentMode.AddToPlaylist
+    }
+    fun enterSongInfoMode() {
+        if (
+            fullscreenContentMode != FullscreenContentMode.Playback ||
+            !isFullscreenPlayer ||
+            fullscreenContentExitProgress > 0.01f
+        ) {
+            return
+        }
+        artistSelectionRequest = null
+        expandedMoreMenu = false
+        fullscreenContentMode = FullscreenContentMode.SongInfo
+    }
+    fun exitFullscreenContentMode() {
+        expandedMoreMenu = false
+        if (fullscreenContentMode != FullscreenContentMode.Playback) {
+            fullscreenContentMode = FullscreenContentMode.Playback
+        }
     }
     fun exitAddToPlaylistMode() {
-        expandedMoreMenu = false
-        fullPlayerMode = FullPlayerMode.Normal
+        exitFullscreenContentMode()
     }
     BackHandler(
-        enabled = fullPlayerMode == FullPlayerMode.AddToPlaylist && fullscreenInteractionActive
+        enabled = fullscreenContentMode == FullscreenContentMode.AddToPlaylist &&
+            fullscreenInteractionActive
     ) {
         exitAddToPlaylistMode()
+    }
+    BackHandler(
+        enabled = fullscreenContentMode == FullscreenContentMode.SongInfo &&
+            fullscreenInteractionActive
+    ) {
+        exitFullscreenContentMode()
     }
     LaunchedEffect(fullscreen, expanded, hasCurrentSong) {
         if (!fullscreen || !expanded || !hasCurrentSong) {
             isFullscreenPlayer = false
+            exitFullscreenContentMode()
         }
     }
     LaunchedEffect(fullscreen, hasCurrentSong, currentSong?.id) {
         if (!fullscreen || !hasCurrentSong) {
-            exitAddToPlaylistMode()
+            exitFullscreenContentMode()
+        } else if (currentSong?.id != null) {
+            exitFullscreenContentMode()
         }
     }
-    val artistClickEnabled = isFullscreenPlayer && fullPlayerMode == FullPlayerMode.Normal
+    val artistClickEnabled =
+        isFullscreenPlayer && fullscreenContentMode == FullscreenContentMode.Playback
     LaunchedEffect(artistClickEnabled) {
         if (!artistClickEnabled) {
             artistSelectionRequest = null
@@ -618,13 +720,21 @@ fun MiniPlayer(
         }
     }
     var accumulatedDragY by remember { mutableStateOf(0f) }
+    val playbackGesturesEnabled =
+        artistSelectionRequest == null &&
+            fullscreenContentMode == FullscreenContentMode.Playback
     val playerGesturesEnabled =
-        artistSelectionRequest == null && fullPlayerMode == FullPlayerMode.Normal
+        playbackGesturesEnabled ||
+            (
+                artistSelectionRequest == null &&
+                    fullscreenContentMode == FullscreenContentMode.SongInfo
+                )
     val gestureModifier = if (playerGesturesEnabled) {
         Modifier.pointerInput(
             hasCurrentSong,
             expanded,
             fullscreenInteractionActive,
+            fullscreenContentMode,
             minimized,
             swipeThresholdPx,
             fullscreenSwipeThresholdPx,
@@ -642,6 +752,12 @@ fun MiniPlayer(
                 },
                 onDragEnd = {
                     if (!hasCurrentSong) {
+                        return@detectVerticalDragGestures
+                    }
+                    if (fullscreenContentMode == FullscreenContentMode.SongInfo) {
+                        if (accumulatedDragY >= fullscreenSwipeThresholdPx) {
+                            exitFullscreenContentMode()
+                        }
                         return@detectVerticalDragGestures
                     }
                     when {
@@ -694,7 +810,7 @@ fun MiniPlayer(
         progressGestureStartY.toPx()..progressGestureEndY.toPx()
     }
     val songSwipeModifier = Modifier.swipeToChangeSong(
-        enabled = hasCurrentSong && playerGesturesEnabled,
+        enabled = hasCurrentSong && playbackGesturesEnabled,
         thresholdPx = songSwipeThresholdPx,
         ignoredStartYRangePx = progressGestureIgnoreRangePx,
         onSwipeLeft = ::playNextFromMiniPlayer,
@@ -704,7 +820,7 @@ fun MiniPlayer(
         72.dp.toPx()
     }
     val addToPlaylistBackSwipeModifier = Modifier.addToPlaylistBackSwipeGesture(
-        enabled = fullPlayerMode == FullPlayerMode.AddToPlaylist,
+        enabled = fullscreenContentMode == FullscreenContentMode.AddToPlaylist,
         thresholdPx = addToPlaylistBackSwipeThresholdPx,
         onBack = ::exitAddToPlaylistMode
     )
@@ -713,7 +829,7 @@ fun MiniPlayer(
     }
     val addToPlaylistListState = rememberLazyListState()
     val addToPlaylistPullDownBackModifier = Modifier.addToPlaylistPullDownBackGesture(
-        enabled = fullPlayerMode == FullPlayerMode.AddToPlaylist,
+        enabled = fullscreenContentMode == FullscreenContentMode.AddToPlaylist,
         listState = addToPlaylistListState,
         thresholdPx = addToPlaylistPullDownThresholdPx,
         onBack = ::exitAddToPlaylistMode
@@ -803,8 +919,11 @@ fun MiniPlayer(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(visualPanelHeight)
-                    .pointerInput(expandedMoreMenu, fullPlayerMode) {
-                        if (!expandedMoreMenu || fullPlayerMode != FullPlayerMode.Normal) {
+                    .pointerInput(expandedMoreMenu, fullscreenContentMode) {
+                        if (
+                            !expandedMoreMenu ||
+                            fullscreenContentMode != FullscreenContentMode.Playback
+                        ) {
                             return@pointerInput
                         }
 
@@ -824,28 +943,21 @@ fun MiniPlayer(
                     .then(songSwipeModifier)
                     .then(addToPlaylistBackSwipeModifier)
                     .then(addToPlaylistPullDownBackModifier)
-                    .then(
-                        if (hasArtworkBackground) {
-                                Modifier
-                            } else {
-                                Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            }
-                        )
                 ) {
                     val playerWidth = maxWidth
                     Box(
                         modifier = Modifier
                             .matchParentSize()
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .background(coverTintDialogBackgroundColor(lastStableBackdrop.colors))
                     )
                     BlurredArtworkBackground(
-                        imageRequest = backgroundImageRequest,
+                        imageRequest = lastStableBackdrop.backgroundImageRequest,
                         alpha = lerpFloat(0.78f, 0f, animationProgress),
                         waitForArtworkLoad = useLocalArtworkLoading,
                         modifier = Modifier.matchParentSize()
                     )
                     CrossfadeFlowCloudBackground(
-                        colors = cloudColors,
+                        colors = lastStableBackdrop.colors,
                         progress = animationProgress,
                         isPlaying = playerUiState.isPlaying,
                         modifier = Modifier.matchParentSize()
@@ -873,9 +985,11 @@ fun MiniPlayer(
                     val addToPlaylistCardsHeight =
                         (visualPanelHeight - addToPlaylistCardsTop - 20.dp)
                             .coerceAtLeast(AddToPlaylistCardHeight)
+                    val fullscreenContentExitSharedProgress =
+                        fullscreenContentExitProgress.coerceIn(0f, 1f)
                     val addToPlaylistSharedProgress = addToPlaylistProgress.coerceIn(0f, 1f)
-                    val addToPlaylistControlsAlpha = 1f - addToPlaylistSharedProgress
-                    val addToPlaylistControlsOffsetY = 32.dp * addToPlaylistSharedProgress
+                    val playbackContentAlpha = 1f - fullscreenContentExitSharedProgress
+                    val playbackContentOffsetY = 32.dp * fullscreenContentExitSharedProgress
                     MorphArtworkLayer(
                         imageRequest = coverImageRequest,
                         waitForArtworkLoad = useLocalArtworkLoading,
@@ -890,7 +1004,7 @@ fun MiniPlayer(
                         fullscreenProgress = fullscreenProgress,
                         fullscreenArtworkSize = fullscreenProgressTrackWidth,
                         fullscreenArtworkCenterY = fullscreenCoverCenterY,
-                        addToPlaylistProgress = addToPlaylistSharedProgress,
+                        contentExitProgress = fullscreenContentExitSharedProgress,
                         addToPlaylistArtworkSize = addToPlaylistArtworkSize,
                         addToPlaylistArtworkX = addToPlaylistArtworkLeft,
                         addToPlaylistArtworkTop = addToPlaylistArtworkTop,
@@ -925,7 +1039,7 @@ fun MiniPlayer(
                         fullscreenProgress = fullscreenProgress,
                         fullscreenX = fullscreenArtworkX,
                         fullscreenTop = fullscreenMetadataTop,
-                        addToPlaylistProgress = addToPlaylistSharedProgress,
+                        contentExitProgress = fullscreenContentExitSharedProgress,
                         switchDirection = collapsedMetadataSwitchDirection,
                         artistClickEnabled = artistClickEnabled,
                         onArtistClick = ::handleArtistClick,
@@ -947,7 +1061,7 @@ fun MiniPlayer(
                             )
                     )
                     if (
-                        fullPlayerMode == FullPlayerMode.AddToPlaylist ||
+                        fullscreenContentMode == FullscreenContentMode.AddToPlaylist ||
                         addToPlaylistSharedProgress > 0.001f
                     ) {
                         AddToPlaylistPlaylistGrid(
@@ -960,7 +1074,7 @@ fun MiniPlayer(
                             progress = addToPlaylistSharedProgress,
                             screenWidth = playerWidth,
                             pullToDismissEnabled =
-                                fullPlayerMode == FullPlayerMode.AddToPlaylist,
+                                fullscreenContentMode == FullscreenContentMode.AddToPlaylist,
                             onDismissAtTop = ::exitAddToPlaylistMode,
                             onCreatePlaylistClick = onCreatePlaylistClick,
                             onPlaylistClick = { playlist ->
@@ -978,11 +1092,11 @@ fun MiniPlayer(
                         modifier = Modifier
                             .matchParentSize()
                             .graphicsLayer {
-                                alpha = addToPlaylistControlsAlpha
+                                alpha = playbackContentAlpha
                                 translationY =
                                     (fullscreenStationaryControlsOffsetY -
                                         fullscreenControlsLiftY +
-                                        addToPlaylistControlsOffsetY).toPx()
+                                        playbackContentOffsetY).toPx()
                             }
                     ) {
                         ExpandedOnlyContent(
@@ -1015,7 +1129,7 @@ fun MiniPlayer(
                             collapsedHeight = collapsedHeight,
                             expandedTop = expandedControlsTop,
                             fullscreenProgress = fullscreenProgress,
-                            controlsExitProgress = addToPlaylistSharedProgress,
+                            controlsExitProgress = fullscreenContentExitSharedProgress,
                             onPlayPrevious = {
                                 expandedMoreMenu = false
                                 playPreviousFromMiniPlayer()
@@ -1046,7 +1160,7 @@ fun MiniPlayer(
                             playbackOrderMode = playerUiState.playbackOrderMode,
                             iconColor = controlIconColor,
                             fullscreenProgress = fullscreenProgress,
-                            controlsExitProgress = addToPlaylistSharedProgress,
+                            controlsExitProgress = fullscreenContentExitSharedProgress,
                             moreMenuExpanded = expandedMoreMenu,
                             onMoreMenuExpandedChange = { expanded ->
                                 expandedMoreMenu = expanded
@@ -1054,6 +1168,9 @@ fun MiniPlayer(
                             onToggleLiked = onToggleCurrentSongLiked,
                             onAddToPlaylist = {
                                 enterAddToPlaylistMode()
+                            },
+                            onOpenSongInfo = {
+                                enterSongInfoMode()
                             },
                             onOpenQueue = {
                                 artistSelectionRequest = null
@@ -1066,13 +1183,30 @@ fun MiniPlayer(
                             onTogglePlaybackOrderMode = onTogglePlaybackOrderMode
                         )
                     }
+                    if (
+                        fullscreenContentMode == FullscreenContentMode.SongInfo ||
+                        songInfoProgress > 0.001f
+                    ) {
+                        FullscreenSongInfoOverlay(
+                            song = currentSong,
+                            progress = songInfoProgress,
+                            topPadding = addToPlaylistCardsTop,
+                            backGestureThresholdPx = fullscreenSwipeThresholdPx,
+                            onBack = ::exitFullscreenContentMode,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth()
+                                .height(visualPanelHeight)
+                                .zIndex(6f)
+                        )
+                    }
                 }
                 FullscreenCollapseArrow(
                     progress = fullscreenProgress,
                     interactionSource = noRippleInteractionSource,
                     onClick = {
-                        if (fullPlayerMode == FullPlayerMode.AddToPlaylist) {
-                            exitAddToPlaylistMode()
+                        if (fullscreenContentMode != FullscreenContentMode.Playback) {
+                            exitFullscreenContentMode()
                         } else if (allowFullscreenFromCollapsed) {
                             onFullscreenChange(false)
                             onExpandedChange(false)
@@ -1095,8 +1229,8 @@ fun MiniPlayer(
                 currentSong = currentSong,
                 displayOrder = queueDisplayOrder,
                 onDisplayOrderChange = onQueueDisplayOrderChange,
-                backgroundImageRequest = backgroundImageRequest,
-                cloudColors = cloudColors,
+                backgroundImageRequest = lastStableBackdrop.backgroundImageRequest,
+                cloudColors = lastStableBackdrop.colors,
                 backgroundProgress = animationProgress,
                 isPlaying = playerUiState.isPlaying,
                 waitForArtworkLoad = useLocalArtworkLoading,
@@ -1538,6 +1672,37 @@ private fun List<AddToPlaylistCardItem>.toAddToPlaylistRowKey(): String {
             is AddToPlaylistCardItem.Playlist -> item.playlist.id
             AddToPlaylistCardItem.CreatePlaylist -> "create_playlist"
         }
+    }
+}
+
+private fun Song?.toBackdropKey(): String {
+    return this?.let { song ->
+        "${song.id}|${song.title}|${song.artist}|${song.uri}"
+    } ?: "empty_backdrop"
+}
+
+private fun normalizeBackdropColors(
+    colors: List<Color>,
+    isDarkTheme: Boolean
+): List<Color> {
+    val fallbackColors = if (isDarkTheme) {
+        listOf(
+            Color(0xFF5D6C8F),
+            Color(0xFF77658E),
+            Color(0xFF4E7A73)
+        )
+    } else {
+        listOf(
+            Color(0xFF7185B7),
+            Color(0xFF9B7EB3),
+            Color(0xFF72A79C)
+        )
+    }
+    val sourceColors = colors.ifEmpty { fallbackColors }
+    val lastColor = sourceColors.lastOrNull() ?: fallbackColors.last()
+
+    return List(3) { index ->
+        sourceColors.getOrElse(index) { lastColor }.copy(alpha = 1f)
     }
 }
 
