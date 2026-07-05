@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -177,6 +179,7 @@ internal fun SharedSongInfo(
         )
         val fullscreenArtistTopPadding = lerpDp(4.dp, 14.dp, fullscreenProgress)
         val artistMinimizedAlpha = lerpFloat(minimizedProgress, 1f, progress)
+        val artistClickShape = RoundedCornerShape(4.dp)
 
         Column(
             modifier = Modifier
@@ -235,9 +238,11 @@ internal fun SharedSongInfo(
                         .fillMaxWidth()
                         .then(
                             if (canClickArtist) {
-                                Modifier.clickable {
-                                    onArtistClick?.invoke(blockArtist)
-                                }
+                                Modifier
+                                    .clip(artistClickShape)
+                                    .clickable {
+                                        onArtistClick?.invoke(blockArtist)
+                                    }
                             } else {
                                 Modifier
                             }
