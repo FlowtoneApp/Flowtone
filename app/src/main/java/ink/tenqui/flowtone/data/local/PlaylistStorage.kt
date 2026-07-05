@@ -82,36 +82,25 @@ class PlaylistStorage(context: Context) {
                 for (index in 0 until jsonArray.length()) {
                     val item = jsonArray.optJSONObject(index) ?: continue
                     val playlistId = item.optString(ENTRY_PLAYLIST_ID_KEY).trim()
-                    val songId = item.optLong(ENTRY_SONG_ID_KEY, -1L)
-                    if (playlistId.isEmpty() || songId < 0L) {
+                    val songId = item.optSongId()
+                    if (playlistId.isEmpty() || songId.isEmpty()) {
                         continue
                     }
 
                     add(
                         PlaylistSongEntry(
+                            id = item.optString(ENTRY_ID_KEY).ifBlank {
+                                "entry_${playlistId}_${songId}"
+                            },
                             playlistId = playlistId,
                             songId = songId,
-                            addedAt = item.optLong(ENTRY_ADDED_AT_KEY, 0L),
-                            order = item.optInt(ENTRY_ORDER_KEY, index),
-                            titleSnapshot = item.optString(
-                                ENTRY_TITLE_SNAPSHOT_KEY,
-                                DEFAULT_SONG_TITLE
-                            ).ifBlank { DEFAULT_SONG_TITLE },
-                            artistSnapshot = item.optString(
-                                ENTRY_ARTIST_SNAPSHOT_KEY,
-                                DEFAULT_SONG_ARTIST
-                            ).ifBlank { DEFAULT_SONG_ARTIST },
-                            artworkUriSnapshot = item.optString(
-                                ENTRY_ARTWORK_URI_SNAPSHOT_KEY,
-                                ""
-                            ).ifBlank { null }
+                            addedAt = item.optLong(ENTRY_ADDED_AT_KEY, 0L)
                         )
                     )
                 }
             }
                 .sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.playlistId }
-                    .thenBy { entry -> entry.addedAt }
-                    .thenBy { entry -> entry.order })
+                    .thenBy { entry -> entry.addedAt })
                 .distinctBy { entry -> "${entry.playlistId}:${entry.songId}" }
         }.getOrDefault(emptyList())
     }
@@ -120,18 +109,14 @@ class PlaylistStorage(context: Context) {
         val jsonArray = JSONArray()
         entries
             .sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.playlistId }
-                .thenBy { entry -> entry.addedAt }
-                .thenBy { entry -> entry.order })
+                .thenBy { entry -> entry.addedAt })
             .forEach { entry ->
                 jsonArray.put(
                     JSONObject()
+                        .put(ENTRY_ID_KEY, entry.id)
                         .put(ENTRY_PLAYLIST_ID_KEY, entry.playlistId)
                         .put(ENTRY_SONG_ID_KEY, entry.songId)
                         .put(ENTRY_ADDED_AT_KEY, entry.addedAt)
-                        .put(ENTRY_ORDER_KEY, entry.order)
-                        .put(ENTRY_TITLE_SNAPSHOT_KEY, entry.titleSnapshot)
-                        .put(ENTRY_ARTIST_SNAPSHOT_KEY, entry.artistSnapshot)
-                        .put(ENTRY_ARTWORK_URI_SNAPSHOT_KEY, entry.artworkUriSnapshot.orEmpty())
                 )
             }
 
@@ -165,15 +150,10 @@ class PlaylistStorage(context: Context) {
         const val CREATED_AT_KEY = "createdAt"
         const val UPDATED_AT_KEY = "updatedAt"
         const val DEFAULT_SUBTITLE = "0 首歌曲"
+        const val ENTRY_ID_KEY = "id"
         const val ENTRY_PLAYLIST_ID_KEY = "playlistId"
         const val ENTRY_SONG_ID_KEY = "songId"
         const val ENTRY_ADDED_AT_KEY = "addedAt"
-        const val ENTRY_ORDER_KEY = "order"
-        const val ENTRY_TITLE_SNAPSHOT_KEY = "titleSnapshot"
-        const val ENTRY_ARTIST_SNAPSHOT_KEY = "artistSnapshot"
-        const val ENTRY_ARTWORK_URI_SNAPSHOT_KEY = "artworkUriSnapshot"
-        const val DEFAULT_SONG_TITLE = "未知歌曲"
-        const val DEFAULT_SONG_ARTIST = "未知艺术家"
     }
 }
 
@@ -199,21 +179,27 @@ private fun List<Playlist>.toPlaylistJsonArray(): JSONArray {
 private fun List<PlaylistSongEntry>.toPlaylistSongEntryJsonArray(): JSONArray {
     val jsonArray = JSONArray()
     sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.playlistId }
-        .thenBy { entry -> entry.addedAt }
-        .thenBy { entry -> entry.order })
+        .thenBy { entry -> entry.addedAt })
         .forEach { entry ->
             jsonArray.put(
                 JSONObject()
+                    .put("id", entry.id)
                     .put("playlistId", entry.playlistId)
                     .put("songId", entry.songId)
                     .put("addedAt", entry.addedAt)
-                    .put("order", entry.order)
-                    .put("titleSnapshot", entry.titleSnapshot)
-                    .put("artistSnapshot", entry.artistSnapshot)
-                    .put("artworkUriSnapshot", entry.artworkUriSnapshot.orEmpty())
             )
         }
     return jsonArray
+}
+
+private fun JSONObject.optSongId(): String {
+    val storedSongId = optString("songId").trim()
+    if (storedSongId.isNotEmpty()) {
+        return storedSongId
+    }
+
+    val legacySongId = optLong("songId", -1L)
+    return if (legacySongId >= 0L) legacySongId.toString() else ""
 }
 
 private fun JSONObject.optPlaylistCardStyle(): PlaylistCardStyle {

@@ -17,11 +17,8 @@ data class Playlist(
 )
 
 data class PlaylistSongEntry(
+    val id: String,
     val playlistId: String,
-    val songId: Long,
-    val addedAt: Long,
-    val order: Int,
-    val titleSnapshot: String,
-    val artistSnapshot: String,
-    val artworkUriSnapshot: String?
+    val songId: String,
+    val addedAt: Long
 )

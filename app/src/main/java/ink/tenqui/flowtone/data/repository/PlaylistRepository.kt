@@ -7,9 +7,11 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -180,8 +182,9 @@ class PlaylistRepository(
         }
 
         val currentEntries = _playlistSongEntries.value
+        val songId = song.stablePlaylistSongId()
         val alreadyExists = currentEntries.any { entry ->
-            entry.playlistId == playlistId && entry.songId == song.id
+            entry.playlistId == playlistId && entry.songId == songId
         }
         if (alreadyExists) {
             return@withLock PlaylistMutationResult.Success(Unit)
@@ -189,19 +192,15 @@ class PlaylistRepository(
 
         val now = System.currentTimeMillis()
         val nextEntry = PlaylistSongEntry(
+            id = UUID.randomUUID().toString(),
             playlistId = playlistId,
-            songId = song.id,
-            addedAt = now,
-            order = currentEntries.count { entry -> entry.playlistId == playlistId },
-            titleSnapshot = song.title,
-            artistSnapshot = song.artist,
-            artworkUriSnapshot = song.artworkUri?.toString()
+            songId = songId,
+            addedAt = now
         )
         val nextEntries = currentEntries + nextEntry
         val nextPlaylists = currentPlaylists.map { playlist ->
             if (playlist.id == playlistId) {
                 playlist.copy(
-                    subtitle = "${nextEntries.count { entry -> entry.playlistId == playlistId }} 首歌曲",
                     updatedAt = now
                 )
             } else {
@@ -241,21 +240,19 @@ class PlaylistRepository(
         }
 
         val currentEntries = _playlistSongEntries.value
+        val songId = song.stablePlaylistSongId()
         val existingEntryKeys = currentEntries.mapTo(mutableSetOf()) { entry ->
             entry.playlistId to entry.songId
         }
         val now = System.currentTimeMillis()
         val newEntries = targetPlaylistIds
-            .filterNot { playlistId -> playlistId to song.id in existingEntryKeys }
+            .filterNot { playlistId -> playlistId to songId in existingEntryKeys }
             .map { playlistId ->
                 PlaylistSongEntry(
+                    id = UUID.randomUUID().toString(),
                     playlistId = playlistId,
-                    songId = song.id,
-                    addedAt = now,
-                    order = currentEntries.count { entry -> entry.playlistId == playlistId },
-                    titleSnapshot = song.title,
-                    artistSnapshot = song.artist,
-                    artworkUriSnapshot = song.artworkUri?.toString()
+                    songId = songId,
+                    addedAt = now
                 )
             }
 
@@ -267,7 +264,6 @@ class PlaylistRepository(
         val nextPlaylists = currentPlaylists.map { playlist ->
             if (playlist.id in targetPlaylistIds) {
                 playlist.copy(
-                    subtitle = "${nextEntries.count { entry -> entry.playlistId == playlist.id }} 首歌曲",
                     updatedAt = now
                 )
             } else {
@@ -284,19 +280,80 @@ class PlaylistRepository(
         )
     }
 
-    fun playlistSongCount(playlistId: String): Int {
+    suspend fun removeSongFromPlaylist(
+        playlistId: String,
+        songId: String
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        if (currentPlaylists.none { playlist -> playlist.id == playlistId }) {
+            return@withLock PlaylistMutationResult.Failure(
+                PlaylistMutationError.NotFound
+            )
+        }
+
+        val normalizedSongId = songId.trim()
+        if (normalizedSongId.isEmpty()) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val currentEntries = _playlistSongEntries.value
+        val nextEntries = currentEntries.filterNot { entry ->
+            entry.playlistId == playlistId && entry.songId == normalizedSongId
+        }
+        if (nextEntries.size == currentEntries.size) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val now = System.currentTimeMillis()
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id == playlistId) {
+                playlist.copy(updatedAt = now)
+            } else {
+                playlist
+            }
+        }
+
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = currentEntries,
+            nextPlaylists = nextPlaylists,
+            nextEntries = nextEntries,
+            successValue = Unit
+        )
+    }
+
+    fun getPlaylistSongEntries(playlistId: String): List<PlaylistSongEntry> {
+        return sortedEntriesForPlaylist(
+            playlistId = playlistId,
+            entries = _playlistSongEntries.value
+        )
+    }
+
+    fun observePlaylistSongEntries(playlistId: String): Flow<List<PlaylistSongEntry>> {
+        return playlistSongEntries.map { entries ->
+            sortedEntriesForPlaylist(
+                playlistId = playlistId,
+                entries = entries
+            )
+        }
+    }
+
+    fun getPlaylistSongCount(playlistId: String): Int {
         return _playlistSongEntries.value.count { entry -> entry.playlistId == playlistId }
+    }
+
+    fun playlistSongCount(playlistId: String): Int {
+        return getPlaylistSongCount(playlistId)
     }
 
     fun songsForPlaylist(
         playlistId: String,
         availableSongs: List<Song>
     ): List<Song> {
-        val songsById = availableSongs.associateBy { song -> song.id }
+        val songsById = availableSongs.associateBy { song -> song.stablePlaylistSongId() }
         return _playlistSongEntries.value
             .filter { entry -> entry.playlistId == playlistId }
-            .sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.addedAt }
-                .thenBy { entry -> entry.order })
+            .sortedBy { entry -> entry.addedAt }
             .mapNotNull { entry -> songsById[entry.songId] }
     }
 
@@ -344,4 +401,17 @@ private fun normalizePlaylistOrder(playlists: List<Playlist>): List<Playlist> {
     return playlists
         .sortedBy { playlist -> playlist.order }
         .mapIndexed { index, playlist -> playlist.copy(order = index) }
+}
+
+private fun sortedEntriesForPlaylist(
+    playlistId: String,
+    entries: List<PlaylistSongEntry>
+): List<PlaylistSongEntry> {
+    return entries
+        .filter { entry -> entry.playlistId == playlistId }
+        .sortedBy { entry -> entry.addedAt }
+}
+
+private fun Song.stablePlaylistSongId(): String {
+    return id.toString()
 }
