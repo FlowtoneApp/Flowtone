@@ -777,7 +777,7 @@ private fun LibraryPlaylistTileCardView(
                                 actionProgress.coerceIn(0f, 1f)
                             )
                             alpha = eased
-                            translationY = 8.dp.toPx() * (1f - eased)
+                            translationX = 18.dp.toPx() * (1f - eased)
                             scaleX = 0.96f + 0.04f * eased
                             scaleY = 0.96f + 0.04f * eased
                             transformOrigin = TransformOrigin(1f, 0.5f)
