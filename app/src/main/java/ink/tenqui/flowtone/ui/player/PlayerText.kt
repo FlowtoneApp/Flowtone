@@ -53,6 +53,7 @@ internal fun SharedSongInfo(
     fullscreenTop: Dp = 0.dp,
     addToPlaylistProgress: Float = 0f,
     switchDirection: Int,
+    artistClickEnabled: Boolean = false,
     onArtistClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -119,7 +120,8 @@ internal fun SharedSongInfo(
         blockArtist: String,
         contentAlpha: Float
     ) {
-        val artistClickEnabled = onArtistClick != null && isSelectableArtist(blockArtist)
+        val canClickArtist =
+            artistClickEnabled && onArtistClick != null && isSelectableArtist(blockArtist)
         val titleWidth = with(density) {
             textMeasurer.measure(
                 text = AnnotatedString(blockTitle),
@@ -231,10 +233,13 @@ internal fun SharedSongInfo(
                     textAlign = metadataTextAlign,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(
-                            enabled = artistClickEnabled,
-                            onClick = {
-                                onArtistClick?.invoke(blockArtist)
+                        .then(
+                            if (canClickArtist) {
+                                Modifier.clickable {
+                                    onArtistClick?.invoke(blockArtist)
+                                }
+                            } else {
+                                Modifier
                             }
                         )
                         .padding(horizontal = lineHorizontalPadding)

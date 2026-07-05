@@ -228,13 +228,19 @@ fun MiniPlayer(
     )
     val baseHeight = lerpDp(minimizedHeight, collapsedHeight, minimizedProgress)
     val currentHeight = baseHeight + (expandedHeight - collapsedHeight) * animationProgress
+    var isFullscreenPlayer by remember {
+        mutableStateOf(fullscreen && expanded && hasCurrentSong)
+    }
     val fullscreenProgress by animateFloatAsState(
         targetValue = if (fullscreen && expanded && hasCurrentSong) 1f else 0f,
         animationSpec = tween(
             durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = MiniPlayerEasing
         ),
-        label = "MiniPlayerFullscreenProgress"
+        label = "MiniPlayerFullscreenProgress",
+        finishedListener = { finalValue ->
+            isFullscreenPlayer = finalValue == 1f && fullscreen && expanded && hasCurrentSong
+        }
     )
     val fullscreenInteractionActive = fullscreen || fullscreenProgress > 0.01f
     val addToPlaylistProgress by animateFloatAsState(
@@ -500,9 +506,20 @@ fun MiniPlayer(
     ) {
         exitAddToPlaylistMode()
     }
+    LaunchedEffect(fullscreen, expanded, hasCurrentSong) {
+        if (!fullscreen || !expanded || !hasCurrentSong) {
+            isFullscreenPlayer = false
+        }
+    }
     LaunchedEffect(fullscreen, hasCurrentSong, currentSong?.id) {
         if (!fullscreen || !hasCurrentSong) {
             exitAddToPlaylistMode()
+        }
+    }
+    val artistClickEnabled = isFullscreenPlayer && fullPlayerMode == FullPlayerMode.Normal
+    LaunchedEffect(artistClickEnabled) {
+        if (!artistClickEnabled) {
+            artistSelectionRequest = null
         }
     }
     fun selectArtist(candidate: String, rawArtist: String) {
@@ -514,6 +531,9 @@ fun MiniPlayer(
         onArtistSelected(candidate)
     }
     fun handleArtistClick(rawArtist: String) {
+        if (!artistClickEnabled) {
+            return
+        }
         if (!isSelectableArtist(rawArtist)) {
             return
         }
@@ -907,6 +927,7 @@ fun MiniPlayer(
                         fullscreenTop = fullscreenMetadataTop,
                         addToPlaylistProgress = addToPlaylistSharedProgress,
                         switchDirection = collapsedMetadataSwitchDirection,
+                        artistClickEnabled = artistClickEnabled,
                         onArtistClick = ::handleArtistClick,
                         modifier = Modifier
                             .align(Alignment.TopStart)
