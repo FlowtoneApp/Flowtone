@@ -5,7 +5,6 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,28 +39,21 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
@@ -73,7 +64,6 @@ import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import java.util.UUID
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -82,42 +72,33 @@ private val CreatePlaylistPanelHeight = 236.dp
 private val CreatePlaylistPanelMinWidth = 280.dp
 private val CreatePlaylistPanelMaxWidth = 360.dp
 private val CreatePlaylistPanelCornerRadius = 28.dp
-private val PlaylistCardCornerRadius = 24.dp
 private val CreatePlaylistShadowSafePadding = 48.dp
 private val LibraryActionCardSpacing = 12.dp
+private val LibraryPlaylistRowStartOffsetY = 20.dp
+private val NewPlaylistRowStartOffsetY = 10.dp
 private const val CreatePlaylistCardWidthFraction = 0.312f
 private const val CreatePlaylistScrimMaxAlpha = 0.18f
 private const val CreatePlaylistPanelStartScale = 0.96f
 private const val CreatePlaylistPanelExitScale = 0.98f
+private const val LibraryPlaylistRowDelayFraction = 0.06f
+private const val LibraryPlaylistRowMaxDelayFraction = 0.18f
+private const val LibraryPlaylistRowDurationFraction = 0.72f
 
 internal sealed class CreatePlaylistState {
     object Idle : CreatePlaylistState()
     object Editing : CreatePlaylistState()
     object Closing : CreatePlaylistState()
-    data class AnimatingWindowToCard(
-        val playlist: LibraryPlaylistCard,
-        val startBounds: Rect
-    ) : CreatePlaylistState()
 }
 
 internal class LibraryPlaylistController internal constructor(
     private val playlistStore: LibraryPlaylistCardStore,
     val listState: LazyListState,
-    val panelProgress: Animatable<Float, AnimationVector1D>,
-    val flyingProgress: Animatable<Float, AnimationVector1D>
+    val panelProgress: Animatable<Float, AnimationVector1D>
 ) {
     var playlists by mutableStateOf(playlistStore.loadCards())
     var playlistName by mutableStateOf("")
     var createPlaylistState by mutableStateOf<CreatePlaylistState>(CreatePlaylistState.Idle)
-    var overlayRootBounds by mutableStateOf<Rect?>(null)
-    var localLibraryCardBounds by mutableStateOf<Rect?>(null)
-    var createWindowBounds by mutableStateOf<Rect?>(null)
-    var targetPlaylistCardBounds by mutableStateOf<Rect?>(null)
-    var animationTargetBounds by mutableStateOf<Rect?>(null)
-    var revealTargetCardBehindFlying by mutableStateOf(false)
-
-    val animatingState: CreatePlaylistState.AnimatingWindowToCard?
-        get() = createPlaylistState as? CreatePlaylistState.AnimatingWindowToCard
+    var shouldSavePlaylists by mutableStateOf(false)
 
     val duplicatePlaylistName: Boolean
         get() = hasDuplicatePlaylistTitle(playlistName, playlists)
@@ -128,8 +109,6 @@ internal class LibraryPlaylistController internal constructor(
     fun startEditing() {
         if (createPlaylistState == CreatePlaylistState.Idle) {
             playlistName = ""
-            targetPlaylistCardBounds = null
-            animationTargetBounds = null
             createPlaylistState = CreatePlaylistState.Editing
         }
     }
@@ -137,17 +116,12 @@ internal class LibraryPlaylistController internal constructor(
     fun closeEditing() {
         if (createPlaylistState == CreatePlaylistState.Editing) {
             createPlaylistState = CreatePlaylistState.Closing
-            animationTargetBounds = null
         }
     }
 
     fun resetCreateState() {
         playlistName = ""
         createPlaylistState = CreatePlaylistState.Idle
-        createWindowBounds = null
-        targetPlaylistCardBounds = null
-        animationTargetBounds = null
-        revealTargetCardBehindFlying = false
     }
 
     suspend fun savePlaylists() {
@@ -155,6 +129,14 @@ internal class LibraryPlaylistController internal constructor(
         withContext(Dispatchers.IO) {
             playlistStore.saveCards(playlistsToPersist)
         }
+    }
+
+    suspend fun savePlaylistsIfRequested() {
+        if (!shouldSavePlaylists) {
+            return
+        }
+        shouldSavePlaylists = false
+        savePlaylists()
     }
 }
 
@@ -168,16 +150,12 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
     val panelProgress = remember {
         Animatable(0f)
     }
-    val flyingProgress = remember {
-        Animatable(0f)
-    }
 
-    return remember(playlistStore, listState, panelProgress, flyingProgress) {
+    return remember(playlistStore, listState, panelProgress) {
         LibraryPlaylistController(
             playlistStore = playlistStore,
             listState = listState,
-            panelProgress = panelProgress,
-            flyingProgress = flyingProgress
+            panelProgress = panelProgress
         )
     }
 }
@@ -191,123 +169,134 @@ internal fun LibraryScreen(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    val animatingState = playlistController.animatingState
     val playlistRows = playlistController.playlists.chunked(2)
+    val playlistRowStartOffsetYPx = with(density) {
+        LibraryPlaylistRowStartOffsetY.toPx()
+    }
+    val newPlaylistRowStartOffsetYPx = with(density) {
+        NewPlaylistRowStartOffsetY.toPx()
+    }
+    val libraryCardsProgress = remember {
+        Animatable(if (visible) 1f else 0f)
+    }
+    val knownPlaylistRowKeys = remember {
+        mutableStateListOf<String>().apply {
+            addAll(playlistRows.map { rowPlaylists -> rowPlaylists.toLibraryPlaylistRowKey() })
+        }
+    }
 
-    Box(
+    LaunchedEffect(visible) {
+        libraryCardsProgress.animateTo(
+            targetValue = if (visible) 1f else 0f,
+            animationSpec = tween(
+                durationMillis = FlowtoneMotion.DurationMillis,
+                easing = FlowtoneMotion.Easing
+            )
+        )
+    }
+
+    LazyColumn(
+        state = playlistController.listState,
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(
+            start = 20.dp,
+            top = 8.dp,
+            end = 20.dp,
+            bottom = 32.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LazyColumn(
-            state = playlistController.listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                top = 8.dp,
-                end = 20.dp,
-                bottom = 24.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "library-actions") {
-                StaggeredPageElement(
-                    visible = visible,
-                    animationIndex = 0,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                        val createCardWidth = maxWidth * CreatePlaylistCardWidthFraction
-                        val localLibraryWidth =
-                            maxWidth - createCardWidth - LibraryActionCardSpacing
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
-                        ) {
-                            LibraryCollectionCard(
-                                title = "\u672c\u5730\u66f2\u5e93",
-                                subtitle = "$songCount \u9996\u6b4c\u66f2",
-                                onClick = onOpenLocalLibrary,
-                                modifier = Modifier
-                                    .width(localLibraryWidth)
-                                    .height(LibraryInfoCardHeight)
-                                    .onGloballyPositioned { coordinates ->
-                                        playlistController.localLibraryCardBounds =
-                                            coordinates.boundsInRoot()
-                                    }
-                            )
-                            CreatePlaylistEntryCard(
-                                onClick = {
-                                    playlistController.startEditing()
-                                },
-                                modifier = Modifier
-                                    .width(createCardWidth)
-                                    .height(LibraryInfoCardHeight)
-                            )
-                        }
-                    }
-                }
-            }
-
-            itemsIndexed(
-                items = playlistRows,
-                key = { _, rowPlaylists ->
-                    rowPlaylists.joinToString(separator = "|") { playlist -> playlist.id }
-                }
-            ) { _, rowPlaylists ->
+        item(key = "library-actions") {
+            StaggeredPageElement(
+                visible = visible,
+                animationIndex = 0,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    val cardWidth = (maxWidth - LibraryActionCardSpacing) / 2f
-                    val localLibraryHeight = playlistController.localLibraryCardBounds?.let { bounds ->
-                        with(density) { bounds.height.toDp() }
-                    } ?: LibraryInfoCardHeight
-                    val cardHeight = localLibraryHeight * (4f / 3f)
+                    val createCardWidth = maxWidth * CreatePlaylistCardWidthFraction
+                    val localLibraryWidth =
+                        maxWidth - createCardWidth - LibraryActionCardSpacing
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
                     ) {
-                        rowPlaylists.forEach { playlist ->
-                            val isAnimatingTarget = animatingState?.playlist?.id == playlist.id
-                            LibraryPlaylistTileCardView(
-                                playlist = playlist,
-                                modifier = Modifier
-                                    .size(
-                                        width = cardWidth,
-                                        height = cardHeight
-                                    )
-                                    .alpha(
-                                        if (
-                                            isAnimatingTarget &&
-                                            !playlistController.revealTargetCardBehindFlying
-                                        ) {
-                                            0f
-                                        } else {
-                                            1f
-                                        }
-                                    )
-                                    .then(
-                                        if (isAnimatingTarget) {
-                                            Modifier.onGloballyPositioned { coordinates ->
-                                                playlistController.targetPlaylistCardBounds =
-                                                    coordinates.boundsInRoot()
-                                            }
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                            )
-                        }
-
-                        if (rowPlaylists.size == 1) {
-                            Spacer(
-                                modifier = Modifier.size(
-                                    width = cardWidth,
-                                    height = cardHeight
-                                )
-                            )
-                        }
+                        LibraryCollectionCard(
+                            title = "\u672c\u5730\u66f2\u5e93",
+                            subtitle = "$songCount \u9996\u6b4c\u66f2",
+                            onClick = onOpenLocalLibrary,
+                            modifier = Modifier
+                                .width(localLibraryWidth)
+                                .height(LibraryInfoCardHeight)
+                        )
+                        CreatePlaylistEntryCard(
+                            onClick = {
+                                playlistController.startEditing()
+                            },
+                            modifier = Modifier
+                                .width(createCardWidth)
+                                .height(LibraryInfoCardHeight)
+                        )
                     }
+                }
+            }
+        }
+
+        itemsIndexed(
+            items = playlistRows,
+            key = { _, rowPlaylists ->
+                rowPlaylists.toLibraryPlaylistRowKey()
+            }
+        ) { rowIndex, rowPlaylists ->
+            val cardHeight = LibraryInfoCardHeight * (4f / 3f)
+            val rowKey = rowPlaylists.toLibraryPlaylistRowKey()
+            val isKnownRow = rowKey in knownPlaylistRowKeys
+            val rowAppearProgress = remember(rowKey) {
+                Animatable(if (isKnownRow) 1f else 0f)
+            }
+
+            LaunchedEffect(rowKey) {
+                if (!isKnownRow && rowKey !in knownPlaylistRowKeys) {
+                    knownPlaylistRowKeys.add(rowKey)
+                    rowAppearProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(
+                            durationMillis = FlowtoneMotion.DurationMillis,
+                            easing = FlowtoneMotion.Easing
+                        )
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .libraryPlaylistRowMotion(
+                        globalProgress = libraryCardsProgress.value,
+                        rowIndex = rowIndex + 1,
+                        pageStartOffsetYPx = playlistRowStartOffsetYPx,
+                        rowAppearProgress = rowAppearProgress.value,
+                        rowAppearStartOffsetYPx = newPlaylistRowStartOffsetYPx
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
+            ) {
+                rowPlaylists.forEach { playlist ->
+                    LibraryPlaylistTileCardView(
+                        playlist = playlist,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(cardHeight)
+                    )
+                }
+
+                if (rowPlaylists.size == 1) {
+                    Spacer(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(cardHeight)
+                    )
                 }
             }
         }
@@ -319,10 +308,8 @@ internal fun CreatePlaylistOverlay(
     playlistController: LibraryPlaylistController,
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val createPlaylistState = playlistController.createPlaylistState
-    val animatingState = playlistController.animatingState
     val scrimAlpha by animateFloatAsState(
         targetValue = if (createPlaylistState == CreatePlaylistState.Editing) {
             CreatePlaylistScrimMaxAlpha
@@ -337,7 +324,7 @@ internal fun CreatePlaylistOverlay(
     )
 
     LaunchedEffect(createPlaylistState) {
-        when (val state = createPlaylistState) {
+        when (createPlaylistState) {
             CreatePlaylistState.Editing -> {
                 playlistController.panelProgress.snapTo(0f)
                 playlistController.panelProgress.animateTo(
@@ -360,65 +347,8 @@ internal fun CreatePlaylistOverlay(
                 if (playlistController.createPlaylistState == CreatePlaylistState.Closing) {
                     playlistController.resetCreateState()
                     playlistController.panelProgress.snapTo(0f)
+                    playlistController.savePlaylistsIfRequested()
                 }
-            }
-
-            is CreatePlaylistState.AnimatingWindowToCard -> {
-                playlistController.panelProgress.snapTo(1f)
-                playlistController.flyingProgress.snapTo(0f)
-                playlistController.revealTargetCardBehindFlying = false
-                if (playlistController.playlists.none { playlist ->
-                        playlist.id == state.playlist.id
-                    }
-                ) {
-                    playlistController.playlists = playlistController.playlists + state.playlist
-                    withFrameNanos { }
-                }
-                val targetIndex = playlistController.playlists
-                    .indexOfFirst { playlist -> playlist.id == state.playlist.id }
-                    .takeIf { index -> index >= 0 }
-                    ?: playlistController.playlists.lastIndex.coerceAtLeast(0)
-                playlistController.listState.animateScrollToItem(index = 1 + targetIndex / 2)
-
-                var remainingFrames = 60
-                while (
-                    playlistController.targetPlaylistCardBounds == null &&
-                    remainingFrames > 0
-                ) {
-                    withFrameNanos { }
-                    remainingFrames -= 1
-                }
-
-                val targetBounds = playlistController.targetPlaylistCardBounds
-                if (targetBounds == null) {
-                    playlistController.flyingProgress.snapTo(1f)
-                    playlistController.revealTargetCardBehindFlying = true
-                    withFrameNanos { }
-                    playlistController.resetCreateState()
-                    playlistController.flyingProgress.snapTo(0f)
-                    playlistController.panelProgress.snapTo(0f)
-                    playlistController.savePlaylists()
-                    return@LaunchedEffect
-                }
-
-                playlistController.animationTargetBounds = targetBounds
-                playlistController.flyingProgress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(
-                        durationMillis = FlowtoneMotion.DurationMillis,
-                        easing = FlowtoneMotion.Easing
-                    )
-                )
-                playlistController.revealTargetCardBehindFlying = true
-                withFrameNanos { }
-
-                val currentAnimatingState = playlistController.animatingState
-                if (currentAnimatingState?.playlist?.id == state.playlist.id) {
-                    playlistController.resetCreateState()
-                }
-                playlistController.flyingProgress.snapTo(0f)
-                playlistController.panelProgress.snapTo(0f)
-                playlistController.savePlaylists()
             }
 
             CreatePlaylistState.Idle -> Unit
@@ -426,11 +356,7 @@ internal fun CreatePlaylistOverlay(
     }
 
     BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .onGloballyPositioned { coordinates ->
-                playlistController.overlayRootBounds = coordinates.boundsInRoot()
-            }
+        modifier = modifier.fillMaxSize()
     ) {
         if (scrimAlpha > 0.001f || createPlaylistState != CreatePlaylistState.Idle) {
             Box(
@@ -496,14 +422,12 @@ internal fun CreatePlaylistOverlay(
                         },
                         onCreate = {
                             val title = playlistController.playlistName.trim()
-                            val startBounds = playlistController.createWindowBounds
                             if (
                                 title.isNotEmpty() &&
                                 !hasDuplicatePlaylistTitle(
                                     title,
                                     playlistController.playlists
-                                ) &&
-                                startBounds != null
+                                )
                             ) {
                                 val order = (
                                     playlistController.playlists.maxOfOrNull { playlist ->
@@ -515,86 +439,16 @@ internal fun CreatePlaylistOverlay(
                                     title = title,
                                     order = order
                                 )
-                                playlistController.targetPlaylistCardBounds = null
-                                playlistController.animationTargetBounds = null
                                 playlistController.playlists =
                                     playlistController.playlists + playlist
-                                playlistController.createPlaylistState =
-                                    CreatePlaylistState.AnimatingWindowToCard(
-                                        playlist = playlist,
-                                        startBounds = startBounds
-                                    )
+                                playlistController.shouldSavePlaylists = true
+                                playlistController.closeEditing()
                             }
                         },
                         modifier = Modifier
                             .width(panelWidth)
                             .height(CreatePlaylistPanelHeight)
-                            .onGloballyPositioned { coordinates ->
-                                playlistController.createWindowBounds =
-                                    coordinates.boundsInRoot()
-                            }
                     )
-                }
-            }
-        }
-
-        if (animatingState != null) {
-            val rootBounds = playlistController.overlayRootBounds
-            if (rootBounds != null) {
-                val startBounds = animatingState.startBounds
-                val targetBounds = playlistController.animationTargetBounds ?: startBounds
-                val progress = playlistController.flyingProgress.value.coerceIn(0f, 1f)
-                val startRect = startBounds.relativeTo(rootBounds)
-                val targetRect = targetBounds.relativeTo(rootBounds)
-                val flyingLeft = lerpFloat(startRect.left, targetRect.left, progress)
-                val flyingTop = lerpFloat(startRect.top, targetRect.top, progress)
-                val flyingWidth = lerpFloat(startRect.width, targetRect.width, progress)
-                val flyingHeight = lerpFloat(startRect.height, targetRect.height, progress)
-
-                if (flyingWidth > 1f && flyingHeight > 1f) {
-                    val safePadding = with(density) {
-                        CreatePlaylistShadowSafePadding.toPx()
-                    }.roundToInt()
-                    val flyingLeftPx = flyingLeft.roundToInt()
-                    val flyingTopPx = flyingTop.roundToInt()
-                    val flyingWidthDp = with(density) { flyingWidth.toDp() }
-                    val flyingHeightDp = with(density) { flyingHeight.toDp() }
-                    val flyingOuterWidth =
-                        flyingWidthDp + CreatePlaylistShadowSafePadding +
-                            CreatePlaylistShadowSafePadding
-                    val flyingOuterHeight =
-                        flyingHeightDp + CreatePlaylistShadowSafePadding +
-                            CreatePlaylistShadowSafePadding
-
-                    Box(
-                        modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = flyingLeftPx - safePadding,
-                                    y = flyingTopPx - safePadding
-                                )
-                            }
-                            .size(
-                                width = flyingOuterWidth,
-                                height = flyingOuterHeight
-                            )
-                    ) {
-                        FlyingPlaylistCreationCard(
-                            title = animatingState.playlist.title,
-                            progress = playlistController.flyingProgress.value,
-                            modifier = Modifier
-                                .offset {
-                                    IntOffset(
-                                        x = safePadding,
-                                        y = safePadding
-                                    )
-                                }
-                                .size(
-                                    width = flyingWidthDp,
-                                    height = flyingHeightDp
-                                )
-                        )
-                    }
                 }
             }
         }
@@ -750,148 +604,42 @@ private fun CreatePlaylistPanel(
     }
 }
 
-@Composable
-private fun FlyingPlaylistCreationCard(
-    title: String,
-    progress: Float,
-    modifier: Modifier = Modifier
-) {
-    val boundedProgress = progress.coerceIn(0f, 1f)
-    val formAlpha = (1f - boundedProgress * 1.8f).coerceIn(0f, 1f)
-    val cardAlpha = ((boundedProgress - 0.35f) / 0.45f).coerceIn(0f, 1f)
-    val cornerRadius = lerpDp(
-        CreatePlaylistPanelCornerRadius,
-        PlaylistCardCornerRadius,
-        boundedProgress
-    )
-    val cardShape = RoundedCornerShape(cornerRadius)
-    val containerColor = lerp(
-        start = MaterialTheme.colorScheme.surfaceContainerHigh,
-        stop = MaterialTheme.colorScheme.surfaceContainer,
-        fraction = boundedProgress
-    )
-
-    Surface(
-        modifier = modifier,
-        shape = cardShape,
-        color = containerColor,
-        tonalElevation = 0.dp,
-        shadowElevation = lerpDp(18.dp, 0.dp, boundedProgress)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(cardShape)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(formAlpha)
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = "\u521b\u5efa\u6b4c\u5355",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(top = 18.dp)
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline,
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "\u53d6\u6d88",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.primary)
-                            .padding(horizontal = 20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "\u521b\u5efa",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(cardAlpha)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.Top,
-                horizontalAlignment = Alignment.Start
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "0 \u9996\u6b4c\u66f2",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-        }
-    }
-}
-
-private fun Rect.relativeTo(root: Rect): Rect {
-    return Rect(
-        left = left - root.left,
-        top = top - root.top,
-        right = right - root.left,
-        bottom = bottom - root.top
-    )
-}
-
 private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float {
     return start + (stop - start) * fraction
 }
 
-private fun lerpDp(start: Dp, stop: Dp, fraction: Float): Dp {
-    return start + (stop - start) * fraction
+private fun Modifier.libraryPlaylistRowMotion(
+    globalProgress: Float,
+    rowIndex: Int,
+    pageStartOffsetYPx: Float,
+    rowAppearProgress: Float,
+    rowAppearStartOffsetYPx: Float
+): Modifier {
+    val rowProgress = libraryPlaylistRowProgress(
+        globalProgress = globalProgress,
+        rowIndex = rowIndex
+    )
+    val easedProgress = FlowtoneMotion.Easing.transform(rowProgress)
+    val easedAppearProgress = FlowtoneMotion.Easing.transform(rowAppearProgress.coerceIn(0f, 1f))
+    return graphicsLayer {
+        alpha = easedProgress * easedAppearProgress
+        translationY = pageStartOffsetYPx * (1f - easedProgress) +
+            rowAppearStartOffsetYPx * (1f - easedAppearProgress)
+    }
+}
+
+private fun List<LibraryPlaylistCard>.toLibraryPlaylistRowKey(): String {
+    return joinToString(separator = "_") { playlist -> playlist.id }
+}
+
+private fun libraryPlaylistRowProgress(
+    globalProgress: Float,
+    rowIndex: Int
+): Float {
+    val delay = (rowIndex.coerceAtLeast(0) * LibraryPlaylistRowDelayFraction)
+        .coerceAtMost(LibraryPlaylistRowMaxDelayFraction)
+    return ((globalProgress.coerceIn(0f, 1f) - delay) / LibraryPlaylistRowDurationFraction)
+        .coerceIn(0f, 1f)
 }
 
 private fun hasDuplicatePlaylistTitle(
