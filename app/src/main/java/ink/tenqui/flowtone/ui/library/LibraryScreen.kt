@@ -1,12 +1,21 @@
 package ink.tenqui.flowtone.ui.library
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,19 +37,22 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,6 +69,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.Playlist
+import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -64,7 +78,6 @@ import ink.tenqui.flowtone.ui.components.LibraryCollectionCard
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 import ink.tenqui.flowtone.viewmodel.MusicUiState
-import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -87,6 +100,17 @@ internal sealed class CreatePlaylistState {
     object Closing : CreatePlaylistState()
 }
 
+internal enum class PlaylistDialogMode {
+    Create,
+    Rename,
+    Delete
+}
+
+internal enum class PlaylistDialogVisualStyle {
+    Library,
+    AddToPlaylist
+}
+
 internal class LibraryPlaylistController internal constructor(
     private val playlistStore: LibraryPlaylistCardStore,
     val listState: LazyListState,
@@ -95,17 +119,68 @@ internal class LibraryPlaylistController internal constructor(
     var playlists by mutableStateOf(playlistStore.loadCards())
     var playlistName by mutableStateOf("")
     var createPlaylistState by mutableStateOf<CreatePlaylistState>(CreatePlaylistState.Idle)
+    var playlistDialogMode by mutableStateOf(PlaylistDialogMode.Create)
+    var playlistDialogVisualStyle by mutableStateOf(PlaylistDialogVisualStyle.Library)
+    var dialogPlaylist by mutableStateOf<LibraryPlaylistCard?>(null)
+    var dialogLocked by mutableStateOf(false)
+    var activePlaylistActionId by mutableStateOf<String?>(null)
+    var newlyCreatedPlaylistId by mutableStateOf<String?>(null)
     var shouldSavePlaylists by mutableStateOf(false)
 
     val duplicatePlaylistName: Boolean
-        get() = hasDuplicatePlaylistTitle(playlistName, playlists)
+        get() = if (dialogLocked) {
+            false
+        } else when (playlistDialogMode) {
+            PlaylistDialogMode.Create -> hasDuplicatePlaylistTitle(playlistName, playlists)
+            PlaylistDialogMode.Rename -> hasDuplicatePlaylistTitle(
+                playlistName = playlistName,
+                playlists = playlists,
+                excludingPlaylistId = dialogPlaylist?.id
+            )
+            PlaylistDialogMode.Delete -> false
+        }
 
     val canCreatePlaylist: Boolean
-        get() = playlistName.trim().isNotEmpty() && !duplicatePlaylistName
+        get() = !dialogLocked &&
+            when (playlistDialogMode) {
+                PlaylistDialogMode.Create,
+                PlaylistDialogMode.Rename ->
+                    playlistName.trim().isNotEmpty() && !duplicatePlaylistName
+                PlaylistDialogMode.Delete -> dialogPlaylist != null
+            }
 
-    fun startEditing() {
+    fun startEditing(
+        visualStyle: PlaylistDialogVisualStyle = PlaylistDialogVisualStyle.Library
+    ) {
         if (createPlaylistState == CreatePlaylistState.Idle) {
+            activePlaylistActionId = null
             playlistName = ""
+            dialogPlaylist = null
+            dialogLocked = false
+            playlistDialogMode = PlaylistDialogMode.Create
+            playlistDialogVisualStyle = visualStyle
+            createPlaylistState = CreatePlaylistState.Editing
+        }
+    }
+
+    fun startRenamePlaylist(playlist: LibraryPlaylistCard) {
+        if (createPlaylistState == CreatePlaylistState.Idle) {
+            playlistName = playlist.title
+            dialogPlaylist = playlist
+            dialogLocked = false
+            playlistDialogMode = PlaylistDialogMode.Rename
+            playlistDialogVisualStyle = PlaylistDialogVisualStyle.Library
+            createPlaylistState = CreatePlaylistState.Editing
+        }
+    }
+
+    fun startDeletePlaylist(playlist: LibraryPlaylistCard) {
+        if (createPlaylistState == CreatePlaylistState.Idle) {
+            playlistName = playlist.title
+            dialogPlaylist = playlist
+            dialogLocked = false
+            playlistDialogMode = PlaylistDialogMode.Delete
+            playlistDialogVisualStyle = PlaylistDialogVisualStyle.Library
             createPlaylistState = CreatePlaylistState.Editing
         }
     }
@@ -118,7 +193,27 @@ internal class LibraryPlaylistController internal constructor(
 
     fun resetCreateState() {
         playlistName = ""
+        dialogPlaylist = null
+        dialogLocked = false
+        playlistDialogMode = PlaylistDialogMode.Create
+        playlistDialogVisualStyle = PlaylistDialogVisualStyle.Library
         createPlaylistState = CreatePlaylistState.Idle
+    }
+
+    fun lockDialog() {
+        dialogLocked = true
+    }
+
+    fun unlockDialog() {
+        dialogLocked = false
+    }
+
+    fun showPlaylistActions(playlistId: String) {
+        activePlaylistActionId = playlistId
+    }
+
+    fun clearPlaylistActions() {
+        activePlaylistActionId = null
     }
 
     suspend fun savePlaylists() {
@@ -134,6 +229,54 @@ internal class LibraryPlaylistController internal constructor(
         }
         shouldSavePlaylists = false
         savePlaylists()
+    }
+
+    fun applySongCounts(entries: List<PlaylistSongEntry>) {
+        val counts = entries.groupingBy { entry -> entry.playlistId }.eachCount()
+        val updatedPlaylists = playlists.map { playlist ->
+            val songCount = counts[playlist.id] ?: 0
+            val subtitle = "$songCount \u9996\u6b4c\u66f2"
+            if (playlist.subtitle == subtitle) {
+                playlist
+            } else {
+                playlist.copy(subtitle = subtitle)
+            }
+        }
+        if (updatedPlaylists != playlists) {
+            playlists = updatedPlaylists
+            shouldSavePlaylists = true
+        }
+    }
+
+    fun applyRepositoryPlaylists(
+        repositoryPlaylists: List<Playlist>,
+        entries: List<PlaylistSongEntry>,
+        createdPlaylistId: String? = null
+    ) {
+        val counts = entries.groupingBy { entry -> entry.playlistId }.eachCount()
+        playlists = repositoryPlaylists
+            .sortedBy { playlist -> playlist.order }
+            .map { playlist ->
+                val songCount = counts[playlist.id] ?: 0
+                LibraryPlaylistCard(
+                    id = playlist.id,
+                    title = playlist.title,
+                    subtitle = "$songCount \u9996\u6b4c\u66f2",
+                    order = playlist.order
+                )
+            }
+        activePlaylistActionId = activePlaylistActionId?.takeIf { activeId ->
+            playlists.any { playlist -> playlist.id == activeId }
+        }
+        if (createdPlaylistId != null) {
+            newlyCreatedPlaylistId = createdPlaylistId
+        }
+    }
+
+    fun consumeNewlyCreatedPlaylistAnimation(playlistId: String) {
+        if (newlyCreatedPlaylistId == playlistId) {
+            newlyCreatedPlaylistId = null
+        }
     }
 }
 
@@ -161,11 +304,13 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
 internal fun LibraryScreen(
     songCount: Int,
     onOpenLocalLibrary: () -> Unit,
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
     playlistController: LibraryPlaylistController,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val noRippleInteractionSource = remember { MutableInteractionSource() }
     val playlistRows = playlistController.playlists.chunked(2)
     val playlistCardHeight = LibraryInfoCardHeight * (4f / 3f)
     val playlistRowItemOffsetYPx = with(density) {
@@ -174,13 +319,11 @@ internal fun LibraryScreen(
     val libraryCardsProgress = remember {
         Animatable(if (visible) 1f else 0f)
     }
-    val knownPlaylistRowKeys = remember {
-        mutableStateListOf<String>().apply {
-            addAll(playlistRows.map { rowPlaylists -> rowPlaylists.toLibraryPlaylistRowKey() })
-        }
-    }
 
     LaunchedEffect(visible) {
+        if (!visible) {
+            playlistController.clearPlaylistActions()
+        }
         libraryCardsProgress.animateTo(
             targetValue = if (visible) 1f else 0f,
             animationSpec = tween(
@@ -194,7 +337,12 @@ internal fun LibraryScreen(
         state = playlistController.listState,
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .clickable(
+                interactionSource = noRippleInteractionSource,
+                indication = null,
+                onClick = playlistController::clearPlaylistActions
+            ),
         contentPadding = PaddingValues(
             start = 20.dp,
             top = 8.dp,
@@ -221,13 +369,17 @@ internal fun LibraryScreen(
                         LibraryCollectionCard(
                             title = "\u672c\u5730\u66f2\u5e93",
                             subtitle = "$songCount \u9996\u6b4c\u66f2",
-                            onClick = onOpenLocalLibrary,
+                            onClick = {
+                                playlistController.clearPlaylistActions()
+                                onOpenLocalLibrary()
+                            },
                             modifier = Modifier
                                 .width(localLibraryWidth)
                                 .height(LibraryInfoCardHeight)
                         )
                         CreatePlaylistEntryCard(
                             onClick = {
+                                playlistController.clearPlaylistActions()
                                 playlistController.startEditing()
                             },
                             modifier = Modifier
@@ -245,42 +397,45 @@ internal fun LibraryScreen(
                 rowPlaylists.toLibraryPlaylistRowKey()
             }
         ) { rowIndex, rowPlaylists ->
-            val rowKey = rowPlaylists.toLibraryPlaylistRowKey()
-            val isKnownRow = rowKey in knownPlaylistRowKeys
-            val rowAppearProgress = remember(rowKey) {
-                Animatable(if (isKnownRow) 1f else 0f)
-            }
-
-            LaunchedEffect(rowKey) {
-                if (!isKnownRow && rowKey !in knownPlaylistRowKeys) {
-                    knownPlaylistRowKeys.add(rowKey)
-                    rowAppearProgress.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(
-                            durationMillis = FlowtoneMotion.DurationMillis,
-                            easing = LinearEasing
-                        )
-                    )
-                }
-            }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .libraryPlaylistRowMotion(
                         globalProgress = libraryCardsProgress.value,
                         rowIndex = rowIndex + 1,
-                        rowAppearProgress = rowAppearProgress.value,
+                        rowAppearProgress = 1f,
                         itemOffsetYPx = playlistRowItemOffsetYPx
                     ),
                 horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
             ) {
                 rowPlaylists.forEach { playlist ->
+                    val showActions = playlistController.activePlaylistActionId == playlist.id
                     LibraryPlaylistTileCardView(
                         playlist = playlist,
+                        cardHeight = playlistCardHeight,
+                        showActions = showActions,
+                        playCreateAnimation =
+                            playlistController.newlyCreatedPlaylistId == playlist.id,
+                        onCreateAnimationFinished = {
+                            playlistController.consumeNewlyCreatedPlaylistAnimation(
+                                playlist.id
+                            )
+                        },
+                        onClick = {
+                            playlistController.clearPlaylistActions()
+                            onOpenPlaylist(playlist)
+                        },
+                        onLongClick = {
+                            playlistController.showPlaylistActions(playlist.id)
+                        },
+                        onEdit = {
+                            playlistController.startRenamePlaylist(playlist)
+                        },
+                        onDelete = {
+                            playlistController.startDeletePlaylist(playlist)
+                        },
                         modifier = Modifier
                             .weight(1f)
-                            .height(playlistCardHeight)
                     )
                 }
 
@@ -299,13 +454,24 @@ internal fun LibraryScreen(
 @Composable
 internal fun CreatePlaylistOverlay(
     playlistController: LibraryPlaylistController,
+    onCreatePlaylist: (String) -> Unit,
+    onRenamePlaylist: (String, String) -> Unit,
+    onDeletePlaylist: (String) -> Unit,
+    addToPlaylistDialogBackgroundColor: Color = Color(0xFF1B1B20),
     modifier: Modifier = Modifier
 ) {
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val createPlaylistState = playlistController.createPlaylistState
+    val scrimMaxAlpha = if (
+        playlistController.playlistDialogVisualStyle == PlaylistDialogVisualStyle.AddToPlaylist
+    ) {
+        0.34f
+    } else {
+        CreatePlaylistScrimMaxAlpha
+    }
     val scrimAlpha by animateFloatAsState(
         targetValue = if (createPlaylistState == CreatePlaylistState.Editing) {
-            CreatePlaylistScrimMaxAlpha
+            scrimMaxAlpha
         } else {
             0f
         },
@@ -359,7 +525,11 @@ internal fun CreatePlaylistOverlay(
                     .clickable(
                         interactionSource = noRippleInteractionSource,
                         indication = null,
-                        onClick = playlistController::closeEditing
+                        onClick = {
+                            if (!playlistController.dialogLocked) {
+                                playlistController.closeEditing()
+                            }
+                        }
                     )
             )
         }
@@ -407,6 +577,11 @@ internal fun CreatePlaylistOverlay(
                         playlistName = playlistController.playlistName,
                         canCreate = playlistController.canCreatePlaylist,
                         showDuplicateNameMessage = playlistController.duplicatePlaylistName,
+                        dialogLocked = playlistController.dialogLocked,
+                        mode = playlistController.playlistDialogMode,
+                        visualStyle = playlistController.playlistDialogVisualStyle,
+                        addToPlaylistDialogBackgroundColor =
+                            addToPlaylistDialogBackgroundColor,
                         onPlaylistNameChange = { value ->
                             playlistController.playlistName = value
                         },
@@ -414,28 +589,33 @@ internal fun CreatePlaylistOverlay(
                             playlistController.closeEditing()
                         },
                         onCreate = {
-                            val title = playlistController.playlistName.trim()
-                            if (
-                                title.isNotEmpty() &&
-                                !hasDuplicatePlaylistTitle(
-                                    title,
-                                    playlistController.playlists
-                                )
-                            ) {
-                                val order = (
-                                    playlistController.playlists.maxOfOrNull { playlist ->
-                                        playlist.order
-                                    } ?: -1
-                                    ) + 1
-                                val playlist = LibraryPlaylistCard(
-                                    id = UUID.randomUUID().toString(),
-                                    title = title,
-                                    order = order
-                                )
-                                playlistController.playlists =
-                                    playlistController.playlists + playlist
-                                playlistController.shouldSavePlaylists = true
-                                playlistController.closeEditing()
+                            when (playlistController.playlistDialogMode) {
+                                PlaylistDialogMode.Create -> {
+                                    val title = playlistController.playlistName.trim()
+                                    if (playlistController.canCreatePlaylist) {
+                                        playlistController.lockDialog()
+                                        onCreatePlaylist(title)
+                                    }
+                                }
+                                PlaylistDialogMode.Rename -> {
+                                    val playlist = playlistController.dialogPlaylist
+                                    val title = playlistController.playlistName.trim()
+                                    if (
+                                        playlist != null &&
+                                        playlistController.canCreatePlaylist
+                                    ) {
+                                        playlistController.lockDialog()
+                                        onRenamePlaylist(playlist.id, title)
+                                    }
+                                }
+                                PlaylistDialogMode.Delete -> {
+                                    if (playlistController.canCreatePlaylist) {
+                                        playlistController.lockDialog()
+                                    }
+                                    playlistController.dialogPlaylist?.let { playlist ->
+                                        onDeletePlaylist(playlist.id)
+                                    }
+                                }
                             }
                         },
                         modifier = Modifier
@@ -489,34 +669,151 @@ private fun CreatePlaylistEntryCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryPlaylistTileCardView(
     playlist: LibraryPlaylistCard,
+    cardHeight: androidx.compose.ui.unit.Dp,
+    showActions: Boolean,
+    playCreateAnimation: Boolean,
+    onCreateAnimationFinished: () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.Top
+    val actionProgress by animateFloatAsState(
+        targetValue = if (showActions) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis / 2,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "LibraryPlaylistActionButtons"
+    )
+    val createProgress = remember(playlist.id) {
+        Animatable(if (playCreateAnimation) 0f else 1f)
+    }
+    LaunchedEffect(playCreateAnimation, playlist.id) {
+        if (playCreateAnimation) {
+            createProgress.snapTo(0f)
+            createProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = FlowtoneMotion.DurationMillis,
+                    easing = FlowtoneMotion.Easing
+                )
+            )
+            onCreateAnimationFinished()
+        } else if (createProgress.value < 1f) {
+            createProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = (
+                        FlowtoneMotion.DurationMillis * (1f - createProgress.value)
+                        ).toInt().coerceAtLeast(1),
+                    easing = FlowtoneMotion.Easing
+                )
+            )
+        }
+    }
+    val actionButtonColor = MaterialTheme.colorScheme.onSurface
+    val editActionIconSize = 24.dp
+    val editActionTouchSize = 36.dp
+
+    Box(
+        modifier = modifier.height(cardHeight)
     ) {
-        Text(
-            text = playlist.title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = playlist.subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(cardHeight)
+                .graphicsLayer {
+                    val eased = FlowtoneMotion.Easing.transform(
+                        createProgress.value.coerceIn(0f, 1f)
+                    )
+                    alpha = eased
+                    translationY = 18.dp.toPx() * (1f - eased)
+                }
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    .padding(end = 44.dp),
+                verticalArrangement = Arrangement.Top
+            ) {
+                Text(
+                    text = playlist.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = playlist.subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            if (showActions || actionProgress > 0.001f) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .graphicsLayer {
+                            val eased = FlowtoneMotion.Easing.transform(
+                                actionProgress.coerceIn(0f, 1f)
+                            )
+                            alpha = eased
+                            translationY = 8.dp.toPx() * (1f - eased)
+                            scaleX = 0.96f + 0.04f * eased
+                            scaleY = 0.96f + 0.04f * eased
+                            transformOrigin = TransformOrigin(1f, 0.5f)
+                        },
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(editActionTouchSize)
+                            .clickable(onClick = onEdit),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "\u7f16\u8f91\u6b4c\u5355",
+                            tint = actionButtonColor,
+                            modifier = Modifier.size(editActionIconSize)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(editActionTouchSize)
+                            .clickable(onClick = onDelete),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "\u5220\u9664\u6b4c\u5355",
+                            tint = actionButtonColor,
+                            modifier = Modifier.size(editActionIconSize)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -525,72 +822,170 @@ private fun CreatePlaylistPanel(
     playlistName: String,
     canCreate: Boolean,
     showDuplicateNameMessage: Boolean,
+    dialogLocked: Boolean,
+    mode: PlaylistDialogMode,
+    visualStyle: PlaylistDialogVisualStyle,
+    addToPlaylistDialogBackgroundColor: Color,
     onPlaylistNameChange: (String) -> Unit,
     onCancel: () -> Unit,
     onCreate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val panelShape = RoundedCornerShape(CreatePlaylistPanelCornerRadius)
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val addToPlaylistStyle = visualStyle == PlaylistDialogVisualStyle.AddToPlaylist
+    val containerColor = if (addToPlaylistStyle) {
+        addToPlaylistDialogBackgroundColor.copy(alpha = 1f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val contentColor = if (addToPlaylistStyle) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryContentColor = if (addToPlaylistStyle) {
+        Color.White.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val panelBorder = if (addToPlaylistStyle) {
+        BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+    } else {
+        null
+    }
+    val shadowElevation = if (addToPlaylistStyle) 0.dp else 18.dp
+    val titleText = when (mode) {
+        PlaylistDialogMode.Create -> "\u521b\u5efa\u6b4c\u5355"
+        PlaylistDialogMode.Rename -> "\u7f16\u8f91\u6b4c\u5355"
+        PlaylistDialogMode.Delete -> "\u5220\u9664\u6b4c\u5355"
+    }
+    val confirmText = when (mode) {
+        PlaylistDialogMode.Create -> "\u521b\u5efa"
+        PlaylistDialogMode.Rename -> "\u4fdd\u5b58"
+        PlaylistDialogMode.Delete -> "\u5220\u9664"
+    }
+    val showTitleError = showDuplicateNameMessage && !dialogLocked
 
     Surface(
         modifier = modifier,
         shape = panelShape,
         color = containerColor,
+        border = panelBorder,
         tonalElevation = 0.dp,
-        shadowElevation = 18.dp
+        shadowElevation = shadowElevation
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .clip(panelShape)
         ) {
-            Text(
-                text = "\u521b\u5efa\u6b4c\u5355",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            OutlinedTextField(
-                value = playlistName,
-                onValueChange = onPlaylistNameChange,
-                placeholder = {
-                    Text(text = "\u6b4c\u5355\u540d")
-                },
-                singleLine = true,
-                supportingText = if (showDuplicateNameMessage) {
-                    {
-                        Text(text = "\u5df2\u5b58\u5728\u540c\u540d\u6b4c\u5355")
-                    }
-                } else {
-                    null
-                },
-                isError = showDuplicateNameMessage,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp)
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .padding(24.dp)
             ) {
-                TextButton(onClick = onCancel) {
-                    Text(text = "\u53d6\u6d88")
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor
+                )
+                if (mode == PlaylistDialogMode.Delete) {
+                    Text(
+                        text = "\u786e\u5b9a\u8981\u5220\u9664\u8fd9\u4e2a\u6b4c\u5355\u5417\uff1f",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryContentColor,
+                        modifier = Modifier.padding(top = 18.dp)
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = playlistName,
+                        onValueChange = onPlaylistNameChange,
+                        enabled = !dialogLocked,
+                        placeholder = {
+                            Text(
+                                text = "\u6b4c\u5355\u540d\u79f0",
+                                color = secondaryContentColor
+                            )
+                        },
+                        singleLine = true,
+                        textStyle = if (addToPlaylistStyle) {
+                            LocalTextStyle.current.copy(color = contentColor)
+                        } else {
+                            LocalTextStyle.current
+                        },
+                        supportingText = if (showTitleError) {
+                            {
+                                Text(
+                                    text = "\u5df2\u5b58\u5728\u540c\u540d\u6b4c\u5355",
+                                    color = if (addToPlaylistStyle) {
+                                        secondaryContentColor
+                                    } else {
+                                        Color.Unspecified
+                                    }
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        isError = showTitleError,
+                        colors = if (addToPlaylistStyle) {
+                            OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = contentColor,
+                                unfocusedTextColor = contentColor,
+                                disabledTextColor = contentColor.copy(alpha = 0.72f),
+                                errorTextColor = contentColor,
+                                focusedBorderColor = contentColor,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.58f),
+                                disabledBorderColor = Color.White.copy(alpha = 0.34f),
+                                errorBorderColor = contentColor,
+                                focusedPlaceholderColor = secondaryContentColor,
+                                unfocusedPlaceholderColor = secondaryContentColor,
+                                disabledPlaceholderColor = secondaryContentColor,
+                                errorPlaceholderColor = secondaryContentColor,
+                                cursorColor = contentColor,
+                                errorCursorColor = contentColor,
+                                focusedLabelColor = contentColor,
+                                unfocusedLabelColor = secondaryContentColor,
+                                disabledLabelColor = secondaryContentColor,
+                                errorLabelColor = contentColor
+                            )
+                        } else {
+                            OutlinedTextFieldDefaults.colors()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 18.dp)
+                    )
                 }
-                Button(
-                    onClick = onCreate,
-                    enabled = canCreate,
-                    colors = ButtonDefaults.buttonColors(
-                        disabledContainerColor =
-                            MaterialTheme.colorScheme.surfaceContainerHighest,
-                        disabledContentColor =
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    ),
-                    modifier = Modifier.padding(start = 8.dp)
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "\u521b\u5efa")
+                    TextButton(
+                        onClick = onCancel,
+                        enabled = !dialogLocked
+                    ) {
+                        Text(
+                            text = "\u53d6\u6d88",
+                            color = if (addToPlaylistStyle) contentColor else Color.Unspecified
+                        )
+                    }
+                    Button(
+                        onClick = onCreate,
+                        enabled = canCreate && !dialogLocked,
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor =
+                                MaterialTheme.colorScheme.surfaceContainerHighest,
+                            disabledContentColor =
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        ),
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(text = confirmText)
+                    }
                 }
             }
         }
@@ -638,10 +1033,12 @@ private fun libraryPlaylistRowProgress(
 
 private fun hasDuplicatePlaylistTitle(
     playlistName: String,
-    playlists: List<LibraryPlaylistCard>
+    playlists: List<LibraryPlaylistCard>,
+    excludingPlaylistId: String? = null
 ): Boolean {
     val normalizedName = playlistName.trim()
     return normalizedName.isNotEmpty() && playlists.any { playlist ->
+        playlist.id != excludingPlaylistId &&
         playlist.title.trim().equals(normalizedName, ignoreCase = true)
     }
 }
@@ -711,6 +1108,121 @@ fun LocalLibraryScreen(
                     modifier = itemModifier(visibleAnimationIndex)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun PlaylistDetailScreen(
+    playlistId: String?,
+    allSongs: List<Song>,
+    playlistSongEntries: List<PlaylistSongEntry>,
+    currentSong: Song?,
+    onSongClick: (List<Song>, Int) -> Unit,
+    itemModifier: (Int) -> Modifier = { Modifier },
+    suppressEmptyState: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+    val playlistSongs = remember(playlistId, allSongs, playlistSongEntries) {
+        if (playlistId == null) {
+            emptyList()
+        } else {
+            val songsById = allSongs.associateBy { song -> song.id.toString() }
+            playlistSongEntries
+                .filter { entry -> entry.playlistId == playlistId }
+                .sortedBy { entry -> entry.addedAt }
+                .mapNotNull { entry -> songsById[entry.songId] }
+        }
+    }
+
+    if (playlistSongs.isEmpty()) {
+        EmptyPlaylistState(
+            visible = !suppressEmptyState,
+            modifier = modifier
+        )
+        return
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 8.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        itemsIndexed(
+            items = playlistSongs,
+            key = { _, song -> song.id }
+        ) { index, song ->
+            val visibleAnimationIndex = (
+                index - listState.firstVisibleItemIndex
+                ).coerceIn(0, 10)
+            SongListItem(
+                song = song,
+                isCurrentSong = currentSong?.id == song.id,
+                onClick = {
+                    onSongClick(playlistSongs, index)
+                },
+                modifier = itemModifier(visibleAnimationIndex)
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyPlaylistState(
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    var messageVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(visible) {
+        messageVisible = visible
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 28.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(
+            visible = messageVisible,
+            enter = fadeIn(
+                animationSpec = tween(
+                    durationMillis = FlowtoneMotion.DurationMillis,
+                    easing = FlowtoneMotion.Easing
+                )
+            ) + slideInVertically(
+                animationSpec = tween(
+                    durationMillis = FlowtoneMotion.DurationMillis,
+                    easing = FlowtoneMotion.Easing
+                ),
+                initialOffsetY = { with(density) { 12.dp.roundToPx() } }
+            ),
+            exit = fadeOut(
+                animationSpec = tween(
+                    durationMillis = FlowtoneMotion.DurationMillis,
+                    easing = FlowtoneMotion.Easing
+                )
+            ) + slideOutVertically(
+                animationSpec = tween(
+                    durationMillis = FlowtoneMotion.DurationMillis,
+                    easing = FlowtoneMotion.Easing
+                ),
+                targetOffsetY = { with(density) { 12.dp.roundToPx() } }
+            )
+        ) {
+            Text(
+                text = "\u6b64\u6b4c\u5355\u4e2d\u6682\u65e0\u6b4c\u66f2",
+                style = MaterialTheme.typography.headlineMedium,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

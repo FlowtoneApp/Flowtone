@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
@@ -39,6 +40,7 @@ internal fun TopLevelPagerContent(
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -55,6 +57,7 @@ internal fun TopLevelPagerContent(
                 TopLevelPage.Library -> LibraryScreen(
                     songCount = uiState.songs.size,
                     onOpenLocalLibrary = onOpenLocalLibrary,
+                    onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,
                     playlistController = libraryPlaylistController,
                     modifier = Modifier.fillMaxSize()

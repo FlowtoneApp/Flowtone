@@ -43,12 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +53,7 @@ import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.components.pullToDismissAtTop
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -97,9 +94,6 @@ internal fun PlayerQueueBottomSheet(
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val queueListState = rememberLazyListState()
     var queueViewportHeightPx by remember { mutableStateOf(0) }
-    val density = LocalDensity.current
-    val pullToDismissThresholdPx = with(density) { 64.dp.toPx() }
-
     fun requestDismiss() {
         if (!dismissStarted) {
             dismissStarted = true
@@ -150,32 +144,6 @@ internal fun PlayerQueueBottomSheet(
             )
         }
     }
-    val pullToDismissConnection = remember(queueListState, pullToDismissThresholdPx) {
-        var pullDistancePx = 0f
-
-        object : NestedScrollConnection {
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                val listAtTop = queueListState.firstVisibleItemIndex == 0 &&
-                    queueListState.firstVisibleItemScrollOffset == 0
-
-                if (!dismissStarted && listAtTop && available.y > 0f) {
-                    pullDistancePx += available.y
-                    if (pullDistancePx >= pullToDismissThresholdPx) {
-                        requestDismiss()
-                    }
-                } else if (!listAtTop || available.y < 0f || consumed.y < 0f) {
-                    pullDistancePx = 0f
-                }
-
-                return Offset.Zero
-            }
-        }
-    }
-
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -338,7 +306,12 @@ internal fun PlayerQueueBottomSheet(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .onSizeChanged { queueViewportHeightPx = it.height }
-                                    .nestedScroll(pullToDismissConnection)
+                                    .pullToDismissAtTop(
+                                        listState = queueListState,
+                                        enabled = !dismissStarted,
+                                        threshold = 64.dp,
+                                        onDismiss = ::requestDismiss
+                                    )
                             ) {
                                 itemsIndexed(
                                     items = animatedQueue,

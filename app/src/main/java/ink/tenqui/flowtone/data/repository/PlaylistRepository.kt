@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.repository
 import ink.tenqui.flowtone.core.model.Playlist
 import ink.tenqui.flowtone.core.model.PlaylistCardStyle
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import java.util.UUID
@@ -26,6 +27,59 @@ class PlaylistRepository(
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
     val playlistSongEntries: StateFlow<List<PlaylistSongEntry>> =
         _playlistSongEntries.asStateFlow()
+
+    suspend fun syncLibraryPlaylistCards(
+        cards: List<LibraryPlaylistCard>
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        val currentEntries = _playlistSongEntries.value
+        val currentById = currentPlaylists.associateBy { playlist -> playlist.id }
+        val now = System.currentTimeMillis()
+        val nextPlaylists = cards
+            .sortedBy { card -> card.order }
+            .mapIndexed { index, card ->
+                val existing = currentById[card.id]
+                if (existing == null) {
+                    Playlist(
+                        id = card.id,
+                        title = card.title,
+                        subtitle = card.subtitle,
+                        order = index,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                } else {
+                    existing.copy(
+                        title = card.title,
+                        subtitle = card.subtitle,
+                        order = index,
+                        updatedAt = if (
+                            existing.title != card.title ||
+                            existing.subtitle != card.subtitle ||
+                            existing.order != index
+                        ) {
+                            now
+                        } else {
+                            existing.updatedAt
+                        }
+                    )
+                }
+            }
+        val nextPlaylistIds = nextPlaylists.mapTo(mutableSetOf()) { playlist -> playlist.id }
+        val nextEntries = currentEntries.filter { entry -> entry.playlistId in nextPlaylistIds }
+
+        if (nextPlaylists == currentPlaylists && nextEntries == currentEntries) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = currentEntries,
+            nextPlaylists = normalizePlaylistOrder(nextPlaylists),
+            nextEntries = nextEntries,
+            successValue = Unit
+        )
+    }
 
     fun hasDuplicateTitle(title: String, excludingPlaylistId: String? = null): Boolean {
         val normalizedTitle = title.trim()

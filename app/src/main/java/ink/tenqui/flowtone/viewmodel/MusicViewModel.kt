@@ -224,6 +224,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playSongAt(index = playbackIndex)
     }
 
+    fun playSongQueue(songs: List<Song>, startIndex: Int) {
+        if (songs.isEmpty() || startIndex !in songs.indices) {
+            return
+        }
+
+        val startSong = songs[startIndex]
+        sourceQueue = songs
+        rebuildPlaybackQueueForMode(
+            mode = playbackState.value.playbackOrderMode,
+            currentSong = startSong
+        )
+        val playbackIndex = findSongIndex(playbackQueue, startSong)
+        playSongAt(index = playbackIndex)
+    }
+
     fun playQueueSong(song: Song) {
         val playbackIndex = findSongIndex(playbackQueue, song)
         if (playbackIndex != -1) {

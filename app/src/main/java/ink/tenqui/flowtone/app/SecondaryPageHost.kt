@@ -12,12 +12,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
+import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
 import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
@@ -44,9 +51,12 @@ internal fun SecondaryPageHost(
     onSongRecordThresholdSecondsChange: (Int) -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
+    selectedPlaylistId: String?,
+    playlistSongEntries: List<PlaylistSongEntry>,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
+    onPlaylistSongClick: (List<Song>, Int) -> Unit,
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -56,6 +66,13 @@ internal fun SecondaryPageHost(
     onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var retainedPlaylistId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(secondaryPage, selectedPlaylistId) {
+        if (secondaryPage == SecondaryPage.Playlist && selectedPlaylistId != null) {
+            retainedPlaylistId = selectedPlaylistId
+        }
+    }
+
     AnimatedContent(
         targetState = secondaryPage,
         transitionSpec = {
@@ -177,6 +194,23 @@ internal fun SecondaryPageHost(
                 onRequestPermission = onRequestPermission,
                 onSongClick = onSongClick,
                 itemModifier = ::songItemModifier,
+                modifier = fadingContainerModifier()
+                    .fillMaxSize()
+                    .rightSwipeBackGesture(onCloseSecondaryPage)
+            )
+
+            SecondaryPage.Playlist -> PlaylistDetailScreen(
+                playlistId = if (secondaryPage == SecondaryPage.Playlist) {
+                    selectedPlaylistId
+                } else {
+                    retainedPlaylistId
+                },
+                allSongs = uiState.songs,
+                playlistSongEntries = playlistSongEntries,
+                currentSong = currentSong,
+                onSongClick = onPlaylistSongClick,
+                itemModifier = ::songItemModifier,
+                suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
                 modifier = fadingContainerModifier()
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)

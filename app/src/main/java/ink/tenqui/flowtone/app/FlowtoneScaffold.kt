@@ -14,21 +14,35 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.local.PlaylistStorage
+import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
+import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
+import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
 import ink.tenqui.flowtone.viewmodel.MusicUiState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -43,6 +57,7 @@ internal fun FlowtoneScaffold(
     pagerState: PagerState,
     selectedTopLevelPage: TopLevelPage,
     secondaryPage: SecondaryPage?,
+    selectedPlaylistId: String?,
     secondaryPathSegments: List<String>,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
@@ -78,6 +93,7 @@ internal fun FlowtoneScaffold(
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onOpenSource: () -> Unit,
     onOpenSourceBack: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -92,10 +108,51 @@ internal fun FlowtoneScaffold(
     onSeekTo: (Long) -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
     onPlayQueueSong: (Song) -> Unit,
+    onPlaylistSongClick: (List<Song>, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val hasCurrentSong = playerUiState.hasCurrentSong
     val libraryPlaylistController = rememberLibraryPlaylistController()
+    val playlistRepository = remember(context) {
+        PlaylistRepository(PlaylistStorage(context.applicationContext))
+    }
+    var addToPlaylistDialogBackgroundColor by remember {
+        mutableStateOf(Color(0xFF1B1B20))
+    }
+    val playlistSongEntries by playlistRepository.playlistSongEntries.collectAsState()
+    val playlistIdsContainingCurrentSong = remember(
+        playlistSongEntries,
+        playerUiState.currentSong?.id
+    ) {
+        val currentSongId = playerUiState.currentSong?.id?.toString()
+        if (currentSongId == null) {
+            emptySet()
+        } else {
+            playlistSongEntries
+                .filter { entry -> entry.songId == currentSongId }
+                .mapTo(mutableSetOf()) { entry -> entry.playlistId }
+        }
+    }
+
+    LaunchedEffect(libraryPlaylistController.playlists) {
+        playlistRepository.syncLibraryPlaylistCards(libraryPlaylistController.playlists)
+    }
+
+    LaunchedEffect(playlistSongEntries) {
+        libraryPlaylistController.applySongCounts(playlistSongEntries)
+        libraryPlaylistController.savePlaylistsIfRequested()
+        playlistRepository.syncLibraryPlaylistCards(libraryPlaylistController.playlists)
+    }
+
+    fun refreshLibraryPlaylistsFromRepository(createdPlaylistId: String? = null) {
+        libraryPlaylistController.applyRepositoryPlaylists(
+            repositoryPlaylists = playlistRepository.playlists.value,
+            entries = playlistRepository.playlistSongEntries.value,
+            createdPlaylistId = createdPlaylistId
+        )
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         Scaffold(
@@ -138,6 +195,7 @@ internal fun FlowtoneScaffold(
                         onOpenSettings = onOpenSettings,
                         onOpenAbout = onOpenAbout,
                         onOpenLocalLibrary = onOpenLocalLibrary,
+                        onOpenPlaylist = onOpenPlaylist,
                         modifier = Modifier.fillMaxSize()
                     )
                     SecondaryPageHost(
@@ -159,9 +217,12 @@ internal fun FlowtoneScaffold(
                         onSongRecordThresholdSecondsChange = onSongRecordThresholdSecondsChange,
                         uiState = uiState,
                         currentSong = playerUiState.currentSong,
+                        selectedPlaylistId = selectedPlaylistId,
+                        playlistSongEntries = playlistSongEntries,
                         permissionDenied = permissionDenied,
                         onRequestPermission = onRequestPermission,
                         onSongClick = onSongClick,
+                        onPlaylistSongClick = onPlaylistSongClick,
                         onCloseSecondaryPage = onCloseSecondaryPage,
                         onSettingsBackActionChange = settingsBackActionChange,
                         onSettingsPathSegmentsChange = onSettingsPathSegmentsChange,
@@ -203,6 +264,40 @@ internal fun FlowtoneScaffold(
             onPlayNext = onPlayNext,
             onSeekTo = onSeekTo,
             onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
+            libraryPlaylists = libraryPlaylistController.playlists,
+            playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
+            newlyCreatedPlaylistId = libraryPlaylistController.newlyCreatedPlaylistId,
+            onNewPlaylistCreateAnimationFinished = {
+                libraryPlaylistController.consumeNewlyCreatedPlaylistAnimation(it)
+            },
+            onAddToPlaylistDialogBackgroundColorChange = { color ->
+                addToPlaylistDialogBackgroundColor = color
+            },
+            onCreatePlaylistClick = {
+                libraryPlaylistController.startEditing(
+                    visualStyle = PlaylistDialogVisualStyle.AddToPlaylist
+                )
+            },
+            onAddSongToPlaylist = addSongToPlaylist@{ playlist, onAdded ->
+                val currentSong = playerUiState.currentSong ?: return@addSongToPlaylist
+                coroutineScope.launch {
+                    playlistRepository.syncLibraryPlaylistCards(libraryPlaylistController.playlists)
+                    val result = playlistRepository.addSongToPlaylist(
+                        playlistId = playlist.id,
+                        song = currentSong
+                    )
+                    if (result is PlaylistMutationResult.Success) {
+                        libraryPlaylistController.applySongCounts(
+                            playlistRepository.playlistSongEntries.value
+                        )
+                        libraryPlaylistController.savePlaylistsIfRequested()
+                        playlistRepository.syncLibraryPlaylistCards(
+                            libraryPlaylistController.playlists
+                        )
+                        onAdded()
+                    }
+                }
+            },
             sourceQueue = uiState.sourceQueue,
             playbackQueue = uiState.playbackQueue,
             currentQueueIndex = uiState.currentQueueIndex,
@@ -215,6 +310,56 @@ internal fun FlowtoneScaffold(
         )
         CreatePlaylistOverlay(
             playlistController = libraryPlaylistController,
+            onCreatePlaylist = { title ->
+                coroutineScope.launch {
+                    playlistRepository.syncLibraryPlaylistCards(
+                        libraryPlaylistController.playlists
+                    )
+                    val result = playlistRepository.createPlaylist(title)
+                    if (result is PlaylistMutationResult.Success) {
+                        refreshLibraryPlaylistsFromRepository(
+                            createdPlaylistId = result.value.id
+                        )
+                        libraryPlaylistController.closeEditing()
+                    } else {
+                        libraryPlaylistController.unlockDialog()
+                    }
+                }
+            },
+            onRenamePlaylist = { playlistId, title ->
+                coroutineScope.launch {
+                    playlistRepository.syncLibraryPlaylistCards(
+                        libraryPlaylistController.playlists
+                    )
+                    val result = playlistRepository.renamePlaylist(
+                        id = playlistId,
+                        newTitle = title
+                    )
+                    if (result is PlaylistMutationResult.Success) {
+                        refreshLibraryPlaylistsFromRepository()
+                        libraryPlaylistController.clearPlaylistActions()
+                        libraryPlaylistController.closeEditing()
+                    } else {
+                        libraryPlaylistController.unlockDialog()
+                    }
+                }
+            },
+            onDeletePlaylist = { playlistId ->
+                coroutineScope.launch {
+                    playlistRepository.syncLibraryPlaylistCards(
+                        libraryPlaylistController.playlists
+                    )
+                    val result = playlistRepository.deletePlaylist(playlistId)
+                    if (result is PlaylistMutationResult.Success) {
+                        refreshLibraryPlaylistsFromRepository()
+                        libraryPlaylistController.clearPlaylistActions()
+                        libraryPlaylistController.closeEditing()
+                    } else {
+                        libraryPlaylistController.unlockDialog()
+                    }
+                }
+            },
+            addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
             modifier = Modifier.fillMaxSize()
         )
     }

@@ -90,6 +90,12 @@ fun FlowtoneApp(
     var secondaryPage by rememberSaveable {
         mutableStateOf<SecondaryPage?>(null)
     }
+    var selectedPlaylistId by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+    var selectedPlaylistTitle by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
     var settingsBackAction by remember {
         mutableStateOf<(() -> Unit)?>(null)
     }
@@ -259,7 +265,8 @@ fun FlowtoneApp(
             secondaryPage = when (secondaryPage) {
                 SecondaryPage.Settings,
                 SecondaryPage.About,
-                SecondaryPage.LocalLibrary -> null
+                SecondaryPage.LocalLibrary,
+                SecondaryPage.Playlist -> null
                 SecondaryPage.OpenSource -> SecondaryPage.About
                 null -> null
             }
@@ -347,6 +354,7 @@ fun FlowtoneApp(
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
         secondaryPage = secondaryPage,
+        selectedPlaylistId = selectedPlaylistId,
         secondaryPathSegments = secondaryPathSegments,
         hideSecondaryBackButton = hideSecondaryBackButton,
         onHideSecondaryBackButtonChange = { hide ->
@@ -411,6 +419,8 @@ fun FlowtoneApp(
         onCloseSecondaryPage = {
             secondaryPage = null
             secondaryPathSegments = emptyList()
+            selectedPlaylistId = null
+            selectedPlaylistTitle = null
         },
         onOpenSettings = {
             secondaryPathSegments = emptyList()
@@ -422,7 +432,15 @@ fun FlowtoneApp(
         },
         onOpenLocalLibrary = {
             secondaryPathSegments = emptyList()
+            selectedPlaylistId = null
+            selectedPlaylistTitle = null
             secondaryPage = SecondaryPage.LocalLibrary
+        },
+        onOpenPlaylist = { playlist ->
+            selectedPlaylistId = playlist.id
+            selectedPlaylistTitle = playlist.title
+            secondaryPathSegments = listOf(playlist.title)
+            secondaryPage = SecondaryPage.Playlist
         },
         onOpenSource = {
             secondaryPathSegments = emptyList()
@@ -437,6 +455,9 @@ fun FlowtoneApp(
         },
         onSongClick = { song ->
             musicViewModel.playSong(song)
+        },
+        onPlaylistSongClick = { songs, startIndex ->
+            musicViewModel.playSongQueue(songs, startIndex)
         },
         onDismissExpandedPlayer = {
             if (miniPlayerFullscreen) {
