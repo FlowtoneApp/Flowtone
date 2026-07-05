@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -74,15 +75,11 @@ private val CreatePlaylistPanelMaxWidth = 360.dp
 private val CreatePlaylistPanelCornerRadius = 28.dp
 private val CreatePlaylistShadowSafePadding = 48.dp
 private val LibraryActionCardSpacing = 12.dp
-private val LibraryPlaylistRowStartOffsetY = 20.dp
-private val NewPlaylistRowStartOffsetY = 10.dp
 private const val CreatePlaylistCardWidthFraction = 0.312f
 private const val CreatePlaylistScrimMaxAlpha = 0.18f
 private const val CreatePlaylistPanelStartScale = 0.96f
 private const val CreatePlaylistPanelExitScale = 0.98f
-private const val LibraryPlaylistRowDelayFraction = 0.06f
-private const val LibraryPlaylistRowMaxDelayFraction = 0.18f
-private const val LibraryPlaylistRowDurationFraction = 0.72f
+private const val LibraryItemSlideOffsetDivisor = 6f
 
 internal sealed class CreatePlaylistState {
     object Idle : CreatePlaylistState()
@@ -170,11 +167,9 @@ internal fun LibraryScreen(
 ) {
     val density = LocalDensity.current
     val playlistRows = playlistController.playlists.chunked(2)
-    val playlistRowStartOffsetYPx = with(density) {
-        LibraryPlaylistRowStartOffsetY.toPx()
-    }
-    val newPlaylistRowStartOffsetYPx = with(density) {
-        NewPlaylistRowStartOffsetY.toPx()
+    val playlistCardHeight = LibraryInfoCardHeight * (4f / 3f)
+    val playlistRowItemOffsetYPx = with(density) {
+        playlistCardHeight.toPx() / LibraryItemSlideOffsetDivisor
     }
     val libraryCardsProgress = remember {
         Animatable(if (visible) 1f else 0f)
@@ -190,7 +185,7 @@ internal fun LibraryScreen(
             targetValue = if (visible) 1f else 0f,
             animationSpec = tween(
                 durationMillis = FlowtoneMotion.DurationMillis,
-                easing = FlowtoneMotion.Easing
+                easing = LinearEasing
             )
         )
     }
@@ -250,7 +245,6 @@ internal fun LibraryScreen(
                 rowPlaylists.toLibraryPlaylistRowKey()
             }
         ) { rowIndex, rowPlaylists ->
-            val cardHeight = LibraryInfoCardHeight * (4f / 3f)
             val rowKey = rowPlaylists.toLibraryPlaylistRowKey()
             val isKnownRow = rowKey in knownPlaylistRowKeys
             val rowAppearProgress = remember(rowKey) {
@@ -264,7 +258,7 @@ internal fun LibraryScreen(
                         targetValue = 1f,
                         animationSpec = tween(
                             durationMillis = FlowtoneMotion.DurationMillis,
-                            easing = FlowtoneMotion.Easing
+                            easing = LinearEasing
                         )
                     )
                 }
@@ -276,9 +270,8 @@ internal fun LibraryScreen(
                     .libraryPlaylistRowMotion(
                         globalProgress = libraryCardsProgress.value,
                         rowIndex = rowIndex + 1,
-                        pageStartOffsetYPx = playlistRowStartOffsetYPx,
                         rowAppearProgress = rowAppearProgress.value,
-                        rowAppearStartOffsetYPx = newPlaylistRowStartOffsetYPx
+                        itemOffsetYPx = playlistRowItemOffsetYPx
                     ),
                 horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
             ) {
@@ -287,7 +280,7 @@ internal fun LibraryScreen(
                         playlist = playlist,
                         modifier = Modifier
                             .weight(1f)
-                            .height(cardHeight)
+                            .height(playlistCardHeight)
                     )
                 }
 
@@ -295,7 +288,7 @@ internal fun LibraryScreen(
                     Spacer(
                         modifier = Modifier
                             .weight(1f)
-                            .height(cardHeight)
+                            .height(playlistCardHeight)
                     )
                 }
             }
@@ -611,9 +604,8 @@ private fun lerpFloat(start: Float, stop: Float, fraction: Float): Float {
 private fun Modifier.libraryPlaylistRowMotion(
     globalProgress: Float,
     rowIndex: Int,
-    pageStartOffsetYPx: Float,
     rowAppearProgress: Float,
-    rowAppearStartOffsetYPx: Float
+    itemOffsetYPx: Float
 ): Modifier {
     val rowProgress = libraryPlaylistRowProgress(
         globalProgress = globalProgress,
@@ -621,10 +613,10 @@ private fun Modifier.libraryPlaylistRowMotion(
     )
     val easedProgress = FlowtoneMotion.Easing.transform(rowProgress)
     val easedAppearProgress = FlowtoneMotion.Easing.transform(rowAppearProgress.coerceIn(0f, 1f))
+    val itemProgress = easedProgress * easedAppearProgress
     return graphicsLayer {
-        alpha = easedProgress * easedAppearProgress
-        translationY = pageStartOffsetYPx * (1f - easedProgress) +
-            rowAppearStartOffsetYPx * (1f - easedAppearProgress)
+        alpha = itemProgress
+        translationY = itemOffsetYPx * (1f - itemProgress)
     }
 }
 
@@ -636,10 +628,12 @@ private fun libraryPlaylistRowProgress(
     globalProgress: Float,
     rowIndex: Int
 ): Float {
-    val delay = (rowIndex.coerceAtLeast(0) * LibraryPlaylistRowDelayFraction)
-        .coerceAtMost(LibraryPlaylistRowMaxDelayFraction)
-    return ((globalProgress.coerceIn(0f, 1f) - delay) / LibraryPlaylistRowDurationFraction)
-        .coerceIn(0f, 1f)
+    val delayMillis = FlowtoneMotion.staggerDelayMillis(rowIndex).toFloat()
+    val durationMillis = FlowtoneMotion.staggerDurationMillis(rowIndex)
+        .coerceAtLeast(1)
+        .toFloat()
+    val elapsedMillis = globalProgress.coerceIn(0f, 1f) * FlowtoneMotion.DurationMillis
+    return ((elapsedMillis - delayMillis) / durationMillis).coerceIn(0f, 1f)
 }
 
 private fun hasDuplicatePlaylistTitle(
