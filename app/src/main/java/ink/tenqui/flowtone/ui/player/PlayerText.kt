@@ -51,6 +51,7 @@ internal fun SharedSongInfo(
     fullscreenProgress: Float = 0f,
     fullscreenX: Dp = 0.dp,
     fullscreenTop: Dp = 0.dp,
+    addToPlaylistProgress: Float = 0f,
     switchDirection: Int,
     onArtistClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -96,6 +97,8 @@ internal fun SharedSongInfo(
     val viewportWidth = lerpDp(defaultViewportWidth, fullscreenViewportWidth, fullscreenProgress)
     val viewportClipWidth = viewportWidth * fullscreenTitleScale
     val viewportClipHeight = metadataGroupHeight * fullscreenTitleScale
+    val fullTextExitProgress = addToPlaylistProgress.coerceIn(0f, 1f)
+    val fullTextExitOffsetY = (-24).dp * fullTextExitProgress
     val lineHorizontalPadding = lerpDp(
         lerpDp(0.dp, metadataLineHorizontalPadding, progress),
         0.dp,
@@ -245,8 +248,9 @@ internal fun SharedSongInfo(
             .width(viewportClipWidth + metadataSwitchDistance * 2f)
             .height(viewportClipHeight)
             .graphicsLayer {
+                alpha = 1f - fullTextExitProgress
                 translationX = viewportX.toPx() - metadataSwitchDistance.toPx()
-                translationY = viewportY.toPx()
+                translationY = viewportY.toPx() + fullTextExitOffsetY.toPx()
             }
             .clipToBounds()
     ) {

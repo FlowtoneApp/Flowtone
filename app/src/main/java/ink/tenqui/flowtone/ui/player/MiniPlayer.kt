@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.player
 
 import android.graphics.Color as AndroidColor
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -16,8 +17,10 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,11 +28,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +55,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -74,6 +80,11 @@ private const val PAUSED_ARTWORK_SCALE = 0.965f
 private const val PAUSE_ARTWORK_SCALE_DURATION_MS = 300
 private const val PAUSED_ARTWORK_ROTATION_DEGREES = 3f
 private const val PAUSE_ARTWORK_ROTATION_DURATION_MS = 300
+
+private enum class FullPlayerMode {
+    Normal,
+    AddToPlaylist
+}
 
 @Composable
 fun MiniPlayer(
@@ -106,6 +117,7 @@ fun MiniPlayer(
     val hasCurrentSong = playerUiState.hasCurrentSong
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
+    var fullPlayerMode by rememberSaveable { mutableStateOf(FullPlayerMode.Normal) }
     var collapsedMetadataSwitchDirection by remember { mutableStateOf(1) }
     val artworkUri = playerUiState.artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
@@ -192,6 +204,23 @@ fun MiniPlayer(
         label = "MiniPlayerFullscreenProgress"
     )
     val fullscreenInteractionActive = fullscreen || fullscreenProgress > 0.01f
+    val addToPlaylistProgress by animateFloatAsState(
+        targetValue = if (
+            fullPlayerMode == FullPlayerMode.AddToPlaylist &&
+            fullscreen &&
+            expanded &&
+            hasCurrentSong
+        ) {
+            1f
+        } else {
+            0f
+        },
+        animationSpec = tween(
+            durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
+            easing = MiniPlayerEasing
+        ),
+        label = "AddToPlaylistProgress"
+    )
     val hostHeight = lerpDp(
         currentHeight + dragHotZoneHeight,
         fullscreenTargetHeight,
@@ -418,6 +447,25 @@ fun MiniPlayer(
         }
         Unit
     }
+    fun enterAddToPlaylistMode() {
+        artistSelectionRequest = null
+        expandedMoreMenu = false
+        fullPlayerMode = FullPlayerMode.AddToPlaylist
+    }
+    fun exitAddToPlaylistMode() {
+        expandedMoreMenu = false
+        fullPlayerMode = FullPlayerMode.Normal
+    }
+    BackHandler(
+        enabled = fullPlayerMode == FullPlayerMode.AddToPlaylist && fullscreenInteractionActive
+    ) {
+        exitAddToPlaylistMode()
+    }
+    LaunchedEffect(fullscreen, hasCurrentSong, currentSong?.id) {
+        if (!fullscreen || !hasCurrentSong) {
+            exitAddToPlaylistMode()
+        }
+    }
     fun selectArtist(candidate: String, rawArtist: String) {
         artistSelectionRequest = null
         Log.d(
@@ -511,7 +559,8 @@ fun MiniPlayer(
         }
     }
     var accumulatedDragY by remember { mutableStateOf(0f) }
-    val playerGesturesEnabled = artistSelectionRequest == null
+    val playerGesturesEnabled =
+        artistSelectionRequest == null && fullPlayerMode == FullPlayerMode.Normal
     val gestureModifier = if (playerGesturesEnabled) {
         Modifier.pointerInput(
             hasCurrentSong,
@@ -677,8 +726,8 @@ fun MiniPlayer(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(visualPanelHeight)
-                    .pointerInput(expandedMoreMenu) {
-                        if (!expandedMoreMenu) {
+                    .pointerInput(expandedMoreMenu, fullPlayerMode) {
+                        if (!expandedMoreMenu || fullPlayerMode != FullPlayerMode.Normal) {
                             return@pointerInput
                         }
 
@@ -731,6 +780,18 @@ fun MiniPlayer(
                     val fullscreenArtworkX = (playerWidth - fullscreenProgressTrackWidth) / 2f
                     val fullscreenMetadataTop =
                         fullscreenCoverCenterY + fullscreenProgressTrackWidth / 2f + 14.dp
+                    val addToPlaylistArtworkSize = 56.dp
+                    val addToPlaylistArtworkLeft = 20.dp
+                    val addToPlaylistArtworkTop = with(density) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + 72.dp
+                    val addToPlaylistTextStart =
+                        addToPlaylistArtworkLeft + addToPlaylistArtworkSize + 12.dp
+                    val addToPlaylistTextWidth =
+                        (playerWidth - addToPlaylistTextStart - 20.dp).coerceAtLeast(80.dp)
+                    val addToPlaylistSharedProgress = addToPlaylistProgress.coerceIn(0f, 1f)
+                    val addToPlaylistControlsAlpha = 1f - addToPlaylistSharedProgress
+                    val addToPlaylistControlsOffsetY = 32.dp * addToPlaylistSharedProgress
                     MorphArtworkLayer(
                         imageRequest = coverImageRequest,
                         waitForArtworkLoad = useLocalArtworkLoading,
@@ -745,6 +806,10 @@ fun MiniPlayer(
                         fullscreenProgress = fullscreenProgress,
                         fullscreenArtworkSize = fullscreenProgressTrackWidth,
                         fullscreenArtworkCenterY = fullscreenCoverCenterY,
+                        addToPlaylistProgress = addToPlaylistSharedProgress,
+                        addToPlaylistArtworkSize = addToPlaylistArtworkSize,
+                        addToPlaylistArtworkX = addToPlaylistArtworkLeft,
+                        addToPlaylistArtworkTop = addToPlaylistArtworkTop,
                         playbackScale = artworkPlaybackScale,
                         playbackRotationDegrees = artworkPlaybackRotationDegrees,
                         modifier = Modifier
@@ -776,102 +841,126 @@ fun MiniPlayer(
                         fullscreenProgress = fullscreenProgress,
                         fullscreenX = fullscreenArtworkX,
                         fullscreenTop = fullscreenMetadataTop,
+                        addToPlaylistProgress = addToPlaylistSharedProgress,
                         switchDirection = collapsedMetadataSwitchDirection,
                         onArtistClick = ::handleArtistClick,
                         modifier = Modifier
                             .align(Alignment.TopStart)
                     )
-                    ExpandedOnlyContent(
-                        progress = animationProgress,
-                        positionMs = playerUiState.positionMs,
-                        durationMs = durationMs,
-                        isPlaying = playerUiState.isPlaying,
-                        isPlayingForVisualLock = visualIsPlaying,
-                        currentSongKey = currentSong?.id,
-                        hasCurrentSong = hasCurrentSong,
-                        progressTrackColor = progressTrackColor,
-                        progressColor = progressColor,
-                        fullscreenProgress = fullscreenProgress,
-                        onSeekTo = onSeekTo,
-                        onLockPlayPauseVisual = ::lockPlayPauseVisual,
-                        onScrubbingChange = { scrubbing ->
-                            isProgressScrubbing = scrubbing
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = expandedProgressTop)
-                            .graphicsLayer {
-                                translationY = (fullscreenStationaryControlsOffsetY - fullscreenControlsLiftY).toPx()
-                            }
-                    )
-                    SharedPlaybackControls(
-                        progress = animationProgress,
-                        isPlaying = visualIsPlaying,
-                        iconColor = controlIconColor,
-                        screenWidth = playerWidth,
-                        minimizedProgress = minimizedProgress,
-                        minimizedHeight = minimizedHeight,
-                        collapsedHeight = collapsedHeight,
-                        expandedTop = expandedControlsTop,
-                        fullscreenProgress = fullscreenProgress,
-                        onPlayPrevious = {
-                            expandedMoreMenu = false
-                            playPreviousFromMiniPlayer()
-                        },
-                        onTogglePlayPause = {
-                            expandedMoreMenu = false
-                            if (hasCurrentSong) {
-                                isProgressScrubbing = false
-                                keepPlayPauseVisualLockedAfterSeek = false
-                                onTogglePlayPause()
-                            }
-                        },
-                        onPlayNext = {
-                            expandedMoreMenu = false
-                            playNextFromMiniPlayer()
-                        },
+                    AddToPlaylistItemSongInfo(
+                        title = title,
+                        artist = artist,
+                        progress = addToPlaylistSharedProgress,
+                        titleColor = titleColor,
+                        artistColor = artistColor,
+                        width = addToPlaylistTextWidth,
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .graphicsLayer {
-                                translationY = (fullscreenStationaryControlsOffsetY - fullscreenControlsLiftY).toPx()
-                            }
+                            .offset(
+                                x = addToPlaylistTextStart,
+                                y = addToPlaylistArtworkTop
+                            )
                     )
-                    SideButtonsOverlay(
-                        progress = animationProgress,
-                        playerWidth = playerWidth,
-                        currentHeight = currentHeight,
-                        expandedHeight = expandedHeight,
-                        expandedProgressTop = expandedProgressTop,
-                        expandedControlsTop = expandedControlsTop,
-                        hasCurrentSong = hasCurrentSong,
-                        isCurrentSongLiked = isCurrentSongLiked,
-                        playbackOrderMode = playerUiState.playbackOrderMode,
-                        iconColor = controlIconColor,
-                        fullscreenProgress = fullscreenProgress,
-                        moreMenuExpanded = expandedMoreMenu,
-                        onMoreMenuExpandedChange = { expanded ->
-                            expandedMoreMenu = expanded
-                        },
-                        onToggleLiked = onToggleCurrentSongLiked,
-                        onOpenQueue = {
-                            artistSelectionRequest = null
-                            queueSheetBackgroundBlurred = true
-                            showQueueSheet = true
-                        },
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
+                            .matchParentSize()
                             .graphicsLayer {
-                                translationY = (fullscreenStationaryControlsOffsetY - fullscreenControlsLiftY).toPx()
+                                alpha = addToPlaylistControlsAlpha
+                                translationY =
+                                    (fullscreenStationaryControlsOffsetY -
+                                        fullscreenControlsLiftY +
+                                        addToPlaylistControlsOffsetY).toPx()
+                            }
+                    ) {
+                        ExpandedOnlyContent(
+                            progress = animationProgress,
+                            positionMs = playerUiState.positionMs,
+                            durationMs = durationMs,
+                            isPlaying = playerUiState.isPlaying,
+                            isPlayingForVisualLock = visualIsPlaying,
+                            currentSongKey = currentSong?.id,
+                            hasCurrentSong = hasCurrentSong,
+                            progressTrackColor = progressTrackColor,
+                            progressColor = progressColor,
+                            fullscreenProgress = fullscreenProgress,
+                            onSeekTo = onSeekTo,
+                            onLockPlayPauseVisual = ::lockPlayPauseVisual,
+                            onScrubbingChange = { scrubbing ->
+                                isProgressScrubbing = scrubbing
                             },
-                        onTogglePlaybackOrderMode = onTogglePlaybackOrderMode
-                    )
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = expandedProgressTop)
+                        )
+                        SharedPlaybackControls(
+                            progress = animationProgress,
+                            isPlaying = visualIsPlaying,
+                            iconColor = controlIconColor,
+                            screenWidth = playerWidth,
+                            minimizedProgress = minimizedProgress,
+                            minimizedHeight = minimizedHeight,
+                            collapsedHeight = collapsedHeight,
+                            expandedTop = expandedControlsTop,
+                            fullscreenProgress = fullscreenProgress,
+                            controlsExitProgress = addToPlaylistSharedProgress,
+                            onPlayPrevious = {
+                                expandedMoreMenu = false
+                                playPreviousFromMiniPlayer()
+                            },
+                            onTogglePlayPause = {
+                                expandedMoreMenu = false
+                                if (hasCurrentSong) {
+                                    isProgressScrubbing = false
+                                    keepPlayPauseVisualLockedAfterSeek = false
+                                    onTogglePlayPause()
+                                }
+                            },
+                            onPlayNext = {
+                                expandedMoreMenu = false
+                                playNextFromMiniPlayer()
+                            },
+                            modifier = Modifier.align(Alignment.TopStart)
+                        )
+                        SideButtonsOverlay(
+                            progress = animationProgress,
+                            playerWidth = playerWidth,
+                            currentHeight = currentHeight,
+                            expandedHeight = expandedHeight,
+                            expandedProgressTop = expandedProgressTop,
+                            expandedControlsTop = expandedControlsTop,
+                            hasCurrentSong = hasCurrentSong,
+                            isCurrentSongLiked = isCurrentSongLiked,
+                            playbackOrderMode = playerUiState.playbackOrderMode,
+                            iconColor = controlIconColor,
+                            fullscreenProgress = fullscreenProgress,
+                            controlsExitProgress = addToPlaylistSharedProgress,
+                            moreMenuExpanded = expandedMoreMenu,
+                            onMoreMenuExpandedChange = { expanded ->
+                                expandedMoreMenu = expanded
+                            },
+                            onToggleLiked = onToggleCurrentSongLiked,
+                            onAddToPlaylist = {
+                                enterAddToPlaylistMode()
+                            },
+                            onOpenQueue = {
+                                artistSelectionRequest = null
+                                queueSheetBackgroundBlurred = true
+                                showQueueSheet = true
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth(),
+                            onTogglePlaybackOrderMode = onTogglePlaybackOrderMode
+                        )
+                    }
                 }
                 FullscreenCollapseArrow(
                     progress = fullscreenProgress,
                     interactionSource = noRippleInteractionSource,
                     onClick = {
-                        if (allowFullscreenFromCollapsed) {
+                        if (fullPlayerMode == FullPlayerMode.AddToPlaylist) {
+                            exitAddToPlaylistMode()
+                        } else if (allowFullscreenFromCollapsed) {
                             onFullscreenChange(false)
                             onExpandedChange(false)
                         } else {
@@ -928,6 +1017,47 @@ fun MiniPlayer(
                     .zIndex(30f)
             )
         }
+    }
+}
+
+@Composable
+private fun AddToPlaylistItemSongInfo(
+    title: String,
+    artist: String,
+    progress: Float,
+    titleColor: Color,
+    artistColor: Color,
+    width: Dp,
+    modifier: Modifier = Modifier
+) {
+    val itemProgress = progress.coerceIn(0f, 1f)
+
+    Column(
+        modifier = modifier
+            .width(width)
+            .height(56.dp)
+            .graphicsLayer {
+                alpha = itemProgress
+                translationY = (16.dp * (1f - itemProgress)).toPx()
+            },
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = titleColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = artist,
+            style = MaterialTheme.typography.bodyMedium,
+            color = artistColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
     }
 }
 

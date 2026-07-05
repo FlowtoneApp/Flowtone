@@ -66,6 +66,7 @@ internal fun SharedPlaybackControls(
     collapsedHeight: Dp,
     expandedTop: Dp,
     fullscreenProgress: Float,
+    controlsExitProgress: Float = 0f,
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
@@ -119,6 +120,8 @@ internal fun SharedPlaybackControls(
     val playPauseX = lerpDp(collapsedPlayPauseX, expandedPlayPauseX, progress)
     val nextX = lerpDp(collapsedNextX, expandedNextX, progress)
     val fullscreenScale = lerpFloat(1f, 1.2f, fullscreenProgress)
+    val controlsExit = controlsExitProgress.coerceIn(0f, 1f)
+    val controlsEnabled = controlsExit <= 0.01f
 
     Box(
         modifier = modifier
@@ -130,6 +133,7 @@ internal fun SharedPlaybackControls(
     ) {
         TransparentControlButton(
             onClick = onPlayPrevious,
+            enabled = controlsEnabled,
             modifier = Modifier
                 .size(previousNextTouchSize)
                 .graphicsLayer {
@@ -148,6 +152,7 @@ internal fun SharedPlaybackControls(
         }
         TransparentControlButton(
             onClick = onTogglePlayPause,
+            enabled = controlsEnabled,
             modifier = Modifier
                 .size(playPauseTouchSize)
                 .graphicsLayer {
@@ -173,6 +178,7 @@ internal fun SharedPlaybackControls(
         }
         TransparentControlButton(
             onClick = onPlayNext,
+            enabled = controlsEnabled,
             modifier = Modifier
                 .size(previousNextTouchSize)
                 .graphicsLayer {
@@ -205,10 +211,12 @@ internal fun SideButtonsOverlay(
     playbackOrderMode: PlaybackOrderMode,
     iconColor: Color,
     fullscreenProgress: Float,
+    controlsExitProgress: Float = 0f,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -227,6 +235,8 @@ internal fun SideButtonsOverlay(
     val favoriteExitProgress = fullscreenProgress.coerceIn(0f, 1f)
     val favoriteEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
     val queueEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
+    val controlsExit = controlsExitProgress.coerceIn(0f, 1f)
+    val controlsEnabled = controlsExit <= 0.01f
     LaunchedEffect(hasCurrentSong, fullscreenProgress) {
         if (!hasCurrentSong || fullscreenProgress <= 0.01f) {
             onMoreMenuExpandedChange(false)
@@ -246,7 +256,7 @@ internal fun SideButtonsOverlay(
         val bottomFavoriteOffsetY = lerpDp(0.dp, (-24).dp, favoriteExitProgress)
         FavoriteButton(
             liked = isCurrentSongLiked,
-            enabled = sideButtonsVisualEnabled && fullscreenProgress < 0.45f,
+            enabled = sideButtonsVisualEnabled && fullscreenProgress < 0.45f && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
                 onToggleLiked()
@@ -269,9 +279,10 @@ internal fun SideButtonsOverlay(
             expandedProgressTop - 56.dp + lerpDp(12.dp, 0.dp, favoriteEnterProgress)
         val fullscreenActionsEnabled = hasCurrentSong && fullscreenProgress > 0.72f
         val moreMenuVisible = hasCurrentSong
+        val expandedMoreMenuVisible = moreMenuExpanded && moreMenuVisible
         FavoriteButton(
             liked = isCurrentSongLiked,
-            enabled = fullscreenActionsEnabled,
+            enabled = fullscreenActionsEnabled && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
                 onToggleLiked()
@@ -285,7 +296,7 @@ internal fun SideButtonsOverlay(
             visualEnabled = hasCurrentSong
         )
         AnimatedVisibility(
-            visible = moreMenuVisible && !moreMenuExpanded,
+            visible = moreMenuVisible && !expandedMoreMenuVisible,
             enter = fullscreenMoreButtonEnterTransition(),
             exit = fullscreenMoreButtonExitTransition(),
             modifier = Modifier
@@ -297,7 +308,7 @@ internal fun SideButtonsOverlay(
         ) {
             MoreMenuButton(
                 iconColor = iconColor,
-                enabled = fullscreenActionsEnabled,
+                enabled = fullscreenActionsEnabled && controlsEnabled,
                 onClick = {
                     onMoreMenuExpandedChange(true)
                 },
@@ -306,11 +317,15 @@ internal fun SideButtonsOverlay(
             )
         }
         FullscreenMoreMenu(
-            visible = moreMenuExpanded && moreMenuVisible,
+            visible = expandedMoreMenuVisible,
             iconColor = iconColor,
             alpha = favoriteEnterProgress,
+            enabled = controlsEnabled,
             onCollapse = {
                 onMoreMenuExpandedChange(false)
+            },
+            onAddToPlaylist = {
+                onAddToPlaylist()
             },
             modifier = Modifier.offset(
                 x = fullscreenMenuX,
@@ -324,7 +339,7 @@ internal fun SideButtonsOverlay(
         PlaybackOrderButton(
             mode = playbackOrderMode,
             iconColor = iconColor,
-            enabled = sideButtonsVisualEnabled,
+            enabled = sideButtonsVisualEnabled && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
                 onTogglePlaybackOrderMode()
@@ -342,7 +357,7 @@ internal fun SideButtonsOverlay(
 
         QueueButton(
             iconColor = iconColor,
-            enabled = hasCurrentSong && fullscreenProgress > 0.72f,
+            enabled = hasCurrentSong && fullscreenProgress > 0.72f && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
                 onOpenQueue()
@@ -463,7 +478,9 @@ private fun FullscreenMoreMenu(
     visible: Boolean,
     iconColor: Color,
     alpha: Float,
+    enabled: Boolean,
     onCollapse: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val capsuleHeight by animateDpAsState(
@@ -515,6 +532,7 @@ private fun FullscreenMoreMenu(
                     contentDescription = "\u6536\u8d77\u66f4\u591a\u64cd\u4f5c",
                     iconColor = iconColor,
                     iconSize = 28.dp,
+                    enabled = enabled,
                     onClick = onCollapse
                 )
                 Column(
@@ -531,7 +549,8 @@ private fun FullscreenMoreMenu(
                         iconColor = iconColor,
                         iconAlpha = capsuleIconAlpha,
                         iconScale = capsuleIconScale,
-                        onClick = {}
+                        enabled = enabled,
+                        onClick = onAddToPlaylist
                     )
                     FullscreenMoreMenuAction(
                         icon = Icons.Outlined.Info,
@@ -539,6 +558,7 @@ private fun FullscreenMoreMenu(
                         iconColor = iconColor,
                         iconAlpha = capsuleIconAlpha,
                         iconScale = capsuleIconScale,
+                        enabled = enabled,
                         onClick = {}
                     )
                 }
@@ -555,10 +575,12 @@ private fun FullscreenMoreMenuAction(
     onClick: () -> Unit,
     iconSize: Dp = 30.dp,
     iconAlpha: Float = 1f,
-    iconScale: Float = 1f
+    iconScale: Float = 1f,
+    enabled: Boolean = true
 ) {
     TransparentControlButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.size(48.dp)
     ) {
         Icon(

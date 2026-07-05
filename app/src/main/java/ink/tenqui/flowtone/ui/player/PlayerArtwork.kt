@@ -142,6 +142,10 @@ internal fun MorphArtworkLayer(
     fullscreenProgress: Float = 0f,
     fullscreenArtworkSize: Dp = expandedArtworkSize,
     fullscreenArtworkCenterY: Dp = expandedArtworkTop + expandedArtworkSize / 2f,
+    addToPlaylistProgress: Float = 0f,
+    addToPlaylistArtworkSize: Dp = 56.dp,
+    addToPlaylistArtworkX: Dp = 20.dp,
+    addToPlaylistArtworkTop: Dp = expandedArtworkTop,
     playbackScale: Float = 1f,
     playbackRotationDegrees: Float = 0f,
     modifier: Modifier = Modifier
@@ -149,8 +153,8 @@ internal fun MorphArtworkLayer(
     val baseArtworkSize = expandedArtworkSize
     val expandedX = (playerWidth - baseArtworkSize) / 2f
     val fullscreenX = (playerWidth - fullscreenArtworkSize) / 2f
-    val artworkX = lerpDp(expandedX, fullscreenX, fullscreenProgress)
-    val artworkSize = lerpDp(baseArtworkSize, fullscreenArtworkSize, fullscreenProgress)
+    val normalArtworkX = lerpDp(expandedX, fullscreenX, fullscreenProgress)
+    val normalArtworkSize = lerpDp(baseArtworkSize, fullscreenArtworkSize, fullscreenProgress)
     val collapsedContainerScale = 2f
     val collapsedAnchorFraction = 0.382f
     val collapsedArtworkCenterY = collapsedHeight * 0.5f
@@ -158,12 +162,18 @@ internal fun MorphArtworkLayer(
         baseArtworkSize * (0.5f + (collapsedAnchorFraction - 0.5f) * collapsedContainerScale)
     val baseArtworkY = lerpDp(collapsedArtworkTop, expandedArtworkTop, progress)
     val fullscreenArtworkY = fullscreenArtworkCenterY - fullscreenArtworkSize / 2f
-    val artworkY = lerpDp(baseArtworkY, fullscreenArtworkY, fullscreenProgress)
+    val normalArtworkY = lerpDp(baseArtworkY, fullscreenArtworkY, fullscreenProgress)
+    val addProgress = addToPlaylistProgress.coerceIn(0f, 1f)
+    val artworkX = lerpDp(normalArtworkX, addToPlaylistArtworkX, addProgress)
+    val artworkSize = lerpDp(normalArtworkSize, addToPlaylistArtworkSize, addProgress)
+    val artworkY = lerpDp(normalArtworkY, addToPlaylistArtworkTop, addProgress)
     val blurRadius = lerpDp(16.dp, 0.dp, progress)
-    val cornerRadius = lerpDp(24.dp, 28.dp, progress)
+    val cornerRadius = lerpDp(lerpDp(24.dp, 28.dp, progress), 12.dp, addProgress)
     val shadowPadding = 32.dp
-    val shadowProgress = progress.coerceIn(0f, 1f)
+    val shadowProgress = progress.coerceIn(0f, 1f) * (1f - addProgress)
     val containerScale = lerpFloat(collapsedContainerScale, 1f, scaleProgress)
+    val artworkScale = lerpFloat(playbackScale, 1f, addProgress)
+    val artworkRotationDegrees = lerpFloat(playbackRotationDegrees, 0f, addProgress)
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
     val coverBackgroundColor = if (imageRequest == null) {
@@ -186,9 +196,9 @@ internal fun MorphArtworkLayer(
             .width(artworkSize + shadowPadding * 2)
             .height(artworkSize + shadowPadding * 2)
             .graphicsLayer {
-                scaleX = containerScale * playbackScale
-                scaleY = containerScale * playbackScale
-                rotationZ = playbackRotationDegrees
+                scaleX = containerScale * artworkScale
+                scaleY = containerScale * artworkScale
+                rotationZ = artworkRotationDegrees
                 transformOrigin = TransformOrigin.Center
                 compositingStrategy = CompositingStrategy.Offscreen
             }
