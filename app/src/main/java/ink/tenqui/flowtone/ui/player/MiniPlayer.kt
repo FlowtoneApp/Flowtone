@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
@@ -84,6 +85,7 @@ import coil3.toBitmap
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.SongListItem
@@ -1976,13 +1978,39 @@ private fun AddToPlaylistCard(
     ) {
         when (item) {
             is AddToPlaylistCardItem.Playlist -> {
+                if (item.playlist.isLikedSongsPlaylist()) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                width = 1.dp,
+                                color = primaryContentColor,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .background(Color.Transparent),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FavoriteBorder,
+                            contentDescription = null,
+                            tint = primaryContentColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
                 Text(
                     text = item.playlist.title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = primaryContentColor,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = if (item.playlist.isLikedSongsPlaylist()) {
+                        Modifier.padding(top = 14.dp)
+                    } else {
+                        Modifier
+                    }
                 )
                 Text(
                     text = if (alreadyContainsSong) {
