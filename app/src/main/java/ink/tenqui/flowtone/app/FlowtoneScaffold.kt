@@ -34,6 +34,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
+import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
@@ -131,8 +132,7 @@ internal fun FlowtoneScaffold(
     }
     val playlistSongEntries by playlistRepository.playlistSongEntries.collectAsState()
     val likedSongCount = remember(uiState.songs, likedSongKeys) {
-        val likedKeys = likedSongKeys.toSet()
-        uiState.songs.count { song -> song.id.toString() in likedKeys }
+        uiState.songs.count { song -> isSongLiked(song, likedSongKeys) }
     }
     val displayedLibraryPlaylists = remember(libraryPlaylistController.playlists, likedSongCount) {
         listOf(likedSongsPlaylistCard(likedSongCount)) + libraryPlaylistController.playlists
@@ -140,16 +140,18 @@ internal fun FlowtoneScaffold(
     val playlistIdsContainingCurrentSong = remember(
         playlistSongEntries,
         playerUiState.currentSong?.id,
+        playerUiState.currentSong?.uri,
         likedSongKeys
     ) {
-        val currentSongId = playerUiState.currentSong?.id?.toString()
-        if (currentSongId == null) {
+        val currentSong = playerUiState.currentSong
+        val currentSongId = currentSong?.id?.toString()
+        if (currentSong == null || currentSongId == null) {
             emptySet()
         } else {
             val normalPlaylistIds = playlistSongEntries
                 .filter { entry -> entry.songId == currentSongId }
                 .mapTo(mutableSetOf()) { entry -> entry.playlistId }
-            if (currentSongId in likedSongKeys) {
+            if (isSongLiked(currentSong, likedSongKeys)) {
                 normalPlaylistIds + LikedSongsPlaylistId
             } else {
                 normalPlaylistIds

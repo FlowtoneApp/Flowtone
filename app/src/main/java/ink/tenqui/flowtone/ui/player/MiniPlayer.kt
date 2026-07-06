@@ -84,6 +84,7 @@ import coil3.toBitmap
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.pullToDismissAtTop
 import kotlinx.coroutines.CancellationException
@@ -99,6 +100,7 @@ private const val PAUSED_ARTWORK_SCALE = 0.965f
 private const val PAUSE_ARTWORK_SCALE_DURATION_MS = 300
 private const val PAUSED_ARTWORK_ROTATION_DEGREES = 3f
 private const val PAUSE_ARTWORK_ROTATION_DURATION_MS = 300
+private const val FLOWTONE_FAVORITE_BUTTON_TAG = "FlowtoneFavoriteButton"
 private val AddToPlaylistCardHeight = 148.dp
 private val AddToPlaylistCardSpacing = 12.dp
 private val ArtistPlaceholderAvatarSize = 84.dp
@@ -587,10 +589,18 @@ fun MiniPlayer(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var expandedMoreMenu by remember { mutableStateOf(false) }
     var queueSheetBackgroundBlurred by remember { mutableStateOf(false) }
-    val currentSongKey = currentSong?.id?.toString()
-    val isCurrentSongLiked = currentSongKey != null && likedSongKeys.contains(currentSongKey)
+    val isCurrentSongLiked = currentSong?.let { song ->
+        isSongLiked(song, likedSongKeys)
+    } ?: false
     val onToggleCurrentSongLiked: () -> Unit = {
-        currentSong?.let(onToggleSongLiked)
+        currentSong?.let { song ->
+            Log.d(
+                FLOWTONE_FAVORITE_BUTTON_TAG,
+                "favorite click songId=${song.id}, expanded=$expanded, fullscreen=$fullscreen, " +
+                    "minimized=$minimized"
+            )
+            onToggleSongLiked(song)
+        }
         Unit
     }
     fun enterAddToPlaylistMode() {
@@ -903,7 +913,6 @@ fun MiniPlayer(
                 alpha = visibleProgress
                 clip = fullscreenProgress > 0.01f
             }
-            .then(gestureModifier)
     ) {
         val playerShape = RoundedCornerShape(
             topStart = lerpDp(24.dp, 0.dp, fullscreenProgress),
@@ -936,6 +945,7 @@ fun MiniPlayer(
                         translationY = handleOffsetY.toPx()
                     }
                     .align(Alignment.TopCenter)
+                    .then(gestureModifier)
             )
             Box(
                 modifier = Modifier
@@ -986,11 +996,16 @@ fun MiniPlayer(
                         clip = true
                         compositingStrategy = CompositingStrategy.Offscreen
                     }
-                    .then(songSwipeModifier)
                     .then(addToPlaylistBackSwipeModifier)
                     .then(addToPlaylistPullDownBackModifier)
                 ) {
                     val playerWidth = maxWidth
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .then(gestureModifier)
+                            .then(songSwipeModifier)
+                    )
                     Box(
                         modifier = Modifier
                             .matchParentSize()
@@ -1230,7 +1245,8 @@ fun MiniPlayer(
                             },
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .fillMaxWidth(),
+                                .fillMaxSize()
+                                .zIndex(2f),
                             onTogglePlaybackOrderMode = onTogglePlaybackOrderMode
                         )
                     }

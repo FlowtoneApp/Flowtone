@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import kotlin.math.roundToInt
@@ -254,15 +255,17 @@ internal fun SideButtonsOverlay(
         val favoriteStartX = favoriteEndX - sideButtonHorizontalOffset
         val favoriteX = lerpDp(favoriteStartX, favoriteEndX, enterProgress)
         val bottomFavoriteAlpha = buttonAlpha * (1f - favoriteExitProgress)
+        val bottomFavoriteVisible = bottomFavoriteAlpha > 0.01f
         val bottomFavoriteOffsetY = lerpDp(0.dp, (-24).dp, favoriteExitProgress)
         FavoriteButton(
             liked = isCurrentSongLiked,
-            enabled = sideButtonsVisualEnabled && fullscreenProgress < 0.45f && controlsEnabled,
+            enabled = hasCurrentSong && bottomFavoriteVisible && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
                 onToggleLiked()
             },
             modifier = Modifier
+                .zIndex(4f)
                 .offset(x = favoriteX, y = buttonY + bottomFavoriteOffsetY)
                 .size(buttonSize)
                 .graphicsLayer {
@@ -279,16 +282,18 @@ internal fun SideButtonsOverlay(
         val fullscreenFavoriteY =
             expandedProgressTop - 56.dp + lerpDp(12.dp, 0.dp, favoriteEnterProgress)
         val fullscreenActionsEnabled = hasCurrentSong && fullscreenProgress > 0.72f
+        val fullscreenFavoriteVisible = favoriteEnterProgress > 0.01f
         val moreMenuVisible = hasCurrentSong
         val expandedMoreMenuVisible = moreMenuExpanded && moreMenuVisible
         FavoriteButton(
             liked = isCurrentSongLiked,
-            enabled = fullscreenActionsEnabled && controlsEnabled,
+            enabled = hasCurrentSong && fullscreenFavoriteVisible && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
                 onToggleLiked()
             },
             modifier = Modifier
+                .zIndex(4f)
                 .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
                 .size(buttonSize)
                 .graphicsLayer {
@@ -359,23 +364,25 @@ internal fun SideButtonsOverlay(
             visualEnabled = sideButtonsVisualEnabled
         )
 
-        QueueButton(
-            iconColor = iconColor,
-            enabled = hasCurrentSong && fullscreenProgress > 0.72f && controlsEnabled,
-            onClick = {
-                collapseMoreMenu()
-                onOpenQueue()
-            },
-            modifier = Modifier
-                .offset(x = favoriteEndX, y = buttonY)
-                .size(buttonSize)
-                .graphicsLayer {
-                    scaleX = fullscreenScale
-                    scaleY = fullscreenScale
-                    alpha = buttonAlpha * queueEnterProgress
+        if (queueEnterProgress > 0.01f) {
+            QueueButton(
+                iconColor = iconColor,
+                enabled = hasCurrentSong && fullscreenProgress > 0.72f && controlsEnabled,
+                onClick = {
+                    collapseMoreMenu()
+                    onOpenQueue()
                 },
-            visualEnabled = hasCurrentSong
-        )
+                modifier = Modifier
+                    .offset(x = favoriteEndX, y = buttonY)
+                    .size(buttonSize)
+                    .graphicsLayer {
+                        scaleX = fullscreenScale
+                        scaleY = fullscreenScale
+                        alpha = buttonAlpha * queueEnterProgress
+                    },
+                visualEnabled = hasCurrentSong
+            )
+        }
     }
 }
 

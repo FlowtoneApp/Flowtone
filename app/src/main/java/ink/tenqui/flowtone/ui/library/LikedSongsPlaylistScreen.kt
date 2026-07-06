@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.ui.components.SongListItem
 
 @Composable
@@ -30,8 +31,7 @@ fun LikedSongsPlaylistScreen(
 ) {
     val listState = rememberLazyListState()
     val likedSongs = remember(allSongs, likedSongKeys) {
-        val likedKeys = likedSongKeys.toSet()
-        allSongs.filter { song -> song.id.toString() in likedKeys }
+        allSongs.filter { song -> isSongLiked(song, likedSongKeys) }
     }
 
     if (likedSongs.isEmpty()) {

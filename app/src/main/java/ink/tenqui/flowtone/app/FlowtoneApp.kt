@@ -35,6 +35,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.local.LikedSongsStore
+import ink.tenqui.flowtone.data.local.isSongLiked
+import ink.tenqui.flowtone.data.local.likedSongStorageKeys
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -66,6 +69,9 @@ fun FlowtoneApp(
     val playerUiState = PlayerUiState.from(playbackState)
     val appPreferences = remember(context) {
         AppPreferences(context.applicationContext)
+    }
+    val likedSongsStore = remember(context) {
+        LikedSongsStore(context.applicationContext)
     }
     val defaultStartPage = remember(appPreferences) {
         appPreferences.getDefaultStartPage()
@@ -285,20 +291,21 @@ fun FlowtoneApp(
         }
     }
     fun setSongLiked(song: Song, liked: Boolean) {
-        val key = song.id.toString()
-        likedSongKeys = if (liked) {
-            if (key in likedSongKeys) {
-                likedSongKeys
-            } else {
-                likedSongKeys + key
-            }
+        val songKeys = likedSongStorageKeys(song)
+        val nextKeys = if (liked) {
+            (likedSongKeys + songKeys).distinct()
         } else {
-            likedSongKeys - key
+            val keysToRemove = songKeys.toSet()
+            likedSongKeys.filterNot { key -> key in keysToRemove }
+        }
+
+        if (nextKeys != likedSongKeys) {
+            likedSongKeys = nextKeys
+            likedSongsStore.saveLikedSongKeys(nextKeys)
         }
     }
     fun toggleSongLiked(song: Song) {
-        val key = song.id.toString()
-        setSongLiked(song, key !in likedSongKeys)
+        setSongLiked(song, !isSongLiked(song, likedSongKeys))
     }
     val exitMiniPlayerFullscreen: () -> Unit = {
         miniPlayerFullscreen = false
@@ -353,6 +360,10 @@ fun FlowtoneApp(
         if (granted) {
             musicViewModel.scanSongs()
         }
+    }
+
+    LaunchedEffect(likedSongsStore) {
+        likedSongKeys = likedSongsStore.loadLikedSongKeys()
     }
 
     LaunchedEffect(Unit) {
