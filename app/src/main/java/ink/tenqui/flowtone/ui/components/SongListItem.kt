@@ -48,9 +48,9 @@ fun SongListItem(
     } else {
         MaterialTheme.colorScheme.onSurface
     }
+    val rowShape = MaterialTheme.shapes.medium
     val rowBackground = if (isCurrentSong) {
         Modifier
-            .clip(MaterialTheme.shapes.medium)
             .background(currentSongBackgroundColor ?: MaterialTheme.colorScheme.secondaryContainer)
     } else {
         Modifier
@@ -59,6 +59,7 @@ fun SongListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clip(rowShape)
             .then(rowBackground)
             .clickable { onClick(song) }
             .heightIn(min = 72.dp)
