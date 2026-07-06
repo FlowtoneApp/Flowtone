@@ -310,7 +310,7 @@ internal fun PlayerQueueBottomSheet(
                                         listState = queueListState,
                                         enabled = !dismissStarted,
                                         threshold = 64.dp,
-                                        onDismiss = ::requestDismiss
+                                        onDismiss = { requestDismiss() }
                                     )
                             ) {
                                 itemsIndexed(

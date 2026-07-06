@@ -257,24 +257,26 @@ internal fun SideButtonsOverlay(
         val bottomFavoriteAlpha = buttonAlpha * (1f - favoriteExitProgress)
         val bottomFavoriteVisible = bottomFavoriteAlpha > 0.01f
         val bottomFavoriteOffsetY = lerpDp(0.dp, (-24).dp, favoriteExitProgress)
-        FavoriteButton(
-            liked = isCurrentSongLiked,
-            enabled = hasCurrentSong && bottomFavoriteVisible && controlsEnabled,
-            onClick = {
-                collapseMoreMenu()
-                onToggleLiked()
-            },
-            modifier = Modifier
-                .zIndex(4f)
-                .offset(x = favoriteX, y = buttonY + bottomFavoriteOffsetY)
-                .size(buttonSize)
-                .graphicsLayer {
-                    scaleX = scale * fullscreenScale
-                    scaleY = scale * fullscreenScale
-                    alpha = bottomFavoriteAlpha
+        if (bottomFavoriteVisible) {
+            FavoriteButton(
+                liked = isCurrentSongLiked,
+                enabled = hasCurrentSong && controlsEnabled,
+                onClick = {
+                    collapseMoreMenu()
+                    onToggleLiked()
                 },
-            visualEnabled = sideButtonsVisualEnabled
-        )
+                modifier = Modifier
+                    .zIndex(4f)
+                    .offset(x = favoriteX, y = buttonY + bottomFavoriteOffsetY)
+                    .size(buttonSize)
+                    .graphicsLayer {
+                        scaleX = scale * fullscreenScale
+                        scaleY = scale * fullscreenScale
+                        alpha = bottomFavoriteAlpha
+                    },
+                visualEnabled = sideButtonsVisualEnabled
+            )
+        }
 
         val fullscreenMenuSpacing = 4.dp
         val fullscreenMenuX = progressLeft + progressWidth - buttonSize
@@ -365,9 +367,11 @@ internal fun SideButtonsOverlay(
         )
 
         if (queueEnterProgress > 0.01f) {
+            val queueButtonEnabled =
+                hasCurrentSong && fullscreenProgress > 0.72f && controlsEnabled
             QueueButton(
                 iconColor = iconColor,
-                enabled = hasCurrentSong && fullscreenProgress > 0.72f && controlsEnabled,
+                enabled = queueButtonEnabled,
                 onClick = {
                     collapseMoreMenu()
                     onOpenQueue()
