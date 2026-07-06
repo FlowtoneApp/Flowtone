@@ -328,14 +328,22 @@ fun FlowtoneApp(
         if (artistRootPageArtistName == null || artistRootReturnInProgress) {
             return
         }
-        if (!hasCurrentSong || miniPlayerFullscreen) {
+        if (!hasCurrentSong) {
+            artistRootPageArtistName = null
+            artistRootReturnInProgress = false
+            return
+        }
+        if (miniPlayerFullscreen) {
+            miniPlayerExpanded = true
+            miniPlayerMinimized = false
+            miniPlayerFullscreenEnteredFromCollapsed = false
             artistRootPageArtistName = null
             artistRootReturnInProgress = false
             return
         }
 
         artistRootReturnInProgress = true
-        miniPlayerFullscreenEnteredFromCollapsed = !miniPlayerExpanded
+        miniPlayerFullscreenEnteredFromCollapsed = false
         miniPlayerExpanded = true
         miniPlayerMinimized = false
         miniPlayerFullscreen = true
