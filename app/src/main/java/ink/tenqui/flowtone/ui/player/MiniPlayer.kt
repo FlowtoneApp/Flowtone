@@ -656,13 +656,23 @@ fun MiniPlayer(
         artistPlaceholderArtists = artists
         fullscreenContentMode = FullscreenContentMode.ArtistPlaceholder
     }
-    fun exitFullscreenContentMode() {
+    fun exitArtistPlaceholderWithAnimation() {
         expandedMoreMenu = false
-        if (fullscreenContentMode != FullscreenContentMode.ArtistPlaceholder) {
-            artistPlaceholderArtists = emptyList()
-        }
-        if (fullscreenContentMode != FullscreenContentMode.Playback) {
+        if (fullscreenContentMode == FullscreenContentMode.ArtistPlaceholder) {
             fullscreenContentMode = FullscreenContentMode.Playback
+        }
+    }
+    fun exitFullscreenContentMode() {
+        when (fullscreenContentMode) {
+            FullscreenContentMode.ArtistPlaceholder -> exitArtistPlaceholderWithAnimation()
+            FullscreenContentMode.Playback -> {
+                expandedMoreMenu = false
+            }
+            else -> {
+                expandedMoreMenu = false
+                artistPlaceholderArtists = emptyList()
+                fullscreenContentMode = FullscreenContentMode.Playback
+            }
         }
     }
     fun resetFullscreenContentMode() {
@@ -670,6 +680,17 @@ fun MiniPlayer(
         artistPlaceholderArtists = emptyList()
         if (fullscreenContentMode != FullscreenContentMode.Playback) {
             fullscreenContentMode = FullscreenContentMode.Playback
+        }
+    }
+    fun exitFullscreenContentModeForSongChange() {
+        val artistPlaceholderExitInProgress =
+            fullscreenContentMode == FullscreenContentMode.Playback &&
+                artistPlaceholderArtists.isNotEmpty() &&
+                artistPlaceholderProgress > 0.001f
+        if (fullscreenContentMode == FullscreenContentMode.ArtistPlaceholder) {
+            exitArtistPlaceholderWithAnimation()
+        } else if (!artistPlaceholderExitInProgress) {
+            resetFullscreenContentMode()
         }
     }
     fun exitAddToPlaylistMode() {
@@ -694,16 +715,21 @@ fun MiniPlayer(
         exitFullscreenContentMode()
     }
     LaunchedEffect(fullscreen, expanded, hasCurrentSong) {
-        if (!fullscreen || !expanded || !hasCurrentSong) {
+        if (!fullscreen || !expanded) {
             isFullscreenPlayer = false
             resetFullscreenContentMode()
+        } else if (!hasCurrentSong) {
+            isFullscreenPlayer = false
+            exitFullscreenContentModeForSongChange()
         }
     }
     LaunchedEffect(fullscreen, hasCurrentSong, currentSong?.id) {
-        if (!fullscreen || !hasCurrentSong) {
+        if (!fullscreen) {
             resetFullscreenContentMode()
+        } else if (!hasCurrentSong) {
+            exitFullscreenContentModeForSongChange()
         } else if (currentSong?.id != null) {
-            resetFullscreenContentMode()
+            exitFullscreenContentModeForSongChange()
         }
     }
     val artistClickEnabled =
