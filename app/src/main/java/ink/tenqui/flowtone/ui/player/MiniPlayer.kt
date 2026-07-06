@@ -86,6 +86,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.pullToDismissAtTop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,9 @@ private val ArtistPlaceholderAvatarSize = 84.dp
 private val ArtistPlaceholderAvatarGap = 14.dp
 private val ArtistPlaceholderNameHeight = 48.dp
 private val ArtistPlaceholderItemWidth = 104.dp
+private val ArtistPlaceholderListTopGap = 28.dp
+private val ArtistPlaceholderHintHeight = 24.dp
+private val ArtistPlaceholderHintBottomGap = 18.dp
 private const val ArtistPlaceholderNameYFraction = 0.312f
 
 private enum class FullscreenContentMode {
@@ -172,13 +176,15 @@ fun MiniPlayer(
     },
     sourceQueue: List<Song> = emptyList(),
     playbackQueue: List<Song> = emptyList(),
+    allSongs: List<Song> = emptyList(),
     currentQueueIndex: Int = -1,
     queueDisplayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
     onQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit = {},
     onPlayQueueSong: (Song) -> Unit = {},
+    onPlayArtistSongQueue: (List<Song>, Int) -> Unit = { _, _ -> },
     likedSongKeys: List<String> = emptyList(),
     onToggleSongLiked: (Song) -> Unit = {},
-    onArtistSelected: (String) -> Unit = {},
+    onOpenArtistRootPage: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentSong = playerUiState.currentSong
@@ -589,6 +595,13 @@ fun MiniPlayer(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var expandedMoreMenu by remember { mutableStateOf(false) }
     var queueSheetBackgroundBlurred by remember { mutableStateOf(false) }
+    val artistPlaceholderLocalSongs = remember(artistPlaceholderArtists, allSongs) {
+        if (artistPlaceholderArtists.size == 1) {
+            localSongsForArtist(allSongs, artistPlaceholderArtists.first())
+        } else {
+            emptyList()
+        }
+    }
     val isCurrentSongLiked = currentSong?.let { song ->
         isSongLiked(song, likedSongKeys)
     } ?: false
@@ -709,8 +722,8 @@ fun MiniPlayer(
         if (!artistPlaceholderActive || selectedArtistName.isBlank()) {
             return
         }
-        exitFullscreenContentMode()
-        onArtistSelected(selectedArtistName)
+        resetFullscreenContentMode()
+        onOpenArtistRootPage(selectedArtistName)
     }
     LaunchedEffect(currentSong?.id) {
         isProgressScrubbing = false
@@ -1256,12 +1269,15 @@ fun MiniPlayer(
                     ) {
                         ArtistPlaceholderOverlay(
                             artists = artistPlaceholderArtists,
+                            artistSongs = artistPlaceholderLocalSongs,
+                            currentSong = currentSong,
                             progress = artistPlaceholderProgress,
                             backGestureThresholdPx = fullscreenSwipeThresholdPx,
                             backGestureEnabled = artistPlaceholderActive &&
                                 artistPlaceholderProgress > 0.5f,
                             onBack = ::exitFullscreenContentMode,
                             onArtistClick = ::openArtistDetailFromPlaceholder,
+                            onSongClick = onPlayArtistSongQueue,
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .fillMaxWidth()
@@ -1451,11 +1467,14 @@ private fun Modifier.addToPlaylistPullDownBackGesture(
 @Composable
 private fun ArtistPlaceholderOverlay(
     artists: List<String>,
+    artistSongs: List<Song>,
+    currentSong: Song?,
     progress: Float,
     backGestureThresholdPx: Float,
     backGestureEnabled: Boolean,
     onBack: () -> Unit,
     onArtistClick: (String) -> Unit,
+    onSongClick: (List<Song>, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (artists.isEmpty()) {
@@ -1472,38 +1491,188 @@ private fun ArtistPlaceholderOverlay(
             )
     ) {
         val overlayProgress = progress.coerceIn(0f, 1f)
-        val nameCenterY = maxHeight * ArtistPlaceholderNameYFraction
-        val nameTop = (nameCenterY - ArtistPlaceholderNameHeight / 2f)
-            .coerceAtLeast(0.dp)
-        val contentTop = (nameTop - ArtistPlaceholderAvatarGap - ArtistPlaceholderAvatarSize)
-            .coerceAtLeast(0.dp)
+        val singleArtist = artists.size == 1
         val contentHeight =
             ArtistPlaceholderAvatarSize + ArtistPlaceholderAvatarGap + ArtistPlaceholderNameHeight
+        val multiArtistContentHeight =
+            ArtistPlaceholderHintHeight + ArtistPlaceholderHintBottomGap + contentHeight
+        val contentTop = if (!singleArtist) {
+            (maxHeight - multiArtistContentHeight) / 2f
+        } else {
+            val nameCenterY = maxHeight * ArtistPlaceholderNameYFraction
+            val nameTop = (nameCenterY - ArtistPlaceholderNameHeight / 2f)
+                .coerceAtLeast(0.dp)
+            (nameTop - ArtistPlaceholderAvatarGap - ArtistPlaceholderAvatarSize)
+                .coerceAtLeast(0.dp)
+        }
 
-        LazyRow(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = contentTop)
-                .fillMaxWidth()
-                .height(contentHeight)
-                .graphicsLayer {
-                    alpha = overlayProgress
-                    translationY = 18.dp.toPx() * (1f - overlayProgress)
-                },
-            contentPadding = PaddingValues(horizontal = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(
-                space = 20.dp,
-                alignment = Alignment.CenterHorizontally
-            )
-        ) {
-            itemsIndexed(
-                items = artists,
-                key = { index, artist -> "$index:$artist" }
-            ) { _, artist ->
-                ArtistPlaceholderItem(
-                    artist = artist,
-                    onArtistClick = onArtistClick
+        if (singleArtist) {
+            LazyRow(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = contentTop)
+                    .fillMaxWidth()
+                    .height(contentHeight)
+                    .graphicsLayer {
+                        alpha = overlayProgress
+                        translationY = 18.dp.toPx() * (1f - overlayProgress)
+                    },
+                contentPadding = PaddingValues(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(
+                    space = 20.dp,
+                    alignment = Alignment.CenterHorizontally
                 )
+            ) {
+                itemsIndexed(
+                    items = artists,
+                    key = { index, artist -> "$index:$artist" }
+                ) { _, artist ->
+                    ArtistPlaceholderItem(
+                        artist = artist,
+                        onArtistClick = onArtistClick
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = contentTop)
+                    .fillMaxWidth()
+                    .height(multiArtistContentHeight)
+                    .graphicsLayer {
+                        alpha = overlayProgress
+                        translationY = 18.dp.toPx() * (1f - overlayProgress)
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "选择一位艺人以查看详情",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(ArtistPlaceholderHintHeight)
+                        .padding(horizontal = 32.dp)
+                )
+                Spacer(modifier = Modifier.height(ArtistPlaceholderHintBottomGap))
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(contentHeight),
+                    contentPadding = PaddingValues(horizontal = 32.dp),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        space = 20.dp,
+                        alignment = Alignment.CenterHorizontally
+                    )
+                ) {
+                    itemsIndexed(
+                        items = artists,
+                        key = { index, artist -> "$index:$artist" }
+                    ) { _, artist ->
+                        ArtistPlaceholderItem(
+                            artist = artist,
+                            onArtistClick = onArtistClick
+                        )
+                    }
+                }
+            }
+        }
+
+        if (singleArtist) {
+            val listTop = contentTop + contentHeight + ArtistPlaceholderListTopGap
+            val listHeight = (maxHeight - listTop - 28.dp).coerceAtLeast(156.dp)
+            ArtistPlaceholderLocalSongList(
+                artistName = artists.first(),
+                songs = artistSongs,
+                currentSong = currentSong,
+                onSongClick = onSongClick,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = listTop)
+                    .fillMaxWidth()
+                    .height(listHeight)
+                    .padding(horizontal = 20.dp)
+                    .graphicsLayer {
+                        alpha = overlayProgress
+                        translationY = 18.dp.toPx() * (1f - overlayProgress)
+                    }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistPlaceholderLocalSongList(
+    artistName: String,
+    songs: List<Song>,
+    currentSong: Song?,
+    onSongClick: (List<Song>, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.Black.copy(alpha = 0.22f))
+            .padding(start = 12.dp, top = 14.dp, end = 12.dp, bottom = 12.dp)
+    ) {
+        Text(
+            text = "本地音乐中的 $artistName",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+        if (songs.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "没有找到该艺术家的本地歌曲",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.72f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(top = 8.dp)
+            ) {
+                itemsIndexed(
+                    items = songs,
+                    key = { index, song -> "${song.id}-${song.uri}-$index" }
+                ) { index, song ->
+                    SongListItem(
+                        song = song,
+                        isCurrentSong = currentSong?.id == song.id || currentSong?.uri == song.uri,
+                        onClick = {
+                            onSongClick(songs, index)
+                        },
+                        titleColor = Color.White,
+                        artistColor = Color.White.copy(alpha = 0.76f),
+                        durationColor = Color.White.copy(alpha = 0.72f),
+                        currentSongBackgroundColor = Color.White.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
             }
         }
     }
@@ -1515,6 +1684,7 @@ private fun ArtistPlaceholderItem(
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val noRippleInteractionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier.width(ArtistPlaceholderItemWidth),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -1524,7 +1694,11 @@ private fun ArtistPlaceholderItem(
                 .size(ArtistPlaceholderAvatarSize)
                 .clip(RoundedCornerShape(percent = 50))
                 .background(Color(0xFFB8B8B8).copy(alpha = 0.72f))
-                .clickable { onArtistClick(artist) },
+                .clickable(
+                    interactionSource = noRippleInteractionSource,
+                    indication = null,
+                    onClick = { onArtistClick(artist) }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -1545,7 +1719,11 @@ private fun ArtistPlaceholderItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ArtistPlaceholderNameHeight)
-                .clickable { onArtistClick(artist) }
+                .clickable(
+                    interactionSource = noRippleInteractionSource,
+                    indication = null,
+                    onClick = { onArtistClick(artist) }
+                )
                 .padding(top = 8.dp)
         )
     }

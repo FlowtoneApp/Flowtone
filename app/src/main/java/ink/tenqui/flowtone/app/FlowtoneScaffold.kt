@@ -1,7 +1,12 @@
 package ink.tenqui.flowtone.app
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,8 +43,12 @@ import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
+import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
+import ink.tenqui.flowtone.ui.library.ArtistRootPage
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
@@ -60,6 +69,7 @@ internal fun FlowtoneScaffold(
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     pagerState: PagerState,
     selectedTopLevelPage: TopLevelPage,
+    rootPage: FlowtoneRootPage,
     secondaryPage: SecondaryPage?,
     selectedPlaylistId: String?,
     selectedArtistName: String?,
@@ -100,7 +110,8 @@ internal fun FlowtoneScaffold(
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    onOpenArtist: (String) -> Unit,
+    onOpenArtistRootPage: (String) -> Unit,
+    onCloseArtistRootPage: () -> Unit,
     onOpenSource: () -> Unit,
     onOpenSourceBack: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -185,15 +196,17 @@ internal fun FlowtoneScaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0),
             topBar = {
-                FlowtoneTopBar(
-                    selectedTopLevelPage = selectedTopLevelPage,
-                    pagerState = pagerState,
-                    secondaryPage = secondaryPage,
-                    additionalPathSegments = secondaryPathSegments,
-                    backgroundAlpha = topBarBackgroundAlpha,
-                    hideBackButton = hideSecondaryBackButton,
-                    onBack = onNavigateBack
-                )
+                if (rootPage == FlowtoneRootPage.MainTabs) {
+                    FlowtoneTopBar(
+                        selectedTopLevelPage = selectedTopLevelPage,
+                        pagerState = pagerState,
+                        secondaryPage = secondaryPage,
+                        additionalPathSegments = secondaryPathSegments,
+                        backgroundAlpha = topBarBackgroundAlpha,
+                        hideBackButton = hideSecondaryBackButton,
+                        onBack = onNavigateBack
+                    )
+                }
             }
         ) { innerPadding ->
             SharedTransitionLayout(
@@ -258,6 +271,41 @@ internal fun FlowtoneScaffold(
                         onOpenSourcePathSegmentsChange = onOpenSourcePathSegmentsChange,
                         modifier = Modifier.fillMaxSize()
                     )
+                    AnimatedContent(
+                        targetState = rootPage as? FlowtoneRootPage.ArtistRootPage,
+                        transitionSpec = {
+                            fadeIn(
+                                animationSpec = tween(
+                                    durationMillis = FlowtoneMotion.DurationMillis,
+                                    easing = FlowtonePageEasing
+                                )
+                            ) togetherWith fadeOut(
+                                animationSpec = tween(
+                                    durationMillis = FlowtoneMotion.DurationMillis,
+                                    easing = FlowtonePageEasing
+                                )
+                            )
+                        },
+                        label = "ArtistRootPageTransition",
+                        modifier = Modifier.fillMaxSize()
+                    ) { artistRootPage ->
+                        fun artistPageItemModifier(index: Int): Modifier {
+                            return staggeredPageElementModifier(index)
+                        }
+                        if (artistRootPage != null) {
+                            ArtistRootPage(
+                                artistName = artistRootPage.artistName,
+                                allSongs = uiState.songs,
+                                currentSong = playerUiState.currentSong,
+                                onBack = onCloseArtistRootPage,
+                                onSongClick = onPlaylistSongClick,
+                                itemModifier = ::artistPageItemModifier,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .rightSwipeBackGesture(onCloseArtistRootPage)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -331,13 +379,15 @@ internal fun FlowtoneScaffold(
             },
             sourceQueue = uiState.sourceQueue,
             playbackQueue = uiState.playbackQueue,
+            allSongs = uiState.songs,
             currentQueueIndex = uiState.currentQueueIndex,
             queueDisplayOrder = playbackQueueDisplayOrder,
             onQueueDisplayOrderChange = onPlaybackQueueDisplayOrderChange,
             onPlayQueueSong = onPlayQueueSong,
+            onPlayArtistSongQueue = onPlaylistSongClick,
             likedSongKeys = likedSongKeys,
             onToggleSongLiked = onToggleSongLiked,
-            onArtistSelected = onOpenArtist,
+            onOpenArtistRootPage = onOpenArtistRootPage,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = miniPlayerBottomProtection)

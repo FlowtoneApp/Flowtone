@@ -97,6 +97,12 @@ fun FlowtoneApp(
     var secondaryPage by rememberSaveable {
         mutableStateOf<SecondaryPage?>(null)
     }
+    var artistRootPageArtistName by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+    var artistRootReturnInProgress by remember {
+        mutableStateOf(false)
+    }
     var selectedPlaylistId by rememberSaveable {
         mutableStateOf<String?>(null)
     }
@@ -145,6 +151,9 @@ fun FlowtoneApp(
         pageCount = { TopLevelPage.entries.size }
     )
     val selectedTopLevelPage = TopLevelPage.entries[pagerState.currentPage]
+    val rootPage = artistRootPageArtistName?.let { artistName ->
+        FlowtoneRootPage.ArtistRootPage(artistName)
+    } ?: FlowtoneRootPage.MainTabs
     val secondaryOpen = secondaryPage != null
     val topBarRevealDistancePx = with(density) { 24.dp.toPx() }
     var contentScrollOffsetPx by remember {
@@ -315,6 +324,23 @@ fun FlowtoneApp(
             miniPlayerFullscreenEnteredFromCollapsed = false
         }
     }
+    fun closeArtistRootPageThroughMiniPlayer() {
+        if (artistRootPageArtistName == null || artistRootReturnInProgress) {
+            return
+        }
+        if (!hasCurrentSong || miniPlayerFullscreen) {
+            artistRootPageArtistName = null
+            artistRootReturnInProgress = false
+            return
+        }
+
+        artistRootReturnInProgress = true
+        miniPlayerFullscreenEnteredFromCollapsed = !miniPlayerExpanded
+        miniPlayerExpanded = true
+        miniPlayerMinimized = false
+        miniPlayerFullscreen = true
+    }
+
     BackHandler(enabled = secondaryPage != null, onBack = navigateBack)
     BackHandler(enabled = hasCurrentSong && (miniPlayerExpanded || miniPlayerFullscreen)) {
         if (miniPlayerFullscreen) {
@@ -323,8 +349,11 @@ fun FlowtoneApp(
             miniPlayerExpanded = false
         }
     }
+    BackHandler(enabled = rootPage is FlowtoneRootPage.ArtistRootPage) {
+        closeArtistRootPageThroughMiniPlayer()
+    }
 
-    LaunchedEffect(selectedTopLevelPage, secondaryPage) {
+    LaunchedEffect(selectedTopLevelPage, secondaryPage, rootPage) {
         contentScrollOffsetPx = 0f
     }
 
@@ -334,6 +363,14 @@ fun FlowtoneApp(
             miniPlayerFullscreen = false
             miniPlayerFullscreenEnteredFromCollapsed = false
             miniPlayerMinimized = false
+        }
+    }
+
+    LaunchedEffect(artistRootReturnInProgress) {
+        if (artistRootReturnInProgress) {
+            delay(MINI_PLAYER_EXPAND_ANIMATION_DURATION_MS.toLong())
+            artistRootPageArtistName = null
+            artistRootReturnInProgress = false
         }
     }
 
@@ -392,6 +429,7 @@ fun FlowtoneApp(
         },
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
+        rootPage = rootPage,
         secondaryPage = secondaryPage,
         selectedPlaylistId = selectedPlaylistId,
         selectedArtistName = selectedArtistName,
@@ -488,16 +526,16 @@ fun FlowtoneApp(
             secondaryPathSegments = listOf(playlist.title)
             secondaryPage = SecondaryPage.Playlist
         },
-        onOpenArtist = { artistName ->
-            selectedArtistName = artistName
-            selectedPlaylistId = null
-            selectedPlaylistTitle = null
-            secondaryPathSegments = listOf(artistName)
-            secondaryPage = SecondaryPage.Artist
+        onOpenArtistRootPage = { artistName ->
+            artistRootReturnInProgress = false
+            artistRootPageArtistName = artistName
             miniPlayerFullscreen = false
             miniPlayerExpanded = false
             miniPlayerFullscreenEnteredFromCollapsed = false
             miniPlayerMinimized = false
+        },
+        onCloseArtistRootPage = {
+            closeArtistRootPageThroughMiniPlayer()
         },
         onOpenSource = {
             secondaryPathSegments = emptyList()

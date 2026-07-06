@@ -21,9 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.ui.components.SongListItem
-import ink.tenqui.flowtone.ui.player.parseArtistCandidates
+import ink.tenqui.flowtone.ui.player.localSongsForArtist
 
 @Composable
 fun ArtistDetailScreen(
@@ -37,16 +36,7 @@ fun ArtistDetailScreen(
     val displayArtist = artistName?.trim().orEmpty()
     val listState = rememberLazyListState()
     val artistSongs = remember(displayArtist, allSongs) {
-        if (displayArtist.isBlank()) {
-            emptyList()
-        } else {
-            allSongs.filter { song ->
-                song.sourceType == SourceType.Local &&
-                    parseArtistCandidates(song.artist).any { candidate ->
-                        candidate.equals(displayArtist, ignoreCase = true)
-                    }
-            }
-        }
+        localSongsForArtist(allSongs, displayArtist)
     }
 
     if (displayArtist.isBlank()) {
