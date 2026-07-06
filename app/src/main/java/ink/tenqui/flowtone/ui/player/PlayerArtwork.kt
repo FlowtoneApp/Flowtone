@@ -148,6 +148,8 @@ internal fun MorphArtworkLayer(
     addToPlaylistArtworkTop: Dp = expandedArtworkTop,
     playbackScale: Float = 1f,
     playbackRotationDegrees: Float = 0f,
+    layerAlpha: Float = 1f,
+    layerTranslationY: Dp = 0.dp,
     modifier: Modifier = Modifier
 ) {
     val baseArtworkSize = expandedArtworkSize
@@ -169,7 +171,7 @@ internal fun MorphArtworkLayer(
     val artworkY = lerpDp(normalArtworkY, addToPlaylistArtworkTop, addProgress)
     val blurRadius = lerpDp(16.dp, 0.dp, progress)
     val cornerRadius = lerpDp(lerpDp(24.dp, 28.dp, progress), 12.dp, addProgress)
-    val shadowPadding = 32.dp
+    val shadowPadding = 40.dp
     val shadowProgress = progress.coerceIn(0f, 1f) * (1f - addProgress)
     val containerScale = lerpFloat(collapsedContainerScale, 1f, scaleProgress)
     val artworkScale = lerpFloat(playbackScale, 1f, addProgress)
@@ -196,6 +198,8 @@ internal fun MorphArtworkLayer(
             .width(artworkSize + shadowPadding * 2)
             .height(artworkSize + shadowPadding * 2)
             .graphicsLayer {
+                alpha = layerAlpha.coerceIn(0f, 1f)
+                translationY = layerTranslationY.toPx()
                 scaleX = containerScale * artworkScale
                 scaleY = containerScale * artworkScale
                 rotationZ = artworkRotationDegrees

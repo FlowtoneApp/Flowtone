@@ -1,8 +1,6 @@
 package ink.tenqui.flowtone.ui.player
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -22,15 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
-import kotlin.math.abs
 
 @Composable
 internal fun FullscreenSongInfoOverlay(
@@ -74,10 +68,10 @@ internal fun FullscreenSongInfoOverlay(
                 .fillMaxSize()
                 .offset(y = 44.dp * (1f - overlayProgress))
                 .padding(start = 24.dp, top = topPadding, end = 24.dp, bottom = 36.dp)
-                .songInfoBackGesture(
+                .fullscreenContentBackGesture(
                     enabled = overlayProgress > 0.5f,
-                    scrollState = scrollState,
                     thresholdPx = backGestureThresholdPx,
+                    canStartBack = { scrollState.value == 0 },
                     onBack = onBack
                 )
                 .verticalScroll(scrollState),
@@ -175,62 +169,3 @@ private data class SongInfoRowData(
     val label: String,
     val value: String
 )
-
-private fun Modifier.songInfoBackGesture(
-    enabled: Boolean,
-    scrollState: ScrollState,
-    thresholdPx: Float,
-    onBack: () -> Unit
-): Modifier {
-    if (!enabled) {
-        return this
-    }
-
-    return pointerInput(scrollState, thresholdPx) {
-        awaitEachGesture {
-            awaitFirstDown(
-                requireUnconsumed = false,
-                pass = PointerEventPass.Initial
-            )
-
-            var dragX = 0f
-            var dragY = 0f
-
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                val change = event.changes.firstOrNull() ?: break
-
-                if (!event.changes.any { pointer -> pointer.pressed }) {
-                    break
-                }
-                if (scrollState.value != 0) {
-                    break
-                }
-
-                val delta = change.position - change.previousPosition
-                dragX += delta.x
-                dragY += delta.y
-
-                val absDragX = abs(dragX)
-                val absDragY = abs(dragY)
-                val isClearRightSwipe =
-                    dragX > thresholdPx && absDragX > absDragY * 1.5f
-                val isClearPullDown =
-                    dragY > thresholdPx && absDragY > absDragX * 1.25f
-
-                if (isClearRightSwipe || isClearPullDown) {
-                    change.consume()
-                    onBack()
-                    break
-                }
-
-                val upwardPassedThreshold = dragY < -thresholdPx
-                val horizontalGestureDominates =
-                    absDragX > thresholdPx && absDragX >= absDragY
-                if (upwardPassedThreshold || horizontalGestureDominates) {
-                    break
-                }
-            }
-        }
-    }
-}
