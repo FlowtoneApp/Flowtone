@@ -41,6 +41,7 @@ internal fun TopLevelPagerContent(
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    likedSongCount: Int,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -59,6 +60,7 @@ internal fun TopLevelPagerContent(
 
                 TopLevelPage.Library -> LibraryScreen(
                     songCount = uiState.songs.size,
+                    likedSongCount = likedSongCount,
                     onOpenLocalLibrary = onOpenLocalLibrary,
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,

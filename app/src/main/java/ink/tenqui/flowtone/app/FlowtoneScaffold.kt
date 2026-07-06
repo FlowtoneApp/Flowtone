@@ -31,6 +31,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
+import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
+import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
@@ -59,6 +62,7 @@ internal fun FlowtoneScaffold(
     secondaryPage: SecondaryPage?,
     selectedPlaylistId: String?,
     selectedArtistName: String?,
+    likedSongKeys: List<String>,
     secondaryPathSegments: List<String>,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
@@ -111,6 +115,8 @@ internal fun FlowtoneScaffold(
     onTogglePlaybackOrderMode: () -> Unit,
     onPlayQueueSong: (Song) -> Unit,
     onPlaylistSongClick: (List<Song>, Int) -> Unit,
+    onSetSongLiked: (Song, Boolean) -> Unit,
+    onToggleSongLiked: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -124,17 +130,30 @@ internal fun FlowtoneScaffold(
         mutableStateOf(Color(0xFF1B1B20))
     }
     val playlistSongEntries by playlistRepository.playlistSongEntries.collectAsState()
+    val likedSongCount = remember(uiState.songs, likedSongKeys) {
+        val likedKeys = likedSongKeys.toSet()
+        uiState.songs.count { song -> song.id.toString() in likedKeys }
+    }
+    val displayedLibraryPlaylists = remember(libraryPlaylistController.playlists, likedSongCount) {
+        listOf(likedSongsPlaylistCard(likedSongCount)) + libraryPlaylistController.playlists
+    }
     val playlistIdsContainingCurrentSong = remember(
         playlistSongEntries,
-        playerUiState.currentSong?.id
+        playerUiState.currentSong?.id,
+        likedSongKeys
     ) {
         val currentSongId = playerUiState.currentSong?.id?.toString()
         if (currentSongId == null) {
             emptySet()
         } else {
-            playlistSongEntries
+            val normalPlaylistIds = playlistSongEntries
                 .filter { entry -> entry.songId == currentSongId }
                 .mapTo(mutableSetOf()) { entry -> entry.playlistId }
+            if (currentSongId in likedSongKeys) {
+                normalPlaylistIds + LikedSongsPlaylistId
+            } else {
+                normalPlaylistIds
+            }
         }
     }
 
@@ -198,6 +217,7 @@ internal fun FlowtoneScaffold(
                         onOpenAbout = onOpenAbout,
                         onOpenLocalLibrary = onOpenLocalLibrary,
                         onOpenPlaylist = onOpenPlaylist,
+                        likedSongCount = likedSongCount,
                         modifier = Modifier.fillMaxSize()
                     )
                     SecondaryPageHost(
@@ -221,6 +241,7 @@ internal fun FlowtoneScaffold(
                         currentSong = playerUiState.currentSong,
                         selectedPlaylistId = selectedPlaylistId,
                         selectedArtistName = selectedArtistName,
+                        likedSongKeys = likedSongKeys,
                         playlistSongEntries = playlistSongEntries,
                         permissionDenied = permissionDenied,
                         onRequestPermission = onRequestPermission,
@@ -267,7 +288,7 @@ internal fun FlowtoneScaffold(
             onPlayNext = onPlayNext,
             onSeekTo = onSeekTo,
             onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
-            libraryPlaylists = libraryPlaylistController.playlists,
+            libraryPlaylists = displayedLibraryPlaylists,
             playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
             newlyCreatedPlaylistId = libraryPlaylistController.newlyCreatedPlaylistId,
             onNewPlaylistCreateAnimationFinished = {
@@ -283,6 +304,11 @@ internal fun FlowtoneScaffold(
             },
             onAddSongToPlaylist = addSongToPlaylist@{ playlist, onAdded ->
                 val currentSong = playerUiState.currentSong ?: return@addSongToPlaylist
+                if (playlist.isLikedSongsPlaylist()) {
+                    onSetSongLiked(currentSong, true)
+                    onAdded()
+                    return@addSongToPlaylist
+                }
                 coroutineScope.launch {
                     playlistRepository.syncLibraryPlaylistCards(libraryPlaylistController.playlists)
                     val result = playlistRepository.addSongToPlaylist(
@@ -307,6 +333,8 @@ internal fun FlowtoneScaffold(
             queueDisplayOrder = playbackQueueDisplayOrder,
             onQueueDisplayOrderChange = onPlaybackQueueDisplayOrderChange,
             onPlayQueueSong = onPlayQueueSong,
+            likedSongKeys = likedSongKeys,
+            onToggleSongLiked = onToggleSongLiked,
             onArtistSelected = onOpenArtist,
             modifier = Modifier
                 .align(Alignment.BottomCenter)

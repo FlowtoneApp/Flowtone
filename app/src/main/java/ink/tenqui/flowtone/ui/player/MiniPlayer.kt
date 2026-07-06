@@ -174,6 +174,8 @@ fun MiniPlayer(
     queueDisplayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
     onQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit = {},
     onPlayQueueSong: (Song) -> Unit = {},
+    likedSongKeys: List<String> = emptyList(),
+    onToggleSongLiked: (Song) -> Unit = {},
     onArtistSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -586,18 +588,9 @@ fun MiniPlayer(
     var expandedMoreMenu by remember { mutableStateOf(false) }
     var queueSheetBackgroundBlurred by remember { mutableStateOf(false) }
     val currentSongKey = currentSong?.id?.toString()
-    var likedSongKeys by rememberSaveable {
-        mutableStateOf(emptyList<String>())
-    }
     val isCurrentSongLiked = currentSongKey != null && likedSongKeys.contains(currentSongKey)
     val onToggleCurrentSongLiked: () -> Unit = {
-        currentSongKey?.let { key ->
-            likedSongKeys = if (likedSongKeys.contains(key)) {
-                likedSongKeys - key
-            } else {
-                likedSongKeys + key
-            }
-        }
+        currentSong?.let(onToggleSongLiked)
         Unit
     }
     fun enterAddToPlaylistMode() {

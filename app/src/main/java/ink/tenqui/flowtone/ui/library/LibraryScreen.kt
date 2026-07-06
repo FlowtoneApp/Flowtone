@@ -72,6 +72,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Playlist
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.LibraryCollectionCard
@@ -303,6 +304,7 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
 @Composable
 internal fun LibraryScreen(
     songCount: Int,
+    likedSongCount: Int,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
@@ -311,7 +313,10 @@ internal fun LibraryScreen(
 ) {
     val density = LocalDensity.current
     val noRippleInteractionSource = remember { MutableInteractionSource() }
-    val playlistRows = playlistController.playlists.chunked(2)
+    val playlists = remember(playlistController.playlists, likedSongCount) {
+        listOf(likedSongsPlaylistCard(likedSongCount)) + playlistController.playlists
+    }
+    val playlistRows = playlists.chunked(2)
     val playlistCardHeight = LibraryInfoCardHeight * (4f / 3f)
     val playlistRowItemOffsetYPx = with(density) {
         playlistCardHeight.toPx() / LibraryItemSlideOffsetDivisor
@@ -410,10 +415,11 @@ internal fun LibraryScreen(
             ) {
                 rowPlaylists.forEach { playlist ->
                     val showActions = playlistController.activePlaylistActionId == playlist.id
+                    val editable = !playlist.isSystem
                     LibraryPlaylistTileCardView(
                         playlist = playlist,
                         cardHeight = playlistCardHeight,
-                        showActions = showActions,
+                        showActions = editable && showActions,
                         playCreateAnimation =
                             playlistController.newlyCreatedPlaylistId == playlist.id,
                         onCreateAnimationFinished = {
@@ -426,7 +432,9 @@ internal fun LibraryScreen(
                             onOpenPlaylist(playlist)
                         },
                         onLongClick = {
-                            playlistController.showPlaylistActions(playlist.id)
+                            if (editable) {
+                                playlistController.showPlaylistActions(playlist.id)
+                            }
                         },
                         onEdit = {
                             playlistController.startRenamePlaylist(playlist)

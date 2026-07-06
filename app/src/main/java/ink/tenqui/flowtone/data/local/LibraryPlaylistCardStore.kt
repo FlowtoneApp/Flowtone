@@ -50,6 +50,7 @@ class LibraryPlaylistCardStore(context: Context) {
 
     fun saveCards(cards: List<LibraryPlaylistCard>): List<LibraryPlaylistCard> {
         val normalizedCards = cards
+            .filterNot { card -> card.isSystem }
             .sortedBy { card -> card.order }
             .mapIndexed { index, card ->
                 card.copy(

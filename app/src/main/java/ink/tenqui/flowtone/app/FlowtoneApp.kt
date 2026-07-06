@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -128,6 +129,9 @@ fun FlowtoneApp(
     }
     var playbackQueueDisplayOrder by rememberSaveable {
         mutableStateOf(appPreferences.getPlaybackQueueDisplayOrder())
+    }
+    var likedSongKeys by rememberSaveable {
+        mutableStateOf(emptyList<String>())
     }
 
     val pagerState = rememberPagerState(
@@ -280,6 +284,22 @@ fun FlowtoneApp(
             }
         }
     }
+    fun setSongLiked(song: Song, liked: Boolean) {
+        val key = song.id.toString()
+        likedSongKeys = if (liked) {
+            if (key in likedSongKeys) {
+                likedSongKeys
+            } else {
+                likedSongKeys + key
+            }
+        } else {
+            likedSongKeys - key
+        }
+    }
+    fun toggleSongLiked(song: Song) {
+        val key = song.id.toString()
+        setSongLiked(song, key !in likedSongKeys)
+    }
     val exitMiniPlayerFullscreen: () -> Unit = {
         miniPlayerFullscreen = false
         if (miniPlayerFullscreenEnteredFromCollapsed) {
@@ -364,6 +384,7 @@ fun FlowtoneApp(
         secondaryPage = secondaryPage,
         selectedPlaylistId = selectedPlaylistId,
         selectedArtistName = selectedArtistName,
+        likedSongKeys = likedSongKeys,
         secondaryPathSegments = secondaryPathSegments,
         hideSecondaryBackButton = hideSecondaryBackButton,
         onHideSecondaryBackButtonChange = { hide ->
@@ -526,6 +547,8 @@ fun FlowtoneApp(
         onSeekTo = musicViewModel::seekTo,
         onTogglePlaybackOrderMode = musicViewModel::togglePlaybackOrderMode,
         onPlayQueueSong = musicViewModel::playQueueSong,
+        onSetSongLiked = ::setSongLiked,
+        onToggleSongLiked = ::toggleSongLiked,
         modifier = Modifier.fillMaxSize()
     )
 }
