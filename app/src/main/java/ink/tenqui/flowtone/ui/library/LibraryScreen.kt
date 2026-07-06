@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -72,6 +73,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Playlist
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -419,6 +421,7 @@ internal fun LibraryScreen(
                     LibraryPlaylistTileCardView(
                         playlist = playlist,
                         cardHeight = playlistCardHeight,
+                        editable = editable,
                         showActions = editable && showActions,
                         playCreateAnimation =
                             playlistController.newlyCreatedPlaylistId == playlist.id,
@@ -682,6 +685,7 @@ private fun CreatePlaylistEntryCard(
 private fun LibraryPlaylistTileCardView(
     playlist: LibraryPlaylistCard,
     cardHeight: androidx.compose.ui.unit.Dp,
+    editable: Boolean,
     showActions: Boolean,
     playCreateAnimation: Boolean,
     onCreateAnimationFinished: () -> Unit,
@@ -728,6 +732,15 @@ private fun LibraryPlaylistTileCardView(
     val actionButtonColor = MaterialTheme.colorScheme.onSurface
     val editActionIconSize = 24.dp
     val editActionTouchSize = 36.dp
+    val isLikedPlaylist = playlist.isLikedSongsPlaylist()
+    val cardClickModifier = if (editable) {
+        Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
+    } else {
+        Modifier.clickable(onClick = onClick)
+    }
 
     Box(
         modifier = modifier.height(cardHeight)
@@ -745,19 +758,33 @@ private fun LibraryPlaylistTileCardView(
                 }
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick
-                )
+                .then(cardClickModifier)
                 .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
-                    .padding(end = 44.dp),
+                    .padding(end = if (editable) 44.dp else 0.dp),
                 verticalArrangement = Arrangement.Top
             ) {
+                if (isLikedPlaylist) {
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = 14.dp)
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FavoriteBorder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
                 Text(
                     text = playlist.title,
                     style = MaterialTheme.typography.titleLarge,
