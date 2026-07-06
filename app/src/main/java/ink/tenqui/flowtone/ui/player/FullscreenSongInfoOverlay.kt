@@ -134,6 +134,7 @@ private fun Song.toSongInfoRows(): List<SongInfoRowData> {
         SongInfoRowData("专辑", "未知"),
         SongInfoRowData("时长", formatSongInfoDuration(durationMs)),
         SongInfoRowData("来源", sourceType.toDisplayText()),
+        SongInfoRowData("文件路径", filePath?.ifBlank { null } ?: uri.toString().ifBlank { "未知" }),
         SongInfoRowData("Uri", uri.toString().ifBlank { "未知" }),
         SongInfoRowData("Song ID", id.toString()),
         SongInfoRowData("Album ID", albumId?.toString() ?: "未知"),

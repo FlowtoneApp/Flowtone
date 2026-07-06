@@ -23,7 +23,8 @@ class AudioScanner(
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.IS_MUSIC
+            MediaStore.Audio.Media.IS_MUSIC,
+            MediaStore.Audio.Media.DATA
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > ?"
         val selectionArgs = arrayOf(MIN_MUSIC_DURATION_MS.toString())
@@ -42,6 +43,7 @@ class AudioScanner(
             val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            val dataColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
@@ -57,6 +59,11 @@ class AudioScanner(
                 val artworkUri = albumId?.let {
                     ContentUris.withAppendedId(ALBUM_ART_BASE_URI, it)
                 }
+                val filePath = if (dataColumn >= 0 && !cursor.isNull(dataColumn)) {
+                    cursor.getString(dataColumn).orEmpty().ifBlank { null }
+                } else {
+                    null
+                }
 
                 songs.add(
                     Song(
@@ -67,7 +74,8 @@ class AudioScanner(
                         durationMs = durationMs,
                         uri = uri,
                         albumId = albumId,
-                        artworkUri = artworkUri
+                        artworkUri = artworkUri,
+                        filePath = filePath
                     )
                 )
             }

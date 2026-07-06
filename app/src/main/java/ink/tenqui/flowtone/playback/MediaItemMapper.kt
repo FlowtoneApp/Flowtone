@@ -12,6 +12,7 @@ object MediaItemMapper {
     private const val EXTRA_SONG_URI = "song_uri"
     private const val EXTRA_ARTWORK_URI = "artwork_uri"
     private const val EXTRA_DURATION_MS = "duration_ms"
+    private const val EXTRA_FILE_PATH = "file_path"
 
     fun toMediaItem(song: Song): MediaItem {
         val mediaId = song.id.takeIf { it > 0L }?.toString()
@@ -20,6 +21,7 @@ object MediaItemMapper {
             putLong(EXTRA_SONG_ID, song.id)
             putString(EXTRA_SONG_URI, song.uri.toString())
             song.artworkUri?.let { putString(EXTRA_ARTWORK_URI, it.toString()) }
+            song.filePath?.let { putString(EXTRA_FILE_PATH, it) }
             putLong(EXTRA_DURATION_MS, song.durationMs)
         }
         val mediaMetadata = MediaMetadata.Builder()
@@ -54,6 +56,7 @@ object MediaItemMapper {
         val title = mediaItem.mediaMetadata.title?.toString().orEmpty().ifBlank { "\u672a\u77e5\u6b4c\u66f2" }
         val artist = mediaItem.mediaMetadata.artist?.toString().orEmpty().ifBlank { "\u672a\u77e5\u827a\u672f\u5bb6" }
         val durationMs = extras?.getLong(EXTRA_DURATION_MS)?.takeIf { it > 0L } ?: 0L
+        val filePath = extras?.getString(EXTRA_FILE_PATH)?.ifBlank { null }
 
         return Song(
             id = songId ?: uri.toString().hashCode().toLong(),
@@ -62,7 +65,8 @@ object MediaItemMapper {
             artist = artist,
             durationMs = durationMs,
             uri = uri,
-            artworkUri = artworkUri
+            artworkUri = artworkUri,
+            filePath = filePath
         )
     }
 }
