@@ -58,6 +58,7 @@ internal fun FlowtoneScaffold(
     selectedTopLevelPage: TopLevelPage,
     secondaryPage: SecondaryPage?,
     selectedPlaylistId: String?,
+    selectedArtistName: String?,
     secondaryPathSegments: List<String>,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
@@ -94,6 +95,7 @@ internal fun FlowtoneScaffold(
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    onOpenArtist: (String) -> Unit,
     onOpenSource: () -> Unit,
     onOpenSourceBack: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -218,6 +220,7 @@ internal fun FlowtoneScaffold(
                         uiState = uiState,
                         currentSong = playerUiState.currentSong,
                         selectedPlaylistId = selectedPlaylistId,
+                        selectedArtistName = selectedArtistName,
                         playlistSongEntries = playlistSongEntries,
                         permissionDenied = permissionDenied,
                         onRequestPermission = onRequestPermission,
@@ -304,6 +307,7 @@ internal fun FlowtoneScaffold(
             queueDisplayOrder = playbackQueueDisplayOrder,
             onQueueDisplayOrderChange = onPlaybackQueueDisplayOrderChange,
             onPlayQueueSong = onPlayQueueSong,
+            onArtistSelected = onOpenArtist,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = miniPlayerBottomProtection)

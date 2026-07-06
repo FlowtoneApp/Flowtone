@@ -96,6 +96,9 @@ fun FlowtoneApp(
     var selectedPlaylistTitle by rememberSaveable {
         mutableStateOf<String?>(null)
     }
+    var selectedArtistName by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
     var settingsBackAction by remember {
         mutableStateOf<(() -> Unit)?>(null)
     }
@@ -262,13 +265,18 @@ fun FlowtoneApp(
                 secondaryPage = SecondaryPage.About
             }
         } else {
-            secondaryPage = when (secondaryPage) {
+            val closingPage = secondaryPage
+            secondaryPage = when (closingPage) {
                 SecondaryPage.Settings,
                 SecondaryPage.About,
                 SecondaryPage.LocalLibrary,
-                SecondaryPage.Playlist -> null
+                SecondaryPage.Playlist,
+                SecondaryPage.Artist -> null
                 SecondaryPage.OpenSource -> SecondaryPage.About
                 null -> null
+            }
+            if (closingPage == SecondaryPage.Artist) {
+                selectedArtistName = null
             }
         }
     }
@@ -355,6 +363,7 @@ fun FlowtoneApp(
         selectedTopLevelPage = selectedTopLevelPage,
         secondaryPage = secondaryPage,
         selectedPlaylistId = selectedPlaylistId,
+        selectedArtistName = selectedArtistName,
         secondaryPathSegments = secondaryPathSegments,
         hideSecondaryBackButton = hideSecondaryBackButton,
         onHideSecondaryBackButtonChange = { hide ->
@@ -421,29 +430,46 @@ fun FlowtoneApp(
             secondaryPathSegments = emptyList()
             selectedPlaylistId = null
             selectedPlaylistTitle = null
+            selectedArtistName = null
         },
         onOpenSettings = {
             secondaryPathSegments = emptyList()
+            selectedArtistName = null
             secondaryPage = SecondaryPage.Settings
         },
         onOpenAbout = {
             secondaryPathSegments = emptyList()
+            selectedArtistName = null
             secondaryPage = SecondaryPage.About
         },
         onOpenLocalLibrary = {
             secondaryPathSegments = emptyList()
             selectedPlaylistId = null
             selectedPlaylistTitle = null
+            selectedArtistName = null
             secondaryPage = SecondaryPage.LocalLibrary
         },
         onOpenPlaylist = { playlist ->
             selectedPlaylistId = playlist.id
             selectedPlaylistTitle = playlist.title
+            selectedArtistName = null
             secondaryPathSegments = listOf(playlist.title)
             secondaryPage = SecondaryPage.Playlist
         },
+        onOpenArtist = { artistName ->
+            selectedArtistName = artistName
+            selectedPlaylistId = null
+            selectedPlaylistTitle = null
+            secondaryPathSegments = listOf(artistName)
+            secondaryPage = SecondaryPage.Artist
+            miniPlayerFullscreen = false
+            miniPlayerExpanded = false
+            miniPlayerFullscreenEnteredFromCollapsed = false
+            miniPlayerMinimized = false
+        },
         onOpenSource = {
             secondaryPathSegments = emptyList()
+            selectedArtistName = null
             secondaryPage = SecondaryPage.OpenSource
         },
         onOpenSourceBack = {

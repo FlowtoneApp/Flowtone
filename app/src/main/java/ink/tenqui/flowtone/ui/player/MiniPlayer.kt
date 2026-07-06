@@ -36,7 +36,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +43,7 @@ import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -701,6 +701,14 @@ fun MiniPlayer(
         }
         enterArtistPlaceholderMode(rawArtist)
     }
+    fun openArtistDetailFromPlaceholder(artistName: String) {
+        val selectedArtistName = artistName.trim()
+        if (!artistPlaceholderActive || selectedArtistName.isBlank()) {
+            return
+        }
+        exitFullscreenContentMode()
+        onArtistSelected(selectedArtistName)
+    }
     LaunchedEffect(currentSong?.id) {
         isProgressScrubbing = false
     }
@@ -1244,6 +1252,7 @@ fun MiniPlayer(
                             backGestureEnabled = artistPlaceholderActive &&
                                 artistPlaceholderProgress > 0.5f,
                             onBack = ::exitFullscreenContentMode,
+                            onArtistClick = ::openArtistDetailFromPlaceholder,
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .fillMaxWidth()
@@ -1437,6 +1446,7 @@ private fun ArtistPlaceholderOverlay(
     backGestureThresholdPx: Float,
     backGestureEnabled: Boolean,
     onBack: () -> Unit,
+    onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (artists.isEmpty()) {
@@ -1477,11 +1487,14 @@ private fun ArtistPlaceholderOverlay(
                 alignment = Alignment.CenterHorizontally
             )
         ) {
-            items(
+            itemsIndexed(
                 items = artists,
-                key = { artist -> artist }
-            ) { artist ->
-                ArtistPlaceholderItem(artist = artist)
+                key = { index, artist -> "$index:$artist" }
+            ) { _, artist ->
+                ArtistPlaceholderItem(
+                    artist = artist,
+                    onArtistClick = onArtistClick
+                )
             }
         }
     }
@@ -1490,6 +1503,7 @@ private fun ArtistPlaceholderOverlay(
 @Composable
 private fun ArtistPlaceholderItem(
     artist: String,
+    onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -1501,7 +1515,16 @@ private fun ArtistPlaceholderItem(
                 .size(ArtistPlaceholderAvatarSize)
                 .clip(RoundedCornerShape(percent = 50))
                 .background(Color(0xFFB8B8B8).copy(alpha = 0.72f))
-        )
+                .clickable { onArtistClick(artist) },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Person,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.88f),
+                modifier = Modifier.size(ArtistPlaceholderAvatarSize * 0.54f)
+            )
+        }
         Text(
             text = artist,
             style = MaterialTheme.typography.titleSmall,
@@ -1513,6 +1536,7 @@ private fun ArtistPlaceholderItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(ArtistPlaceholderNameHeight)
+                .clickable { onArtistClick(artist) }
                 .padding(top = 8.dp)
         )
     }

@@ -23,6 +23,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
+import ink.tenqui.flowtone.ui.library.ArtistDetailScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
 import ink.tenqui.flowtone.ui.screens.AboutScreen
@@ -52,6 +53,7 @@ internal fun SecondaryPageHost(
     uiState: MusicUiState,
     currentSong: Song?,
     selectedPlaylistId: String?,
+    selectedArtistName: String?,
     playlistSongEntries: List<PlaylistSongEntry>,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
@@ -67,9 +69,15 @@ internal fun SecondaryPageHost(
     modifier: Modifier = Modifier
 ) {
     var retainedPlaylistId by remember { mutableStateOf<String?>(null) }
+    var retainedArtistName by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(secondaryPage, selectedPlaylistId) {
         if (secondaryPage == SecondaryPage.Playlist && selectedPlaylistId != null) {
             retainedPlaylistId = selectedPlaylistId
+        }
+    }
+    LaunchedEffect(secondaryPage, selectedArtistName) {
+        if (secondaryPage == SecondaryPage.Artist && selectedArtistName != null) {
+            retainedArtistName = selectedArtistName
         }
     }
 
@@ -211,6 +219,21 @@ internal fun SecondaryPageHost(
                 onSongClick = onPlaylistSongClick,
                 itemModifier = ::songItemModifier,
                 suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
+                modifier = fadingContainerModifier()
+                    .fillMaxSize()
+                    .rightSwipeBackGesture(onCloseSecondaryPage)
+            )
+
+            SecondaryPage.Artist -> ArtistDetailScreen(
+                artistName = if (secondaryPage == SecondaryPage.Artist) {
+                    selectedArtistName
+                } else {
+                    retainedArtistName
+                },
+                allSongs = uiState.songs,
+                currentSong = currentSong,
+                onSongClick = onPlaylistSongClick,
+                itemModifier = ::songItemModifier,
                 modifier = fadingContainerModifier()
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)
