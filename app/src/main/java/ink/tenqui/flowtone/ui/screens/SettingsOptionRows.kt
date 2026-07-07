@@ -13,10 +13,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,12 +20,9 @@ import androidx.compose.ui.draw.clip
 @Composable
 internal fun SongRecordThresholdRow(
     selectedSeconds: Int,
-    onSelectedSecondsChange: (Int) -> Unit,
+    onOpenDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
     val seconds = selectedSeconds.coerceSongRecordThreshold()
 
     Row(
@@ -37,7 +30,7 @@ internal fun SongRecordThresholdRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(SettingsRowCornerRadius))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable { showDialog = true }
+            .clickable { onOpenDialog() }
             .padding(
                 horizontal = SettingsRowHorizontalPadding,
                 vertical = SettingsRowVerticalPadding
@@ -61,17 +54,6 @@ internal fun SongRecordThresholdRow(
             imageVector = Icons.Rounded.ChevronRight,
             contentDescription = "设置歌曲记录阈值",
             tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    if (showDialog) {
-        SongRecordThresholdDialog(
-            selectedSeconds = seconds,
-            onDismiss = { showDialog = false },
-            onConfirm = { value ->
-                onSelectedSecondsChange(value)
-                showDialog = false
-            }
         )
     }
 }

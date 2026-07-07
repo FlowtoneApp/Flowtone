@@ -16,6 +16,12 @@ import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
+internal enum class SongRecordThresholdDialogState {
+    Idle,
+    Editing,
+    Closing
+}
+
 internal class FlowtoneAppState(
     permissionDeniedState: MutableState<Boolean>,
     miniPlayerExpandedState: MutableState<Boolean>,
@@ -38,6 +44,7 @@ internal class FlowtoneAppState(
     disablePausedArtworkTiltState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
+    songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
     playbackQueueDisplayOrderState: MutableState<QueueDisplayOrder>,
     likedSongKeysState: MutableState<List<String>>
 ) {
@@ -62,6 +69,7 @@ internal class FlowtoneAppState(
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
     var preloadSongMetadataCount by preloadSongMetadataCountState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
+    var songRecordThresholdDialogState by songRecordThresholdDialogStateState
     var playbackQueueDisplayOrder by playbackQueueDisplayOrderState
     var likedSongKeys by likedSongKeysState
 }
@@ -131,6 +139,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val songRecordThresholdSeconds = rememberSaveable {
         mutableStateOf(appPreferences.getSongRecordThresholdSeconds())
     }
+    val songRecordThresholdDialogState = rememberSaveable {
+        mutableStateOf(SongRecordThresholdDialogState.Idle)
+    }
     val playbackQueueDisplayOrder = rememberSaveable {
         mutableStateOf(appPreferences.getPlaybackQueueDisplayOrder())
     }
@@ -160,6 +171,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
         preloadSongMetadataCountState = preloadSongMetadataCount,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
+        songRecordThresholdDialogStateState = songRecordThresholdDialogState,
         playbackQueueDisplayOrderState = playbackQueueDisplayOrder,
         likedSongKeysState = likedSongKeys
     )
@@ -184,6 +196,7 @@ internal data class FlowtoneAppScaffoldState(
     val allowFullscreenFromCollapsed: Boolean,
     val preloadSongMetadataCount: Int,
     val songRecordThresholdSeconds: Int,
+    val songRecordThresholdDialogState: SongRecordThresholdDialogState,
     val playbackQueueDisplayOrder: QueueDisplayOrder,
     val permissionDenied: Boolean,
     val showSwipeHint: Boolean,
@@ -237,6 +250,7 @@ internal fun flowtoneAppScaffoldState(
         allowFullscreenFromCollapsed = appState.allowFullscreenFromCollapsed,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
+        songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
         playbackQueueDisplayOrder = appState.playbackQueueDisplayOrder,
         permissionDenied = appState.permissionDenied,
         showSwipeHint = appState.showSwipeHint,

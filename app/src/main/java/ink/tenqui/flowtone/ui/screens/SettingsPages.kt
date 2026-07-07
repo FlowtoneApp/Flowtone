@@ -133,7 +133,7 @@ internal fun PlaybackSettingsPage(
 @Composable
 internal fun RecordSettingsPage(
     songRecordThresholdSeconds: Int,
-    onSongRecordThresholdSecondsChange: (Int) -> Unit,
+    onOpenSongRecordThresholdDialog: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -144,7 +144,7 @@ internal fun RecordSettingsPage(
         ) {
             SongRecordThresholdRow(
                 selectedSeconds = songRecordThresholdSeconds,
-                onSelectedSecondsChange = onSongRecordThresholdSecondsChange
+                onOpenDialog = onOpenSongRecordThresholdDialog
             )
         }
     }

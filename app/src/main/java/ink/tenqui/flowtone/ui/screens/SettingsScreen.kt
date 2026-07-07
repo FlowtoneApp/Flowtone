@@ -98,7 +98,7 @@ internal fun SettingsScreen(
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
-    onSongRecordThresholdSecondsChange: (Int) -> Unit,
+    onOpenSongRecordThresholdDialog: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -167,7 +167,7 @@ internal fun SettingsScreen(
 
             SettingsSection.Record -> RecordSettingsPage(
                 songRecordThresholdSeconds = songRecordThresholdSeconds,
-                onSongRecordThresholdSecondsChange = onSongRecordThresholdSecondsChange,
+                onOpenSongRecordThresholdDialog = onOpenSongRecordThresholdDialog,
                 elementModifier = ::viewElementModifier
             )
 

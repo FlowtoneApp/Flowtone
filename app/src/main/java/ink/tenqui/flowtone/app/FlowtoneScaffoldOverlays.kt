@@ -19,6 +19,7 @@ import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.player.MiniPlayer
+import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -169,6 +170,14 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             }
         },
         addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
+        modifier = Modifier.fillMaxSize()
+    )
+    SongRecordThresholdOverlay(
+        dialogState = state.songRecordThresholdDialogState,
+        selectedSeconds = state.songRecordThresholdSeconds,
+        onDismissRequest = callbacks.onCloseSongRecordThresholdDialog,
+        onDismissAnimationFinished = callbacks.onSongRecordThresholdDialogClosed,
+        onConfirm = callbacks.onSongRecordThresholdSecondsChange,
         modifier = Modifier.fillMaxSize()
     )
 }

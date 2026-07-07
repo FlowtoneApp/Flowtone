@@ -74,7 +74,7 @@ internal fun FlowtoneScaffoldContent(
                 preloadSongMetadataCount = state.preloadSongMetadataCount,
                 onPreloadSongMetadataCountChange = callbacks.onPreloadSongMetadataCountChange,
                 songRecordThresholdSeconds = state.songRecordThresholdSeconds,
-                onSongRecordThresholdSecondsChange = callbacks.onSongRecordThresholdSecondsChange,
+                onOpenSongRecordThresholdDialog = callbacks.onOpenSongRecordThresholdDialog,
                 uiState = state.uiState,
                 currentSong = state.playerUiState.currentSong,
                 selectedPlaylistId = state.selectedPlaylistId,

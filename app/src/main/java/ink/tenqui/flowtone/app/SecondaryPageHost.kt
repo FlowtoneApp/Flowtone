@@ -51,7 +51,7 @@ internal fun SecondaryPageHost(
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
-    onSongRecordThresholdSecondsChange: (Int) -> Unit,
+    onOpenSongRecordThresholdDialog: () -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
     selectedPlaylistId: String?,
@@ -178,7 +178,7 @@ internal fun SecondaryPageHost(
                 preloadSongMetadataCount = preloadSongMetadataCount,
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
                 songRecordThresholdSeconds = songRecordThresholdSeconds,
-                onSongRecordThresholdSecondsChange = onSongRecordThresholdSecondsChange,
+                onOpenSongRecordThresholdDialog = onOpenSongRecordThresholdDialog,
                 elementModifier = ::elementModifier,
                 modifier = Modifier.fillMaxSize()
             )

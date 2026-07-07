@@ -13,6 +13,9 @@ internal data class FlowtoneAppCallbacks(
     val onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     val onPreloadSongMetadataCountChange: (Int) -> Unit,
     val onSongRecordThresholdSecondsChange: (Int) -> Unit,
+    val onOpenSongRecordThresholdDialog: () -> Unit,
+    val onCloseSongRecordThresholdDialog: () -> Unit,
+    val onSongRecordThresholdDialogClosed: () -> Unit,
     val onPlaybackQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit,
     val settingsBackActionChange: ((() -> Unit)?) -> Unit,
     val onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -89,6 +92,21 @@ internal fun flowtoneAppCallbacks(
         onSongRecordThresholdSecondsChange = { seconds ->
             appState.songRecordThresholdSeconds = seconds
             appPreferences.setSongRecordThresholdSeconds(seconds)
+        },
+        onOpenSongRecordThresholdDialog = {
+            if (appState.songRecordThresholdDialogState == SongRecordThresholdDialogState.Idle) {
+                appState.songRecordThresholdDialogState = SongRecordThresholdDialogState.Editing
+            }
+        },
+        onCloseSongRecordThresholdDialog = {
+            if (appState.songRecordThresholdDialogState == SongRecordThresholdDialogState.Editing) {
+                appState.songRecordThresholdDialogState = SongRecordThresholdDialogState.Closing
+            }
+        },
+        onSongRecordThresholdDialogClosed = {
+            if (appState.songRecordThresholdDialogState == SongRecordThresholdDialogState.Closing) {
+                appState.songRecordThresholdDialogState = SongRecordThresholdDialogState.Idle
+            }
         },
         onPlaybackQueueDisplayOrderChange = { order ->
             appState.playbackQueueDisplayOrder = order
