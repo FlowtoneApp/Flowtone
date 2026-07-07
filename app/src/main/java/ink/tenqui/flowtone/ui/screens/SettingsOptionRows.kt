@@ -4,11 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -16,46 +13,45 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 
 @Composable
-internal fun SettingsSectionRow(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
+internal fun SongRecordThresholdRow(
+    selectedSeconds: Int,
+    onSelectedSecondsChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+    val seconds = selectedSeconds.coerceSongRecordThreshold()
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(SettingsRowCornerRadius))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onClick)
+            .clickable { showDialog = true }
             .padding(
                 horizontal = SettingsRowHorizontalPadding,
                 vertical = SettingsRowVerticalPadding
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(SettingsRowIconSize)
-        )
-        Spacer(modifier = Modifier.width(SettingsSectionRowIconGap))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = title,
+                text = "歌曲记录阈值",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = subtitle,
+                text = "当前：$seconds 秒，播放满后才计入今日听歌",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = SettingsRowSubtitleTopPadding)
@@ -63,15 +59,19 @@ internal fun SettingsSectionRow(
         }
         Icon(
             imageVector = Icons.Rounded.ChevronRight,
-            contentDescription = null,
+            contentDescription = "设置歌曲记录阈值",
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-}
 
-internal fun Int.coerceSongRecordThreshold(): Int {
-    return coerceIn(
-        MinSongRecordThresholdSeconds,
-        MaxSongRecordThresholdSeconds
-    )
+    if (showDialog) {
+        SongRecordThresholdDialog(
+            selectedSeconds = seconds,
+            onDismiss = { showDialog = false },
+            onConfirm = { value ->
+                onSelectedSecondsChange(value)
+                showDialog = false
+            }
+        )
+    }
 }
