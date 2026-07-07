@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui.player
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -36,8 +35,6 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-
-private const val FLOWTONE_FAVORITE_BUTTON_TAG = "FlowtoneFavoriteButton"
 
 @Composable
 fun MiniPlayer(
@@ -346,17 +343,6 @@ fun MiniPlayer(
     val isCurrentSongLiked = currentSong?.let { song ->
         isSongLiked(song, likedSongKeys)
     } ?: false
-    val onToggleCurrentSongLiked: () -> Unit = {
-        currentSong?.let { song ->
-            Log.d(
-                FLOWTONE_FAVORITE_BUTTON_TAG,
-                "favorite click songId=${song.id}, expanded=$expanded, fullscreen=$fullscreen, " +
-                    "minimized=$minimized"
-            )
-            callbacks.onToggleSongLiked(song)
-        }
-        Unit
-    }
     BackHandler(
         enabled = state.fullscreenContentMode == FullscreenContentMode.AddToPlaylist &&
             fullscreenInteractionActive
@@ -391,6 +377,24 @@ fun MiniPlayer(
         fullscreenContentMode = state.fullscreenContentMode,
         fullscreenContentExitProgress = fullscreenContentExitProgress,
         artistPlaceholderProgress = artistPlaceholderProgress
+    )
+    val fullscreenInteractionHandlers = miniPlayerFullscreenInteractionHandlers(
+        currentSong = currentSong,
+        expanded = expanded,
+        fullscreen = fullscreen,
+        minimized = minimized,
+        hasCurrentSong = hasCurrentSong,
+        artistClickEnabled = artistClickEnabled,
+        artistPlaceholderActive = artistPlaceholderActive,
+        fullscreenContentMode = state.fullscreenContentMode,
+        fullscreenContentExitProgress = fullscreenContentExitProgress,
+        artistPlaceholderProgress = artistPlaceholderProgress,
+        allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
+        transitions = transitions,
+        callbacks = callbacks,
+        onAddSongToPlaylist = onAddSongToPlaylist,
+        onFullscreenChange = onFullscreenChange,
+        onExpandedChange = onExpandedChange
     )
     MiniPlayerSongTransitionEffects(
         currentSong = currentSong,
@@ -432,18 +436,6 @@ fun MiniPlayer(
         ),
         label = "ArtworkPlaybackRotation"
     )
-    fun playPreviousFromMiniPlayer() {
-        if (hasCurrentSong) {
-            transitions.preparePlayPrevious()
-            callbacks.onPlayPrevious()
-        }
-    }
-    fun playNextFromMiniPlayer() {
-        if (hasCurrentSong) {
-            transitions.preparePlayNext()
-            callbacks.onPlayNext()
-        }
-    }
     MiniPlayerPlayPauseVisualLockEffects(
         playPauseVisualLockToken = state.playPauseVisualLockToken,
         keepPlayPauseVisualLockedAfterSeek = state.keepPlayPauseVisualLockedAfterSeek,
@@ -479,52 +471,23 @@ fun MiniPlayer(
                     }
                 },
                 onDragEnd = {
-                    if (!hasCurrentSong) {
-                        return@detectVerticalDragGestures
-                    }
-                    if (fullscreenContentBackGesturesEnabled) {
-                        if (state.accumulatedDragY >= fullscreenSwipeThresholdPx) {
-                            transitions.exitFullscreenContentMode()
-                        }
-                        return@detectVerticalDragGestures
-                    }
-                    when {
-                        state.accumulatedDragY <= -swipeThresholdPx && minimized -> {
-                            onMinimizedChange(false)
-                        }
-                        state.accumulatedDragY <= -fullscreenSwipeThresholdPx &&
-                            !expanded &&
-                            !fullscreenInteractionActive &&
-                            allowFullscreenFromCollapsed -> {
-                            onMinimizedChange(false)
-                            onFullscreenChange(true)
-                            onExpandedChange(true)
-                        }
-                        state.accumulatedDragY <= -fullscreenSwipeThresholdPx &&
-                            expanded &&
-                            !fullscreenInteractionActive &&
-                            allowFullscreenFromExpanded -> {
-                            onFullscreenChange(true)
-                        }
-                        state.accumulatedDragY <= -swipeThresholdPx && !expanded -> {
-                            onExpandedChange(true)
-                        }
-                        state.accumulatedDragY >= fullscreenSwipeThresholdPx &&
-                            fullscreenInteractionActive -> {
-                            onFullscreenChange(false)
-                        }
-                        state.accumulatedDragY >= swipeThresholdPx &&
-                            expanded &&
-                            !fullscreenInteractionActive -> {
-                            onExpandedChange(false)
-                        }
-                        state.accumulatedDragY >= swipeThresholdPx &&
-                            !expanded &&
-                            !fullscreenInteractionActive &&
-                            !minimized -> {
-                            onMinimizedChange(true)
-                        }
-                    }
+                    handleMiniPlayerVerticalDragEnd(
+                        state = state,
+                        transitions = transitions,
+                        hasCurrentSong = hasCurrentSong,
+                        fullscreenContentBackGesturesEnabled =
+                            fullscreenContentBackGesturesEnabled,
+                        swipeThresholdPx = swipeThresholdPx,
+                        fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
+                        minimized = minimized,
+                        expanded = expanded,
+                        fullscreenInteractionActive = fullscreenInteractionActive,
+                        allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
+                        allowFullscreenFromExpanded = allowFullscreenFromExpanded,
+                        onMinimizedChange = onMinimizedChange,
+                        onFullscreenChange = onFullscreenChange,
+                        onExpandedChange = onExpandedChange
+                    )
                 },
                 onDragCancel = {
                     state.accumulatedDragY = 0f
@@ -544,8 +507,20 @@ fun MiniPlayer(
         enabled = hasCurrentSong && playbackGesturesEnabled,
         thresholdPx = songSwipeThresholdPx,
         ignoredStartYRangePx = progressGestureIgnoreRangePx,
-        onSwipeLeft = ::playNextFromMiniPlayer,
-        onSwipeRight = ::playPreviousFromMiniPlayer
+        onSwipeLeft = {
+            handleMiniPlayerPlayNext(
+                hasCurrentSong = hasCurrentSong,
+                transitions = transitions,
+                callbacks = callbacks
+            )
+        },
+        onSwipeRight = {
+            handleMiniPlayerPlayPrevious(
+                hasCurrentSong = hasCurrentSong,
+                transitions = transitions,
+                callbacks = callbacks
+            )
+        }
     )
     val addToPlaylistBackSwipeThresholdPx = with(density) {
         72.dp.toPx()
@@ -600,11 +575,11 @@ fun MiniPlayer(
         interactionSource = state.noRippleInteractionSource,
         gestureModifier = gestureModifier,
         onActivate = {
-            if (minimized) {
-                onMinimizedChange(false)
-            } else {
-                onExpandedChange(true)
-            }
+            handleMiniPlayerActivate(
+                minimized = minimized,
+                onMinimizedChange = onMinimizedChange,
+                onExpandedChange = onExpandedChange
+            )
         },
         modifier = modifier,
         panelContent = { playerShape ->
@@ -627,9 +602,10 @@ fun MiniPlayer(
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
                             val up = waitForUpOrCancellation()
-                            if (up != null) {
-                                transitions.closeExpandedMoreMenu()
-                            }
+                            handleExpandedMoreMenuPointerUp(
+                                up = up,
+                                transitions = transitions
+                            )
                         }
                     }
                     .graphicsLayer {
@@ -723,70 +699,29 @@ fun MiniPlayer(
                         songInfoProgress = songInfoProgress,
                         callbacks = callbacks,
                         collapseInteractionSource = state.noRippleInteractionSource,
-                        onArtistClick = { rawArtist ->
-                            transitions.handleArtistClick(
-                                rawArtist = rawArtist,
-                                artistClickEnabled = artistClickEnabled,
-                                fullscreenContentExitProgress = fullscreenContentExitProgress,
-                                artistPlaceholderProgress = artistPlaceholderProgress
-                            )
-                        },
+                        onArtistClick = fullscreenInteractionHandlers.onArtistClick,
                         onNewPlaylistCreateAnimationFinished =
                             onNewPlaylistCreateAnimationFinished,
-                        onDismissAddToPlaylistAtTop = transitions::exitAddToPlaylistMode,
+                        onDismissAddToPlaylistAtTop =
+                            fullscreenInteractionHandlers.onDismissAddToPlaylistAtTop,
                         onCreatePlaylistClick = onCreatePlaylistClick,
-                        onPlaylistClick = { playlist ->
-                            onAddSongToPlaylist(playlist, transitions::exitAddToPlaylistMode)
-                        },
-                        onLockPlayPauseVisual = transitions::lockPlayPauseVisual,
-                        onScrubbingChange = transitions::setProgressScrubbing,
-                        onPlayPrevious = {
-                            transitions.closeExpandedMoreMenu()
-                            playPreviousFromMiniPlayer()
-                        },
-                        onTogglePlayPause = {
-                            if (transitions.prepareTogglePlayPause(hasCurrentSong)) {
-                                callbacks.onTogglePlayPause()
-                            }
-                        },
-                        onPlayNext = {
-                            transitions.closeExpandedMoreMenu()
-                            playNextFromMiniPlayer()
-                        },
-                        onMoreMenuExpandedChange = transitions::setExpandedMoreMenu,
-                        onToggleLiked = onToggleCurrentSongLiked,
-                        onAddToPlaylist = {
-                            transitions.enterAddToPlaylistMode()
-                        },
-                        onOpenSongInfo = {
-                            transitions.enterSongInfoMode(
-                                fullscreenContentExitProgress = fullscreenContentExitProgress,
-                                artistPlaceholderProgress = artistPlaceholderProgress
-                            )
-                        },
-                        onOpenQueue = {
-                            transitions.openQueueSheet()
-                        },
-                        onArtistHostBack = transitions::exitFullscreenContentMode,
-                        onArtistHostArtistClick = { artistName ->
-                            transitions.openArtistDetailFromPlaceholder(
-                                artistName = artistName,
-                                artistPlaceholderActive = artistPlaceholderActive
-                            )?.let(callbacks.onOpenArtistRootPage)
-                        },
-                        onCollapseClick = {
-                            if (
-                                state.fullscreenContentMode !=
-                                FullscreenContentMode.Playback
-                            ) {
-                                transitions.exitFullscreenContentMode()
-                            } else if (allowFullscreenFromCollapsed) {
-                                onFullscreenChange(false)
-                                onExpandedChange(false)
-                            } else {
-                                onFullscreenChange(false)
-                            }
-                        }
+                        onPlaylistClick = fullscreenInteractionHandlers.onPlaylistClick,
+                        onLockPlayPauseVisual =
+                            fullscreenInteractionHandlers.onLockPlayPauseVisual,
+                        onScrubbingChange = fullscreenInteractionHandlers.onScrubbingChange,
+                        onPlayPrevious = fullscreenInteractionHandlers.onPlayPrevious,
+                        onTogglePlayPause = fullscreenInteractionHandlers.onTogglePlayPause,
+                        onPlayNext = fullscreenInteractionHandlers.onPlayNext,
+                        onMoreMenuExpandedChange =
+                            fullscreenInteractionHandlers.onMoreMenuExpandedChange,
+                        onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
+                        onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
+                        onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo,
+                        onOpenQueue = fullscreenInteractionHandlers.onOpenQueue,
+                        onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
+                        onArtistHostArtistClick =
+                            fullscreenInteractionHandlers.onArtistHostArtistClick,
+                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick
                     )
             }
         },
