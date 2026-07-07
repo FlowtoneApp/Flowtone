@@ -1,60 +1,18 @@
 package ink.tenqui.flowtone.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.outlined.CreateNewFolder
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import kotlin.math.roundToInt
 
 @Composable
 internal fun SharedPlaybackControls(
@@ -124,79 +82,25 @@ internal fun SharedPlaybackControls(
     val controlsExit = controlsExitProgress.coerceIn(0f, 1f)
     val controlsEnabled = controlsExit <= 0.01f
 
-    Box(
+    PlayerMainControls(
+        isPlaying = isPlaying,
+        iconColor = iconColor,
+        screenWidth = screenWidth,
+        previousNextTouchSize = previousNextTouchSize,
+        playPauseTouchSize = playPauseTouchSize,
+        previousNextIconSize = previousNextIconSize,
+        playPauseIconSize = playPauseIconSize,
+        previousX = previousX,
+        playPauseX = playPauseX,
+        nextX = nextX,
+        currentTop = currentTop,
+        fullscreenScale = fullscreenScale,
+        controlsEnabled = controlsEnabled,
+        onPlayPrevious = onPlayPrevious,
+        onTogglePlayPause = onTogglePlayPause,
+        onPlayNext = onPlayNext,
         modifier = modifier
-            .width(screenWidth)
-            .height(playPauseTouchSize)
-            .graphicsLayer {
-                translationY = currentTop.toPx()
-            }
-    ) {
-        TransparentControlButton(
-            onClick = onPlayPrevious,
-            enabled = controlsEnabled,
-            modifier = Modifier
-                .size(previousNextTouchSize)
-                .graphicsLayer {
-                    translationX = previousX.toPx()
-                    translationY = ((playPauseTouchSize - previousNextTouchSize) / 2f).toPx()
-                    scaleX = fullscreenScale
-                    scaleY = fullscreenScale
-                }
-        ) {
-            Icon(
-                imageVector = Icons.Filled.SkipPrevious,
-                contentDescription = "\u4e0a\u4e00\u66f2",
-                tint = iconColor,
-                modifier = Modifier.size(previousNextIconSize)
-            )
-        }
-        TransparentControlButton(
-            onClick = onTogglePlayPause,
-            enabled = controlsEnabled,
-            modifier = Modifier
-                .size(playPauseTouchSize)
-                .graphicsLayer {
-                    translationX = playPauseX.toPx()
-                    scaleX = fullscreenScale
-                    scaleY = fullscreenScale
-                }
-        ) {
-            Icon(
-                imageVector = if (isPlaying) {
-                    Icons.Filled.Pause
-                } else {
-                    Icons.Filled.PlayArrow
-                },
-                contentDescription = if (isPlaying) {
-                    "\u6682\u505c"
-                } else {
-                    "\u64ad\u653e"
-                },
-                tint = iconColor,
-                modifier = Modifier.size(playPauseIconSize)
-            )
-        }
-        TransparentControlButton(
-            onClick = onPlayNext,
-            enabled = controlsEnabled,
-            modifier = Modifier
-                .size(previousNextTouchSize)
-                .graphicsLayer {
-                    translationX = nextX.toPx()
-                    translationY = ((playPauseTouchSize - previousNextTouchSize) / 2f).toPx()
-                    scaleX = fullscreenScale
-                    scaleY = fullscreenScale
-                }
-        ) {
-            Icon(
-                imageVector = Icons.Filled.SkipNext,
-                contentDescription = "\u4e0b\u4e00\u66f2",
-                tint = iconColor,
-                modifier = Modifier.size(previousNextIconSize)
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -223,7 +127,7 @@ internal fun SideButtonsOverlay(
     modifier: Modifier = Modifier
 ) {
     val enterProgress = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
-    val buttonSize = 48.dp
+    val buttonSize = PlayerSideButtonSize
     val sideButtonHorizontalOffset = 48.dp
     val progressWidth = playerWidth * 0.76f
     val progressLeft = (playerWidth - progressWidth) / 2f
@@ -390,341 +294,3 @@ internal fun SideButtonsOverlay(
     }
 }
 
-@Composable
-internal fun FavoriteButton(
-    liked: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    visualEnabled: Boolean = enabled
-) {
-    TransparentControlButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .graphicsLayer {
-                alpha = if (visualEnabled) 1f else 0.45f
-            }
-    ) {
-        Icon(
-            imageVector = if (liked) {
-                Icons.Rounded.Favorite
-            } else {
-                Icons.Outlined.FavoriteBorder
-            },
-            contentDescription = if (liked) {
-                "\u5df2\u559c\u6b22"
-            } else {
-                "\u6dfb\u52a0\u559c\u6b22"
-            },
-            tint = if (liked) {
-                Color(0xFFFF4D67)
-            } else {
-                Color.White.copy(alpha = 0.92f)
-            },
-            modifier = Modifier.size(30.dp)
-        )
-    }
-}
-
-@Composable
-internal fun PlaybackOrderButton(
-    mode: PlaybackOrderMode,
-    iconColor: Color,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    visualEnabled: Boolean = enabled
-) {
-    val icon = when (mode) {
-        PlaybackOrderMode.Sequence -> Icons.Rounded.Repeat
-        PlaybackOrderMode.RepeatOne -> Icons.Rounded.RepeatOne
-        PlaybackOrderMode.Shuffle -> Icons.Rounded.Shuffle
-    }
-    val description = when (mode) {
-        PlaybackOrderMode.Sequence -> "\u987a\u5e8f\u64ad\u653e"
-        PlaybackOrderMode.RepeatOne -> "\u5355\u66f2\u5faa\u73af"
-        PlaybackOrderMode.Shuffle -> "\u968f\u673a\u64ad\u653e"
-    }
-    TransparentControlButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .graphicsLayer {
-                alpha = if (visualEnabled) 1f else 0.45f
-            }
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = iconColor,
-            modifier = Modifier.size(30.dp)
-        )
-    }
-}
-
-@Composable
-internal fun QueueButton(
-    iconColor: Color,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    visualEnabled: Boolean = enabled
-) {
-    TransparentControlButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .graphicsLayer {
-                alpha = if (visualEnabled) 1f else 0.45f
-            }
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
-            contentDescription = "\u64ad\u653e\u961f\u5217",
-            tint = iconColor,
-            modifier = Modifier.size(30.dp)
-        )
-    }
-}
-
-@Composable
-private fun FullscreenMoreMenu(
-    visible: Boolean,
-    iconColor: Color,
-    alpha: Float,
-    enabled: Boolean,
-    onCollapse: () -> Unit,
-    onAddToPlaylist: () -> Unit,
-    onOpenSongInfo: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val capsuleHeight by animateDpAsState(
-        targetValue = if (visible) 96.dp else 0.dp,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "FullscreenMoreMenuCapsuleHeight"
-    )
-    val capsuleIconAlpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "FullscreenMoreMenuIconAlpha"
-    )
-    val capsuleIconScale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.82f,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "FullscreenMoreMenuIconScale"
-    )
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fullscreenMenuEnterTransition(),
-        exit = fullscreenMenuExitTransition(),
-        modifier = modifier
-            .graphicsLayer {
-                this.alpha = alpha
-            }
-    ) {
-        Box(
-            modifier = Modifier
-                .width(48.dp)
-                .height(144.dp),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            Column(
-                modifier = Modifier.width(48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                FullscreenMoreMenuAction(
-                    icon = Icons.Rounded.ExpandMore,
-                    contentDescription = "\u6536\u8d77\u66f4\u591a\u64cd\u4f5c",
-                    iconColor = iconColor,
-                    iconSize = 28.dp,
-                    enabled = enabled,
-                    onClick = onCollapse
-                )
-                Column(
-                    modifier = Modifier
-                        .width(48.dp)
-                        .height(capsuleHeight)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.Gray.copy(alpha = 0.26f)),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    FullscreenMoreMenuAction(
-                        icon = Icons.Outlined.CreateNewFolder,
-                        contentDescription = "\u6dfb\u52a0\u5230\u6b4c\u5355",
-                        iconColor = iconColor,
-                        iconAlpha = capsuleIconAlpha,
-                        iconScale = capsuleIconScale,
-                        enabled = enabled,
-                        onClick = onAddToPlaylist
-                    )
-                    FullscreenMoreMenuAction(
-                        icon = Icons.Outlined.Info,
-                        contentDescription = "\u4fe1\u606f",
-                        iconColor = iconColor,
-                        iconAlpha = capsuleIconAlpha,
-                        iconScale = capsuleIconScale,
-                        enabled = enabled,
-                        onClick = onOpenSongInfo
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FullscreenMoreMenuAction(
-    icon: ImageVector,
-    contentDescription: String,
-    iconColor: Color,
-    onClick: () -> Unit,
-    iconSize: Dp = 30.dp,
-    iconAlpha: Float = 1f,
-    iconScale: Float = 1f,
-    enabled: Boolean = true
-) {
-    TransparentControlButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.size(48.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = iconColor,
-            modifier = Modifier
-                .size(iconSize)
-                .graphicsLayer {
-                    alpha = iconAlpha
-                    scaleX = iconScale
-                    scaleY = iconScale
-                }
-        )
-    }
-}
-
-@Composable
-private fun fullscreenMenuEnterTransition(): EnterTransition {
-    val density = LocalDensity.current
-    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
-    return fadeIn(
-        tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) + slideInVertically(
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) { slideDistancePx }
-}
-
-@Composable
-private fun fullscreenMenuExitTransition(): ExitTransition {
-    val density = LocalDensity.current
-    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
-    return fadeOut(
-        tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) + slideOutVertically(
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) { slideDistancePx }
-}
-
-@Composable
-private fun fullscreenMoreButtonEnterTransition(): EnterTransition {
-    val density = LocalDensity.current
-    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
-    return fadeIn(
-        tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) + slideInVertically(
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) { -slideDistancePx }
-}
-
-@Composable
-private fun fullscreenMoreButtonExitTransition(): ExitTransition {
-    val density = LocalDensity.current
-    val slideDistancePx = with(density) { 12.dp.toPx().roundToInt() }
-    return fadeOut(
-        tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) + slideOutVertically(
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        )
-    ) { -slideDistancePx }
-}
-
-@Composable
-internal fun MoreMenuButton(
-    iconColor: Color,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    visualEnabled: Boolean = enabled
-) {
-    TransparentControlButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .graphicsLayer {
-                alpha = if (visualEnabled) 1f else 0.45f
-            }
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.MoreVert,
-            contentDescription = "\u66f4\u591a",
-            tint = iconColor,
-            modifier = Modifier.size(30.dp)
-        )
-    }
-}
-
-@Composable
-internal fun TransparentControlButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier.size(52.dp),
-    enabled: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .clickable(
-                enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        content()
-    }
-}
