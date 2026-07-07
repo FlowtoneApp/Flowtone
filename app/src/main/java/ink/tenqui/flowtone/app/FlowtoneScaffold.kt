@@ -9,13 +9,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -30,12 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
-import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
-import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
@@ -50,87 +44,85 @@ import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.library.ArtistRootPage
 import ink.tenqui.flowtone.ui.player.MiniPlayer
-import ink.tenqui.flowtone.ui.player.PlayerUiState
-import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
-import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
-import ink.tenqui.flowtone.viewmodel.MusicUiState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun FlowtoneScaffold(
-    uiState: MusicUiState,
-    playerUiState: PlayerUiState,
-    appPreferences: AppPreferences,
-    themeMode: AppThemeMode,
-    onThemeModeChange: (AppThemeMode) -> Unit,
-    disablePausedArtworkTilt: Boolean,
-    onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
-    pagerState: PagerState,
-    selectedTopLevelPage: TopLevelPage,
-    rootPage: FlowtoneRootPage,
-    secondaryPage: SecondaryPage?,
-    selectedPlaylistId: String?,
-    selectedArtistName: String?,
-    likedSongKeys: List<String>,
-    secondaryPathSegments: List<String>,
-    hideSecondaryBackButton: Boolean,
-    onHideSecondaryBackButtonChange: (Boolean) -> Unit,
-    resumePlaybackAfterCall: Boolean,
-    onResumePlaybackAfterCallChange: (Boolean) -> Unit,
-    allowFullscreenFromCollapsed: Boolean,
-    onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
-    preloadSongMetadataCount: Int,
-    onPreloadSongMetadataCountChange: (Int) -> Unit,
-    songRecordThresholdSeconds: Int,
-    onSongRecordThresholdSecondsChange: (Int) -> Unit,
-    playbackQueueDisplayOrder: QueueDisplayOrder,
-    onPlaybackQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit,
-    settingsBackActionChange: ((() -> Unit)?) -> Unit,
-    onSettingsPathSegmentsChange: (List<String>) -> Unit,
-    openSourceBackActionChange: ((() -> Unit)?) -> Unit,
-    onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
-    permissionDenied: Boolean,
-    showSwipeHint: Boolean,
-    secondaryOpen: Boolean,
-    topBarBackgroundAlpha: Float,
-    topBarScrollConnection: NestedScrollConnection,
-    backgroundBlurRadius: Dp,
-    backgroundBlurProgress: Float,
-    miniPlayerContentBottomPadding: Dp,
-    miniPlayerBottomProtection: Dp,
-    miniPlayerExpanded: Boolean,
-    miniPlayerFullscreen: Boolean,
-    miniPlayerMinimized: Boolean,
-    noRippleInteractionSource: MutableInteractionSource,
-    onNavigateBack: () -> Unit,
-    onCloseSecondaryPage: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenAbout: () -> Unit,
-    onOpenLocalLibrary: () -> Unit,
-    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    onOpenArtistRootPage: (String) -> Unit,
-    onCloseArtistRootPage: () -> Unit,
-    onOpenSource: () -> Unit,
-    onOpenSourceBack: () -> Unit,
-    onRequestPermission: () -> Unit,
-    onSongClick: (Song) -> Unit,
-    onDismissExpandedPlayer: () -> Unit,
-    onExpandedChange: (Boolean) -> Unit,
-    onFullscreenChange: (Boolean) -> Unit,
-    onMinimizedChange: (Boolean) -> Unit,
-    onTogglePlayPause: () -> Unit,
-    onPlayPrevious: () -> Unit,
-    onPlayNext: () -> Unit,
-    onSeekTo: (Long) -> Unit,
-    onTogglePlaybackOrderMode: () -> Unit,
-    onPlayQueueSong: (Song) -> Unit,
-    onPlaylistSongClick: (List<Song>, Int) -> Unit,
-    onSetSongLiked: (Song, Boolean) -> Unit,
-    onToggleSongLiked: (Song) -> Unit,
+    state: FlowtoneAppScaffoldState,
+    callbacks: FlowtoneAppCallbacks,
     modifier: Modifier = Modifier
 ) {
+    val uiState = state.uiState
+    val playerUiState = state.playerUiState
+    val appPreferences = state.appPreferences
+    val themeMode = state.themeMode
+    val disablePausedArtworkTilt = state.disablePausedArtworkTilt
+    val pagerState = state.pagerState
+    val selectedTopLevelPage = state.selectedTopLevelPage
+    val rootPage = state.rootPage
+    val secondaryPage = state.secondaryPage
+    val selectedPlaylistId = state.selectedPlaylistId
+    val selectedArtistName = state.selectedArtistName
+    val likedSongKeys = state.likedSongKeys
+    val secondaryPathSegments = state.secondaryPathSegments
+    val hideSecondaryBackButton = state.hideSecondaryBackButton
+    val resumePlaybackAfterCall = state.resumePlaybackAfterCall
+    val allowFullscreenFromCollapsed = state.allowFullscreenFromCollapsed
+    val preloadSongMetadataCount = state.preloadSongMetadataCount
+    val songRecordThresholdSeconds = state.songRecordThresholdSeconds
+    val playbackQueueDisplayOrder = state.playbackQueueDisplayOrder
+    val permissionDenied = state.permissionDenied
+    val showSwipeHint = state.showSwipeHint
+    val secondaryOpen = state.secondaryOpen
+    val topBarBackgroundAlpha = state.topBarBackgroundAlpha
+    val topBarScrollConnection = state.topBarScrollConnection
+    val backgroundBlurRadius = state.backgroundBlurRadius
+    val backgroundBlurProgress = state.backgroundBlurProgress
+    val miniPlayerContentBottomPadding = state.miniPlayerContentBottomPadding
+    val miniPlayerBottomProtection = state.miniPlayerBottomProtection
+    val miniPlayerExpanded = state.miniPlayerExpanded
+    val miniPlayerFullscreen = state.miniPlayerFullscreen
+    val miniPlayerMinimized = state.miniPlayerMinimized
+    val noRippleInteractionSource = state.noRippleInteractionSource
+    val onThemeModeChange = callbacks.onThemeModeChange
+    val onDisablePausedArtworkTiltChange = callbacks.onDisablePausedArtworkTiltChange
+    val onHideSecondaryBackButtonChange = callbacks.onHideSecondaryBackButtonChange
+    val onResumePlaybackAfterCallChange = callbacks.onResumePlaybackAfterCallChange
+    val onAllowFullscreenFromCollapsedChange = callbacks.onAllowFullscreenFromCollapsedChange
+    val onPreloadSongMetadataCountChange = callbacks.onPreloadSongMetadataCountChange
+    val onSongRecordThresholdSecondsChange = callbacks.onSongRecordThresholdSecondsChange
+    val onPlaybackQueueDisplayOrderChange = callbacks.onPlaybackQueueDisplayOrderChange
+    val settingsBackActionChange = callbacks.settingsBackActionChange
+    val onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange
+    val openSourceBackActionChange = callbacks.openSourceBackActionChange
+    val onOpenSourcePathSegmentsChange = callbacks.onOpenSourcePathSegmentsChange
+    val onNavigateBack = callbacks.onNavigateBack
+    val onCloseSecondaryPage = callbacks.onCloseSecondaryPage
+    val onOpenSettings = callbacks.onOpenSettings
+    val onOpenAbout = callbacks.onOpenAbout
+    val onOpenLocalLibrary = callbacks.onOpenLocalLibrary
+    val onOpenPlaylist = callbacks.onOpenPlaylist
+    val onOpenArtistRootPage = callbacks.onOpenArtistRootPage
+    val onCloseArtistRootPage = callbacks.onCloseArtistRootPage
+    val onOpenSource = callbacks.onOpenSource
+    val onOpenSourceBack = callbacks.onOpenSourceBack
+    val onRequestPermission = callbacks.onRequestPermission
+    val onSongClick = callbacks.onSongClick
+    val onDismissExpandedPlayer = callbacks.onDismissExpandedPlayer
+    val onExpandedChange = callbacks.onExpandedChange
+    val onFullscreenChange = callbacks.onFullscreenChange
+    val onMinimizedChange = callbacks.onMinimizedChange
+    val onTogglePlayPause = callbacks.onTogglePlayPause
+    val onPlayPrevious = callbacks.onPlayPrevious
+    val onPlayNext = callbacks.onPlayNext
+    val onSeekTo = callbacks.onSeekTo
+    val onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
+    val onPlayQueueSong = callbacks.onPlayQueueSong
+    val onPlaylistSongClick = callbacks.onPlaylistSongClick
+    val onSetSongLiked = callbacks.onSetSongLiked
+    val onToggleSongLiked = callbacks.onToggleSongLiked
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val hasCurrentSong = playerUiState.hasCurrentSong
