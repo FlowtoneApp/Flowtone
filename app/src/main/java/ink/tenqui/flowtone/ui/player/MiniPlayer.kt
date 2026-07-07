@@ -3,7 +3,6 @@ package ink.tenqui.flowtone.ui.player
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,21 +38,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.imageLoader
 import coil3.request.ImageRequest
-import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.request.crossfade
-import coil3.toBitmap
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 
 private const val FLOWTONE_FAVORITE_BUTTON_TAG = "FlowtoneFavoriteButton"
 
@@ -355,11 +346,10 @@ fun MiniPlayer(
                 .build()
         }
     }
-    LaunchedEffect(coverImageRequest) {
-        coverImageRequest?.let { request ->
-            context.imageLoader.enqueue(request)
-        }
-    }
+    MiniPlayerCoverImageEffects(
+        coverImageRequest = coverImageRequest,
+        context = context
+    )
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val fallbackSeedColor = MaterialTheme.colorScheme.primary.toArgb()
     val fallbackSeedColors = remember(currentSong?.id, title, artist, artworkUri, fallbackSeedColor) {
@@ -395,120 +385,31 @@ fun MiniPlayer(
         mutableStateOf(true)
     }
 
-    LaunchedEffect(currentSong?.id, currentSong?.uri, artworkUri, fallbackSeedColor, isDarkTheme) {
-        Log.d(
-            FLOWTONE_CLOUD_COLORS_TAG,
-            "start songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
-                "requestData=${paletteImageRequest?.data}"
-        )
-
-        if (artworkUri == null || paletteImageRequest == null) {
-            lastStableBackdrop = fallbackBackdrop
-            usingFallbackCloudColors = true
-            Log.d(
-                FLOWTONE_CLOUD_COLORS_TAG,
-                "fallback used for songId=${currentSong?.id}, song=${title}, reason=artworkUri is null, " +
-                    "path=songFallback, " +
-                    "colors=${fallbackCloudColors.joinToString { it.toArgbHex() }}"
-            )
-            return@LaunchedEffect
-        }
-
-        runCatching {
-            withContext(Dispatchers.Default) {
-                val result = context.imageLoader.execute(paletteImageRequest)
-                Log.d(
-                    FLOWTONE_CLOUD_COLORS_TAG,
-                    "coil result songId=${currentSong?.id}, song=${title}, success=${result is SuccessResult}"
-                )
-
-                val bitmap = (result as? SuccessResult)?.image?.toBitmap(96, 96)
-                    ?: error("Coil did not return a bitmap image")
-                val seedResult = extractMaterialYouSeedColors(
-                    bitmap = bitmap,
-                    fallbackColor = fallbackSeedColors.first(),
-                    count = 3
-                )
-                val colors = normalizeBackdropColors(
-                    colors = when (seedResult.colorPath) {
-                        CloudColorPath.MaterialYouSeeds -> materialYouCloudColors(
-                            seedColors = seedResult.seedColors,
-                            isDarkTheme = isDarkTheme
-                        )
-
-                        CloudColorPath.NeutralLowChroma -> neutralCloudColorsFromCover(
-                            averageLuminance = seedResult.averageLuminance,
-                            isDarkTheme = isDarkTheme
-                        )
-
-                        CloudColorPath.ThemeFallback -> fallbackCloudColors
-                    },
-                    isDarkTheme = isDarkTheme
-                )
-                val usedFallback = seedResult.usedFallback ||
-                    seedResult.colorPath == CloudColorPath.ThemeFallback
-                Log.d(
-                    FLOWTONE_CLOUD_COLORS_TAG,
-                    "success songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
-                        "requestData=${paletteImageRequest.data}, bitmap=${bitmap.width}x${bitmap.height}, " +
-                        "opaque=${seedResult.opaquePixelCount}, quantized=${seedResult.quantizedColorCount}, " +
-                        "sat=${seedResult.averageSaturation}, lum=${seedResult.averageLuminance}, " +
-                        "lowChroma=${seedResult.isLowChromaCover}, path=${seedResult.colorPath.logName}, " +
-                        "seeds=${seedResult.seedColors.joinToString { it.toArgbHex() }}, " +
-                        "colors=${colors.joinToString { it.toArgbHex() }}, " +
-                        "fallback=${usedFallback}, reason=${seedResult.fallbackReason.orEmpty()}"
-                )
-                colors to usedFallback
-            }
-        }.onSuccess { (colors, usedFallback) ->
-            val nextBackgroundRequest = backgroundImageRequest
-            val nextCoverRequest = coverImageRequest
-            lastStableBackdrop = if (nextBackgroundRequest != null && nextCoverRequest != null) {
-                PlayerBackdropState.Artwork(
-                    key = currentSong.toBackdropKey(),
-                    colors = colors,
-                    backgroundImageRequest = nextBackgroundRequest,
-                    coverImageRequest = nextCoverRequest
-                )
-            } else {
-                fallbackBackdrop
-            }
-            usingFallbackCloudColors = usedFallback
-        }.onFailure { throwable ->
-            if (throwable is CancellationException) {
-                throw throwable
-            }
-            lastStableBackdrop = fallbackBackdrop
-            usingFallbackCloudColors = true
-            Log.w(
-                FLOWTONE_CLOUD_COLORS_TAG,
-                "fallback used for songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
-                    "requestData=${paletteImageRequest.data}, reason=${throwable.message}, " +
-                    "path=songFallback, " +
-                    "colors=${fallbackCloudColors.joinToString { it.toArgbHex() }}",
-                throwable
-            )
-        }
-    }
-    LaunchedEffect(currentSong?.id, artworkUri, lastStableBackdrop) {
-        val backdropName = when (lastStableBackdrop) {
-            is PlayerBackdropState.Artwork -> "Artwork"
-            is PlayerBackdropState.Fallback -> "Fallback"
-        }
-        Log.d(
-            FLOWTONE_CLOUD_COLORS_TAG,
-            "render songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
-                "backdrop=$backdropName, " +
-                "colors=${lastStableBackdrop.colors.joinToString { it.toArgbHex() }}, " +
-                "usingFallback=$usingFallbackCloudColors"
-        )
-    }
+    MiniPlayerBackdropEffects(
+        currentSong = currentSong,
+        title = title,
+        artworkUri = artworkUri,
+        fallbackSeedColor = fallbackSeedColor,
+        isDarkTheme = isDarkTheme,
+        paletteImageRequest = paletteImageRequest,
+        backgroundImageRequest = backgroundImageRequest,
+        coverImageRequest = coverImageRequest,
+        fallbackSeedColors = fallbackSeedColors,
+        fallbackCloudColors = fallbackCloudColors,
+        fallbackBackdrop = fallbackBackdrop,
+        lastStableBackdrop = lastStableBackdrop,
+        usingFallbackCloudColors = usingFallbackCloudColors,
+        context = context,
+        onLastStableBackdropChange = { lastStableBackdrop = it },
+        onUsingFallbackCloudColorsChange = { usingFallbackCloudColors = it }
+    )
     val addToPlaylistDialogBackgroundColor = remember(lastStableBackdrop.colors) {
         coverTintDialogBackgroundColor(lastStableBackdrop.colors)
     }
-    LaunchedEffect(addToPlaylistDialogBackgroundColor) {
-        onAddToPlaylistDialogBackgroundColorChange(addToPlaylistDialogBackgroundColor)
-    }
+    MiniPlayerAddToPlaylistDialogEffects(
+        addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
+        onAddToPlaylistDialogBackgroundColorChange = onAddToPlaylistDialogBackgroundColorChange
+    )
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val titleColor = Color.White
     val artistColor = Color.White
@@ -642,24 +543,15 @@ fun MiniPlayer(
     ) {
         exitFullscreenContentMode()
     }
-    LaunchedEffect(fullscreen, expanded, hasCurrentSong) {
-        if (!fullscreen || !expanded) {
-            isFullscreenPlayer = false
-            resetFullscreenContentMode()
-        } else if (!hasCurrentSong) {
-            isFullscreenPlayer = false
-            exitFullscreenContentModeForSongChange()
-        }
-    }
-    LaunchedEffect(fullscreen, hasCurrentSong, currentSong?.id) {
-        if (!fullscreen) {
-            resetFullscreenContentMode()
-        } else if (!hasCurrentSong) {
-            exitFullscreenContentModeForSongChange()
-        } else if (currentSong?.id != null) {
-            exitFullscreenContentModeForSongChange()
-        }
-    }
+    MiniPlayerFullscreenContentEffects(
+        fullscreen = fullscreen,
+        expanded = expanded,
+        hasCurrentSong = hasCurrentSong,
+        currentSong = currentSong,
+        onFullscreenPlayerChange = { isFullscreenPlayer = it },
+        resetFullscreenContentMode = ::resetFullscreenContentMode,
+        exitFullscreenContentModeForSongChange = ::exitFullscreenContentModeForSongChange
+    )
     val artistClickEnabled = isArtistClickEnabled(
         isFullscreenPlayer = isFullscreenPlayer,
         fullscreenContentMode = fullscreenContentMode,
@@ -680,9 +572,10 @@ fun MiniPlayer(
         resetFullscreenContentMode()
         callbacks.onOpenArtistRootPage(selectedArtistName)
     }
-    LaunchedEffect(currentSong?.id) {
-        isProgressScrubbing = false
-    }
+    MiniPlayerSongTransitionEffects(
+        currentSong = currentSong,
+        onProgressScrubbingChange = { isProgressScrubbing = it }
+    )
     val visualIsPlaying = if (isProgressScrubbing || keepPlayPauseVisualLockedAfterSeek) {
         lockedIsPlayingDuringScrub
     } else {
@@ -735,15 +628,13 @@ fun MiniPlayer(
             callbacks.onPlayNext()
         }
     }
-    LaunchedEffect(playPauseVisualLockToken) {
-        val token = playPauseVisualLockToken
-        if (keepPlayPauseVisualLockedAfterSeek) {
-            delay(650L)
-            if (playPauseVisualLockToken == token) {
-                keepPlayPauseVisualLockedAfterSeek = false
-            }
+    MiniPlayerPlayPauseVisualLockEffects(
+        playPauseVisualLockToken = playPauseVisualLockToken,
+        keepPlayPauseVisualLockedAfterSeek = keepPlayPauseVisualLockedAfterSeek,
+        onKeepPlayPauseVisualLockedAfterSeekChange = {
+            keepPlayPauseVisualLockedAfterSeek = it
         }
-    }
+    )
     var accumulatedDragY by remember { mutableStateOf(0f) }
     val playbackGesturesEnabled = isPlaybackGestureContent(fullscreenContentMode)
     val fullscreenContentBackGesturesEnabled =
@@ -858,18 +749,10 @@ fun MiniPlayer(
         onBack = ::exitAddToPlaylistMode
     )
     val queueSheetBackgroundBlurProgress = remember { Animatable(0f) }
-    LaunchedEffect(queueSheetBackgroundBlurred) {
-        if (queueSheetBackgroundBlurred) {
-            queueSheetBackgroundBlurProgress.snapTo(0f)
-        }
-        queueSheetBackgroundBlurProgress.animateTo(
-            targetValue = if (queueSheetBackgroundBlurred) 1f else 0f,
-            animationSpec = tween(
-                durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
-                easing = LinearEasing
-            )
-        )
-    }
+    MiniPlayerQueueEffects(
+        queueSheetBackgroundBlurred = queueSheetBackgroundBlurred,
+        queueSheetBackgroundBlurProgress = queueSheetBackgroundBlurProgress
+    )
     val queueSheetBackgroundBlurRadius = 12.dp * queueSheetBackgroundBlurProgress.value
     val miniPlayerScene = miniPlayerScene(
         expanded = expanded,
