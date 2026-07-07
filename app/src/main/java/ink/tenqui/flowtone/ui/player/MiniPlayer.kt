@@ -116,6 +116,7 @@ fun MiniPlayer(
         context = context,
         allSongs = allSongs
     )
+    val transitions = MiniPlayerTransitions(state)
     val collapsedHeight = MiniPlayerCollapsedHeight
     val minimizedHeight = MiniPlayerMinimizedHeight
     val dragHotZoneHeight = MiniPlayerDragHotZoneHeight
@@ -272,14 +273,7 @@ fun MiniPlayer(
             easing = FlowtoneMotion.Easing
         ),
         label = "ArtistPlaceholderProgress",
-        finishedListener = { finalValue ->
-            if (
-                finalValue == 0f &&
-                state.fullscreenContentMode != FullscreenContentMode.ArtistPlaceholder
-            ) {
-                state.artistPlaceholderArtists = emptyList()
-            }
-        }
+        finishedListener = transitions::finishArtistPlaceholderProgress
     )
     val hostHeight = lerpDp(
         currentHeight + dragHotZoneHeight,
@@ -363,104 +357,23 @@ fun MiniPlayer(
         }
         Unit
     }
-    fun enterAddToPlaylistMode() {
-        state.artistPlaceholderArtists = emptyList()
-        state.expandedMoreMenu = false
-        state.fullscreenContentMode = FullscreenContentMode.AddToPlaylist
-    }
-    fun enterSongInfoMode() {
-        if (
-            state.fullscreenContentMode != FullscreenContentMode.Playback ||
-            !state.isFullscreenPlayer ||
-            fullscreenContentExitProgress > 0.01f ||
-            artistPlaceholderProgress > 0.01f
-        ) {
-            return
-        }
-        state.artistPlaceholderArtists = emptyList()
-        state.expandedMoreMenu = false
-        state.fullscreenContentMode = FullscreenContentMode.SongInfo
-    }
-    fun enterArtistPlaceholderMode(rawArtist: String) {
-        if (
-            state.fullscreenContentMode != FullscreenContentMode.Playback ||
-            !state.isFullscreenPlayer ||
-            fullscreenContentExitProgress > 0.01f ||
-            artistPlaceholderProgress > 0.01f
-        ) {
-            return
-        }
-        val displayArtist = rawArtist.trim()
-        if (!isSelectableArtist(displayArtist)) {
-            return
-        }
-        val artists = parseArtistCandidates(displayArtist)
-        if (artists.isEmpty()) {
-            return
-        }
-
-        state.expandedMoreMenu = false
-        state.artistPlaceholderArtists = artists
-        state.fullscreenContentMode = FullscreenContentMode.ArtistPlaceholder
-    }
-    fun exitArtistPlaceholderWithAnimation() {
-        state.expandedMoreMenu = false
-        if (state.fullscreenContentMode == FullscreenContentMode.ArtistPlaceholder) {
-            state.fullscreenContentMode = FullscreenContentMode.Playback
-        }
-    }
-    fun exitFullscreenContentMode() {
-        when (state.fullscreenContentMode) {
-            FullscreenContentMode.ArtistPlaceholder -> exitArtistPlaceholderWithAnimation()
-            FullscreenContentMode.Playback -> {
-                state.expandedMoreMenu = false
-            }
-            else -> {
-                state.expandedMoreMenu = false
-                state.artistPlaceholderArtists = emptyList()
-                state.fullscreenContentMode = FullscreenContentMode.Playback
-            }
-        }
-    }
-    fun resetFullscreenContentMode() {
-        state.expandedMoreMenu = false
-        state.artistPlaceholderArtists = emptyList()
-        if (state.fullscreenContentMode != FullscreenContentMode.Playback) {
-            state.fullscreenContentMode = FullscreenContentMode.Playback
-        }
-    }
-    fun exitFullscreenContentModeForSongChange() {
-        val artistPlaceholderExitInProgress = isArtistPlaceholderExitInProgress(
-            fullscreenContentMode = state.fullscreenContentMode,
-            artistPlaceholderArtists = state.artistPlaceholderArtists,
-            artistPlaceholderProgress = artistPlaceholderProgress
-        )
-        if (state.fullscreenContentMode == FullscreenContentMode.ArtistPlaceholder) {
-            exitArtistPlaceholderWithAnimation()
-        } else if (!artistPlaceholderExitInProgress) {
-            resetFullscreenContentMode()
-        }
-    }
-    fun exitAddToPlaylistMode() {
-        exitFullscreenContentMode()
-    }
     BackHandler(
         enabled = state.fullscreenContentMode == FullscreenContentMode.AddToPlaylist &&
             fullscreenInteractionActive
     ) {
-        exitAddToPlaylistMode()
+        transitions.exitAddToPlaylistMode()
     }
     BackHandler(
         enabled = state.fullscreenContentMode == FullscreenContentMode.SongInfo &&
             fullscreenInteractionActive
     ) {
-        exitFullscreenContentMode()
+        transitions.exitFullscreenContentMode()
     }
     BackHandler(
         enabled = state.fullscreenContentMode == FullscreenContentMode.ArtistPlaceholder &&
             fullscreenInteractionActive
     ) {
-        exitFullscreenContentMode()
+        transitions.exitFullscreenContentMode()
     }
     MiniPlayerFullscreenContentEffects(
         fullscreen = fullscreen,
@@ -468,8 +381,10 @@ fun MiniPlayer(
         hasCurrentSong = hasCurrentSong,
         currentSong = currentSong,
         onFullscreenPlayerChange = { state.isFullscreenPlayer = it },
-        resetFullscreenContentMode = ::resetFullscreenContentMode,
-        exitFullscreenContentModeForSongChange = ::exitFullscreenContentModeForSongChange
+        resetFullscreenContentMode = transitions::resetFullscreenContentMode,
+        exitFullscreenContentModeForSongChange = {
+            transitions.exitFullscreenContentModeForSongChange(artistPlaceholderProgress)
+        }
     )
     val artistClickEnabled = isArtistClickEnabled(
         isFullscreenPlayer = state.isFullscreenPlayer,
@@ -477,23 +392,9 @@ fun MiniPlayer(
         fullscreenContentExitProgress = fullscreenContentExitProgress,
         artistPlaceholderProgress = artistPlaceholderProgress
     )
-    fun handleArtistClick(rawArtist: String) {
-        if (!artistClickEnabled) {
-            return
-        }
-        enterArtistPlaceholderMode(rawArtist)
-    }
-    fun openArtistDetailFromPlaceholder(artistName: String) {
-        val selectedArtistName = artistName.trim()
-        if (!artistPlaceholderActive || selectedArtistName.isBlank()) {
-            return
-        }
-        resetFullscreenContentMode()
-        callbacks.onOpenArtistRootPage(selectedArtistName)
-    }
     MiniPlayerSongTransitionEffects(
         currentSong = currentSong,
-        onProgressScrubbingChange = { state.isProgressScrubbing = it }
+        onProgressScrubbingChange = transitions::setProgressScrubbing
     )
     val visualIsPlaying = if (
         state.isProgressScrubbing ||
@@ -531,31 +432,23 @@ fun MiniPlayer(
         ),
         label = "ArtworkPlaybackRotation"
     )
-    fun lockPlayPauseVisual(isPlayingToLock: Boolean) {
-        state.lockedIsPlayingDuringScrub = isPlayingToLock
-        state.keepPlayPauseVisualLockedAfterSeek = true
-        state.playPauseVisualLockToken += 1
-    }
     fun playPreviousFromMiniPlayer() {
         if (hasCurrentSong) {
-            state.collapsedMetadataSwitchDirection = -1
-            lockPlayPauseVisual(true)
+            transitions.preparePlayPrevious()
             callbacks.onPlayPrevious()
         }
     }
     fun playNextFromMiniPlayer() {
         if (hasCurrentSong) {
-            state.collapsedMetadataSwitchDirection = 1
-            lockPlayPauseVisual(true)
+            transitions.preparePlayNext()
             callbacks.onPlayNext()
         }
     }
     MiniPlayerPlayPauseVisualLockEffects(
         playPauseVisualLockToken = state.playPauseVisualLockToken,
         keepPlayPauseVisualLockedAfterSeek = state.keepPlayPauseVisualLockedAfterSeek,
-        onKeepPlayPauseVisualLockedAfterSeekChange = {
-            state.keepPlayPauseVisualLockedAfterSeek = it
-        }
+        onKeepPlayPauseVisualLockedAfterSeekChange =
+            transitions::setKeepPlayPauseVisualLockedAfterSeek
     )
     val playbackGesturesEnabled = isPlaybackGestureContent(state.fullscreenContentMode)
     val fullscreenContentBackGesturesEnabled =
@@ -591,7 +484,7 @@ fun MiniPlayer(
                     }
                     if (fullscreenContentBackGesturesEnabled) {
                         if (state.accumulatedDragY >= fullscreenSwipeThresholdPx) {
-                            exitFullscreenContentMode()
+                            transitions.exitFullscreenContentMode()
                         }
                         return@detectVerticalDragGestures
                     }
@@ -660,7 +553,7 @@ fun MiniPlayer(
     val addToPlaylistBackSwipeModifier = Modifier.addToPlaylistBackSwipeGesture(
         enabled = isAddToPlaylistBackGestureEnabled(state.fullscreenContentMode),
         thresholdPx = addToPlaylistBackSwipeThresholdPx,
-        onBack = ::exitAddToPlaylistMode
+        onBack = transitions::exitAddToPlaylistMode
     )
     val addToPlaylistPullDownThresholdPx = with(density) {
         64.dp.toPx()
@@ -669,7 +562,7 @@ fun MiniPlayer(
         enabled = isAddToPlaylistBackGestureEnabled(state.fullscreenContentMode),
         listState = state.addToPlaylistListState,
         thresholdPx = addToPlaylistPullDownThresholdPx,
-        onBack = ::exitAddToPlaylistMode
+        onBack = transitions::exitAddToPlaylistMode
     )
     MiniPlayerQueueEffects(
         queueSheetBackgroundBlurred = state.queueSheetBackgroundBlurred,
@@ -735,7 +628,7 @@ fun MiniPlayer(
                             awaitFirstDown(requireUnconsumed = false)
                             val up = waitForUpOrCancellation()
                             if (up != null) {
-                                state.expandedMoreMenu = false
+                                transitions.closeExpandedMoreMenu()
                             }
                         }
                     }
@@ -830,56 +723,63 @@ fun MiniPlayer(
                         songInfoProgress = songInfoProgress,
                         callbacks = callbacks,
                         collapseInteractionSource = state.noRippleInteractionSource,
-                        onArtistClick = ::handleArtistClick,
+                        onArtistClick = { rawArtist ->
+                            transitions.handleArtistClick(
+                                rawArtist = rawArtist,
+                                artistClickEnabled = artistClickEnabled,
+                                fullscreenContentExitProgress = fullscreenContentExitProgress,
+                                artistPlaceholderProgress = artistPlaceholderProgress
+                            )
+                        },
                         onNewPlaylistCreateAnimationFinished =
                             onNewPlaylistCreateAnimationFinished,
-                        onDismissAddToPlaylistAtTop = ::exitAddToPlaylistMode,
+                        onDismissAddToPlaylistAtTop = transitions::exitAddToPlaylistMode,
                         onCreatePlaylistClick = onCreatePlaylistClick,
                         onPlaylistClick = { playlist ->
-                            onAddSongToPlaylist(playlist, ::exitAddToPlaylistMode)
+                            onAddSongToPlaylist(playlist, transitions::exitAddToPlaylistMode)
                         },
-                        onLockPlayPauseVisual = ::lockPlayPauseVisual,
-                        onScrubbingChange = { scrubbing ->
-                            state.isProgressScrubbing = scrubbing
-                        },
+                        onLockPlayPauseVisual = transitions::lockPlayPauseVisual,
+                        onScrubbingChange = transitions::setProgressScrubbing,
                         onPlayPrevious = {
-                            state.expandedMoreMenu = false
+                            transitions.closeExpandedMoreMenu()
                             playPreviousFromMiniPlayer()
                         },
                         onTogglePlayPause = {
-                            state.expandedMoreMenu = false
-                            if (hasCurrentSong) {
-                                state.isProgressScrubbing = false
-                                state.keepPlayPauseVisualLockedAfterSeek = false
+                            if (transitions.prepareTogglePlayPause(hasCurrentSong)) {
                                 callbacks.onTogglePlayPause()
                             }
                         },
                         onPlayNext = {
-                            state.expandedMoreMenu = false
+                            transitions.closeExpandedMoreMenu()
                             playNextFromMiniPlayer()
                         },
-                        onMoreMenuExpandedChange = { expanded ->
-                            state.expandedMoreMenu = expanded
-                        },
+                        onMoreMenuExpandedChange = transitions::setExpandedMoreMenu,
                         onToggleLiked = onToggleCurrentSongLiked,
                         onAddToPlaylist = {
-                            enterAddToPlaylistMode()
+                            transitions.enterAddToPlaylistMode()
                         },
                         onOpenSongInfo = {
-                            enterSongInfoMode()
+                            transitions.enterSongInfoMode(
+                                fullscreenContentExitProgress = fullscreenContentExitProgress,
+                                artistPlaceholderProgress = artistPlaceholderProgress
+                            )
                         },
                         onOpenQueue = {
-                            state.queueSheetBackgroundBlurred = true
-                            state.showQueueSheet = true
+                            transitions.openQueueSheet()
                         },
-                        onArtistHostBack = ::exitFullscreenContentMode,
-                        onArtistHostArtistClick = ::openArtistDetailFromPlaceholder,
+                        onArtistHostBack = transitions::exitFullscreenContentMode,
+                        onArtistHostArtistClick = { artistName ->
+                            transitions.openArtistDetailFromPlaceholder(
+                                artistName = artistName,
+                                artistPlaceholderActive = artistPlaceholderActive
+                            )?.let(callbacks.onOpenArtistRootPage)
+                        },
                         onCollapseClick = {
                             if (
                                 state.fullscreenContentMode !=
                                 FullscreenContentMode.Playback
                             ) {
-                                exitFullscreenContentMode()
+                                transitions.exitFullscreenContentMode()
                             } else if (allowFullscreenFromCollapsed) {
                                 onFullscreenChange(false)
                                 onExpandedChange(false)
@@ -905,12 +805,8 @@ fun MiniPlayer(
             isPlaying = playerUiState.isPlaying,
             waitForArtworkLoad = useLocalArtworkLoading,
             onSongClick = callbacks.onPlayQueueSong,
-            onDismissStart = {
-                state.queueSheetBackgroundBlurred = false
-            },
-            onDismiss = {
-                state.showQueueSheet = false
-            }
+            onDismissStart = transitions::startQueueSheetDismiss,
+            onDismiss = transitions::finishQueueSheetDismiss
             )
         }
     )
