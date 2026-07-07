@@ -8,26 +8,17 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,9 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,7 +40,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -898,72 +885,30 @@ fun MiniPlayer(
         fullscreenContentExitProgress = fullscreenContentExitProgress,
         artistPlaceholderProgress = artistPlaceholderProgress
     )
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(hostHeight)
-            .graphicsLayer {
-                translationY = miniPlayerSlideOffsetY.toPx()
-                alpha = visibleProgress
-                clip = fullscreenProgress > 0.01f
+    MiniPlayerVisualSurface(
+        hostHeight = hostHeight,
+        miniPlayerSlideOffsetY = miniPlayerSlideOffsetY,
+        visibleProgress = visibleProgress,
+        fullscreenProgress = fullscreenProgress,
+        queueSheetBackgroundBlurRadius = queueSheetBackgroundBlurRadius,
+        animationProgress = animationProgress,
+        visualPanelTop = visualPanelTop,
+        visualPanelHeight = visualPanelHeight,
+        dragHotZoneHeight = dragHotZoneHeight,
+        handleOffsetY = handleOffsetY,
+        hasCurrentSong = hasCurrentSong,
+        expanded = expanded,
+        interactionSource = noRippleInteractionSource,
+        gestureModifier = gestureModifier,
+        onActivate = {
+            if (minimized) {
+                onMinimizedChange(false)
+            } else {
+                onExpandedChange(true)
             }
-    ) {
-        val playerShape = RoundedCornerShape(
-            topStart = lerpDp(24.dp, 0.dp, fullscreenProgress),
-            topEnd = lerpDp(24.dp, 0.dp, fullscreenProgress),
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp
-        )
-        val playerShadowElevation = lerpDp(0.dp, 18.dp, animationProgress)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .blur(queueSheetBackgroundBlurRadius)
-        ) {
-            PlayerDragHandle(
-                animationProgress = animationProgress,
-                hasCurrentSong = hasCurrentSong,
-                expanded = expanded,
-                interactionSource = noRippleInteractionSource,
-                onActivate = {
-                    if (minimized) {
-                        onMinimizedChange(false)
-                    } else {
-                        onExpandedChange(true)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(dragHotZoneHeight)
-                    .graphicsLayer {
-                        translationY = handleOffsetY.toPx()
-                    }
-                    .align(Alignment.TopCenter)
-                    .then(gestureModifier)
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = visualPanelTop)
-                    .fillMaxWidth()
-                    .height(visualPanelHeight)
-                    .shadow(
-                        elevation = playerShadowElevation,
-                        shape = playerShape,
-                        clip = false
-                    )
-                    .clickable(
-                        enabled = hasCurrentSong && !expanded,
-                        interactionSource = noRippleInteractionSource,
-                        indication = null
-                    ) {
-                        if (minimized) {
-                            onMinimizedChange(false)
-                        } else {
-                            onExpandedChange(true)
-                        }
-                    }
-            ) {
+        },
+        modifier = modifier,
+        panelContent = { playerShape ->
                 BoxWithConstraints(
                     modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -994,359 +939,162 @@ fun MiniPlayer(
                     .then(addToPlaylistPullDownBackModifier)
                 ) {
                     val playerWidth = maxWidth
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .then(gestureModifier)
-                            .then(songSwipeModifier)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(coverTintDialogBackgroundColor(lastStableBackdrop.colors))
-                    )
-                    BlurredArtworkBackground(
-                        imageRequest = lastStableBackdrop.backgroundImageRequest,
-                        alpha = lerpFloat(0.78f, 0f, animationProgress),
-                        waitForArtworkLoad = useLocalArtworkLoading,
-                        modifier = Modifier.matchParentSize()
-                    )
-                    CrossfadeFlowCloudBackground(
-                        colors = lastStableBackdrop.colors,
-                        progress = animationProgress,
+                    MiniPlayerBackgroundLayers(
+                        gestureModifier = gestureModifier,
+                        songSwipeModifier = songSwipeModifier,
+                        backgroundColor = coverTintDialogBackgroundColor(lastStableBackdrop.colors),
+                        backgroundImageRequest = lastStableBackdrop.backgroundImageRequest,
+                        cloudColors = lastStableBackdrop.colors,
+                        animationProgress = animationProgress,
                         isPlaying = playerUiState.isPlaying,
-                        modifier = Modifier.matchParentSize()
+                        waitForArtworkLoad = useLocalArtworkLoading,
                     )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(Color.Black.copy(alpha = lerpFloat(0.24f, 0.36f, animationProgress)))
-                    )
-                    val fullscreenProgressTrackWidth = playerWidth * 0.76f
-                    val fullscreenArtworkX = (playerWidth - fullscreenProgressTrackWidth) / 2f
-                    val fullscreenMetadataTop =
-                        fullscreenCoverCenterY + fullscreenProgressTrackWidth / 2f + 14.dp
-                    val addToPlaylistArtworkSize = 56.dp
-                    val addToPlaylistArtworkLeft = 20.dp
-                    val addToPlaylistArtworkTop = with(density) {
+                    val addToPlaylistStatusBarsTop = with(density) {
                         WindowInsets.statusBars.getTop(this).toDp()
-                    } + 72.dp
-                    val addToPlaylistTextStart =
-                        addToPlaylistArtworkLeft + addToPlaylistArtworkSize + 12.dp
-                    val addToPlaylistTextWidth =
-                        (playerWidth - addToPlaylistTextStart - 20.dp).coerceAtLeast(80.dp)
-                    val addToPlaylistCardsTop =
-                        addToPlaylistArtworkTop + addToPlaylistArtworkSize + 24.dp
-                    val addToPlaylistCardsHeight =
-                        (visualPanelHeight - addToPlaylistCardsTop - 20.dp)
-                            .coerceAtLeast(AddToPlaylistCardHeight)
-                    val artistExitProgress = artistPlaceholderProgress.coerceIn(0f, 1f)
-                    val fullscreenContentExitSharedProgress = maxOf(
-                        fullscreenContentExitProgress.coerceIn(0f, 1f),
-                        artistExitProgress
+                    }
+                    val fullscreenLayoutMetrics = miniPlayerFullscreenLayoutMetrics(
+                        playerWidth = playerWidth,
+                        visualPanelHeight = visualPanelHeight,
+                        fullscreenCoverCenterY = fullscreenCoverCenterY,
+                        addToPlaylistStatusBarsTop = addToPlaylistStatusBarsTop,
+                        fullscreenContentExitProgress = fullscreenContentExitProgress,
+                        artistPlaceholderProgress = artistPlaceholderProgress,
+                        addToPlaylistProgress = addToPlaylistProgress
                     )
-                    val artworkContentExitProgress =
-                        fullscreenContentExitProgress.coerceIn(0f, 1f)
-                    val addToPlaylistSharedProgress = addToPlaylistProgress.coerceIn(0f, 1f)
-                    val playbackContentAlpha = 1f - fullscreenContentExitSharedProgress
-                    val playbackContentOffsetY = 32.dp * fullscreenContentExitSharedProgress
-                    MorphArtworkLayer(
+                    MiniPlayerFullscreenLayout(
                         imageRequest = coverImageRequest,
                         waitForArtworkLoad = useLocalArtworkLoading,
-                        progress = artworkAnimationProgress,
-                        scaleProgress = artworkScaleProgress,
+                        playerUiState = playerUiState,
+                        title = title,
+                        artist = artist,
+                        hasCurrentSong = hasCurrentSong,
+                        visualIsPlaying = visualIsPlaying,
                         currentHeight = currentHeight,
-                        viewportHeight = currentHeight,
+                        visualPanelHeight = visualPanelHeight,
                         collapsedHeight = collapsedHeight,
-                        playerWidth = playerWidth,
+                        minimizedHeight = minimizedHeight,
+                        expandedHeight = expandedHeight,
                         expandedArtworkSize = expandedArtworkSize,
                         expandedArtworkTop = expandedArtworkTop,
-                        fullscreenProgress = fullscreenProgress,
-                        fullscreenArtworkSize = fullscreenProgressTrackWidth,
-                        fullscreenArtworkCenterY = fullscreenCoverCenterY,
-                        contentExitProgress = artworkContentExitProgress,
-                        addToPlaylistArtworkSize = addToPlaylistArtworkSize,
-                        addToPlaylistArtworkX = addToPlaylistArtworkLeft,
-                        addToPlaylistArtworkTop = addToPlaylistArtworkTop,
-                        playbackScale = artworkPlaybackScale,
-                        playbackRotationDegrees = artworkPlaybackRotationDegrees,
-                        layerAlpha = 1f - artistExitProgress,
-                        layerTranslationY =
-                            16.dp *
-                                (1f - minimizedProgress) *
-                                (1f - fullscreenProgress) -
-                                24.dp * artistExitProgress,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(visualPanelHeight)
-                            .align(Alignment.TopCenter)
-                    ) {
-                    SharedSongInfo(
-                        title = title,
-                        artist = artist,
-                        currentSongKey = currentSong?.id,
-                        progress = animationProgress,
-                        titleColor = titleColor,
-                        artistColor = artistColor,
+                        expandedMetadataTop = expandedMetadataTop,
+                        expandedProgressTop = expandedProgressTop,
+                        expandedControlsTop = expandedControlsTop,
                         playerWidth = playerWidth,
-                        minimizedProgress = minimizedProgress,
-                        minimizedHeight = minimizedHeight,
-                        collapsedHeight = collapsedHeight,
-                        expandedTop = expandedMetadataTop,
                         fullscreenProgress = fullscreenProgress,
-                        fullscreenX = fullscreenArtworkX,
-                        fullscreenTop = fullscreenMetadataTop,
-                        contentExitProgress = fullscreenContentExitSharedProgress,
-                        switchDirection = collapsedMetadataSwitchDirection,
-                        artistClickEnabled = artistClickEnabled,
-                        onArtistClick = ::handleArtistClick,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                    )
-                    AddToPlaylistItemSongInfo(
-                        title = title,
-                        artist = artist,
-                        progress = addToPlaylistSharedProgress,
+                        animationProgress = animationProgress,
+                        artworkAnimationProgress = artworkAnimationProgress,
+                        artworkScaleProgress = artworkScaleProgress,
+                        minimizedProgress = minimizedProgress,
+                        fullscreenCoverCenterY = fullscreenCoverCenterY,
+                        fullscreenStationaryControlsOffsetY = fullscreenStationaryControlsOffsetY,
+                        fullscreenControlsLiftY = fullscreenControlsLiftY,
+                        layoutMetrics = fullscreenLayoutMetrics,
+                        artworkPlaybackScale = artworkPlaybackScale,
+                        artworkPlaybackRotationDegrees = artworkPlaybackRotationDegrees,
                         titleColor = titleColor,
                         artistColor = artistColor,
-                        width = addToPlaylistTextWidth,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset(
-                                x = addToPlaylistTextStart,
-                                y = addToPlaylistArtworkTop
-                            )
-                    )
-                    if (
-                        shouldShowAddToPlaylistGrid(
-                            fullscreenContentMode = fullscreenContentMode,
-                            addToPlaylistSharedProgress = addToPlaylistSharedProgress
-                        )
-                    ) {
-                        AddToPlaylistPlaylistGrid(
-                            playlists = libraryPlaylists,
-                            playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
-                            newlyCreatedPlaylistId = newlyCreatedPlaylistId,
-                            onNewPlaylistCreateAnimationFinished =
-                                onNewPlaylistCreateAnimationFinished,
-                            listState = addToPlaylistListState,
-                            progress = addToPlaylistSharedProgress,
-                            screenWidth = playerWidth,
-                            pullToDismissEnabled =
-                                isAddToPlaylistBackGestureEnabled(fullscreenContentMode),
-                            onDismissAtTop = ::exitAddToPlaylistMode,
-                            onCreatePlaylistClick = onCreatePlaylistClick,
-                            onPlaylistClick = { playlist ->
-                                onAddSongToPlaylist(playlist, ::exitAddToPlaylistMode)
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .offset(y = addToPlaylistCardsTop)
-                                .fillMaxWidth()
-                                .height(addToPlaylistCardsHeight)
-                                .padding(horizontal = 20.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer {
-                                alpha = playbackContentAlpha
-                                translationY =
-                                    (fullscreenStationaryControlsOffsetY -
-                                        fullscreenControlsLiftY +
-                                        playbackContentOffsetY).toPx()
+                        controlIconColor = controlIconColor,
+                        progressTrackColor = progressTrackColor,
+                        progressColor = progressColor,
+                        collapsedMetadataSwitchDirection = collapsedMetadataSwitchDirection,
+                        artistClickEnabled = artistClickEnabled,
+                        fullscreenContentMode = fullscreenContentMode,
+                        libraryPlaylists = libraryPlaylists,
+                        playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
+                        newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                        addToPlaylistListState = addToPlaylistListState,
+                        isCurrentSongLiked = isCurrentSongLiked,
+                        expandedMoreMenu = expandedMoreMenu,
+                        lyricsHostCanAttach = lyricsHostCanAttach,
+                        fullscreen = fullscreen,
+                        expanded = expanded,
+                        artistPlaceholderArtists = artistPlaceholderArtists,
+                        artistPlaceholderLocalSongs = artistPlaceholderLocalSongs,
+                        artistPlaceholderActive = artistPlaceholderActive,
+                        artistPlaceholderProgress = artistPlaceholderProgress,
+                        fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
+                        songInfoProgress = songInfoProgress,
+                        callbacks = callbacks,
+                        collapseInteractionSource = noRippleInteractionSource,
+                        onArtistClick = ::handleArtistClick,
+                        onNewPlaylistCreateAnimationFinished =
+                            onNewPlaylistCreateAnimationFinished,
+                        onDismissAddToPlaylistAtTop = ::exitAddToPlaylistMode,
+                        onCreatePlaylistClick = onCreatePlaylistClick,
+                        onPlaylistClick = { playlist ->
+                            onAddSongToPlaylist(playlist, ::exitAddToPlaylistMode)
+                        },
+                        onLockPlayPauseVisual = ::lockPlayPauseVisual,
+                        onScrubbingChange = { scrubbing ->
+                            isProgressScrubbing = scrubbing
+                        },
+                        onPlayPrevious = {
+                            expandedMoreMenu = false
+                            playPreviousFromMiniPlayer()
+                        },
+                        onTogglePlayPause = {
+                            expandedMoreMenu = false
+                            if (hasCurrentSong) {
+                                isProgressScrubbing = false
+                                keepPlayPauseVisualLockedAfterSeek = false
+                                callbacks.onTogglePlayPause()
                             }
-                    ) {
-                        ExpandedOnlyContent(
-                            progress = animationProgress,
-                            positionMs = playerUiState.positionMs,
-                            durationMs = durationMs,
-                            isPlaying = playerUiState.isPlaying,
-                            isPlayingForVisualLock = visualIsPlaying,
-                            currentSongKey = currentSong?.id,
-                            hasCurrentSong = hasCurrentSong,
-                            progressTrackColor = progressTrackColor,
-                            progressColor = progressColor,
-                            fullscreenProgress = fullscreenProgress,
-                            onSeekTo = callbacks.onSeekTo,
-                            onLockPlayPauseVisual = ::lockPlayPauseVisual,
-                            onScrubbingChange = { scrubbing ->
-                                isProgressScrubbing = scrubbing
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = expandedProgressTop)
-                        )
-                        SharedPlaybackControls(
-                            progress = animationProgress,
-                            isPlaying = visualIsPlaying,
-                            iconColor = controlIconColor,
-                            screenWidth = playerWidth,
-                            minimizedProgress = minimizedProgress,
-                            minimizedHeight = minimizedHeight,
-                            collapsedHeight = collapsedHeight,
-                            expandedTop = expandedControlsTop,
-                            fullscreenProgress = fullscreenProgress,
-                            controlsExitProgress = fullscreenContentExitSharedProgress,
-                            onPlayPrevious = {
-                                expandedMoreMenu = false
-                                playPreviousFromMiniPlayer()
-                            },
-                            onTogglePlayPause = {
-                                expandedMoreMenu = false
-                                if (hasCurrentSong) {
-                                    isProgressScrubbing = false
-                                    keepPlayPauseVisualLockedAfterSeek = false
-                                    callbacks.onTogglePlayPause()
-                                }
-                            },
-                            onPlayNext = {
-                                expandedMoreMenu = false
-                                playNextFromMiniPlayer()
-                            },
-                            modifier = Modifier.align(Alignment.TopStart)
-                        )
-                        SideButtonsOverlay(
-                            progress = animationProgress,
-                            playerWidth = playerWidth,
-                            currentHeight = currentHeight,
-                            expandedHeight = expandedHeight,
-                            expandedProgressTop = expandedProgressTop,
-                            expandedControlsTop = expandedControlsTop,
-                            hasCurrentSong = hasCurrentSong,
-                            isCurrentSongLiked = isCurrentSongLiked,
-                            playbackOrderMode = playerUiState.playbackOrderMode,
-                            iconColor = controlIconColor,
-                            fullscreenProgress = fullscreenProgress,
-                            controlsExitProgress = fullscreenContentExitSharedProgress,
-                            moreMenuExpanded = expandedMoreMenu,
-                            onMoreMenuExpandedChange = { expanded ->
-                                expandedMoreMenu = expanded
-                            },
-                            onToggleLiked = onToggleCurrentSongLiked,
-                            onAddToPlaylist = {
-                                enterAddToPlaylistMode()
-                            },
-                            onOpenSongInfo = {
-                                enterSongInfoMode()
-                            },
-                            onOpenQueue = {
-                                queueSheetBackgroundBlurred = true
-                                showQueueSheet = true
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxSize()
-                                .zIndex(2f),
-                            onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
-                        )
-                        MiniPlayerLyricsHost(
-                            currentSong = currentSong,
-                            positionMs = playerUiState.positionMs,
-                            playbackProgress = animationProgress,
-                            fullscreenProgress = fullscreenProgress,
-                            fullscreen = fullscreen && expanded && hasCurrentSong,
-                            interactionsEnabled = lyricsHostCanAttach,
-                            onLyricSeekRequested = callbacks.onSeekTo,
-                            modifier = Modifier.matchParentSize()
-                        )
-                    }
-                    if (
-                        shouldShowArtistPlaceholderOverlay(
-                            artistPlaceholderArtists = artistPlaceholderArtists,
-                            artistPlaceholderActive = artistPlaceholderActive,
-                            artistPlaceholderProgress = artistPlaceholderProgress
-                        )
-                    ) {
-                        ArtistPlaceholderOverlay(
-                            artists = artistPlaceholderArtists,
-                            artistSongs = artistPlaceholderLocalSongs,
-                            currentSong = currentSong,
-                            progress = artistPlaceholderProgress,
-                            backGestureThresholdPx = fullscreenSwipeThresholdPx,
-                            backGestureEnabled = isArtistPlaceholderBackGestureEnabled(
-                                artistPlaceholderActive = artistPlaceholderActive,
-                                artistPlaceholderProgress = artistPlaceholderProgress
-                            ),
-                            onBack = ::exitFullscreenContentMode,
-                            onArtistClick = ::openArtistDetailFromPlaceholder,
-                            onSongClick = callbacks.onPlayArtistSongQueue,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                                .height(visualPanelHeight)
-                                .zIndex(6f)
-                        )
-                    }
-                    if (
-                        shouldShowSongInfoOverlay(
-                            fullscreenContentMode = fullscreenContentMode,
-                            songInfoProgress = songInfoProgress
-                        )
-                    ) {
-                        FullscreenSongInfoOverlay(
-                            song = currentSong,
-                            progress = songInfoProgress,
-                            topPadding = addToPlaylistCardsTop,
-                            backGestureThresholdPx = fullscreenSwipeThresholdPx,
-                            onBack = ::exitFullscreenContentMode,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                                .height(visualPanelHeight)
-                                .zIndex(6f)
-                        )
-                    }
-                }
-                FullscreenCollapseArrow(
-                    progress = fullscreenProgress,
-                    interactionSource = noRippleInteractionSource,
-                    onClick = {
-                        if (fullscreenContentMode != FullscreenContentMode.Playback) {
-                            exitFullscreenContentMode()
-                        } else if (allowFullscreenFromCollapsed) {
-                            onFullscreenChange(false)
-                            onExpandedChange(false)
-                        } else {
-                            onFullscreenChange(false)
+                        },
+                        onPlayNext = {
+                            expandedMoreMenu = false
+                            playNextFromMiniPlayer()
+                        },
+                        onMoreMenuExpandedChange = { expanded ->
+                            expandedMoreMenu = expanded
+                        },
+                        onToggleLiked = onToggleCurrentSongLiked,
+                        onAddToPlaylist = {
+                            enterAddToPlaylistMode()
+                        },
+                        onOpenSongInfo = {
+                            enterSongInfoMode()
+                        },
+                        onOpenQueue = {
+                            queueSheetBackgroundBlurred = true
+                            showQueueSheet = true
+                        },
+                        onArtistHostBack = ::exitFullscreenContentMode,
+                        onArtistHostArtistClick = ::openArtistDetailFromPlaceholder,
+                        onCollapseClick = {
+                            if (fullscreenContentMode != FullscreenContentMode.Playback) {
+                                exitFullscreenContentMode()
+                            } else if (allowFullscreenFromCollapsed) {
+                                onFullscreenChange(false)
+                                onExpandedChange(false)
+                            } else {
+                                onFullscreenChange(false)
+                            }
                         }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .zIndex(10f)
-                )
+                    )
             }
-        }
-        }
-        if (showQueueSheet) {
-            PlayerQueueBottomSheet(
-                playbackQueue = playbackQueue,
-                sourceQueue = sourceQueue,
-                currentQueueIndex = currentQueueIndex,
-                currentSong = currentSong,
-                displayOrder = queueDisplayOrder,
-                onDisplayOrderChange = onQueueDisplayOrderChange,
-                backgroundImageRequest = lastStableBackdrop.backgroundImageRequest,
-                cloudColors = lastStableBackdrop.colors,
-                backgroundProgress = animationProgress,
-                isPlaying = playerUiState.isPlaying,
-                waitForArtworkLoad = useLocalArtworkLoading,
-                onSongClick = callbacks.onPlayQueueSong,
-                onDismissStart = {
-                    queueSheetBackgroundBlurred = false
-                },
-                onDismiss = {
-                    showQueueSheet = false
-                },
-                modifier = Modifier
-                    .matchParentSize()
-                    .zIndex(20f)
+        },
+        overlayContent = {
+            MiniPlayerQueueSheetHost(
+            showQueueSheet = showQueueSheet,
+            playbackQueue = playbackQueue,
+            sourceQueue = sourceQueue,
+            currentQueueIndex = currentQueueIndex,
+            currentSong = currentSong,
+            displayOrder = queueDisplayOrder,
+            onDisplayOrderChange = onQueueDisplayOrderChange,
+            backgroundImageRequest = lastStableBackdrop.backgroundImageRequest,
+            cloudColors = lastStableBackdrop.colors,
+            backgroundProgress = animationProgress,
+            isPlaying = playerUiState.isPlaying,
+            waitForArtworkLoad = useLocalArtworkLoading,
+            onSongClick = callbacks.onPlayQueueSong,
+            onDismissStart = {
+                queueSheetBackgroundBlurred = false
+            },
+            onDismiss = {
+                showQueueSheet = false
+            }
             )
         }
-    }
+    )
 }
