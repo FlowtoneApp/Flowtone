@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,6 +57,7 @@ internal fun ArtistPlaceholderOverlay(
     if (artists.isEmpty()) {
         return
     }
+    val localSongListState = rememberLazyListState()
 
     BoxWithConstraints(
         modifier = modifier
@@ -63,6 +65,9 @@ internal fun ArtistPlaceholderOverlay(
             .fullscreenContentBackGesture(
                 enabled = backGestureEnabled,
                 thresholdPx = backGestureThresholdPx,
+                canStartPullDown = {
+                    artists.size != 1 || localSongListState.isScrolledToTop()
+                },
                 onBack = onBack
             )
     ) {
@@ -166,6 +171,7 @@ internal fun ArtistPlaceholderOverlay(
                 artistName = artists.first(),
                 songs = artistSongs,
                 currentSong = currentSong,
+                listState = localSongListState,
                 onSongClick = onSongClick,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -187,11 +193,10 @@ private fun ArtistPlaceholderLocalSongList(
     artistName: String,
     songs: List<Song>,
     currentSong: Song?,
+    listState: LazyListState,
     onSongClick: (List<Song>, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
-
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
@@ -252,6 +257,10 @@ private fun ArtistPlaceholderLocalSongList(
             }
         }
     }
+}
+
+private fun LazyListState.isScrolledToTop(): Boolean {
+    return firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0
 }
 
 @Composable

@@ -11,6 +11,7 @@ internal fun Modifier.fullscreenContentBackGesture(
     enabled: Boolean,
     thresholdPx: Float,
     canStartBack: () -> Boolean = { true },
+    canStartPullDown: () -> Boolean = { true },
     onBack: () -> Unit
 ): Modifier {
     if (!enabled) {
@@ -40,7 +41,11 @@ internal fun Modifier.fullscreenContentBackGesture(
 
                 val delta = change.position - change.previousPosition
                 dragX += delta.x
-                dragY += delta.y
+                if (canStartPullDown()) {
+                    dragY += delta.y
+                } else {
+                    dragY = 0f
+                }
 
                 val absDragX = abs(dragX)
                 val absDragY = abs(dragY)
