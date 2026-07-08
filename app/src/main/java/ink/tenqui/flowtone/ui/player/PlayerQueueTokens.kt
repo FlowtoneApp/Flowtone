@@ -10,6 +10,7 @@ internal val PlayerQueueSheetTopPadding = 20.dp
 internal val PlayerQueueHeaderBottomPadding = 12.dp
 internal val PlayerQueueHeaderCountStartPadding = 6.dp
 internal val PlayerQueueHeaderCountBottomPadding = 2.dp
+internal val PlayerQueueOrderTransitionDistance = 10.dp
 internal val PlayerQueueListPullDismissThreshold = 64.dp
 internal val PlayerQueueItemVerticalPadding = 2.dp
 internal val PlayerQueueSortMenuCornerRadius = 14.dp
