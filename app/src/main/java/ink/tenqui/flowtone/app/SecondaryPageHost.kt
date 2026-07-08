@@ -52,6 +52,8 @@ internal fun SecondaryPageHost(
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
     onOpenSongRecordThresholdDialog: () -> Unit,
+    flowCloudSpeed: Float,
+    onOpenFlowCloudSpeedDialog: () -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
     selectedPlaylistId: String?,
@@ -179,6 +181,8 @@ internal fun SecondaryPageHost(
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
                 songRecordThresholdSeconds = songRecordThresholdSeconds,
                 onOpenSongRecordThresholdDialog = onOpenSongRecordThresholdDialog,
+                flowCloudSpeed = flowCloudSpeed,
+                onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
                 elementModifier = ::elementModifier,
                 modifier = Modifier.fillMaxSize()
             )

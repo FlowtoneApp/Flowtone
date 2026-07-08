@@ -22,6 +22,12 @@ internal enum class SongRecordThresholdDialogState {
     Closing
 }
 
+internal enum class FlowCloudSpeedDialogState {
+    Idle,
+    Editing,
+    Closing
+}
+
 internal class FlowtoneAppState(
     permissionDeniedState: MutableState<Boolean>,
     miniPlayerExpandedState: MutableState<Boolean>,
@@ -45,6 +51,8 @@ internal class FlowtoneAppState(
     preloadSongMetadataCountState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
+    flowCloudSpeedState: MutableState<Float>,
+    flowCloudSpeedDialogStateState: MutableState<FlowCloudSpeedDialogState>,
     playbackQueueDisplayOrderState: MutableState<QueueDisplayOrder>,
     likedSongKeysState: MutableState<List<String>>
 ) {
@@ -70,6 +78,8 @@ internal class FlowtoneAppState(
     var preloadSongMetadataCount by preloadSongMetadataCountState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
+    var flowCloudSpeed by flowCloudSpeedState
+    var flowCloudSpeedDialogState by flowCloudSpeedDialogStateState
     var playbackQueueDisplayOrder by playbackQueueDisplayOrderState
     var likedSongKeys by likedSongKeysState
 }
@@ -142,6 +152,12 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val songRecordThresholdDialogState = rememberSaveable {
         mutableStateOf(SongRecordThresholdDialogState.Idle)
     }
+    val flowCloudSpeed = rememberSaveable {
+        mutableStateOf(appPreferences.getFlowCloudSpeed())
+    }
+    val flowCloudSpeedDialogState = rememberSaveable {
+        mutableStateOf(FlowCloudSpeedDialogState.Idle)
+    }
     val playbackQueueDisplayOrder = rememberSaveable {
         mutableStateOf(appPreferences.getPlaybackQueueDisplayOrder())
     }
@@ -172,6 +188,8 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         preloadSongMetadataCountState = preloadSongMetadataCount,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
+        flowCloudSpeedState = flowCloudSpeed,
+        flowCloudSpeedDialogStateState = flowCloudSpeedDialogState,
         playbackQueueDisplayOrderState = playbackQueueDisplayOrder,
         likedSongKeysState = likedSongKeys
     )
@@ -197,6 +215,8 @@ internal data class FlowtoneAppScaffoldState(
     val preloadSongMetadataCount: Int,
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
+    val flowCloudSpeed: Float,
+    val flowCloudSpeedDialogState: FlowCloudSpeedDialogState,
     val playbackQueueDisplayOrder: QueueDisplayOrder,
     val permissionDenied: Boolean,
     val showSwipeHint: Boolean,
@@ -251,6 +271,8 @@ internal fun flowtoneAppScaffoldState(
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
+        flowCloudSpeed = appState.flowCloudSpeed,
+        flowCloudSpeedDialogState = appState.flowCloudSpeedDialogState,
         playbackQueueDisplayOrder = appState.playbackQueueDisplayOrder,
         permissionDenied = appState.permissionDenied,
         showSwipeHint = appState.showSwipeHint,

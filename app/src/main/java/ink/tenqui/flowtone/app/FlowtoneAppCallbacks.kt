@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.app
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
+import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 
 internal data class FlowtoneAppCallbacks(
@@ -16,6 +17,10 @@ internal data class FlowtoneAppCallbacks(
     val onOpenSongRecordThresholdDialog: () -> Unit,
     val onCloseSongRecordThresholdDialog: () -> Unit,
     val onSongRecordThresholdDialogClosed: () -> Unit,
+    val onFlowCloudSpeedChange: (Float) -> Unit,
+    val onOpenFlowCloudSpeedDialog: () -> Unit,
+    val onCloseFlowCloudSpeedDialog: () -> Unit,
+    val onFlowCloudSpeedDialogClosed: () -> Unit,
     val onPlaybackQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit,
     val settingsBackActionChange: ((() -> Unit)?) -> Unit,
     val onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -106,6 +111,26 @@ internal fun flowtoneAppCallbacks(
         onSongRecordThresholdDialogClosed = {
             if (appState.songRecordThresholdDialogState == SongRecordThresholdDialogState.Closing) {
                 appState.songRecordThresholdDialogState = SongRecordThresholdDialogState.Idle
+            }
+        },
+        onFlowCloudSpeedChange = { speed ->
+            val safeSpeed = speed.coerceFlowCloudSpeed()
+            appState.flowCloudSpeed = safeSpeed
+            appPreferences.setFlowCloudSpeed(safeSpeed)
+        },
+        onOpenFlowCloudSpeedDialog = {
+            if (appState.flowCloudSpeedDialogState == FlowCloudSpeedDialogState.Idle) {
+                appState.flowCloudSpeedDialogState = FlowCloudSpeedDialogState.Editing
+            }
+        },
+        onCloseFlowCloudSpeedDialog = {
+            if (appState.flowCloudSpeedDialogState == FlowCloudSpeedDialogState.Editing) {
+                appState.flowCloudSpeedDialogState = FlowCloudSpeedDialogState.Closing
+            }
+        },
+        onFlowCloudSpeedDialogClosed = {
+            if (appState.flowCloudSpeedDialogState == FlowCloudSpeedDialogState.Closing) {
+                appState.flowCloudSpeedDialogState = FlowCloudSpeedDialogState.Idle
             }
         },
         onPlaybackQueueDisplayOrderChange = { order ->

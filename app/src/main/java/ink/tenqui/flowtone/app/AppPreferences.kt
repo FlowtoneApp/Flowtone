@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.app
 
 import android.content.Context
+import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
+import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 
@@ -143,6 +145,19 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getFlowCloudSpeed(): Float {
+        return prefs.getFloat(
+            FLOW_CLOUD_SPEED_KEY,
+            DefaultFlowCloudSpeed
+        ).coerceFlowCloudSpeed()
+    }
+
+    fun setFlowCloudSpeed(speed: Float) {
+        prefs.edit()
+            .putFloat(FLOW_CLOUD_SPEED_KEY, speed.coerceFlowCloudSpeed())
+            .apply()
+    }
+
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
@@ -153,6 +168,7 @@ class AppPreferences(context: Context) {
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
+        const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
         const val DEFAULT_PRELOAD_COUNT = 5
         const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30
         const val MIN_SONG_RECORD_THRESHOLD_SECONDS = 1

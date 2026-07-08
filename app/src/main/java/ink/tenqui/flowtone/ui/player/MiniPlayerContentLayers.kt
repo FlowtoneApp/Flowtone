@@ -19,6 +19,7 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
     cloudColors: List<Color>,
     animationProgress: Float,
     isPlaying: Boolean,
+    flowCloudSpeed: Float,
     waitForArtworkLoad: Boolean
 ) {
     Box(
@@ -42,6 +43,7 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
         colors = cloudColors,
         progress = animationProgress,
         isPlaying = isPlaying,
+        flowCloudSpeed = flowCloudSpeed,
         modifier = Modifier.matchParentSize()
     )
     Box(
@@ -64,6 +66,7 @@ internal fun BoxScope.MiniPlayerQueueSheetHost(
     cloudColors: List<Color>,
     backgroundProgress: Float,
     isPlaying: Boolean,
+    flowCloudSpeed: Float,
     waitForArtworkLoad: Boolean,
     onSongClick: (Song) -> Unit,
     onDismissStart: () -> Unit,
@@ -81,6 +84,7 @@ internal fun BoxScope.MiniPlayerQueueSheetHost(
             cloudColors = cloudColors,
             backgroundProgress = backgroundProgress,
             isPlaying = isPlaying,
+            flowCloudSpeed = flowCloudSpeed,
             waitForArtworkLoad = waitForArtworkLoad,
             onSongClick = onSongClick,
             onDismissStart = onDismissStart,

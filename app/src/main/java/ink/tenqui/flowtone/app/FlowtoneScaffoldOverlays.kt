@@ -19,6 +19,7 @@ import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.player.MiniPlayer
+import ink.tenqui.flowtone.ui.screens.FlowCloudSpeedOverlay
 import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         allowFullscreenFromCollapsed = state.allowFullscreenFromCollapsed,
         allowFullscreenFromExpanded = true,
         disablePausedArtworkTilt = state.disablePausedArtworkTilt,
+        flowCloudSpeed = state.flowCloudSpeed,
         minimized = state.miniPlayerMinimized,
         onMinimizedChange = callbacks.onMinimizedChange,
         onTogglePlayPause = callbacks.onTogglePlayPause,
@@ -178,6 +180,14 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onDismissRequest = callbacks.onCloseSongRecordThresholdDialog,
         onDismissAnimationFinished = callbacks.onSongRecordThresholdDialogClosed,
         onConfirm = callbacks.onSongRecordThresholdSecondsChange,
+        modifier = Modifier.fillMaxSize()
+    )
+    FlowCloudSpeedOverlay(
+        dialogState = state.flowCloudSpeedDialogState,
+        selectedSpeed = state.flowCloudSpeed,
+        onDismissRequest = callbacks.onCloseFlowCloudSpeedDialog,
+        onDismissAnimationFinished = callbacks.onFlowCloudSpeedDialogClosed,
+        onConfirm = callbacks.onFlowCloudSpeedChange,
         modifier = Modifier.fillMaxSize()
     )
 }

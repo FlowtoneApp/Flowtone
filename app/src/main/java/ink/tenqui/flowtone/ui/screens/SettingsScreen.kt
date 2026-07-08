@@ -99,6 +99,8 @@ internal fun SettingsScreen(
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
     onOpenSongRecordThresholdDialog: () -> Unit,
+    flowCloudSpeed: Float,
+    onOpenFlowCloudSpeedDialog: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -156,6 +158,8 @@ internal fun SettingsScreen(
                 onThemeModeChange = onThemeModeChange,
                 disablePausedArtworkTilt = disablePausedArtworkTilt,
                 onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
+                flowCloudSpeed = flowCloudSpeed,
+                onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
                 elementModifier = ::viewElementModifier
             )
 

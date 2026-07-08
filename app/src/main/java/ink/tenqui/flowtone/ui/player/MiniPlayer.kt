@@ -47,6 +47,7 @@ fun MiniPlayer(
     allowFullscreenFromCollapsed: Boolean = false,
     allowFullscreenFromExpanded: Boolean = true,
     disablePausedArtworkTilt: Boolean = false,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     minimized: Boolean,
     onMinimizedChange: (Boolean) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -628,6 +629,7 @@ fun MiniPlayer(
                         cloudColors = state.lastStableBackdrop.colors,
                         animationProgress = animationProgress,
                         isPlaying = playerUiState.isPlaying,
+                        flowCloudSpeed = flowCloudSpeed,
                         waitForArtworkLoad = useLocalArtworkLoading,
                     )
                     val addToPlaylistStatusBarsTop = with(density) {
@@ -738,6 +740,7 @@ fun MiniPlayer(
             cloudColors = state.lastStableBackdrop.colors,
             backgroundProgress = animationProgress,
             isPlaying = playerUiState.isPlaying,
+            flowCloudSpeed = flowCloudSpeed,
             waitForArtworkLoad = useLocalArtworkLoading,
             onSongClick = callbacks.onPlayQueueSong,
             onDismissStart = transitions::startQueueSheetDismiss,

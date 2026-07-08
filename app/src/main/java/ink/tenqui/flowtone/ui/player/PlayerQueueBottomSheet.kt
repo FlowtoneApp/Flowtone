@@ -51,6 +51,7 @@ internal fun PlayerQueueBottomSheet(
     cloudColors: List<Color>,
     backgroundProgress: Float,
     isPlaying: Boolean,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     waitForArtworkLoad: Boolean,
     onSongClick: (Song) -> Unit,
     onDismissStart: () -> Unit = {},
@@ -177,6 +178,7 @@ internal fun PlayerQueueBottomSheet(
                     cloudColors = cloudColors,
                     progress = backgroundProgress,
                     isPlaying = isPlaying,
+                    flowCloudSpeed = flowCloudSpeed,
                     waitForArtworkLoad = waitForArtworkLoad,
                     shape = sheetShape,
                     modifier = Modifier.matchParentSize()
@@ -271,6 +273,7 @@ private fun PlayerQueueGlassBackground(
     cloudColors: List<Color>,
     progress: Float,
     isPlaying: Boolean,
+    flowCloudSpeed: Float,
     waitForArtworkLoad: Boolean,
     shape: RoundedCornerShape,
     modifier: Modifier = Modifier
@@ -290,6 +293,7 @@ private fun PlayerQueueGlassBackground(
             colors = cloudColors,
             progress = progress,
             isPlaying = isPlaying,
+            flowCloudSpeed = flowCloudSpeed,
             modifier = Modifier.matchParentSize()
         )
         Box(

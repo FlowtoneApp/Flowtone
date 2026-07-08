@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -37,32 +38,45 @@ internal fun FlowCloudBackground(
     colors: List<Color>,
     progress: Float,
     isPlaying: Boolean,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val cloudColors = colors.toOpaqueCloudColors(isDarkTheme)
     val motionSpeed = remember { Animatable(if (isPlaying) 1f else 0f) }
+    val safeFlowCloudSpeed = flowCloudSpeed.coerceFlowCloudSpeed()
+    val currentFlowCloudSpeed by rememberUpdatedState(safeFlowCloudSpeed)
     var motionTimeMs by remember { mutableDoubleStateOf(0.0) }
-    LaunchedEffect(isPlaying) {
-        motionSpeed.animateTo(
-            targetValue = if (isPlaying) 1f else 0f,
-            animationSpec = tween(
-                durationMillis = FLOW_CLOUD_STOP_DURATION_MS,
-                easing = FastOutSlowInEasing
+    LaunchedEffect(isPlaying, safeFlowCloudSpeed) {
+        val targetSpeed = if (isPlaying) 1f else 0f
+        if (safeFlowCloudSpeed <= 0.0001f) {
+            motionSpeed.snapTo(targetSpeed)
+        } else {
+            motionSpeed.animateTo(
+                targetValue = targetSpeed,
+                animationSpec = tween(
+                    durationMillis = FLOW_CLOUD_STOP_DURATION_MS,
+                    easing = FastOutSlowInEasing
+                )
             )
-        )
+        }
     }
     LaunchedEffect(Unit) {
         var previousFrameNanos = 0L
         while (isActive) {
-            if (motionSpeed.value <= 0.0001f) {
-                snapshotFlow { motionSpeed.value }.first { it > 0.0001f }
+            if (motionSpeed.value <= 0.0001f || currentFlowCloudSpeed <= 0.0001f) {
+                snapshotFlow {
+                    motionSpeed.value to currentFlowCloudSpeed
+                }.first { (motion, speed) ->
+                    motion > 0.0001f && speed > 0.0001f
+                }
                 previousFrameNanos = 0L
             }
             withFrameNanos { frameNanos ->
-                if (previousFrameNanos != 0L) {
+                val effectiveSpeed = motionSpeed.value * currentFlowCloudSpeed
+                if (previousFrameNanos != 0L && effectiveSpeed > 0.0001f) {
                     val elapsedMs = (frameNanos - previousFrameNanos) / 1_000_000.0
-                    motionTimeMs += elapsedMs * motionSpeed.value * FLOW_CLOUD_SPEED_MULTIPLIER
+                    motionTimeMs += elapsedMs * effectiveSpeed * FLOW_CLOUD_SPEED_MULTIPLIER
                 }
                 previousFrameNanos = frameNanos
             }
@@ -169,7 +183,8 @@ internal fun CrossfadeFlowCloudBackground(
     progress: Float,
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
-    alpha: Float = 1f
+    alpha: Float = 1f,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val targetColors = colors.toOpaqueCloudColors(isDarkTheme)
@@ -224,6 +239,7 @@ internal fun CrossfadeFlowCloudBackground(
             colors = blendedColors,
             progress = progress,
             isPlaying = isPlaying,
+            flowCloudSpeed = flowCloudSpeed,
             modifier = Modifier.matchParentSize()
         )
     }

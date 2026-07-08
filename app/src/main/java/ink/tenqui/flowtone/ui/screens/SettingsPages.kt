@@ -85,6 +85,8 @@ internal fun AppearanceSettingsPage(
     onThemeModeChange: (AppThemeMode) -> Unit,
     disablePausedArtworkTilt: Boolean,
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
+    flowCloudSpeed: Float,
+    onOpenFlowCloudSpeedDialog: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -102,6 +104,11 @@ internal fun AppearanceSettingsPage(
                 subtitle = "打开后，暂停时封面仅缩小，不再倾斜",
                 checked = disablePausedArtworkTilt,
                 onCheckedChange = onDisablePausedArtworkTiltChange,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            FlowCloudSpeedRow(
+                speed = flowCloudSpeed,
+                onOpenDialog = onOpenFlowCloudSpeedDialog,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
