@@ -48,6 +48,7 @@ internal class FlowtoneAppState(
     resumePlaybackAfterCallState: MutableState<Boolean>,
     allowFullscreenFromCollapsedState: MutableState<Boolean>,
     disablePausedArtworkTiltState: MutableState<Boolean>,
+    strictProgressBarState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
@@ -75,6 +76,7 @@ internal class FlowtoneAppState(
     var resumePlaybackAfterCall by resumePlaybackAfterCallState
     var allowFullscreenFromCollapsed by allowFullscreenFromCollapsedState
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
+    var strictProgressBar by strictProgressBarState
     var preloadSongMetadataCount by preloadSongMetadataCountState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
@@ -143,6 +145,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val disablePausedArtworkTilt = rememberSaveable {
         mutableStateOf(appPreferences.shouldDisablePausedArtworkTilt())
     }
+    val strictProgressBar = rememberSaveable {
+        mutableStateOf(appPreferences.shouldUseStrictProgressBar())
+    }
     val preloadSongMetadataCount = rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
     }
@@ -185,6 +190,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         resumePlaybackAfterCallState = resumePlaybackAfterCall,
         allowFullscreenFromCollapsedState = allowFullscreenFromCollapsed,
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
+        strictProgressBarState = strictProgressBar,
         preloadSongMetadataCountState = preloadSongMetadataCount,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
@@ -201,6 +207,7 @@ internal data class FlowtoneAppScaffoldState(
     val appPreferences: AppPreferences,
     val themeMode: AppThemeMode,
     val disablePausedArtworkTilt: Boolean,
+    val strictProgressBar: Boolean,
     val pagerState: PagerState,
     val selectedTopLevelPage: TopLevelPage,
     val rootPage: FlowtoneRootPage,
@@ -257,6 +264,7 @@ internal fun flowtoneAppScaffoldState(
         appPreferences = appPreferences,
         themeMode = themeMode,
         disablePausedArtworkTilt = appState.disablePausedArtworkTilt,
+        strictProgressBar = appState.strictProgressBar,
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
         rootPage = rootPage,

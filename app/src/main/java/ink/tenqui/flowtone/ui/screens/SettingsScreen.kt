@@ -86,6 +86,8 @@ internal fun SettingsScreen(
     onThemeModeChange: (AppThemeMode) -> Unit,
     disablePausedArtworkTilt: Boolean,
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
+    strictProgressBar: Boolean,
+    onStrictProgressBarChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onBackActionChange: ((() -> Unit)?) -> Unit,
     onPathSegmentsChange: (List<String>) -> Unit,
@@ -158,6 +160,8 @@ internal fun SettingsScreen(
                 onThemeModeChange = onThemeModeChange,
                 disablePausedArtworkTilt = disablePausedArtworkTilt,
                 onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
+                strictProgressBar = strictProgressBar,
+                onStrictProgressBarChange = onStrictProgressBarChange,
                 flowCloudSpeed = flowCloudSpeed,
                 onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
                 elementModifier = ::viewElementModifier

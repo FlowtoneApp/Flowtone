@@ -60,6 +60,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         allowFullscreenFromCollapsed = state.allowFullscreenFromCollapsed,
         allowFullscreenFromExpanded = true,
         disablePausedArtworkTilt = state.disablePausedArtworkTilt,
+        strictProgressBar = state.strictProgressBar,
         flowCloudSpeed = state.flowCloudSpeed,
         minimized = state.miniPlayerMinimized,
         onMinimizedChange = callbacks.onMinimizedChange,

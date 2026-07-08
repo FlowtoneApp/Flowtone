@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -32,6 +33,7 @@ internal fun PlaybackProgressBar(
     durationMs: Long,
     isPlaying: Boolean,
     isPlayingForVisualLock: Boolean,
+    strictProgressBar: Boolean,
     currentSongKey: Long?,
     enabled: Boolean,
     trackColor: Color,
@@ -50,6 +52,7 @@ internal fun PlaybackProgressBar(
     var anchorPositionMs by remember { mutableStateOf(positionMs) }
     var anchorFrameTimeNanos by remember { mutableStateOf(0L) }
     var isTapSeeking by remember { mutableStateOf(false) }
+    var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
     val tapSeekProgress = remember { Animatable(0f) }
     val tapSeekScope = rememberCoroutineScope()
     var tapSeekJob by remember { mutableStateOf<Job?>(null) }
@@ -129,6 +132,38 @@ internal fun PlaybackProgressBar(
         isScrubbing = false
         scrubProgress = 0f
         isTapSeeking = false
+        pendingSeekPositionMs = null
+    }
+    LaunchedEffect(strictProgressBar, durationMs, pendingSeekPositionMs, positionMs) {
+        val pendingPositionMs = pendingSeekPositionMs
+        if (!strictProgressBar || durationMs <= 0L) {
+            pendingSeekPositionMs = null
+            return@LaunchedEffect
+        }
+        if (pendingPositionMs == null) {
+            return@LaunchedEffect
+        }
+
+        val safeDurationMs = durationMs.coerceAtLeast(0L)
+        val safePendingPositionMs = pendingPositionMs.coerceIn(0L, safeDurationMs)
+        val safePlaybackPositionMs = positionMs.coerceIn(0L, safeDurationMs)
+        if (
+            kotlin.math.abs(safePlaybackPositionMs - safePendingPositionMs) <=
+            PlaybackProgressPendingSeekToleranceMs
+        ) {
+            pendingSeekPositionMs = null
+        }
+    }
+    LaunchedEffect(strictProgressBar, currentSongKey, pendingSeekPositionMs) {
+        val pendingPositionMs = pendingSeekPositionMs
+        if (!strictProgressBar || pendingPositionMs == null) {
+            return@LaunchedEffect
+        }
+
+        delay(PlaybackProgressPendingSeekTimeoutMillis)
+        if (pendingSeekPositionMs == pendingPositionMs) {
+            pendingSeekPositionMs = null
+        }
     }
 
     val smoothPlaybackProgress = progressFraction(
@@ -153,10 +188,25 @@ internal fun PlaybackProgressBar(
             lastRenderedProgress = visibleProgress.coerceIn(0f, 1f)
         }
     }
-    val displayTimePositionMs = positionFromProgress(
+    val animatedDisplayTimePositionMs = positionFromProgress(
         durationMs = durationMs,
         progress = visibleProgress
     )
+    val displayTimePositionMs = if (strictProgressBar) {
+        when {
+            durationMs <= 0L -> 0L
+            isScrubbing -> positionFromProgress(
+                durationMs = durationMs,
+                progress = scrubProgress
+            )
+            pendingSeekPositionMs != null -> pendingSeekPositionMs
+                ?.coerceIn(0L, durationMs.coerceAtLeast(0L))
+                ?: 0L
+            else -> positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
+        }
+    } else {
+        animatedDisplayTimePositionMs
+    }
     val activeProgressColor = progressColor
 
     fun updateScrubProgress(x: Float) {
@@ -164,6 +214,12 @@ internal fun PlaybackProgressBar(
             x = x,
             width = containerSize.width.toFloat()
         )
+    }
+
+    fun rememberPendingSeek(positionMs: Long) {
+        if (strictProgressBar) {
+            pendingSeekPositionMs = positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
+        }
     }
 
     Box(modifier = modifier) {
@@ -194,6 +250,7 @@ internal fun PlaybackProgressBar(
             },
             onEnterScrubbing = { x ->
                 isTapSeeking = false
+                pendingSeekPositionMs = null
                 isScrubbing = true
                 updateScrubProgress(x)
                 onLockPlayPauseVisual(currentIsPlayingForVisualLock)
@@ -210,6 +267,7 @@ internal fun PlaybackProgressBar(
                 smoothPositionMs = targetPositionMs
                 anchorPositionMs = targetPositionMs
                 anchorFrameTimeNanos = 0L
+                rememberPendingSeek(targetPositionMs)
                 onLockPlayPauseVisual(currentIsPlayingForVisualLock)
                 onSeekTo(targetPositionMs)
                 isScrubbing = false
@@ -227,6 +285,7 @@ internal fun PlaybackProgressBar(
 
                 tapSeekJob?.cancel()
                 isTapSeeking = true
+                rememberPendingSeek(targetPositionMs)
                 onLockPlayPauseVisual(currentIsPlayingForVisualLock)
                 onSeekTo(targetPositionMs)
                 smoothPositionMs = targetPositionMs
@@ -248,3 +307,5 @@ internal fun PlaybackProgressBar(
     }
 }
 
+private const val PlaybackProgressPendingSeekToleranceMs = 500L
+private const val PlaybackProgressPendingSeekTimeoutMillis = 1_500L

@@ -85,6 +85,8 @@ internal fun AppearanceSettingsPage(
     onThemeModeChange: (AppThemeMode) -> Unit,
     disablePausedArtworkTilt: Boolean,
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
+    strictProgressBar: Boolean,
+    onStrictProgressBarChange: (Boolean) -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
     elementModifier: (Int) -> Modifier,
@@ -109,6 +111,13 @@ internal fun AppearanceSettingsPage(
             FlowCloudSpeedRow(
                 speed = flowCloudSpeed,
                 onOpenDialog = onOpenFlowCloudSpeedDialog,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            SettingSwitchRow(
+                title = "\u4e25\u683c\u8fdb\u5ea6\u6761",
+                subtitle = "\u5f00\u542f\u540e\uff0c\u64ad\u653e\u65f6\u95f4\u5c06\u7cbe\u786e\u663e\u793a\u62d6\u52a8\u6216\u8df3\u8f6c\u4f4d\u7f6e",
+                checked = strictProgressBar,
+                onCheckedChange = onStrictProgressBarChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }

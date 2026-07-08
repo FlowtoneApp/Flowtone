@@ -9,6 +9,7 @@ import ink.tenqui.flowtone.ui.theme.AppThemeMode
 internal data class FlowtoneAppCallbacks(
     val onThemeModeChange: (AppThemeMode) -> Unit,
     val onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
+    val onStrictProgressBarChange: (Boolean) -> Unit,
     val onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     val onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     val onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
@@ -77,6 +78,10 @@ internal fun flowtoneAppCallbacks(
         onDisablePausedArtworkTiltChange = { disable ->
             appState.disablePausedArtworkTilt = disable
             appPreferences.setDisablePausedArtworkTilt(disable)
+        },
+        onStrictProgressBarChange = { strict ->
+            appState.strictProgressBar = strict
+            appPreferences.setStrictProgressBar(strict)
         },
         onHideSecondaryBackButtonChange = { hide ->
             appState.hideSecondaryBackButton = hide
