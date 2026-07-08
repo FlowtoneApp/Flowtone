@@ -11,6 +11,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -31,6 +32,10 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private val togglePlaybackOrderCommand = SessionCommand(
         ACTION_TOGGLE_PLAYBACK_ORDER,
+        Bundle.EMPTY
+    )
+    private val setPlaybackOrderCommand = SessionCommand(
+        ACTION_SET_PLAYBACK_ORDER,
         Bundle.EMPTY
     )
     private val playerListener = object : Player.Listener {
@@ -92,6 +97,7 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             val sessionCommands = connectionResult.availableSessionCommands
                 .buildUpon()
                 .add(togglePlaybackOrderCommand)
+                .add(setPlaybackOrderCommand)
                 .build()
 
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
@@ -121,7 +127,21 @@ class FlowtoneMediaSessionService : MediaSessionService() {
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
 
-        return super.onCustomCommand(session, controller, customCommand, args)
+            if (customCommand.customAction == ACTION_SET_PLAYBACK_ORDER) {
+                val servicePlayer = player
+                if (servicePlayer != null) {
+                    val requestedMode = parsePlaybackOrderMode(args)
+                    applyPlaybackOrderMode(
+                        servicePlayer = servicePlayer,
+                        mode = requestedMode,
+                        shuffleOrderIndices = args.getIntArray(EXTRA_SHUFFLE_ORDER_INDICES)
+                    )
+                    updatePlaybackOrderButton()
+                }
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+
+            return super.onCustomCommand(session, controller, customCommand, args)
         }
     }
 
@@ -229,7 +249,19 @@ class FlowtoneMediaSessionService : MediaSessionService() {
         }
     }
 
-    private fun applyPlaybackOrderMode(servicePlayer: Player, mode: PlaybackOrderMode) {
+    private fun parsePlaybackOrderMode(args: Bundle): PlaybackOrderMode {
+        val modeName = args.getString(EXTRA_PLAYBACK_ORDER_MODE)
+        return modeName
+            ?.let { runCatching { PlaybackOrderMode.valueOf(it) }.getOrNull() }
+            ?: currentPlaybackOrderMode()
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun applyPlaybackOrderMode(
+        servicePlayer: ExoPlayer,
+        mode: PlaybackOrderMode,
+        shuffleOrderIndices: IntArray? = null
+    ) {
         when (mode) {
             PlaybackOrderMode.Sequence -> {
                 servicePlayer.shuffleModeEnabled = false
@@ -242,10 +274,37 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             }
 
             PlaybackOrderMode.Shuffle -> {
+                val customShuffleOrder = shuffleOrderIndices
+                if (isValidShuffleOrder(customShuffleOrder, servicePlayer.mediaItemCount)) {
+                    servicePlayer.setShuffleOrder(
+                        ShuffleOrder.DefaultShuffleOrder(
+                            customShuffleOrder!!,
+                            System.currentTimeMillis()
+                        )
+                    )
+                }
                 servicePlayer.shuffleModeEnabled = true
                 servicePlayer.repeatMode = Player.REPEAT_MODE_OFF
             }
         }
+    }
+
+    private fun isValidShuffleOrder(
+        shuffleOrderIndices: IntArray?,
+        mediaItemCount: Int
+    ): Boolean {
+        if (shuffleOrderIndices == null || shuffleOrderIndices.size != mediaItemCount) {
+            return false
+        }
+
+        val seen = BooleanArray(mediaItemCount)
+        for (index in shuffleOrderIndices) {
+            if (index !in 0 until mediaItemCount || seen[index]) {
+                return false
+            }
+            seen[index] = true
+        }
+        return true
     }
 
     private fun logPlayerState(event: String) {
