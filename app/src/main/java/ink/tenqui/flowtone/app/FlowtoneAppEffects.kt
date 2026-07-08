@@ -13,7 +13,6 @@ import kotlinx.coroutines.delay
 internal fun FlowtoneAppEffects(
     selectedTopLevelPage: TopLevelPage,
     secondaryPage: SecondaryPage?,
-    rootPage: FlowtoneRootPage,
     currentSong: Song?,
     artistRootReturnInProgress: Boolean,
     openExpandedPlayerRequest: Int,
@@ -33,7 +32,7 @@ internal fun FlowtoneAppEffects(
     onLikedSongKeysLoaded: (List<String>) -> Unit,
     onHideSwipeHint: () -> Unit
 ) {
-    LaunchedEffect(selectedTopLevelPage, secondaryPage, rootPage) {
+    LaunchedEffect(selectedTopLevelPage, secondaryPage) {
         onContentScrollOffsetChange(0f)
     }
 

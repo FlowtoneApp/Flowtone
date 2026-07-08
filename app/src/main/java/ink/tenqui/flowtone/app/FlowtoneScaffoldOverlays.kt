@@ -1,26 +1,41 @@
 package ink.tenqui.flowtone.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.screens.FlowCloudSpeedOverlay
 import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
+import ink.tenqui.flowtone.ui.search.GlobalSearchOverlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -38,10 +53,96 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
     onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
 ) {
+    val density = LocalDensity.current
+    val searchTopPadding = with(density) {
+        WindowInsets.statusBars.getTop(this).toDp()
+    } + 56.dp
+    val searchMiniPlayerSpaceProgress by animateFloatAsState(
+        targetValue = if (
+            state.searchActive &&
+            state.searchKeyboardVisible &&
+            state.playerUiState.hasCurrentSong
+        ) {
+            0f
+        } else {
+            1f
+        },
+        animationSpec = tween(
+            durationMillis = 360,
+            easing = FastOutSlowInEasing
+        ),
+        label = "SearchMiniPlayerBottomSpaceProgress"
+    )
+    val searchContentBottomPadding =
+        state.miniPlayerContentBottomPadding * searchMiniPlayerSpaceProgress
+    val searchInteractionsEnabled = state.searchReturnStage == SearchReturnStage.Idle
+    val searchLayerProgress = when (state.searchReturnStage) {
+        SearchReturnStage.SearchExitingForArtist,
+        SearchReturnStage.SearchReentering -> state.searchReentryProgress
+        SearchReturnStage.Idle -> 1f
+        SearchReturnStage.ArtistVisible,
+        SearchReturnStage.ArtistExitingToSearch,
+        SearchReturnStage.SearchPreparing -> 0f
+    }
+
+    AnimatedVisibility(
+        visible = state.searchActive,
+        enter = fadeIn(
+            tween(
+                durationMillis = 180,
+                easing = FlowtonePageEasing
+            )
+        ),
+        exit = fadeOut(
+            tween(
+                durationMillis = 180,
+                easing = FlowtonePageEasing
+            )
+        ),
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(10f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = searchTopPadding)
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))
+        )
+        GlobalSearchOverlay(
+            searchUiState = state.searchUiState,
+            currentSong = state.playerUiState.currentSong,
+            listState = state.searchListState,
+            onSongClick = { songs, index ->
+                callbacks.onPlaylistSongClick(
+                    songs,
+                    index,
+                    PlaybackSource.Search
+                )
+            },
+            onArtistClick = { artist ->
+                callbacks.onOpenArtistRootPage(
+                    artist.name,
+                    ArtistRootNavigationMode.NormalPage
+                )
+            },
+            onExitSearch = callbacks.onExitSearch,
+            interactionsEnabled = searchInteractionsEnabled,
+            reentryProgress = searchLayerProgress,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    top = searchTopPadding,
+                    bottom = searchContentBottomPadding
+                )
+        )
+    }
+
     if (state.playerUiState.hasCurrentSong && state.backgroundBlurProgress > 0.01f) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .zIndex(20f)
                 .background(Color.Black.copy(alpha = 0.18f * state.backgroundBlurProgress))
                 .clickable(
                     interactionSource = state.noRippleInteractionSource,
@@ -50,6 +151,14 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
         )
     }
+    FlowtoneArtistRootLayer(
+        state = state,
+        callbacks = callbacks,
+        hostMode = ArtistRootNavigationMode.MiniPlayer,
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(15f)
+    )
     MiniPlayer(
         playerUiState = state.playerUiState,
         expanded = state.miniPlayerExpanded,
@@ -118,10 +227,25 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onPlayArtistSongQueue = callbacks.onPlaylistSongClick,
         likedSongKeys = state.likedSongKeys,
         onToggleSongLiked = callbacks.onToggleSongLiked,
-        onOpenArtistRootPage = callbacks.onOpenArtistRootPage,
+        onOpenArtistRootPage = { artistName ->
+            callbacks.onOpenArtistRootPage(
+                artistName,
+                ArtistRootNavigationMode.MiniPlayer
+            )
+        },
+        forceHidden = state.searchActive && state.searchKeyboardVisible,
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .padding(bottom = state.miniPlayerBottomProtection)
+            .zIndex(30f)
+    )
+    FlowtoneArtistRootLayer(
+        state = state,
+        callbacks = callbacks,
+        hostMode = ArtistRootNavigationMode.NormalPage,
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(25f)
     )
     CreatePlaylistOverlay(
         playlistController = libraryPlaylistController,
@@ -174,6 +298,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         },
         addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
         modifier = Modifier.fillMaxSize()
+            .zIndex(50f)
     )
     SongRecordThresholdOverlay(
         dialogState = state.songRecordThresholdDialogState,
@@ -181,7 +306,9 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onDismissRequest = callbacks.onCloseSongRecordThresholdDialog,
         onDismissAnimationFinished = callbacks.onSongRecordThresholdDialogClosed,
         onConfirm = callbacks.onSongRecordThresholdSecondsChange,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(50f)
     )
     FlowCloudSpeedOverlay(
         dialogState = state.flowCloudSpeedDialogState,
@@ -189,6 +316,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onDismissRequest = callbacks.onCloseFlowCloudSpeedDialog,
         onDismissAnimationFinished = callbacks.onFlowCloudSpeedDialogClosed,
         onConfirm = callbacks.onFlowCloudSpeedChange,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(50f)
     )
 }

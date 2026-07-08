@@ -10,6 +10,9 @@ import ink.tenqui.flowtone.data.local.SongMetadataPreloader
 import ink.tenqui.flowtone.data.listening.ListeningStatsRepositoryProvider
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.repository.MusicRepository
+import ink.tenqui.flowtone.data.search.GlobalSearchUiState
+import ink.tenqui.flowtone.data.search.SearchQuery
+import ink.tenqui.flowtone.data.search.SearchRepository
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackController
@@ -49,6 +52,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
+    private val searchRepository = SearchRepository()
     private val playbackController = PlaybackController(
         context = application,
         initialPlaybackOrderMode = playbackSettingsStore.getPlaybackOrderMode(),
@@ -59,15 +63,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(
         MusicUiState(listeningStats = listeningStatsRepository.getStats())
     )
+    private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private var sourceQueue: List<Song> = emptyList()
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
     private var preloadJob: Job? = null
+    private var searchJob: Job? = null
     private var playbackOrderModeJob: Job? = null
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
 
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
+    val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
 
     init {
@@ -99,6 +106,66 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     @Suppress("UNUSED_PARAMETER")
     fun setSongRecordThresholdSeconds(seconds: Int) {
         // 阈值由 AppPreferences 保存，后台播放服务中的 ListeningStatsTracker 会读取最新值。
+    }
+
+    fun updateSearchQuery(queryText: String) {
+        val query = SearchQuery.from(queryText)
+        searchJob?.cancel()
+
+        if (query.isBlank) {
+            _searchUiState.value = GlobalSearchUiState(queryText = queryText)
+            return
+        }
+
+        _searchUiState.update { currentState ->
+            currentState.copy(
+                queryText = queryText,
+                isSearching = true
+            )
+        }
+        searchJob = viewModelScope.launch {
+            delay(200)
+            publishSearchResults(query = query, visibleQueryText = queryText)
+        }
+    }
+
+    fun clearSearchQuery() {
+        searchJob?.cancel()
+        _searchUiState.value = GlobalSearchUiState()
+    }
+
+    private suspend fun publishSearchResults(
+        query: SearchQuery,
+        visibleQueryText: String
+    ) {
+        val results = searchRepository.search(query)
+        _searchUiState.update { currentState ->
+            if (currentState.queryText != visibleQueryText) {
+                currentState
+            } else {
+                currentState.copy(
+                    isSearching = false,
+                    songResults = results.songs,
+                    artistResults = results.artists
+                )
+            }
+        }
+    }
+
+    private fun refreshSearchIndex(songs: List<Song>) {
+        viewModelScope.launch {
+            searchRepository.updateLocalSongs(songs)
+            val currentSearchState = _searchUiState.value
+            val query = SearchQuery.from(currentSearchState.queryText)
+            if (!query.isBlank) {
+                searchJob?.cancel()
+                _searchUiState.update { it.copy(isSearching = true) }
+                publishSearchResults(
+                    query = query,
+                    visibleQueryText = currentSearchState.queryText
+                )
+            }
+        }
     }
 
     private fun rebuildPlaybackQueueForMode(
@@ -199,6 +266,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     musicRepository.loadLocalSongs()
                 }
             }
+            val loadedSongs = result.getOrNull()
 
             _uiState.update { currentState ->
                 result.fold(
@@ -229,6 +297,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (result.isSuccess) {
+                loadedSongs?.let(::refreshSearchIndex)
                 reconcileCurrentSongWithLibrary()
                 restoreFromControllerIfPossible()
             }
@@ -641,6 +710,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        searchJob?.cancel()
         playbackOrderModeJob?.cancel()
         playbackController.release()
         super.onCleared()

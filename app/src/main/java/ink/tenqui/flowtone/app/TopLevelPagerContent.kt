@@ -36,6 +36,7 @@ internal fun TopLevelPagerContent(
     permissionDenied: Boolean,
     showSwipeHint: Boolean,
     secondaryOpen: Boolean,
+    userScrollEnabled: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onOpenSettings: () -> Unit,
@@ -49,6 +50,7 @@ internal fun TopLevelPagerContent(
     Box(modifier = modifier) {
         HorizontalPager(
             state = pagerState,
+            userScrollEnabled = userScrollEnabled,
             modifier = Modifier.fillMaxSize()
         ) { pageIndex ->
             val page = TopLevelPage.entries[pageIndex]

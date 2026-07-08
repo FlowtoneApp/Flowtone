@@ -77,10 +77,12 @@ fun MiniPlayer(
     likedSongKeys: List<String> = emptyList(),
     onToggleSongLiked: (Song) -> Unit = {},
     onOpenArtistRootPage: (String) -> Unit = {},
+    forceHidden: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val currentSong = playerUiState.currentSong
     val hasCurrentSong = playerUiState.hasCurrentSong
+    val miniPlayerVisible = hasCurrentSong && !forceHidden
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
     val callbacks = MiniPlayerCallbacks(
@@ -288,7 +290,7 @@ fun MiniPlayer(
         (fullscreenTargetHeight - currentHeight) * fullscreenProgress
     val fullscreenControlsLiftY = 50.dp * fullscreenProgress
     val visibleProgress by animateFloatAsState(
-        targetValue = if (hasCurrentSong) 1f else 0f,
+        targetValue = if (miniPlayerVisible) 1f else 0f,
         animationSpec = tween(
             durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = FastOutSlowInEasing
@@ -298,10 +300,10 @@ fun MiniPlayer(
     val hiddenOffsetDp = currentHeight + dragHotZoneHeight + 32.dp
 
     val miniPlayerSlideOffsetY by animateDpAsState(
-        targetValue = if (hasCurrentSong) 0.dp else hiddenOffsetDp,
+        targetValue = if (miniPlayerVisible) 0.dp else hiddenOffsetDp,
         animationSpec = tween(
             durationMillis = MINI_PLAYER_SLIDE_ANIMATION_DURATION_MS,
-            easing = if (hasCurrentSong) {
+            easing = if (miniPlayerVisible) {
                 MiniPlayerSlideInEasing
             } else {
                 FastOutSlowInEasing

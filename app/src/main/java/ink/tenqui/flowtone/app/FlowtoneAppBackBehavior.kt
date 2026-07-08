@@ -10,10 +10,15 @@ internal fun FlowtoneAppBackHandlers(
     miniPlayerExpanded: Boolean,
     miniPlayerFullscreen: Boolean,
     rootPage: FlowtoneRootPage,
+    searchActive: Boolean,
+    searchKeyboardVisible: Boolean,
+    searchReturnStage: SearchReturnStage,
     onNavigateBack: () -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onCollapseMiniPlayer: () -> Unit,
-    onCloseArtistRootPage: () -> Unit
+    onCloseArtistRootPage: () -> Unit,
+    onDismissSearchKeyboard: () -> Unit,
+    onExitSearch: () -> Unit
 ) {
     BackHandler(enabled = secondaryPage != null, onBack = onNavigateBack)
     BackHandler(enabled = hasCurrentSong && (miniPlayerExpanded || miniPlayerFullscreen)) {
@@ -21,6 +26,16 @@ internal fun FlowtoneAppBackHandlers(
             onExitMiniPlayerFullscreen()
         } else {
             onCollapseMiniPlayer()
+        }
+    }
+    BackHandler(enabled = searchActive) {
+        if (isSearchReturnAnimationStage(searchReturnStage)) {
+            return@BackHandler
+        }
+        if (searchKeyboardVisible) {
+            onDismissSearchKeyboard()
+        } else {
+            onExitSearch()
         }
     }
     BackHandler(enabled = rootPage is FlowtoneRootPage.ArtistRootPage) {

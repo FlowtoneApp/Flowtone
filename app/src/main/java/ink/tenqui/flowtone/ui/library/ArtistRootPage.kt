@@ -65,7 +65,9 @@ private const val ArtistRootTitleDelayMillis = 128
 private const val ArtistRootHeaderCardAnimationIndex = 0
 private const val ArtistRootHeaderAvatarAnimationIndex = 1
 private const val ArtistRootHeaderNameAnimationIndex = 2
-private const val ArtistRootFirstSongAnimationIndex = 3
+private const val ArtistRootSectionTitleAnimationIndex = 3
+private const val ArtistRootFirstSongAnimationIndex = 4
+private const val ArtistRootToolbarAnimationIndex = 0
 private const val ArtistRootVisibleSongStaggerCount = 8
 
 @Composable
@@ -76,6 +78,7 @@ fun ArtistRootPage(
     onBack: () -> Unit,
     onSongClick: (List<Song>, Int) -> Unit,
     itemModifier: (Int) -> Modifier = { Modifier },
+    headerCardModifier: (Int) -> Modifier = itemModifier,
     modifier: Modifier = Modifier
 ) {
     val displayArtist = artistName.trim()
@@ -141,6 +144,7 @@ fun ArtistRootPage(
                     height = headerHeight,
                     topPadding = statusBarTop,
                     itemModifier = itemModifier,
+                    headerCardModifier = headerCardModifier,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -150,7 +154,7 @@ fun ArtistRootPage(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
+                    modifier = itemModifier(ArtistRootSectionTitleAnimationIndex)
                         .fillMaxWidth()
                         .padding(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 8.dp)
                 )
@@ -194,7 +198,7 @@ fun ArtistRootPage(
             height = toolbarHeight,
             topPadding = statusBarTop,
             onBack = onBack,
-            modifier = Modifier
+            modifier = itemModifier(ArtistRootToolbarAnimationIndex)
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
                 .zIndex(2f)
@@ -208,6 +212,7 @@ private fun ArtistHeaderCard(
     height: Dp,
     topPadding: Dp,
     itemModifier: (Int) -> Modifier,
+    headerCardModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -216,7 +221,7 @@ private fun ArtistHeaderCard(
         contentAlignment = Alignment.Center
     ) {
         Box(
-            modifier = itemModifier(ArtistRootHeaderCardAnimationIndex)
+            modifier = headerCardModifier(ArtistRootHeaderCardAnimationIndex)
                 .matchParentSize()
                 .clip(
                     RoundedCornerShape(

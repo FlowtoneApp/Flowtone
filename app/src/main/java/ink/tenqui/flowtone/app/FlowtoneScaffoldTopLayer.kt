@@ -15,7 +15,22 @@ internal fun FlowtoneScaffoldTopLayer(
             additionalPathSegments = state.secondaryPathSegments,
             backgroundAlpha = state.topBarBackgroundAlpha,
             hideBackButton = state.hideSecondaryBackButton,
-            onBack = callbacks.onNavigateBack
+            searchActive = state.searchActive,
+            searchQuery = state.searchUiState.queryText,
+            searchColors = state.searchColors,
+            searchFocusRequest = state.searchFocusRequest,
+            searchKeyboardDismissRequest = state.searchKeyboardDismissRequest,
+            searchReentryProgress = state.searchReentryProgress,
+            onBack = callbacks.onNavigateBack,
+            onSearchClick = callbacks.onOpenSearch,
+            onSearchQueryChange = callbacks.onSearchQueryChange,
+            onExitSearch = callbacks.onExitSearch,
+            onClearSearch = callbacks.onClearSearch,
+            onSearchFocusRequestConsumed = callbacks.onSearchFocusRequestConsumed,
+            onSearchKeyboardDismissRequestConsumed =
+                callbacks.onSearchKeyboardDismissRequestConsumed,
+            onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
+            onSearchImeAction = callbacks.onSearchImeAction
         )
     }
 }

@@ -18,6 +18,8 @@ class PlaybackSourceTest {
     fun fixedSourcesUseStableKeys() {
         assertEquals("liked_songs", PlaybackSource.LikedSongs.key)
         assertEquals("local_library", PlaybackSource.LocalLibrary.key)
+        assertEquals("search", PlaybackSource.Search.key)
+        assertEquals("\u641c\u7d22", PlaybackSource.Search.displayName)
     }
 
     @Test

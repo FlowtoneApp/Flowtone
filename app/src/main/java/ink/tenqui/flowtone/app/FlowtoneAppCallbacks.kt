@@ -35,7 +35,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenAbout: () -> Unit,
     val onOpenLocalLibrary: () -> Unit,
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    val onOpenArtistRootPage: (String) -> Unit,
+    val onOpenArtistRootPage: (String, ArtistRootNavigationMode) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     val onCloseArtistRootPage: () -> Unit,
     val onOpenSource: () -> Unit,
@@ -54,7 +54,15 @@ internal data class FlowtoneAppCallbacks(
     val onPlayQueueSong: (Song) -> Unit,
     val onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     val onSetSongLiked: (Song, Boolean) -> Unit,
-    val onToggleSongLiked: (Song) -> Unit
+    val onToggleSongLiked: (Song) -> Unit,
+    val onOpenSearch: () -> Unit,
+    val onExitSearch: () -> Unit,
+    val onSearchQueryChange: (String) -> Unit,
+    val onClearSearch: () -> Unit,
+    val onSearchFocusRequestConsumed: () -> Unit,
+    val onSearchKeyboardDismissRequestConsumed: () -> Unit,
+    val onSearchInputFocusChange: (Boolean) -> Unit,
+    val onSearchImeAction: () -> Unit
 )
 
 internal fun flowtoneAppCallbacks(
@@ -63,6 +71,7 @@ internal fun flowtoneAppCallbacks(
     onThemeModeChange: (AppThemeMode) -> Unit,
     onNavigateBack: () -> Unit,
     onCloseArtistRootPage: () -> Unit,
+    onOpenArtistRootPage: (String, ArtistRootNavigationMode) -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
@@ -74,7 +83,11 @@ internal fun flowtoneAppCallbacks(
     onTogglePlaybackOrderMode: () -> Unit,
     onPlayQueueSong: (Song) -> Unit,
     onSetSongLiked: (Song, Boolean) -> Unit,
-    onToggleSongLiked: (Song) -> Unit
+    onToggleSongLiked: (Song) -> Unit,
+    onOpenSearch: () -> Unit,
+    onExitSearch: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onClearSearch: () -> Unit
 ): FlowtoneAppCallbacks {
     return FlowtoneAppCallbacks(
         onThemeModeChange = onThemeModeChange,
@@ -193,14 +206,7 @@ internal fun flowtoneAppCallbacks(
             appState.secondaryPathSegments = listOf(playlist.title)
             appState.secondaryPage = SecondaryPage.Playlist
         },
-        onOpenArtistRootPage = { artistName ->
-            appState.artistRootReturnInProgress = false
-            appState.artistRootPageArtistName = artistName
-            appState.miniPlayerFullscreen = false
-            appState.miniPlayerExpanded = false
-            appState.miniPlayerFullscreenEnteredFromCollapsed = false
-            appState.miniPlayerMinimized = false
-        },
+        onOpenArtistRootPage = onOpenArtistRootPage,
         onOpenListeningRecords = { initialTab ->
             appState.listeningRecordInitialTab = initialTab
             appState.secondaryPathSegments = emptyList()
@@ -265,6 +271,22 @@ internal fun flowtoneAppCallbacks(
         onPlayQueueSong = onPlayQueueSong,
         onPlaylistSongClick = onPlaylistSongClick,
         onSetSongLiked = onSetSongLiked,
-        onToggleSongLiked = onToggleSongLiked
+        onToggleSongLiked = onToggleSongLiked,
+        onOpenSearch = onOpenSearch,
+        onExitSearch = onExitSearch,
+        onSearchQueryChange = onSearchQueryChange,
+        onClearSearch = onClearSearch,
+        onSearchFocusRequestConsumed = {
+            appState.searchFocusRequest = 0
+        },
+        onSearchKeyboardDismissRequestConsumed = {
+            appState.searchKeyboardDismissRequest = 0
+        },
+        onSearchInputFocusChange = { focused ->
+            appState.searchInputFocused = focused
+        },
+        onSearchImeAction = {
+            appState.searchInputFocused = false
+        }
     )
 }

@@ -8,6 +8,7 @@ enum class PlaybackSourceType(val label: String) {
     LocalLibrary("本地曲库"),
     Artist("艺术家"),
     Album("专辑"),
+    Search("\u641c\u7d22"),
     Other("其他"),
     Unknown("未知来源")
 }
@@ -36,6 +37,13 @@ data class PlaybackSource(
             key = "liked_songs",
             sourceId = "system_liked_songs",
             displayName = "我喜欢的音乐"
+        )
+
+        val Search = PlaybackSource(
+            type = PlaybackSourceType.Search,
+            key = "search",
+            sourceId = "system_search",
+            displayName = "\u641c\u7d22"
         )
 
         fun userPlaylist(
