@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -44,6 +46,7 @@ import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 
 internal fun LazyListScope.libraryPlaylistRows(
+    likedPlaylist: LibraryPlaylistCard,
     playlistRows: List<List<LibraryPlaylistCard>>,
     playlistCardHeight: Dp,
     libraryCardsProgress: Float,
@@ -51,11 +54,47 @@ internal fun LazyListScope.libraryPlaylistRows(
     activePlaylistActionId: String?,
     newlyCreatedPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
+    onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onShowPlaylistActions: (String) -> Unit,
     onRenamePlaylist: (LibraryPlaylistCard) -> Unit,
     onDeletePlaylist: (LibraryPlaylistCard) -> Unit
 ) {
+    item(key = "library-pinned-playlist-row") {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .libraryPlaylistRowMotion(
+                    globalProgress = libraryCardsProgress,
+                    rowIndex = 1,
+                    rowAppearProgress = 1f,
+                    itemOffsetYPx = playlistRowItemOffsetYPx
+                ),
+            horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
+        ) {
+            LibraryPlaylistTileCardView(
+                playlist = likedPlaylist,
+                cardHeight = playlistCardHeight,
+                editable = false,
+                showActions = false,
+                playCreateAnimation = false,
+                onCreateAnimationFinished = {},
+                onClick = {
+                    onOpenPlaylist(likedPlaylist)
+                },
+                onLongClick = {},
+                onEdit = {},
+                onDelete = {},
+                modifier = Modifier.weight(1f)
+            )
+            LibraryCreatePlaylistTileCardView(
+                cardHeight = playlistCardHeight,
+                onClick = onCreatePlaylist,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+
     itemsIndexed(
         items = playlistRows,
         key = { _, rowPlaylists ->
@@ -67,7 +106,7 @@ internal fun LazyListScope.libraryPlaylistRows(
                 .fillMaxWidth()
                 .libraryPlaylistRowMotion(
                     globalProgress = libraryCardsProgress,
-                    rowIndex = rowIndex + 1,
+                    rowIndex = rowIndex + 2,
                     rowAppearProgress = 1f,
                     itemOffsetYPx = playlistRowItemOffsetYPx
                 ),
@@ -178,6 +217,104 @@ private fun LibraryPlaylistTileCardView(
         Modifier.clickable(onClick = onClick)
     }
 
+    LibraryPlaylistTileSurface(
+        cardHeight = cardHeight,
+        appearProgress = createProgress.value,
+        clickModifier = cardClickModifier,
+        modifier = modifier
+    ) {
+        LibraryPlaylistTileTextContent(
+            title = playlist.title,
+            subtitle = playlist.subtitle,
+            reserveActionWidth = editable,
+            icon = if (isLikedPlaylist) {
+                {
+                    LikedSongsPlaylistTileIcon()
+                }
+            } else {
+                null
+            }
+        )
+
+        if (showActions || actionProgress > 0.001f) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .graphicsLayer {
+                        val eased = FlowtoneMotion.Easing.transform(
+                            actionProgress.coerceIn(0f, 1f)
+                        )
+                        alpha = eased
+                        translationX = 18.dp.toPx() * (1f - eased)
+                        scaleX = 0.96f + 0.04f * eased
+                        scaleY = 0.96f + 0.04f * eased
+                        transformOrigin = TransformOrigin(1f, 0.5f)
+                    },
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(editActionTouchSize)
+                        .clickable(onClick = onEdit),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "\u7f16\u8f91\u6b4c\u5355",
+                        tint = actionButtonColor,
+                        modifier = Modifier.size(editActionIconSize)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(editActionTouchSize)
+                        .clickable(onClick = onDelete),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = "\u5220\u9664\u6b4c\u5355",
+                        tint = actionButtonColor,
+                        modifier = Modifier.size(editActionIconSize)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryCreatePlaylistTileCardView(
+    cardHeight: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LibraryPlaylistTileSurface(
+        cardHeight = cardHeight,
+        appearProgress = 1f,
+        clickModifier = Modifier.clickable(onClick = onClick),
+        modifier = modifier
+    ) {
+        LibraryPlaylistTileTextContent(
+            title = "\u521b\u5efa\u6b4c\u5355",
+            subtitle = "\u6dfb\u52a0\u65b0\u7684\u6b4c\u5355",
+            reserveActionWidth = false,
+            icon = {
+                CreatePlaylistTileIcon()
+            }
+        )
+    }
+}
+
+@Composable
+private fun LibraryPlaylistTileSurface(
+    cardHeight: Dp,
+    appearProgress: Float,
+    clickModifier: Modifier,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
     Box(
         modifier = modifier.height(cardHeight)
     ) {
@@ -187,105 +324,101 @@ private fun LibraryPlaylistTileCardView(
                 .height(cardHeight)
                 .graphicsLayer {
                     val eased = FlowtoneMotion.Easing.transform(
-                        createProgress.value.coerceIn(0f, 1f)
+                        appearProgress.coerceIn(0f, 1f)
                     )
                     alpha = eased
                     translationY = 18.dp.toPx() * (1f - eased)
                 }
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .then(cardClickModifier)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth()
-                    .padding(end = if (editable) 44.dp else 0.dp),
-                verticalArrangement = Arrangement.Top
-            ) {
-                if (isLikedPlaylist) {
-                    Box(
-                        modifier = Modifier
-                            .padding(bottom = 14.dp)
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.FavoriteBorder,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-                Text(
-                    text = playlist.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = playlist.subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
+                .then(clickModifier)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            content = content
+        )
+    }
+}
 
-            if (showActions || actionProgress > 0.001f) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .graphicsLayer {
-                            val eased = FlowtoneMotion.Easing.transform(
-                                actionProgress.coerceIn(0f, 1f)
-                            )
-                            alpha = eased
-                            translationX = 18.dp.toPx() * (1f - eased)
-                            scaleX = 0.96f + 0.04f * eased
-                            scaleY = 0.96f + 0.04f * eased
-                            transformOrigin = TransformOrigin(1f, 0.5f)
-                        },
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(editActionTouchSize)
-                            .clickable(onClick = onEdit),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = "\u7f16\u8f91\u6b4c\u5355",
-                            tint = actionButtonColor,
-                            modifier = Modifier.size(editActionIconSize)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(editActionTouchSize)
-                            .clickable(onClick = onDelete),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = "\u5220\u9664\u6b4c\u5355",
-                            tint = actionButtonColor,
-                            modifier = Modifier.size(editActionIconSize)
-                        )
-                    }
-                }
+@Composable
+private fun BoxScope.LibraryPlaylistTileTextContent(
+    title: String,
+    subtitle: String?,
+    reserveActionWidth: Boolean,
+    icon: (@Composable () -> Unit)? = null
+) {
+    Column(
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .fillMaxWidth()
+            .padding(end = if (reserveActionWidth) 44.dp else 0.dp),
+        verticalArrangement = Arrangement.Top
+    ) {
+        if (icon != null) {
+            Box(modifier = Modifier.padding(bottom = 14.dp)) {
+                icon()
             }
         }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
     }
+}
+
+@Composable
+private fun LikedSongsPlaylistTileIcon() {
+    LibraryPlaylistTileIconContainer(
+        backgroundColor = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.FavoriteBorder,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun CreatePlaylistTileIcon() {
+    LibraryPlaylistTileIconContainer(
+        backgroundColor = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+            contentDescription = "\u521b\u5efa\u6b4c\u5355",
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun LibraryPlaylistTileIconContainer(
+    backgroundColor: androidx.compose.ui.graphics.Color,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor),
+        contentAlignment = Alignment.Center,
+        content = content
+    )
 }
 
 private fun Modifier.libraryPlaylistRowMotion(

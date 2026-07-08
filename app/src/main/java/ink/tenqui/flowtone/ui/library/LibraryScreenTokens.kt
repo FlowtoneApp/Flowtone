@@ -9,7 +9,6 @@ internal val CreatePlaylistPanelMaxWidth = 360.dp
 internal val CreatePlaylistPanelCornerRadius = 28.dp
 internal val CreatePlaylistShadowSafePadding = 48.dp
 internal val LibraryActionCardSpacing = 12.dp
-internal const val CreatePlaylistCardWidthFraction = 0.312f
 internal const val CreatePlaylistScrimMaxAlpha = 0.18f
 internal const val CreatePlaylistPanelStartScale = 0.96f
 internal const val CreatePlaylistPanelExitScale = 0.98f

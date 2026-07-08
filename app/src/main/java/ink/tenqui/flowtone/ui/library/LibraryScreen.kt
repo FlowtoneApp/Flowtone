@@ -253,10 +253,10 @@ internal fun LibraryScreen(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    val playlists = remember(playlistController.playlists, likedSongCount) {
-        listOf(likedSongsPlaylistCard(likedSongCount)) + playlistController.playlists
+    val likedPlaylist = remember(likedSongCount) {
+        likedSongsPlaylistCard(likedSongCount)
     }
-    val playlistRows = playlists.chunked(2)
+    val playlistRows = playlistController.playlists.chunked(2)
     val playlistCardHeight = LibraryInfoCardHeight * (4f / 3f)
     val playlistRowItemOffsetYPx = with(density) {
         playlistCardHeight.toPx() / LibraryItemSlideOffsetDivisor
@@ -281,6 +281,7 @@ internal fun LibraryScreen(
     LibraryHomeContent(
         songCount = songCount,
         visible = visible,
+        likedPlaylist = likedPlaylist,
         playlistRows = playlistRows,
         playlistCardHeight = playlistCardHeight,
         libraryCardsProgress = libraryCardsProgress.value,

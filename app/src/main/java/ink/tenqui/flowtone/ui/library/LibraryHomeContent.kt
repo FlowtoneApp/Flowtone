@@ -22,6 +22,7 @@ import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 internal fun LibraryHomeContent(
     songCount: Int,
     visible: Boolean,
+    likedPlaylist: LibraryPlaylistCard,
     playlistRows: List<List<LibraryPlaylistCard>>,
     playlistCardHeight: Dp,
     libraryCardsProgress: Float,
@@ -68,13 +69,13 @@ internal fun LibraryHomeContent(
                 LibraryHomeEntryCards(
                     songCount = songCount,
                     onOpenLocalLibrary = onOpenLocalLibrary,
-                    onCreatePlaylist = onCreatePlaylist,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
 
         libraryPlaylistRows(
+            likedPlaylist = likedPlaylist,
             playlistRows = playlistRows,
             playlistCardHeight = playlistCardHeight,
             libraryCardsProgress = libraryCardsProgress,
@@ -82,6 +83,7 @@ internal fun LibraryHomeContent(
             activePlaylistActionId = activePlaylistActionId,
             newlyCreatedPlaylistId = newlyCreatedPlaylistId,
             onCreateAnimationFinished = onCreateAnimationFinished,
+            onCreatePlaylist = onCreatePlaylist,
             onOpenPlaylist = onOpenPlaylist,
             onShowPlaylistActions = onShowPlaylistActions,
             onRenamePlaylist = onRenamePlaylist,
