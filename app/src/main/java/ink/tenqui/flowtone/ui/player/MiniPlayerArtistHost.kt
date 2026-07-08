@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackSource
 
 @Composable
 internal fun BoxScope.MiniPlayerArtistHost(
@@ -24,7 +25,7 @@ internal fun BoxScope.MiniPlayerArtistHost(
     songInfoTopPadding: Dp,
     onBack: () -> Unit,
     onArtistClick: (String) -> Unit,
-    onSongClick: (List<Song>, Int) -> Unit
+    onSongClick: (List<Song>, Int, PlaybackSource) -> Unit
 ) {
     if (
         shouldShowArtistPlaceholderOverlay(

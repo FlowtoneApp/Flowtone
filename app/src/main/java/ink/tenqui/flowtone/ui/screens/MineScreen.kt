@@ -30,18 +30,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
+import ink.tenqui.flowtone.data.listening.formatListeningDuration
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
-private val MineListeningRecordCardHeight = 132.dp
+private val MineListeningRecordCardHeight = 164.dp
 
 @Composable
 internal fun MineScreen(
     listeningStats: ListeningStatsSnapshot,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     secondaryOpen: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val todayTopSource = listeningStats.today.topSource?.displayName?.takeIf { it.isNotBlank() }
+    val totalTopSource = listeningStats.total.topSource?.displayName?.takeIf { it.isNotBlank() }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -58,16 +63,20 @@ internal fun MineScreen(
             ) {
                 MineListeningRecordCard(
                     title = "今日听歌",
-                    value = "${listeningStats.todaySongCount} 首",
-                    subtitle = "今日播放记录",
+                    value = "${listeningStats.today.effectivePlayCount} 首",
+                    subtitle = "共 ${formatListeningDuration(listeningStats.today.listeningDurationMs)}",
+                    description = todayTopSource?.let { "主要来自「$it」" } ?: "暂无主要来源",
                     icon = Icons.Rounded.History,
+                    onClick = { onOpenListeningRecords(ListeningRecordTab.Today) },
                     modifier = Modifier.weight(1f)
                 )
                 MineListeningRecordCard(
                     title = "累计时长",
-                    value = formatListeningDuration(listeningStats.totalListeningDurationMs),
-                    subtitle = "本地记录统计",
+                    value = formatListeningDuration(listeningStats.total.listeningDurationMs),
+                    subtitle = "累计有效播放 ${listeningStats.total.effectivePlayCount} 次",
+                    description = totalTopSource?.let { "主要来自「$it」" } ?: "暂无主要来源",
                     icon = Icons.Rounded.Schedule,
+                    onClick = { onOpenListeningRecords(ListeningRecordTab.Total) },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -96,7 +105,9 @@ private fun MineListeningRecordCard(
     title: String,
     value: String,
     subtitle: String,
+    description: String,
     icon: ImageVector,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -104,6 +115,7 @@ private fun MineListeningRecordCard(
             .height(MineListeningRecordCardHeight)
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -118,6 +130,8 @@ private fun MineListeningRecordCard(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
@@ -127,30 +141,25 @@ private fun MineListeningRecordCard(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp)
         )
-    }
-}
-
-private fun formatListeningDuration(durationMs: Long): String {
-    val totalMinutes = (durationMs / 60_000L).coerceAtLeast(0L)
-    if (totalMinutes < 60L) {
-        return "$totalMinutes 分钟"
-    }
-
-    val hours = totalMinutes / 60L
-    val minutes = totalMinutes % 60L
-    return if (minutes == 0L) {
-        "$hours 小时"
-    } else {
-        "$hours 小时 $minutes 分"
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
     }
 }
 

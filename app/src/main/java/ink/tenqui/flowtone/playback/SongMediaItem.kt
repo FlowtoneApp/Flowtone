@@ -7,6 +7,14 @@ fun Song.toMediaItem(): MediaItem {
     return MediaItemMapper.toMediaItem(this)
 }
 
+fun Song.toMediaItem(source: PlaybackSource): MediaItem {
+    return MediaItemMapper.toMediaItem(this, source)
+}
+
 fun MediaItem.toSongOrNull(scannedSongs: List<Song>): Song? {
     return MediaItemMapper.toSongOrNull(this, scannedSongs)
+}
+
+fun MediaItem?.toPlaybackSource(): PlaybackSource {
+    return MediaItemMapper.toPlaybackSource(this)
 }

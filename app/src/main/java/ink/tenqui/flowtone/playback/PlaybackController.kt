@@ -123,15 +123,18 @@ class PlaybackController(
         )
     }
 
-    fun play(song: Song) {
+    fun play(
+        song: Song,
+        source: PlaybackSource = PlaybackSource.Unknown
+    ) {
         val controller = currentControllerOrNull()
         if (controller == null) {
-            setPendingSingleSong(song)
+            setPendingSingleSong(song, source)
             return
         }
 
         runCatching {
-            val mediaItem = song.toMediaItem()
+            val mediaItem = song.toMediaItem(source)
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
@@ -141,18 +144,22 @@ class PlaybackController(
         }
     }
 
-    fun playQueue(songs: List<Song>, startIndex: Int) {
+    fun playQueue(
+        songs: List<Song>,
+        startIndex: Int,
+        source: PlaybackSource = PlaybackSource.Unknown
+    ) {
         if (songs.isEmpty() || startIndex !in songs.indices) {
             return
         }
 
         val controller = currentControllerOrNull()
         if (controller == null) {
-            pendingPlaybackRequest = PendingPlaybackRequest.Queue(songs, startIndex)
+            pendingPlaybackRequest = PendingPlaybackRequest.Queue(songs, startIndex, source)
             return
         }
 
-        val mediaItems = songs.map { it.toMediaItem() }
+        val mediaItems = songs.map { it.toMediaItem(source) }
         val startSong = songs[startIndex]
 
         runCatching {
@@ -366,8 +373,11 @@ class PlaybackController(
         return mediaControllerConnection.currentController
     }
 
-    private fun setPendingSingleSong(song: Song) {
-        pendingPlaybackRequest = PendingPlaybackRequest.SingleSong(song)
+    private fun setPendingSingleSong(
+        song: Song,
+        source: PlaybackSource
+    ) {
+        pendingPlaybackRequest = PendingPlaybackRequest.SingleSong(song, source)
         _playbackState.update {
             it.copy(
                 currentSong = song,
@@ -383,12 +393,12 @@ class PlaybackController(
         when (val request = pendingPlaybackRequest) {
             is PendingPlaybackRequest.Queue -> {
                 pendingPlaybackRequest = null
-                playQueue(request.songs, request.startIndex)
+                playQueue(request.songs, request.startIndex, request.source)
             }
 
             is PendingPlaybackRequest.SingleSong -> {
                 pendingPlaybackRequest = null
-                play(request.song)
+                play(request.song, request.source)
             }
 
             null -> Unit
@@ -492,7 +502,15 @@ class PlaybackController(
     }
 
     private sealed interface PendingPlaybackRequest {
-        data class SingleSong(val song: Song) : PendingPlaybackRequest
-        data class Queue(val songs: List<Song>, val startIndex: Int) : PendingPlaybackRequest
+        data class SingleSong(
+            val song: Song,
+            val source: PlaybackSource
+        ) : PendingPlaybackRequest
+
+        data class Queue(
+            val songs: List<Song>,
+            val startIndex: Int,
+            val source: PlaybackSource
+        ) : PendingPlaybackRequest
     }
 }

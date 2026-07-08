@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.SystemClock
 import android.os.Bundle
 import android.util.Log
 import androidx.annotation.OptIn
@@ -23,13 +24,20 @@ import com.google.common.util.concurrent.ListenableFuture
 import ink.tenqui.flowtone.app.MainActivity
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.R
+import ink.tenqui.flowtone.data.listening.ListeningStatsRepositoryProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 class FlowtoneMediaSessionService : MediaSessionService() {
     private val appPreferences by lazy {
         AppPreferences(applicationContext)
     }
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
+    private var listeningStatsTracker: ListeningStatsTracker? = null
     private val togglePlaybackOrderCommand = SessionCommand(
         ACTION_TOGGLE_PLAYBACK_ORDER,
         Bundle.EMPTY
@@ -164,6 +172,17 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             .build()
         servicePlayer.addListener(playerListener)
         player = servicePlayer
+        listeningStatsTracker = ListeningStatsTracker(
+            repository = ListeningStatsRepositoryProvider.get(applicationContext),
+            scope = serviceScope,
+            thresholdMsProvider = {
+                appPreferences.getSongRecordThresholdSeconds().toLong() * 1_000L
+            },
+            elapsedRealtimeMs = SystemClock::elapsedRealtime,
+            currentTimeMillis = System::currentTimeMillis
+        ).also { tracker ->
+            tracker.attach(servicePlayer)
+        }
         mediaSession = MediaSession.Builder(this, servicePlayer)
             .setId("flowtone_service_session")
             .setCallback(sessionCallback)
@@ -184,12 +203,16 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        listeningStatsTracker?.release()
+        listeningStatsTracker = null
+
         mediaSession?.release()
         mediaSession = null
 
         player?.removeListener(playerListener)
         player?.release()
         player = null
+        serviceScope.cancel()
 
         super.onDestroy()
     }

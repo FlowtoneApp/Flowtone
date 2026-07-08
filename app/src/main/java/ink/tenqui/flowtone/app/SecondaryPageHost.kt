@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
@@ -29,6 +30,8 @@ import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
 import ink.tenqui.flowtone.ui.screens.AboutScreen
+import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
+import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -59,13 +62,15 @@ internal fun SecondaryPageHost(
     uiState: MusicUiState,
     currentSong: Song?,
     selectedPlaylistId: String?,
+    selectedPlaylistTitle: String?,
     selectedArtistName: String?,
+    listeningRecordInitialTab: ListeningRecordTab,
     likedSongKeys: List<String>,
     playlistSongEntries: List<PlaylistSongEntry>,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
-    onPlaylistSongClick: (List<Song>, Int) -> Unit,
+    onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -76,10 +81,16 @@ internal fun SecondaryPageHost(
     modifier: Modifier = Modifier
 ) {
     var retainedPlaylistId by remember { mutableStateOf<String?>(null) }
+    var retainedPlaylistTitle by remember { mutableStateOf<String?>(null) }
     var retainedArtistName by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(secondaryPage, selectedPlaylistId) {
         if (secondaryPage == SecondaryPage.Playlist && selectedPlaylistId != null) {
             retainedPlaylistId = selectedPlaylistId
+        }
+    }
+    LaunchedEffect(secondaryPage, selectedPlaylistTitle) {
+        if (secondaryPage == SecondaryPage.Playlist && selectedPlaylistTitle != null) {
+            retainedPlaylistTitle = selectedPlaylistTitle
         }
     }
     LaunchedEffect(secondaryPage, selectedArtistName) {
@@ -224,12 +235,19 @@ internal fun SecondaryPageHost(
                 } else {
                     retainedPlaylistId
                 }
+                val activePlaylistTitle = if (secondaryPage == SecondaryPage.Playlist) {
+                    selectedPlaylistTitle
+                } else {
+                    retainedPlaylistTitle
+                }
                 if (activePlaylistId == LikedSongsPlaylistId) {
                     LikedSongsPlaylistScreen(
                         allSongs = uiState.songs,
                         likedSongKeys = likedSongKeys,
                         currentSong = currentSong,
-                        onSongClick = onPlaylistSongClick,
+                        onSongClick = { songs, index ->
+                            onPlaylistSongClick(songs, index, PlaybackSource.LikedSongs)
+                        },
                         itemModifier = ::songItemModifier,
                         modifier = fadingContainerModifier()
                             .fillMaxSize()
@@ -241,7 +259,16 @@ internal fun SecondaryPageHost(
                         allSongs = uiState.songs,
                         playlistSongEntries = playlistSongEntries,
                         currentSong = currentSong,
-                        onSongClick = onPlaylistSongClick,
+                        onSongClick = { songs, index ->
+                            onPlaylistSongClick(
+                                songs,
+                                index,
+                                PlaybackSource.userPlaylist(
+                                    playlistId = activePlaylistId.orEmpty(),
+                                    displayName = activePlaylistTitle.orEmpty()
+                                )
+                            )
+                        },
                         itemModifier = ::songItemModifier,
                         suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
                         modifier = fadingContainerModifier()
@@ -259,11 +286,32 @@ internal fun SecondaryPageHost(
                 },
                 allSongs = uiState.songs,
                 currentSong = currentSong,
-                onSongClick = onPlaylistSongClick,
+                onSongClick = { songs, index ->
+                    onPlaylistSongClick(
+                        songs,
+                        index,
+                        PlaybackSource.artist(
+                            if (secondaryPage == SecondaryPage.Artist) {
+                                selectedArtistName.orEmpty()
+                            } else {
+                                retainedArtistName.orEmpty()
+                            }
+                        )
+                    )
+                },
                 itemModifier = ::songItemModifier,
                 modifier = fadingContainerModifier()
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)
+            )
+
+            SecondaryPage.ListeningRecords -> ListeningRecordsScreen(
+                listeningStats = uiState.listeningStats,
+                initialTab = listeningRecordInitialTab,
+                onBack = onCloseSecondaryPage,
+                itemModifier = ::elementModifier,
+                modifier = fadingContainerModifier()
+                    .fillMaxSize()
             )
 
             null -> Box(modifier = Modifier.fillMaxSize())

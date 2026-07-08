@@ -13,8 +13,15 @@ object MediaItemMapper {
     private const val EXTRA_ARTWORK_URI = "artwork_uri"
     private const val EXTRA_DURATION_MS = "duration_ms"
     private const val EXTRA_FILE_PATH = "file_path"
+    private const val EXTRA_SOURCE_TYPE = "playback_source_type"
+    private const val EXTRA_SOURCE_KEY = "playback_source_key"
+    private const val EXTRA_SOURCE_ID = "playback_source_id"
+    private const val EXTRA_SOURCE_DISPLAY_NAME = "playback_source_display_name"
 
-    fun toMediaItem(song: Song): MediaItem {
+    fun toMediaItem(
+        song: Song,
+        source: PlaybackSource = PlaybackSource.Unknown
+    ): MediaItem {
         val mediaId = song.id.takeIf { it > 0L }?.toString()
             ?: song.uri.toString()
         val extras = Bundle().apply {
@@ -23,6 +30,10 @@ object MediaItemMapper {
             song.artworkUri?.let { putString(EXTRA_ARTWORK_URI, it.toString()) }
             song.filePath?.let { putString(EXTRA_FILE_PATH, it) }
             putLong(EXTRA_DURATION_MS, song.durationMs)
+            putString(EXTRA_SOURCE_TYPE, source.type.name)
+            putString(EXTRA_SOURCE_KEY, source.key)
+            source.sourceId?.let { putString(EXTRA_SOURCE_ID, it) }
+            putString(EXTRA_SOURCE_DISPLAY_NAME, source.displayName)
         }
         val mediaMetadata = MediaMetadata.Builder()
             .setTitle(song.title)
@@ -67,6 +78,23 @@ object MediaItemMapper {
             uri = uri,
             artworkUri = artworkUri,
             filePath = filePath
+        )
+    }
+
+    fun toPlaybackSource(mediaItem: MediaItem?): PlaybackSource {
+        val extras = mediaItem?.mediaMetadata?.extras ?: return PlaybackSource.Unknown
+        val sourceKey = extras.getString(EXTRA_SOURCE_KEY)?.takeIf { it.isNotBlank() }
+            ?: return PlaybackSource.Unknown
+        val sourceType = extras.getString(EXTRA_SOURCE_TYPE)
+            ?.let { runCatching { PlaybackSourceType.valueOf(it) }.getOrNull() }
+            ?: PlaybackSourceType.Unknown
+        return PlaybackSource(
+            type = sourceType,
+            key = sourceKey,
+            sourceId = extras.getString(EXTRA_SOURCE_ID)?.takeIf { it.isNotBlank() },
+            displayName = extras.getString(EXTRA_SOURCE_DISPLAY_NAME)
+                ?.takeIf { it.isNotBlank() }
+                ?: PlaybackSource.Unknown.displayName
         )
     }
 }

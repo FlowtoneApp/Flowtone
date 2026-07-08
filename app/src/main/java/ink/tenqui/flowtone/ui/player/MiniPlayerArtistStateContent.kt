@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.SongListItem
 
 @Composable
@@ -51,7 +52,7 @@ internal fun ArtistPlaceholderOverlay(
     backGestureEnabled: Boolean,
     onBack: () -> Unit,
     onArtistClick: (String) -> Unit,
-    onSongClick: (List<Song>, Int) -> Unit,
+    onSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (artists.isEmpty()) {
@@ -194,7 +195,7 @@ private fun ArtistPlaceholderLocalSongList(
     songs: List<Song>,
     currentSong: Song?,
     listState: LazyListState,
-    onSongClick: (List<Song>, Int) -> Unit,
+    onSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -245,7 +246,7 @@ private fun ArtistPlaceholderLocalSongList(
                         song = song,
                         isCurrentSong = currentSong?.id == song.id || currentSong?.uri == song.uri,
                         onClick = {
-                            onSongClick(songs, index)
+                            onSongClick(songs, index, PlaybackSource.artist(artistName))
                         },
                         titleColor = Color.White,
                         artistColor = Color.White.copy(alpha = 0.76f),

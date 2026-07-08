@@ -50,7 +50,8 @@ internal fun navigateFlowtoneAppBack(appState: FlowtoneAppState) {
             SecondaryPage.About,
             SecondaryPage.LocalLibrary,
             SecondaryPage.Playlist,
-            SecondaryPage.Artist -> null
+            SecondaryPage.Artist,
+            SecondaryPage.ListeningRecords -> null
             SecondaryPage.OpenSource -> SecondaryPage.About
             null -> null
         }

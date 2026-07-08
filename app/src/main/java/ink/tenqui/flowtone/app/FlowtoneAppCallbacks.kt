@@ -2,8 +2,10 @@ package ink.tenqui.flowtone.app
 
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
+import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 
 internal data class FlowtoneAppCallbacks(
@@ -34,6 +36,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenLocalLibrary: () -> Unit,
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     val onOpenArtistRootPage: (String) -> Unit,
+    val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     val onCloseArtistRootPage: () -> Unit,
     val onOpenSource: () -> Unit,
     val onOpenSourceBack: () -> Unit,
@@ -49,7 +52,7 @@ internal data class FlowtoneAppCallbacks(
     val onSeekTo: (Long) -> Unit,
     val onTogglePlaybackOrderMode: () -> Unit,
     val onPlayQueueSong: (Song) -> Unit,
-    val onPlaylistSongClick: (List<Song>, Int) -> Unit,
+    val onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     val onSetSongLiked: (Song, Boolean) -> Unit,
     val onToggleSongLiked: (Song) -> Unit
 )
@@ -62,7 +65,7 @@ internal fun flowtoneAppCallbacks(
     onCloseArtistRootPage: () -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
-    onPlaylistSongClick: (List<Song>, Int) -> Unit,
+    onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayPrevious: () -> Unit,
@@ -197,6 +200,14 @@ internal fun flowtoneAppCallbacks(
             appState.miniPlayerExpanded = false
             appState.miniPlayerFullscreenEnteredFromCollapsed = false
             appState.miniPlayerMinimized = false
+        },
+        onOpenListeningRecords = { initialTab ->
+            appState.listeningRecordInitialTab = initialTab
+            appState.secondaryPathSegments = emptyList()
+            appState.selectedPlaylistId = null
+            appState.selectedPlaylistTitle = null
+            appState.selectedArtistName = null
+            appState.secondaryPage = SecondaryPage.ListeningRecords
         },
         onCloseArtistRootPage = onCloseArtistRootPage,
         onOpenSource = {

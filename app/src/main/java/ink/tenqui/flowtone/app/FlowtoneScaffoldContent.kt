@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
@@ -55,6 +56,7 @@ internal fun FlowtoneScaffoldContent(
                 onOpenAbout = callbacks.onOpenAbout,
                 onOpenLocalLibrary = callbacks.onOpenLocalLibrary,
                 onOpenPlaylist = callbacks.onOpenPlaylist,
+                onOpenListeningRecords = callbacks.onOpenListeningRecords,
                 likedSongCount = likedSongCount,
                 modifier = Modifier.fillMaxSize()
             )
@@ -82,7 +84,9 @@ internal fun FlowtoneScaffoldContent(
                 uiState = state.uiState,
                 currentSong = state.playerUiState.currentSong,
                 selectedPlaylistId = state.selectedPlaylistId,
+                selectedPlaylistTitle = state.selectedPlaylistTitle,
                 selectedArtistName = state.selectedArtistName,
+                listeningRecordInitialTab = state.listeningRecordInitialTab,
                 likedSongKeys = state.likedSongKeys,
                 playlistSongEntries = playlistSongEntries,
                 permissionDenied = state.permissionDenied,
@@ -140,7 +144,13 @@ private fun FlowtoneArtistRootLayer(
                 allSongs = state.uiState.songs,
                 currentSong = state.playerUiState.currentSong,
                 onBack = callbacks.onCloseArtistRootPage,
-                onSongClick = callbacks.onPlaylistSongClick,
+                onSongClick = { songs, index ->
+                    callbacks.onPlaylistSongClick(
+                        songs,
+                        index,
+                        PlaybackSource.artist(artistRootPage.artistName)
+                    )
+                },
                 itemModifier = ::artistPageItemModifier,
                 modifier = Modifier
                     .fillMaxSize()

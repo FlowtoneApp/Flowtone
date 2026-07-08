@@ -34,6 +34,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 
 @Composable
@@ -72,7 +73,7 @@ fun MiniPlayer(
     queueDisplayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
     onQueueDisplayOrderChange: (QueueDisplayOrder) -> Unit = {},
     onPlayQueueSong: (Song) -> Unit = {},
-    onPlayArtistSongQueue: (List<Song>, Int) -> Unit = { _, _ -> },
+    onPlayArtistSongQueue: (List<Song>, Int, PlaybackSource) -> Unit = { _, _, _ -> },
     likedSongKeys: List<String> = emptyList(),
     onToggleSongLiked: (Song) -> Unit = {},
     onOpenArtistRootPage: (String) -> Unit = {},

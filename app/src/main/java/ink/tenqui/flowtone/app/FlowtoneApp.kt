@@ -31,6 +31,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.local.LikedSongsStore
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.permissions.currentAudioPermission
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
@@ -289,10 +290,10 @@ fun FlowtoneApp(
                 permissionLauncher.launch(currentAudioPermission())
             },
             onSongClick = { song ->
-                musicViewModel.playSong(song)
+                musicViewModel.playSong(song, PlaybackSource.LocalLibrary)
             },
-            onPlaylistSongClick = { songs, startIndex ->
-                musicViewModel.playSongQueue(songs, startIndex)
+            onPlaylistSongClick = { songs, startIndex, source ->
+                musicViewModel.playSongQueue(songs, startIndex, source)
             },
             onCloseArtistRootPage = ::closeArtistRootPageThroughMiniPlayer,
             onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,

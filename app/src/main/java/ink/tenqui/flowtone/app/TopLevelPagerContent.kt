@@ -23,6 +23,7 @@ import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.HomeScreen
+import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.MineScreen
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
@@ -41,6 +42,7 @@ internal fun TopLevelPagerContent(
     onOpenAbout: () -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     likedSongCount: Int,
     modifier: Modifier = Modifier
 ) {
@@ -72,6 +74,7 @@ internal fun TopLevelPagerContent(
                     listeningStats = uiState.listeningStats,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout,
+                    onOpenListeningRecords = onOpenListeningRecords,
                     secondaryOpen = secondaryOpen,
                     modifier = Modifier.fillMaxSize()
                 )

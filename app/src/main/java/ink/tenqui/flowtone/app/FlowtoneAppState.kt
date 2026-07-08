@@ -13,6 +13,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
+import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
@@ -41,6 +42,7 @@ internal class FlowtoneAppState(
     selectedPlaylistIdState: MutableState<String?>,
     selectedPlaylistTitleState: MutableState<String?>,
     selectedArtistNameState: MutableState<String?>,
+    listeningRecordInitialTabState: MutableState<ListeningRecordTab>,
     settingsBackActionState: MutableState<(() -> Unit)?>,
     openSourceBackActionState: MutableState<(() -> Unit)?>,
     secondaryPathSegmentsState: MutableState<List<String>>,
@@ -69,6 +71,7 @@ internal class FlowtoneAppState(
     var selectedPlaylistId by selectedPlaylistIdState
     var selectedPlaylistTitle by selectedPlaylistTitleState
     var selectedArtistName by selectedArtistNameState
+    var listeningRecordInitialTab by listeningRecordInitialTabState
     var settingsBackAction by settingsBackActionState
     var openSourceBackAction by openSourceBackActionState
     var secondaryPathSegments by secondaryPathSegmentsState
@@ -123,6 +126,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     }
     val selectedArtistName = rememberSaveable {
         mutableStateOf<String?>(null)
+    }
+    val listeningRecordInitialTab = rememberSaveable {
+        mutableStateOf(ListeningRecordTab.Today)
     }
     val settingsBackAction = remember {
         mutableStateOf<(() -> Unit)?>(null)
@@ -183,6 +189,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         selectedPlaylistIdState = selectedPlaylistId,
         selectedPlaylistTitleState = selectedPlaylistTitle,
         selectedArtistNameState = selectedArtistName,
+        listeningRecordInitialTabState = listeningRecordInitialTab,
         settingsBackActionState = settingsBackAction,
         openSourceBackActionState = openSourceBackAction,
         secondaryPathSegmentsState = secondaryPathSegments,
@@ -213,7 +220,9 @@ internal data class FlowtoneAppScaffoldState(
     val rootPage: FlowtoneRootPage,
     val secondaryPage: SecondaryPage?,
     val selectedPlaylistId: String?,
+    val selectedPlaylistTitle: String?,
     val selectedArtistName: String?,
+    val listeningRecordInitialTab: ListeningRecordTab,
     val likedSongKeys: List<String>,
     val secondaryPathSegments: List<String>,
     val hideSecondaryBackButton: Boolean,
@@ -270,7 +279,9 @@ internal fun flowtoneAppScaffoldState(
         rootPage = rootPage,
         secondaryPage = appState.secondaryPage,
         selectedPlaylistId = appState.selectedPlaylistId,
+        selectedPlaylistTitle = appState.selectedPlaylistTitle,
         selectedArtistName = appState.selectedArtistName,
+        listeningRecordInitialTab = appState.listeningRecordInitialTab,
         likedSongKeys = appState.likedSongKeys,
         secondaryPathSegments = appState.secondaryPathSegments,
         hideSecondaryBackButton = appState.hideSecondaryBackButton,
