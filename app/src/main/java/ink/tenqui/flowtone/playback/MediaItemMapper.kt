@@ -13,6 +13,7 @@ object MediaItemMapper {
     private const val EXTRA_ARTWORK_URI = "artwork_uri"
     private const val EXTRA_DURATION_MS = "duration_ms"
     private const val EXTRA_FILE_PATH = "file_path"
+    private const val EXTRA_DATE_ADDED_SECONDS = "date_added_seconds"
     private const val EXTRA_SOURCE_TYPE = "playback_source_type"
     private const val EXTRA_SOURCE_KEY = "playback_source_key"
     private const val EXTRA_SOURCE_ID = "playback_source_id"
@@ -30,6 +31,7 @@ object MediaItemMapper {
             song.artworkUri?.let { putString(EXTRA_ARTWORK_URI, it.toString()) }
             song.filePath?.let { putString(EXTRA_FILE_PATH, it) }
             putLong(EXTRA_DURATION_MS, song.durationMs)
+            putLong(EXTRA_DATE_ADDED_SECONDS, song.dateAddedSeconds)
             putString(EXTRA_SOURCE_TYPE, source.type.name)
             putString(EXTRA_SOURCE_KEY, source.key)
             source.sourceId?.let { putString(EXTRA_SOURCE_ID, it) }
@@ -68,6 +70,9 @@ object MediaItemMapper {
         val artist = mediaItem.mediaMetadata.artist?.toString().orEmpty().ifBlank { "\u672a\u77e5\u827a\u672f\u5bb6" }
         val durationMs = extras?.getLong(EXTRA_DURATION_MS)?.takeIf { it > 0L } ?: 0L
         val filePath = extras?.getString(EXTRA_FILE_PATH)?.ifBlank { null }
+        val dateAddedSeconds = extras?.getLong(EXTRA_DATE_ADDED_SECONDS)
+            ?.coerceAtLeast(0L)
+            ?: 0L
 
         return Song(
             id = songId ?: uri.toString().hashCode().toLong(),
@@ -77,7 +82,8 @@ object MediaItemMapper {
             durationMs = durationMs,
             uri = uri,
             artworkUri = artworkUri,
-            filePath = filePath
+            filePath = filePath,
+            dateAddedSeconds = dateAddedSeconds
         )
     }
 

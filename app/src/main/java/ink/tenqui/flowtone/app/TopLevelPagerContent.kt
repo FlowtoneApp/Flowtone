@@ -56,6 +56,14 @@ internal fun TopLevelPagerContent(
             val page = TopLevelPage.entries[pageIndex]
             when (page) {
                 TopLevelPage.Home -> HomeScreen(
+                    songs = uiState.songs,
+                    listeningStats = uiState.listeningStats,
+                    playlists = flowtoneDisplayedLibraryPlaylists(
+                        playlists = libraryPlaylistController.playlists,
+                        likedSongCount = likedSongCount
+                    ),
+                    onSongClick = onSongClick,
+                    onOpenPlaylist = onOpenPlaylist,
                     drawBackground = false,
                     modifier = Modifier.fillMaxSize()
                 )
