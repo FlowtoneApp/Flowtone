@@ -41,6 +41,11 @@ internal fun FlowtoneScaffoldContent(
         label = "TopLevelBackgroundCloudAlpha"
     )
     val secondaryBackgroundAlpha = 1f - rootCloudAlpha
+    val pagePosition = topLevelContinuousPagePosition(
+        currentPage = state.pagerState.currentPage,
+        currentPageOffsetFraction = state.pagerState.currentPageOffsetFraction
+    )
+    val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
 
     Box(modifier = modifier.fillMaxSize()) {
         if (state.rootPage == FlowtoneRootPage.MainTabs) {
@@ -49,10 +54,10 @@ internal fun FlowtoneScaffoldContent(
                     .fillMaxSize()
                     .topLevelPageBackground(
                         accentColor = topLevelPageBackgroundAccent(
-                            pagePosition = state.pagerState.currentPage +
-                                state.pagerState.currentPageOffsetFraction
+                            pagePosition = pagePosition
                         ),
-                        cloudAlpha = rootCloudAlpha
+                        cloudAlpha = rootCloudAlpha,
+                        cloudPlacement = cloudPlacement
                     )
             )
             Box(
@@ -156,4 +161,14 @@ private fun topLevelPageBackgroundAccent(pagePosition: Float): Color {
     val endIndex = (startIndex + 1).coerceAtMost(colors.lastIndex)
     val fraction = (safePosition - startIndex).coerceIn(0f, 1f)
     return lerp(colors[startIndex], colors[endIndex], fraction)
+}
+
+private fun topLevelContinuousPagePosition(
+    currentPage: Int,
+    currentPageOffsetFraction: Float
+): Float {
+    return (currentPage + currentPageOffsetFraction).coerceIn(
+        minimumValue = 0f,
+        maximumValue = TopLevelPage.entries.lastIndex.toFloat()
+    )
 }

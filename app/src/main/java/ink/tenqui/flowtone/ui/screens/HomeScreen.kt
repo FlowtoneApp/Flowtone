@@ -94,7 +94,8 @@ internal fun Modifier.homeScreenBackground(): Modifier {
 @Composable
 internal fun Modifier.topLevelPageBackground(
     accentColor: Color,
-    cloudAlpha: Float = 1f
+    cloudAlpha: Float = 1f,
+    cloudPlacement: TopLevelBackgroundCloudPlacement = HomeBackgroundCloudPlacement
 ): Modifier {
     val backgroundColor = MaterialTheme.colorScheme.background
     val safeCloudAlpha = cloudAlpha.coerceIn(0f, 1f)
@@ -103,25 +104,56 @@ internal fun Modifier.topLevelPageBackground(
         drawTopPageColorCloud(
             accentColor = accentColor,
             backgroundColor = backgroundColor,
-            cloudAlpha = safeCloudAlpha
+            cloudAlpha = safeCloudAlpha,
+            cloudPlacement = cloudPlacement
         )
     }
 }
 
+internal data class TopLevelBackgroundCloudPlacement(
+    val cloudCenterWidthFraction: Float,
+    val cloudCenterRadiusOffsetXFactor: Float,
+    val cloudCenterRadiusOffsetYFactor: Float,
+    val clearCenterWidthFraction: Float,
+    val clearCenterHeightFraction: Float
+)
+
+internal val HomeBackgroundCloudPlacement = TopLevelBackgroundCloudPlacement(
+    cloudCenterWidthFraction = 0f,
+    cloudCenterRadiusOffsetXFactor = -0.08f,
+    cloudCenterRadiusOffsetYFactor = 0.08f,
+    clearCenterWidthFraction = 1f,
+    clearCenterHeightFraction = 1f
+)
+
+internal val LibraryBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
+    cloudCenterWidthFraction = 0.5f,
+    cloudCenterRadiusOffsetXFactor = 0f,
+    cloudCenterRadiusOffsetYFactor = -0.12f
+)
+
+internal val MineBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
+    cloudCenterWidthFraction = 1f,
+    cloudCenterRadiusOffsetXFactor = 0.08f,
+    clearCenterWidthFraction = 0f
+)
+
 private fun DrawScope.drawTopPageColorCloud(
     accentColor: Color,
     backgroundColor: Color,
-    cloudAlpha: Float
+    cloudAlpha: Float,
+    cloudPlacement: TopLevelBackgroundCloudPlacement
 ) {
     if (cloudAlpha <= 0f) return
     val cloudDiameter = size.height * TopCloudVisibleHeightFraction * 2f /
-        (1f + TopCloudCenterOffsetYFactor)
+        (1f + HomeBackgroundCloudPlacement.cloudCenterRadiusOffsetYFactor)
     if (cloudDiameter <= 0f) return
 
     val cloudRadius = cloudDiameter / 2f
     val cloudCenter = Offset(
-        x = cloudRadius * TopCloudCenterOffsetXFactor,
-        y = cloudRadius * TopCloudCenterOffsetYFactor
+        x = size.width * cloudPlacement.cloudCenterWidthFraction +
+            cloudRadius * cloudPlacement.cloudCenterRadiusOffsetXFactor,
+        y = cloudRadius * cloudPlacement.cloudCenterRadiusOffsetYFactor
     )
 
     drawCircle(
@@ -145,7 +177,10 @@ private fun DrawScope.drawTopPageColorCloud(
                 backgroundColor.copy(alpha = 0.72f * cloudAlpha),
                 Color.Transparent
             ),
-            center = Offset(size.width, size.height),
+            center = Offset(
+                x = size.width * cloudPlacement.clearCenterWidthFraction,
+                y = size.height * cloudPlacement.clearCenterHeightFraction
+            ),
             radius = size.minDimension * BottomRightClearRadiusFraction
         )
     )
@@ -153,8 +188,6 @@ private fun DrawScope.drawTopPageColorCloud(
 
 private val HomeBackgroundAccent = Color(0xFF7898F5)
 private const val TopCloudVisibleHeightFraction = 1.05f
-private const val TopCloudCenterOffsetXFactor = -0.08f
-private const val TopCloudCenterOffsetYFactor = 0.08f
 private const val BottomRightClearRadiusFraction = 0.82f
 
 @Composable
