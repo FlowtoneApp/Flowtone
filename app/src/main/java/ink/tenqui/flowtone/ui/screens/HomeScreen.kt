@@ -47,6 +47,8 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.listening.ListeningSourceStats
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.playback.PlaybackSourceType
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeader
+import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
 @Composable
 internal fun HomeScreen(
@@ -55,6 +57,7 @@ internal fun HomeScreen(
     playlists: List<LibraryPlaylistCard> = emptyList(),
     onSongClick: (Song) -> Unit = {},
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit = {},
+    visible: Boolean = true,
     drawBackground: Boolean = true,
     modifier: Modifier = Modifier
 ) {
@@ -75,6 +78,7 @@ internal fun HomeScreen(
             playlists = playlists,
             onSongClick = onSongClick,
             onOpenPlaylist = onOpenPlaylist,
+            visible = visible,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 21.dp, top = 48.dp, end = 20.dp)
@@ -84,28 +88,48 @@ internal fun HomeScreen(
 
 @Composable
 internal fun Modifier.homeScreenBackground(): Modifier {
+    return topLevelPageBackground(HomeBackgroundAccent)
+}
+
+@Composable
+internal fun Modifier.topLevelPageBackground(
+    accentColor: Color,
+    cloudAlpha: Float = 1f
+): Modifier {
     val backgroundColor = MaterialTheme.colorScheme.background
+    val safeCloudAlpha = cloudAlpha.coerceIn(0f, 1f)
     return drawBehind {
         drawRect(color = backgroundColor)
-        drawHomeTopColorCloud()
+        drawTopPageColorCloud(
+            accentColor = accentColor,
+            backgroundColor = backgroundColor,
+            cloudAlpha = safeCloudAlpha
+        )
     }
 }
 
-private fun DrawScope.drawHomeTopColorCloud() {
-    val cloudDiameter = size.height * 0.8f
+private fun DrawScope.drawTopPageColorCloud(
+    accentColor: Color,
+    backgroundColor: Color,
+    cloudAlpha: Float
+) {
+    if (cloudAlpha <= 0f) return
+    val cloudDiameter = size.height * TopCloudVisibleHeightFraction * 2f /
+        (1f + TopCloudCenterOffsetYFactor)
     if (cloudDiameter <= 0f) return
 
     val cloudRadius = cloudDiameter / 2f
     val cloudCenter = Offset(
-        x = cloudRadius * 0.35f,
-        y = cloudRadius * 0.35f
+        x = cloudRadius * TopCloudCenterOffsetXFactor,
+        y = cloudRadius * TopCloudCenterOffsetYFactor
     )
 
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFF4D8DFF).copy(alpha = 0.28f),
-                Color(0xFF6BA7FF).copy(alpha = 0.15f),
+                accentColor.copy(alpha = 0.34f * cloudAlpha),
+                accentColor.copy(alpha = 0.22f * cloudAlpha),
+                accentColor.copy(alpha = 0.08f * cloudAlpha),
                 Color.Transparent
             ),
             center = cloudCenter,
@@ -114,7 +138,24 @@ private fun DrawScope.drawHomeTopColorCloud() {
         radius = cloudRadius,
         center = cloudCenter
     )
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                backgroundColor.copy(alpha = 0.98f * cloudAlpha),
+                backgroundColor.copy(alpha = 0.72f * cloudAlpha),
+                Color.Transparent
+            ),
+            center = Offset(size.width, size.height),
+            radius = size.minDimension * BottomRightClearRadiusFraction
+        )
+    )
 }
+
+private val HomeBackgroundAccent = Color(0xFF7898F5)
+private const val TopCloudVisibleHeightFraction = 1.05f
+private const val TopCloudCenterOffsetXFactor = -0.08f
+private const val TopCloudCenterOffsetYFactor = 0.08f
+private const val BottomRightClearRadiusFraction = 0.82f
 
 @Composable
 private fun HomeContent(
@@ -123,6 +164,7 @@ private fun HomeContent(
     playlists: List<LibraryPlaylistCard>,
     onSongClick: (Song) -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    visible: Boolean,
     modifier: Modifier = Modifier
 ) {
     val recommendedSongs = remember(songs) {
@@ -147,50 +189,47 @@ private fun HomeContent(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 32.dp)
     ) {
-        HomeHeader()
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 0
+        ) {
+            FlowtonePageHeader(
+                title = "声流",
+                subtitle = "收藏在设备里的每一段声音"
+            )
+        }
         Spacer(modifier = Modifier.height(30.dp))
-        HomeRecommendationSection(
-            title = "随便听听",
-            songs = recommendedSongs,
-            onSongClick = onSongClick
-        )
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 4
+        ) {
+            HomeRecommendationSection(
+                title = "随便听听",
+                songs = recommendedSongs,
+                onSongClick = onSongClick
+            )
+        }
         Spacer(modifier = Modifier.height(28.dp))
-        FrequentPlaylistSection(
-            playlists = frequentPlaylists,
-            onOpenPlaylist = onOpenPlaylist
-        )
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 8
+        ) {
+            FrequentPlaylistSection(
+                playlists = frequentPlaylists,
+                onOpenPlaylist = onOpenPlaylist
+            )
+        }
         Spacer(modifier = Modifier.height(28.dp))
-        RecentlyAddedSection(
-            title = "最近新增",
-            songs = recentlyAddedSongs,
-            onSongClick = onSongClick
-        )
-    }
-}
-
-@Composable
-private fun HomeHeader(
-    modifier: Modifier = Modifier
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier
-    ) {
-        Text(
-            text = "声流",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = "收藏在设备里的每一段声音",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 12
+        ) {
+            RecentlyAddedSection(
+                title = "最近新增",
+                songs = recentlyAddedSongs,
+                onSongClick = onSongClick
+            )
+        }
     }
 }
 

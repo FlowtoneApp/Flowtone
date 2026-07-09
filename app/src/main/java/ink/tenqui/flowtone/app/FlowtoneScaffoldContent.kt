@@ -2,16 +2,24 @@ package ink.tenqui.flowtone.app
 
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
-import ink.tenqui.flowtone.ui.screens.homeScreenBackground
+import ink.tenqui.flowtone.ui.screens.topLevelPageBackground
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -24,16 +32,37 @@ internal fun FlowtoneScaffoldContent(
     innerPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
+    val rootCloudAlpha by animateFloatAsState(
+        targetValue = if (state.secondaryPage == null) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "TopLevelBackgroundCloudAlpha"
+    )
+    val secondaryBackgroundAlpha = 1f - rootCloudAlpha
+
     Box(modifier = modifier.fillMaxSize()) {
-        if (
-            state.rootPage == FlowtoneRootPage.MainTabs &&
-            state.selectedTopLevelPage == TopLevelPage.Home &&
-            state.secondaryPage == null
-        ) {
+        if (state.rootPage == FlowtoneRootPage.MainTabs) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .homeScreenBackground()
+                    .topLevelPageBackground(
+                        accentColor = topLevelPageBackgroundAccent(
+                            pagePosition = state.pagerState.currentPage +
+                                state.pagerState.currentPageOffsetFraction
+                        ),
+                        cloudAlpha = rootCloudAlpha
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        MaterialTheme.colorScheme.background.copy(
+                            alpha = secondaryBackgroundAlpha
+                        )
+                    )
             )
         }
 
@@ -111,4 +140,20 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
+}
+
+private fun topLevelPageBackgroundAccent(pagePosition: Float): Color {
+    val colors = listOf(
+        Color(0xFF7898F5),
+        Color(0xFFA77BDD),
+        Color(0xFFD783A5)
+    )
+    val safePosition = pagePosition.coerceIn(
+        minimumValue = 0f,
+        maximumValue = (colors.lastIndex).toFloat()
+    )
+    val startIndex = kotlin.math.floor(safePosition).toInt().coerceIn(0, colors.lastIndex)
+    val endIndex = (startIndex + 1).coerceAtMost(colors.lastIndex)
+    val fraction = (safePosition - startIndex).coerceIn(0f, 1f)
+    return lerp(colors[startIndex], colors[endIndex], fraction)
 }

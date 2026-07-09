@@ -64,11 +64,11 @@ internal fun LazyListScope.libraryPlaylistRows(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .libraryPlaylistRowMotion(
-                    globalProgress = libraryCardsProgress,
-                    rowIndex = 1,
-                    rowAppearProgress = 1f,
-                    itemOffsetYPx = playlistRowItemOffsetYPx
+                    .libraryPlaylistRowMotion(
+                        globalProgress = libraryCardsProgress,
+                        rowIndex = 8,
+                        rowAppearProgress = 1f,
+                        itemOffsetYPx = playlistRowItemOffsetYPx
                 ),
             horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
         ) {
@@ -104,11 +104,11 @@ internal fun LazyListScope.libraryPlaylistRows(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .libraryPlaylistRowMotion(
-                    globalProgress = libraryCardsProgress,
-                    rowIndex = rowIndex + 2,
-                    rowAppearProgress = 1f,
-                    itemOffsetYPx = playlistRowItemOffsetYPx
+                    .libraryPlaylistRowMotion(
+                        globalProgress = libraryCardsProgress,
+                        rowIndex = 12 + rowIndex * 4,
+                        rowAppearProgress = 1f,
+                        itemOffsetYPx = playlistRowItemOffsetYPx
                 ),
             horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
         ) {

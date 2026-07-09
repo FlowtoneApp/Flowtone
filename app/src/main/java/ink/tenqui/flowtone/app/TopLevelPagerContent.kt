@@ -64,6 +64,7 @@ internal fun TopLevelPagerContent(
                     ),
                     onSongClick = onSongClick,
                     onOpenPlaylist = onOpenPlaylist,
+                    visible = !secondaryOpen,
                     drawBackground = false,
                     modifier = Modifier.fillMaxSize()
                 )

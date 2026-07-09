@@ -72,6 +72,7 @@ internal fun FlowtoneTopBar(
     searchActive: Boolean,
     searchQuery: String,
     searchColors: TopLevelSearchColors,
+    secondaryBackgroundAlpha: Float,
     searchFocusRequest: Int,
     searchKeyboardDismissRequest: Int,
     searchReentryProgress: Float,
@@ -143,6 +144,11 @@ internal fun FlowtoneTopBar(
         modifier = modifier
             .fillMaxWidth()
             .background(topBarBaseBackground)
+            .background(
+                MaterialTheme.colorScheme.background.copy(
+                    alpha = secondaryBackgroundAlpha.coerceIn(0f, 1f)
+                )
+            )
             .background(
                 MaterialTheme.colorScheme.surfaceContainer.copy(alpha = rootTopBarBackgroundAlpha)
             )
