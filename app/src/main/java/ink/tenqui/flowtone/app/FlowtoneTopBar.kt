@@ -67,6 +67,7 @@ internal fun FlowtoneTopBar(
     secondaryPage: SecondaryPage?,
     additionalPathSegments: List<String>,
     backgroundAlpha: Float,
+    titleVisible: Boolean,
     hideBackButton: Boolean,
     searchActive: Boolean,
     searchQuery: String,
@@ -110,6 +111,11 @@ internal fun FlowtoneTopBar(
         targetValue = if (searchActive) 1f else 0f,
         animationSpec = tween(360, easing = FlowtonePageEasing),
         label = "GlobalSearchTopBarProgress"
+    )
+    val titleVisibilityAlpha by animateFloatAsState(
+        targetValue = if (titleVisible) 1f else 0f,
+        animationSpec = tween(160, easing = FlowtonePageEasing),
+        label = "TopBarTitleVisibilityAlpha"
     )
     val density = LocalDensity.current
     val navigationShiftPx = with(density) { 40.dp.toPx() } * backButtonProgress
@@ -167,7 +173,7 @@ internal fun FlowtoneTopBar(
                 .padding(start = 20.dp, end = titleEndPadding)
                 .clipToBounds()
                 .graphicsLayer {
-                    alpha = 1f - searchProgress
+                    alpha = (1f - searchProgress) * titleVisibilityAlpha
                     translationX = -titleExitDistancePx * searchProgress
                     translationY = 0f
                 }

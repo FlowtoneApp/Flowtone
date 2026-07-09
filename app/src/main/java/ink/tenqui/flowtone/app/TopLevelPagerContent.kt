@@ -56,9 +56,7 @@ internal fun TopLevelPagerContent(
             val page = TopLevelPage.entries[pageIndex]
             when (page) {
                 TopLevelPage.Home -> HomeScreen(
-                    songs = uiState.songs,
-                    currentSong = playerUiState.currentSong,
-                    onOpenLocalLibrary = onOpenLocalLibrary,
+                    drawBackground = false,
                     modifier = Modifier.fillMaxSize()
                 )
 

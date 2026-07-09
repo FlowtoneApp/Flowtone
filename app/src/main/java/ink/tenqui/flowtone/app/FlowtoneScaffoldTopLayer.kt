@@ -8,12 +8,24 @@ internal fun FlowtoneScaffoldTopLayer(
     callbacks: FlowtoneAppCallbacks
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
+        val isPlainHomePage =
+            state.selectedTopLevelPage == TopLevelPage.Home &&
+            state.secondaryPage == null &&
+            !state.searchActive
+        val backgroundAlpha = if (isPlainHomePage) {
+            0f
+        } else {
+            state.topBarBackgroundAlpha
+        }
+        val titleVisible = !isPlainHomePage
+
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,
             additionalPathSegments = state.secondaryPathSegments,
-            backgroundAlpha = state.topBarBackgroundAlpha,
+            backgroundAlpha = backgroundAlpha,
+            titleVisible = titleVisible,
             hideBackButton = state.hideSecondaryBackButton,
             searchActive = state.searchActive,
             searchQuery = state.searchUiState.queryText,
