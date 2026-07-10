@@ -2,7 +2,6 @@ package ink.tenqui.flowtone.app
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +25,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -61,10 +59,7 @@ internal fun FlowtonePathTitle(
                 launch {
                     animation.animateTo(
                         targetValue = if (index < segments.size) 1f else 0f,
-                        animationSpec = tween(
-                            durationMillis = FlowtoneMotion.DurationMillis,
-                            easing = FlowtoneMotion.Easing
-                        )
+                        animationSpec = flowtonePageTextTween()
                     )
                 }
             }

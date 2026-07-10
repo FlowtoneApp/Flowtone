@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
@@ -46,6 +48,9 @@ internal fun FlowtoneScaffoldContent(
         currentPageOffsetFraction = state.pagerState.currentPageOffsetFraction
     )
     val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
+    val headerSemanticPage = TopLevelPage.entries[
+        state.pagerState.currentPage.coerceIn(0, TopLevelPage.entries.lastIndex)
+    ]
 
     Box(modifier = modifier.fillMaxSize()) {
         if (state.rootPage == FlowtoneRootPage.MainTabs) {
@@ -97,6 +102,14 @@ internal fun FlowtoneScaffoldContent(
                     onOpenListeningRecords = callbacks.onOpenListeningRecords,
                     likedSongCount = likedSongCount,
                     modifier = Modifier.fillMaxSize()
+                )
+                TopLevelSharedPageHeader(
+                    pagerState = state.pagerState,
+                    semanticPage = headerSemanticPage,
+                    visible = state.rootPage == FlowtoneRootPage.MainTabs && !state.secondaryOpen,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 21.dp, top = 48.dp, end = 20.dp)
                 )
                 SecondaryPageHost(
                     secondaryPage = state.secondaryPage,

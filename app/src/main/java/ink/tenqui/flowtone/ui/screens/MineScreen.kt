@@ -31,7 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.listening.formatListeningDuration
-import ink.tenqui.flowtone.ui.components.FlowtonePageHeader
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
 private val MineListeningRecordCardHeight = 164.dp
@@ -57,10 +57,7 @@ internal fun MineScreen(
             visible = !secondaryOpen,
             animationIndex = 0
         ) {
-            FlowtonePageHeader(
-                title = "我的",
-                subtitle = "内部版本，不代表最终品质"
-            )
+            FlowtonePageHeaderPlaceholder()
         }
         Spacer(modifier = Modifier.height(30.dp))
         StaggeredPageElement(

@@ -47,7 +47,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.listening.ListeningSourceStats
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.playback.PlaybackSourceType
-import ink.tenqui.flowtone.ui.components.FlowtonePageHeader
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
 @Composable
@@ -187,7 +187,7 @@ private fun DrawScope.drawTopPageColorCloud(
 }
 
 private val HomeBackgroundAccent = Color(0xFF7898F5)
-private const val TopCloudVisibleHeightFraction = 1.05f
+private const val TopCloudVisibleHeightFraction = 1.30f
 private const val BottomRightClearRadiusFraction = 0.82f
 
 @Composable
@@ -226,10 +226,7 @@ private fun HomeContent(
             visible = visible,
             animationIndex = 0
         ) {
-            FlowtonePageHeader(
-                title = "声流",
-                subtitle = "收藏在设备里的每一段声音"
-            )
+            FlowtonePageHeaderPlaceholder()
         }
         Spacer(modifier = Modifier.height(30.dp))
         StaggeredPageElement(

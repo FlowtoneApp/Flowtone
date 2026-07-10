@@ -6,6 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,6 +36,32 @@ internal fun FlowtonePageHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+internal fun FlowtonePageHeaderPlaceholder(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.clearAndSetSemantics {}
+    ) {
+        Text(
+            text = " ",
+            style = MaterialTheme.typography.headlineLarge,
+            color = Color.Transparent,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Clip
+        )
+        Text(
+            text = " ",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Transparent,
+            maxLines = 1,
+            overflow = TextOverflow.Clip
         )
     }
 }

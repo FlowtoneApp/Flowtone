@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
-import ink.tenqui.flowtone.ui.components.FlowtonePageHeader
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
 @Composable
@@ -68,9 +68,7 @@ internal fun LibraryHomeContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column {
-                    FlowtonePageHeader(
-                        title = "曲库",
-                        subtitle = "收集自己喜欢的声音",
+                    FlowtonePageHeaderPlaceholder(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(18.dp))
