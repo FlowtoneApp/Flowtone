@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.R
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeader
+import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 import kotlin.math.abs
 
 internal data class TopLevelPageHeaderContent(
@@ -47,41 +48,45 @@ internal fun topLevelPageHeaderContent(page: TopLevelPage): TopLevelPageHeaderCo
 @Composable
 internal fun TopLevelSharedPageHeader(
     pagerState: PagerState,
-    semanticPage: TopLevelPage,
     visible: Boolean,
     modifier: Modifier = Modifier
 ) {
-    if (!visible) {
-        return
-    }
+    StaggeredPageElement(
+        visible = visible,
+        animationIndex = 0,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        val headerContents = remember {
+            TopLevelPage.entries.map(::topLevelPageHeaderContent)
+        }
+        val pagePosition = topLevelHeaderPagePosition(pagerState)
+        val transitionDistancePx = with(LocalDensity.current) {
+            TopLevelHeaderTransitionDistance.toPx()
+        }
+        val semanticPage = TopLevelPage.entries[
+            pagerState.currentPage.coerceIn(0, TopLevelPage.entries.lastIndex)
+        ]
 
-    val headerContents = remember {
-        TopLevelPage.entries.map(::topLevelPageHeaderContent)
-    }
-    val transitionDistancePx = with(LocalDensity.current) {
-        TopLevelHeaderTransitionDistance.toPx()
-    }
-
-    Box(modifier = modifier.fillMaxWidth()) {
-        headerContents.forEach { content ->
-            val semanticsModifier = if (content.page == semanticPage) {
-                Modifier
-            } else {
-                Modifier.clearAndSetSemantics {}
+        Box(modifier = Modifier.fillMaxWidth()) {
+            headerContents.forEach { content ->
+                val distance = content.page.index - pagePosition
+                val semanticsModifier = if (content.page == semanticPage) {
+                    Modifier
+                } else {
+                    Modifier.clearAndSetSemantics {}
+                }
+                FlowtonePageHeader(
+                    title = stringResource(content.titleResId),
+                    subtitle = stringResource(content.subtitleResId),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(semanticsModifier)
+                        .graphicsLayer {
+                            translationX = distance * transitionDistancePx
+                            alpha = topLevelHeaderAlpha(distance)
+                        }
+                )
             }
-            FlowtonePageHeader(
-                title = stringResource(content.titleResId),
-                subtitle = stringResource(content.subtitleResId),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(semanticsModifier)
-                    .graphicsLayer {
-                        val pagePosition = topLevelHeaderPagePosition(pagerState)
-                        val distance = content.page.index - pagePosition
-                        alpha = topLevelHeaderAlpha(distance)
-                        translationX = distance * transitionDistancePx
-                    }
-            )
         }
     }
 }

@@ -48,9 +48,6 @@ internal fun FlowtoneScaffoldContent(
         currentPageOffsetFraction = state.pagerState.currentPageOffsetFraction
     )
     val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
-    val headerSemanticPage = TopLevelPage.entries[
-        state.pagerState.currentPage.coerceIn(0, TopLevelPage.entries.lastIndex)
-    ]
 
     Box(modifier = modifier.fillMaxSize()) {
         if (state.rootPage == FlowtoneRootPage.MainTabs) {
@@ -105,7 +102,6 @@ internal fun FlowtoneScaffoldContent(
                 )
                 TopLevelSharedPageHeader(
                     pagerState = state.pagerState,
-                    semanticPage = headerSemanticPage,
                     visible = state.rootPage == FlowtoneRootPage.MainTabs && !state.secondaryOpen,
                     modifier = Modifier
                         .fillMaxWidth()
