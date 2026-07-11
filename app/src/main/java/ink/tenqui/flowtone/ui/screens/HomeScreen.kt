@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -209,6 +212,7 @@ private fun HomeContent(
             playlists = playlists
         )
     }
+    val frequentPlaylistListState = rememberLazyListState()
     val recentlyAddedSongs = remember(songs) {
         songs.sortedWith(
             compareByDescending<Song> { song -> song.dateAddedSeconds }
@@ -246,6 +250,7 @@ private fun HomeContent(
         ) {
             FrequentPlaylistSection(
                 playlists = frequentPlaylists,
+                listState = frequentPlaylistListState,
                 onOpenPlaylist = onOpenPlaylist
             )
         }
@@ -301,6 +306,7 @@ private fun HomeRecommendationSection(
 @Composable
 private fun FrequentPlaylistSection(
     playlists: List<FrequentPlaylistCard>,
+    listState: LazyListState,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -313,41 +319,32 @@ private fun FrequentPlaylistSection(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        if (playlists.isEmpty()) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            ) {
-                FrequentPlaylistPlaceholderCard(
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-            }
-            return
-        }
-
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(top = 12.dp)
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing),
+            contentPadding = PaddingValues(end = HomeFrequentPlaylistListEndPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
         ) {
-            playlists.chunked(2).forEach { rowPlaylists ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    rowPlaylists.forEach { playlist ->
-                        FrequentPlaylistCardItem(
-                            playlist = playlist,
-                            onClick = { onOpenPlaylist(playlist.card) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    if (rowPlaylists.size == 1) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
+            if (playlists.isEmpty()) {
+                item(key = "frequent-playlist-placeholder") {
+                    FrequentPlaylistPlaceholderCard(
+                        modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
+                    )
                 }
+                return@LazyRow
+            }
+
+            items(
+                items = playlists,
+                key = { playlist -> playlist.card.id }
+            ) { playlist ->
+                FrequentPlaylistCardItem(
+                    playlist = playlist,
+                    onClick = { onOpenPlaylist(playlist.card) },
+                    modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
+                )
             }
         }
     }
@@ -359,7 +356,7 @@ private fun FrequentPlaylistPlaceholderCard(
 ) {
     Box(
         modifier = modifier
-            .height(92.dp)
+            .height(HomeFrequentPlaylistCardHeight)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer),
         contentAlignment = Alignment.Center
@@ -383,7 +380,7 @@ private fun FrequentPlaylistCardItem(
 ) {
     Column(
         modifier = modifier
-            .height(92.dp)
+            .height(HomeFrequentPlaylistCardHeight)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onClick)
@@ -588,6 +585,10 @@ private fun RecommendationArtwork(
 private const val HomeRecommendationCount = 8
 private const val HomeRecentlyAddedCount = 5
 private const val HomeRecentlyAddedRows = 2
+private val HomeFrequentPlaylistCardWidth = 184.dp
+private val HomeFrequentPlaylistCardHeight = 92.dp
+private val HomeFrequentPlaylistCardSpacing = 12.dp
+private val HomeFrequentPlaylistListEndPadding = 20.dp
 
 private data class FrequentPlaylistCard(
     val card: LibraryPlaylistCard,
