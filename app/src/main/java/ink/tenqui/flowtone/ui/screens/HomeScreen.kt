@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -62,6 +63,7 @@ internal fun HomeScreen(
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit = {},
     visible: Boolean = true,
     drawBackground: Boolean = true,
+    scrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier
 ) {
     val backgroundModifier = if (drawBackground) {
@@ -82,6 +84,7 @@ internal fun HomeScreen(
             onSongClick = onSongClick,
             onOpenPlaylist = onOpenPlaylist,
             visible = visible,
+            scrollState = scrollState,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 21.dp, top = 48.dp, end = 20.dp)
@@ -201,6 +204,7 @@ private fun HomeContent(
     onSongClick: (Song) -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
+    scrollState: ScrollState,
     modifier: Modifier = Modifier
 ) {
     val recommendedSongs = remember(songs) {
@@ -223,7 +227,7 @@ private fun HomeContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(bottom = 32.dp)
     ) {
         StaggeredPageElement(

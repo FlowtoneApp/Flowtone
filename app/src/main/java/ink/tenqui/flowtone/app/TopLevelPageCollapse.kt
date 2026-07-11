@@ -34,6 +34,9 @@ internal fun rememberTopLevelPageCollapseProgress(
     val density = LocalDensity.current
     val homeStartOffsetPx = with(density) { TopLevelHomeHeaderCollapseStartOffset.toPx() }
     val libraryStartOffsetPx = with(density) { TopLevelLibraryHeaderCollapseStartOffset.toPx() }
+    val libraryHeaderScrollDistancePx = with(density) {
+        TopLevelLibraryHeaderItemScrollDistance.toPx()
+    }
     val distancePx = with(density) { TopLevelHeaderCollapseScrollDistance.toPx() }
     val homeProgress by remember(homeScrollState, homeStartOffsetPx, distancePx) {
         derivedStateOf {
@@ -44,10 +47,16 @@ internal fun rememberTopLevelPageCollapseProgress(
             )
         }
     }
-    val libraryProgress by remember(libraryListState, libraryStartOffsetPx, distancePx) {
+    val libraryProgress by remember(
+        libraryListState,
+        libraryStartOffsetPx,
+        libraryHeaderScrollDistancePx,
+        distancePx
+    ) {
         derivedStateOf {
             val scrollOffsetPx = if (libraryListState.firstVisibleItemIndex > 0) {
-                libraryStartOffsetPx + distancePx
+                libraryHeaderScrollDistancePx +
+                    libraryListState.firstVisibleItemScrollOffset.toFloat()
             } else {
                 libraryListState.firstVisibleItemScrollOffset.toFloat()
             }
@@ -68,10 +77,9 @@ internal fun rememberTopLevelPageCollapseProgress(
 
 internal val TopLevelHomeHeaderCollapseStartOffset: Dp = 30.dp
 internal val TopLevelLibraryHeaderCollapseStartOffset: Dp = 18.dp
+internal val TopLevelLibraryHeaderItemScrollDistance: Dp = 98.dp
 internal val TopLevelHeaderCollapseScrollDistance: Dp = 96.dp
-internal val TopLevelHeaderCollapsedTravelX: Dp = (-1).dp
-internal val TopLevelHeaderCollapsedTravelY: Dp = (-93).dp
-internal val TopLevelSubtitleCollapsedTravelY: Dp = (-8).dp
+internal val TopLevelHeaderCollapsedTravelY: Dp = (-101).dp
 internal const val TopLevelSubtitleFadeEndProgress = 0.46f
 internal const val TopLevelCollapsedTitleFallbackScale = 0.74f
 

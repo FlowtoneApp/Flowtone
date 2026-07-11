@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,7 @@ internal fun TopLevelPagerContent(
     pagerState: PagerState,
     uiState: MusicUiState,
     playerUiState: PlayerUiState,
+    homeScrollState: ScrollState,
     libraryPlaylistController: LibraryPlaylistController,
     permissionDenied: Boolean,
     showSwipeHint: Boolean,
@@ -66,6 +68,7 @@ internal fun TopLevelPagerContent(
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,
                     drawBackground = false,
+                    scrollState = homeScrollState,
                     modifier = Modifier.fillMaxSize()
                 )
 

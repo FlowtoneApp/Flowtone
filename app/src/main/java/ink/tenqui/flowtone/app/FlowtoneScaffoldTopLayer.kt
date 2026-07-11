@@ -24,7 +24,7 @@ internal fun FlowtoneScaffoldTopLayer(
         val backgroundAlpha = if (isTopLevelRootPage || state.searchActive) {
             0f
         } else {
-            state.topBarBackgroundAlpha
+            state.topBarBackgroundAlpha * secondaryBackgroundAlpha
         }
         val titleVisible = !isTopLevelRootPage
 

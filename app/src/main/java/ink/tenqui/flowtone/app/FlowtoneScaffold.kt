@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.app
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -29,7 +30,12 @@ internal fun FlowtoneScaffold(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val homeScrollState = rememberScrollState()
     val libraryPlaylistController = rememberLibraryPlaylistController()
+    val topLevelPageCollapseProgress = rememberTopLevelPageCollapseProgress(
+        homeScrollState = homeScrollState,
+        libraryListState = libraryPlaylistController.listState
+    )
     val playlistRepository = remember(context) {
         PlaylistRepository(PlaylistStorage(context.applicationContext))
     }
@@ -97,6 +103,8 @@ internal fun FlowtoneScaffold(
             FlowtoneScaffoldContent(
                 state = state,
                 callbacks = callbacks,
+                homeScrollState = homeScrollState,
+                topLevelPageCollapseProgress = topLevelPageCollapseProgress,
                 libraryPlaylistController = libraryPlaylistController,
                 playlistSongEntries = playlistSongEntries,
                 likedSongCount = likedSongCount,

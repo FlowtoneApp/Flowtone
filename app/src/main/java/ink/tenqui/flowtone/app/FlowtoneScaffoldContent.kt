@@ -4,6 +4,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +29,8 @@ import ink.tenqui.flowtone.ui.screens.topLevelPageBackground
 internal fun FlowtoneScaffoldContent(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
+    homeScrollState: ScrollState,
+    topLevelPageCollapseProgress: TopLevelPageCollapseProgress,
     libraryPlaylistController: LibraryPlaylistController,
     playlistSongEntries: List<PlaylistSongEntry>,
     likedSongCount: Int,
@@ -85,6 +88,7 @@ internal fun FlowtoneScaffoldContent(
                     pagerState = state.pagerState,
                     uiState = state.uiState,
                     playerUiState = state.playerUiState,
+                    homeScrollState = homeScrollState,
                     libraryPlaylistController = libraryPlaylistController,
                     permissionDenied = state.permissionDenied,
                     showSwipeHint = state.showSwipeHint,
@@ -102,6 +106,7 @@ internal fun FlowtoneScaffoldContent(
                 )
                 TopLevelSharedPageHeader(
                     pagerState = state.pagerState,
+                    collapseProgress = topLevelPageCollapseProgress,
                     visible = state.rootPage == FlowtoneRootPage.MainTabs && !state.secondaryOpen,
                     modifier = Modifier
                         .fillMaxWidth()
