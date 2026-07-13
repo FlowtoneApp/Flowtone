@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -40,6 +44,7 @@ import ink.tenqui.flowtone.ui.screens.FlowCloudSpeedOverlay
 import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
 import ink.tenqui.flowtone.ui.search.GlobalSearchOverlay
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -58,6 +63,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
     onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
 ) {
+    var playlistAppearanceMutationVersion by remember { mutableIntStateOf(0) }
+    var playlistAppearanceMutationJob by remember { mutableStateOf<Job?>(null) }
     val density = LocalDensity.current
     val searchTopPadding = with(density) {
         WindowInsets.statusBars.getTop(this).toDp()
@@ -271,6 +278,28 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onLongPressOtherPlaylist = libraryPlaylistController::startPlaylistEditingAt,
         onDeletePlaylist = libraryPlaylistController::startDeletePlaylist,
         onRenamePlaylist = libraryPlaylistController::startRenamePlaylist,
+        onAppearanceColorSelected = { playlist, colorKey ->
+            playlistAppearanceMutationVersion += 1
+            val mutationVersion = playlistAppearanceMutationVersion
+            libraryPlaylistController.previewPlaylistAppearanceColor(
+                playlistId = playlist.id,
+                colorKey = colorKey
+            )
+            val previousMutationJob = playlistAppearanceMutationJob
+            playlistAppearanceMutationJob = coroutineScope.launch {
+                previousMutationJob?.join()
+                if (mutationVersion != playlistAppearanceMutationVersion) {
+                    return@launch
+                }
+                playlistRepository.updatePlaylistAppearanceColor(
+                    id = playlist.id,
+                    colorKey = colorKey
+                )
+                if (mutationVersion == playlistAppearanceMutationVersion) {
+                    onRefreshLibraryPlaylistsFromRepository(null)
+                }
+            }
+        },
         modifier = Modifier
             .fillMaxSize()
             .zIndex(40f)

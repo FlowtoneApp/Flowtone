@@ -87,7 +87,6 @@ internal fun FlowtoneScaffoldContent(
                 TopLevelPagerContent(
                     pagerState = state.pagerState,
                     uiState = state.uiState,
-                    playerUiState = state.playerUiState,
                     homeScrollState = homeScrollState,
                     libraryPlaylistController = libraryPlaylistController,
                     permissionDenied = state.permissionDenied,

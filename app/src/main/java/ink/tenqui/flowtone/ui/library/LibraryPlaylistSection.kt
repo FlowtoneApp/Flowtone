@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PlaylistCardContentColors
@@ -280,6 +281,7 @@ internal fun LibraryPlaylistTileVisual(
     val isLikedPlaylist = playlist.isLikedSongsPlaylist()
     LibraryPlaylistTileSurface(
         visualType = playlistCardVisualTypeFor(playlist),
+        appearanceColorKey = playlist.appearanceColorKey,
         cardHeight = cardHeight,
         appearProgress = appearProgress,
         clickModifier = clickModifier,
@@ -346,6 +348,7 @@ private fun LibraryCreatePlaylistTileCardView(
 @Composable
 private fun LibraryPlaylistTileSurface(
     visualType: PlaylistCardVisualType,
+    appearanceColorKey: PlaylistAppearanceColorKey? = null,
     cardHeight: Dp,
     appearProgress: Float,
     clickModifier: Modifier,
@@ -359,6 +362,7 @@ private fun LibraryPlaylistTileSurface(
     ) {
         PlaylistCardSurface(
             visualType = visualType,
+            appearanceColorKey = appearanceColorKey,
             shape = RoundedCornerShape(24.dp),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             clickModifier = clickModifier,

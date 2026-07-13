@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Playlist
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
@@ -268,7 +269,8 @@ internal class LibraryPlaylistController internal constructor(
                     id = playlist.id,
                     title = playlist.title,
                     subtitle = "$songCount \u9996\u6b4c\u66f2",
-                    order = playlist.order
+                    order = playlist.order,
+                    appearanceColorKey = playlist.appearanceColorKey
                 )
             }
         val activePlaylistIds = playlists.mapTo(mutableSetOf()) { playlist -> playlist.id }
@@ -288,6 +290,19 @@ internal class LibraryPlaylistController internal constructor(
         }
         if (createdPlaylistId != null) {
             newlyCreatedPlaylistId = createdPlaylistId
+        }
+    }
+
+    fun previewPlaylistAppearanceColor(
+        playlistId: String,
+        colorKey: PlaylistAppearanceColorKey
+    ) {
+        playlists = playlists.map { playlist ->
+            if (playlist.id == playlistId && !playlist.isSystem) {
+                playlist.copy(appearanceColorKey = colorKey)
+            } else {
+                playlist
+            }
         }
     }
 

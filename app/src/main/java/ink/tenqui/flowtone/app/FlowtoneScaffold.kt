@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -88,7 +89,10 @@ internal fun FlowtoneScaffold(
         state.backgroundBlurRadius
     }
 
-    LaunchedEffect(libraryPlaylistController.playlists) {
+    val libraryPlaylistSyncKey = remember(libraryPlaylistController.playlists) {
+        libraryPlaylistController.playlists.map(LibraryPlaylistCard::repositorySyncKey)
+    }
+    LaunchedEffect(libraryPlaylistSyncKey) {
         playlistRepository.syncLibraryPlaylistCards(libraryPlaylistController.playlists)
     }
 
@@ -172,4 +176,20 @@ internal fun FlowtoneScaffold(
             }
         )
     }
+}
+
+private data class LibraryPlaylistRepositorySyncKey(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val order: Int
+)
+
+private fun LibraryPlaylistCard.repositorySyncKey(): LibraryPlaylistRepositorySyncKey {
+    return LibraryPlaylistRepositorySyncKey(
+        id = id,
+        title = title,
+        subtitle = subtitle,
+        order = order
+    )
 }

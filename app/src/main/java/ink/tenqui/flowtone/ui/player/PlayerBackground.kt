@@ -39,6 +39,7 @@ internal fun FlowCloudBackground(
     progress: Float,
     isPlaying: Boolean,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    motionRangeMultiplier: Float = DefaultFlowCloudMotionRangeMultiplier,
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
@@ -86,6 +87,14 @@ internal fun FlowCloudBackground(
     val blob2Drift = reverseDrift(motionTimeMs, 1_560)
     val blob3Drift = reverseDrift(motionTimeMs, 1_800)
     val blob4Drift = reverseDrift(motionTimeMs, 2_300)
+    val safeMotionRangeMultiplier = motionRangeMultiplier.coerceIn(
+        MinimumFlowCloudMotionRangeMultiplier,
+        MaximumFlowCloudMotionRangeMultiplier
+    )
+    val blob1Motion = expandFlowCloudDrift(blob1Drift, safeMotionRangeMultiplier)
+    val blob2Motion = expandFlowCloudDrift(blob2Drift, safeMotionRangeMultiplier)
+    val blob3Motion = expandFlowCloudDrift(blob3Drift, safeMotionRangeMultiplier)
+    val blob4Motion = expandFlowCloudDrift(blob4Drift, safeMotionRangeMultiplier)
     Canvas(
         modifier = modifier.graphicsLayer {
             compositingStrategy = CompositingStrategy.Offscreen
@@ -141,36 +150,36 @@ internal fun FlowCloudBackground(
 
         drawCloudBlob(
             color = cloudColors[0],
-            centerX = -0.30f + blob1Drift * 0.56f,
-            centerY = -0.18f + blob1Drift * 0.42f,
+            centerX = -0.30f + blob1Motion * 0.56f,
+            centerY = -0.18f + blob1Motion * 0.42f,
             radiusFactor = 1.02f,
             coreAlpha = 0.72f
         )
         drawCloudBlob(
             color = cloudColors[1],
-            centerX = 1.30f - blob2Drift * 0.58f,
-            centerY = -0.22f + blob2Drift * 0.36f,
+            centerX = 1.30f - blob2Motion * 0.58f,
+            centerY = -0.22f + blob2Motion * 0.36f,
             radiusFactor = 0.84f,
             coreAlpha = 0.66f
         )
         drawCloudBlob(
             color = cloudColors[2],
-            centerX = 0.40f - blob3Drift * 0.34f,
-            centerY = 1.28f - blob3Drift * 0.54f,
+            centerX = 0.40f - blob3Motion * 0.34f,
+            centerY = 1.28f - blob3Motion * 0.54f,
             radiusFactor = 1.18f,
             coreAlpha = 0.62f
         )
         drawCloudBlob(
             color = cloudColors[1],
-            centerX = 1.12f - blob4Drift * 0.34f,
-            centerY = 1.18f - blob4Drift * 0.26f,
+            centerX = 1.12f - blob4Motion * 0.34f,
+            centerY = 1.18f - blob4Motion * 0.26f,
             radiusFactor = 0.66f,
             coreAlpha = 0.54f
         )
         drawCloudBlob(
             color = cloudColors[0],
-            centerX = 0.16f + blob2Drift * 0.38f,
-            centerY = 0.42f + blob3Drift * 0.18f,
+            centerX = 0.16f + blob2Motion * 0.38f,
+            centerY = 0.42f + blob3Motion * 0.18f,
             radiusFactor = 0.48f,
             coreAlpha = 0.46f
         )
@@ -184,7 +193,8 @@ internal fun CrossfadeFlowCloudBackground(
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
     alpha: Float = 1f,
-    flowCloudSpeed: Float = DefaultFlowCloudSpeed
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    motionRangeMultiplier: Float = DefaultFlowCloudMotionRangeMultiplier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val targetColors = colors.toOpaqueCloudColors(isDarkTheme)
@@ -240,6 +250,7 @@ internal fun CrossfadeFlowCloudBackground(
             progress = progress,
             isPlaying = isPlaying,
             flowCloudSpeed = flowCloudSpeed,
+            motionRangeMultiplier = motionRangeMultiplier,
             modifier = Modifier.matchParentSize()
         )
     }
@@ -280,6 +291,10 @@ private fun reverseDrift(timeMs: Double, oneWayDurationMs: Int): Float {
     } else {
         (2.0 - cycleProgress).toFloat()
     }
+}
+
+private fun expandFlowCloudDrift(drift: Float, rangeMultiplier: Float): Float {
+    return 0.5f + (drift - 0.5f) * rangeMultiplier
 }
 
 private fun blendCloudColors(
@@ -325,6 +340,9 @@ private fun List<Color>.toOpaqueCloudColors(isDarkTheme: Boolean): List<Color> {
 
 private const val FLOW_CLOUD_STOP_DURATION_MS = 2_000
 private const val FLOW_CLOUD_SPEED_MULTIPLIER = 0.5
+private const val DefaultFlowCloudMotionRangeMultiplier = 1f
+private const val MinimumFlowCloudMotionRangeMultiplier = 0.5f
+private const val MaximumFlowCloudMotionRangeMultiplier = 2f
 
 @Composable
 internal fun BlurredArtworkBackground(

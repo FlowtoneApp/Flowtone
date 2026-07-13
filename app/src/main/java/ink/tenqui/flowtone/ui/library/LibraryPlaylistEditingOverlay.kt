@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,14 +13,19 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -30,10 +37,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -41,9 +52,19 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
+import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PlaylistAppearanceColorKeys
+import ink.tenqui.flowtone.ui.components.playlistAppearanceColorLabel
+import ink.tenqui.flowtone.ui.components.playlistAppearanceColors
 import kotlin.math.max
 import kotlin.math.min
 
@@ -60,11 +81,22 @@ internal fun LibraryPlaylistEditingOverlay(
     onLongPressOtherPlaylist: (Offset) -> Boolean,
     onDeletePlaylist: (LibraryPlaylistCard) -> Unit,
     onRenamePlaylist: (LibraryPlaylistCard) -> Unit,
+    onAppearanceColorSelected: (
+        LibraryPlaylistCard,
+        PlaylistAppearanceColorKey
+    ) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var retainedPlaylist by remember { mutableStateOf<LibraryPlaylistCard?>(null) }
     var retainedCardBounds by remember { mutableStateOf<Rect?>(null) }
     var retainedViewportBounds by remember { mutableStateOf<Rect?>(null) }
+    var appearancePickerOwnerId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(playlist?.id) {
+        if (playlist == null || appearancePickerOwnerId != playlist.id) {
+            appearancePickerOwnerId = null
+        }
+    }
 
     LaunchedEffect(playlist, cardBounds, viewportBounds) {
         if (playlist != null && cardBounds != null) {
@@ -98,10 +130,26 @@ internal fun LibraryPlaylistEditingOverlay(
         retainedViewportBounds
     }
     val safeProgress = progress.coerceIn(0f, 1f)
+    val appearancePickerExpanded = playlist != null &&
+        appearancePickerOwnerId == playlist.id
+    val appearancePickerProgress by animateFloatAsState(
+        targetValue = if (appearancePickerExpanded) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "playlistAppearancePickerProgress"
+    )
 
     BackHandler(
         enabled = playlist != null && !dialogVisible,
-        onBack = onDismissRequest
+        onBack = {
+            if (appearancePickerExpanded) {
+                appearancePickerOwnerId = null
+            } else {
+                onDismissRequest()
+            }
+        }
     )
 
     if (
@@ -154,6 +202,7 @@ internal fun LibraryPlaylistEditingOverlay(
                     detectTapGestures(
                         onTap = {
                             if (playlist != null) {
+                                appearancePickerOwnerId = null
                                 onDismissRequest()
                             }
                         },
@@ -162,6 +211,7 @@ internal fun LibraryPlaylistEditingOverlay(
                                 playlist != null &&
                                 onLongPressOtherPlaylist(position + overlayRootTopLeft)
                             ) {
+                                appearancePickerOwnerId = null
                                 hapticFeedback.performHapticFeedback(
                                     HapticFeedbackType.LongPress
                                 )
@@ -207,13 +257,51 @@ internal fun LibraryPlaylistEditingOverlay(
             }
         }
 
+        val safeBounds = Rect(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx)
         val placement = calculatePlaylistEditActionsPlacement(
             cardBounds = visibleCardBounds,
-            safeBounds = Rect(safeLeftPx, safeTopPx, safeRightPx, safeBottomPx),
+            safeBounds = safeBounds,
             buttonSizePx = with(density) { PlaylistEditActionButtonSize.toPx() },
             buttonGapPx = with(density) { PlaylistEditActionButtonGap.toPx() },
             cardGapPx = with(density) { PlaylistEditActionCardGap.toPx() }
         )
+        val appearancePickerWidthPx = min(
+            safeBounds.width,
+            with(density) { PlaylistAppearancePickerMaxWidth.toPx() }
+        )
+        val appearancePickerHeightPx = with(density) {
+            PlaylistAppearancePickerHeight.toPx()
+        }
+        val appearancePickerPlacement = calculatePlaylistAppearancePickerPlacement(
+            cardBounds = visibleCardBounds,
+            actionsPlacement = placement,
+            safeBounds = safeBounds,
+            pickerWidthPx = appearancePickerWidthPx,
+            pickerHeightPx = appearancePickerHeightPx,
+            gapPx = with(density) { PlaylistAppearancePickerGap.toPx() }
+        )
+        if (appearancePickerExpanded || appearancePickerProgress > 0.001f) {
+            PlaylistAppearanceColorPicker(
+                selectedColorKey = displayedPlaylist.appearanceColorKey
+                    ?: playlistAppearanceColorKeyForStableId(displayedPlaylist.id),
+                progress = appearancePickerProgress,
+                enabled = appearancePickerExpanded,
+                onColorSelected = { colorKey ->
+                    playlist?.let { activePlaylist ->
+                        onAppearanceColorSelected(activePlaylist, colorKey)
+                    }
+                },
+                modifier = Modifier
+                    .offsetInParent(
+                        appearancePickerPlacement.left,
+                        appearancePickerPlacement.top
+                    )
+                    .requiredSize(
+                        width = with(density) { appearancePickerWidthPx.toDp() },
+                        height = PlaylistAppearancePickerHeight
+                    )
+            )
+        }
         Row(
             modifier = Modifier.offsetInParent(placement.left, placement.top),
             horizontalArrangement = Arrangement.spacedBy(PlaylistEditActionButtonGap)
@@ -221,6 +309,7 @@ internal fun LibraryPlaylistEditingOverlay(
             PlaylistEditActionButton(
                 progress = staggeredPlaylistEditActionProgress(safeProgress, 0),
                 onClick = {
+                    appearancePickerOwnerId = null
                     playlist?.let(onDeletePlaylist)
                 }
             ) {
@@ -232,6 +321,7 @@ internal fun LibraryPlaylistEditingOverlay(
             PlaylistEditActionButton(
                 progress = staggeredPlaylistEditActionProgress(safeProgress, 1),
                 onClick = {
+                    appearancePickerOwnerId = null
                     playlist?.let(onRenamePlaylist)
                 }
             ) {
@@ -242,8 +332,13 @@ internal fun LibraryPlaylistEditingOverlay(
             }
             PlaylistEditActionButton(
                 progress = staggeredPlaylistEditActionProgress(safeProgress, 2),
+                selected = appearancePickerExpanded,
                 onClick = {
-                    // TODO: 后续在这里接入歌单外观自定义流程。
+                    appearancePickerOwnerId = if (appearancePickerExpanded) {
+                        null
+                    } else {
+                        playlist?.id
+                    }
                 }
             ) {
                 Icon(
@@ -258,6 +353,7 @@ internal fun LibraryPlaylistEditingOverlay(
 @Composable
 private fun PlaylistEditActionButton(
     progress: Float,
+    selected: Boolean = false,
     onClick: () -> Unit,
     content: @Composable () -> Unit
 ) {
@@ -271,6 +367,17 @@ private fun PlaylistEditActionButton(
         ),
         modifier = Modifier
             .size(PlaylistEditActionButtonSize)
+            .then(
+                if (selected) {
+                    Modifier.border(
+                        width = PlaylistEditActionSelectedBorderWidth,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .graphicsLayer {
                 alpha = progress
                 translationY = translation * (1f - progress)
@@ -279,7 +386,123 @@ private fun PlaylistEditActionButton(
     )
 }
 
+@Composable
+private fun PlaylistAppearanceColorPicker(
+    selectedColorKey: PlaylistAppearanceColorKey,
+    progress: Float,
+    enabled: Boolean,
+    onColorSelected: (PlaylistAppearanceColorKey) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val enterDistancePx = with(density) { PlaylistAppearancePickerEnterDistance.toPx() }
+    val shadowElevationPx = with(density) { PlaylistAppearancePickerElevation.toPx() }
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val paletteColors = remember(isDarkTheme) {
+        PlaylistAppearanceColorKeys.associateWith { colorKey ->
+            playlistAppearanceColors(
+                key = colorKey,
+                isDarkTheme = isDarkTheme
+            )
+        }
+    }
+    val safeProgress = progress.coerceIn(0f, 1f)
+    Row(
+        modifier = modifier
+            .graphicsLayer {
+                alpha = safeProgress
+                translationY = enterDistancePx * (1f - safeProgress)
+                shadowElevation = shadowElevationPx * safeProgress
+                shape = PlaylistAppearancePickerShape
+                clip = true
+                ambientShadowColor = Color.Black
+                spotShadowColor = Color.Black
+            }
+            .background(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = PlaylistAppearancePickerShape
+            )
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PlaylistAppearanceColorKeys.forEach { colorKey ->
+            val colors = checkNotNull(paletteColors[colorKey])
+            val isSelected = selectedColorKey == colorKey
+            val selectionProgress by animateFloatAsState(
+                targetValue = if (isSelected) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = PlaylistAppearanceColorSelectionDurationMillis,
+                    easing = FlowtoneMotion.Easing
+                ),
+                label = "playlistAppearanceColorSelection_${colorKey.name}"
+            )
+            val unselectedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+            val selectionBorderColor = lerp(
+                start = unselectedBorderColor,
+                stop = MaterialTheme.colorScheme.onSurface,
+                fraction = selectionProgress
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .clickable(enabled = enabled) {
+                        onColorSelected(colorKey)
+                    }
+                    .semantics {
+                        selected = isSelected
+                        contentDescription = "${playlistAppearanceColorLabel(colorKey)}歌单颜色"
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(PlaylistAppearanceColorDotSize)
+                        .graphicsLayer {
+                            val scale = PlaylistAppearanceColorUnselectedScale +
+                                (1f - PlaylistAppearanceColorUnselectedScale) *
+                                selectionProgress
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                        .background(colors.backgroundColor, CircleShape)
+                        .border(
+                            width = PlaylistAppearanceColorBorderWidth +
+                                PlaylistAppearanceColorBorderWidth * selectionProgress,
+                            color = selectionBorderColor,
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = colors.titleColor,
+                        modifier = Modifier
+                            .size(PlaylistAppearanceColorCheckSize)
+                            .graphicsLayer {
+                                alpha = selectionProgress
+                                val scale = PlaylistAppearanceColorCheckStartScale +
+                                    (1f - PlaylistAppearanceColorCheckStartScale) *
+                                    selectionProgress
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                    )
+                }
+            }
+        }
+    }
+}
+
 internal data class PlaylistEditActionsPlacement(
+    val left: Float,
+    val top: Float
+)
+
+internal data class PlaylistAppearancePickerPlacement(
     val left: Float,
     val top: Float
 )
@@ -303,6 +526,28 @@ internal fun calculatePlaylistEditActionsPlacement(
         left = left,
         top = top
     )
+}
+
+internal fun calculatePlaylistAppearancePickerPlacement(
+    cardBounds: Rect,
+    actionsPlacement: PlaylistEditActionsPlacement,
+    safeBounds: Rect,
+    pickerWidthPx: Float,
+    pickerHeightPx: Float,
+    gapPx: Float
+): PlaylistAppearancePickerPlacement {
+    val maxLeft = max(safeBounds.left, safeBounds.right - pickerWidthPx)
+    val left = (cardBounds.center.x - pickerWidthPx / 2f)
+        .coerceIn(safeBounds.left, maxLeft)
+    val aboveActionsTop = actionsPlacement.top - gapPx - pickerHeightPx
+    val belowCardTop = cardBounds.bottom + gapPx
+    val maxTop = max(safeBounds.top, safeBounds.bottom - pickerHeightPx)
+    val top = when {
+        aboveActionsTop >= safeBounds.top -> aboveActionsTop
+        belowCardTop + pickerHeightPx <= safeBounds.bottom -> belowCardTop
+        else -> maxTop
+    }.coerceIn(safeBounds.top, maxTop)
+    return PlaylistAppearancePickerPlacement(left = left, top = top)
 }
 
 private fun Rect.translate(delta: Offset): Rect {
@@ -352,5 +597,18 @@ private val PlaylistEditActionButtonSize = 52.dp
 private val PlaylistEditActionButtonGap = 10.dp
 private val PlaylistEditActionCardGap = 12.dp
 private val PlaylistEditActionEnterDistance = 8.dp
+private val PlaylistEditActionSelectedBorderWidth = 2.dp
+private val PlaylistAppearancePickerMaxWidth = 344.dp
+private val PlaylistAppearancePickerHeight = 52.dp
+private val PlaylistAppearancePickerGap = 8.dp
+private val PlaylistAppearancePickerEnterDistance = 8.dp
+private val PlaylistAppearancePickerElevation = 4.dp
+private val PlaylistAppearancePickerShape = RoundedCornerShape(20.dp)
+private val PlaylistAppearanceColorDotSize = 28.dp
+private val PlaylistAppearanceColorCheckSize = 16.dp
+private val PlaylistAppearanceColorBorderWidth = 1.dp
+private const val PlaylistAppearanceColorSelectionDurationMillis = 180
+private const val PlaylistAppearanceColorUnselectedScale = 0.94f
+private const val PlaylistAppearanceColorCheckStartScale = 0.72f
 private const val PlaylistEditActionCount = 3
 private const val PlaylistEditOverlayScrimAlpha = 0.08f

@@ -22,7 +22,6 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
-import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.HomeScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.MineScreen
@@ -32,7 +31,6 @@ import ink.tenqui.flowtone.viewmodel.MusicUiState
 internal fun TopLevelPagerContent(
     pagerState: PagerState,
     uiState: MusicUiState,
-    playerUiState: PlayerUiState,
     homeScrollState: ScrollState,
     libraryPlaylistController: LibraryPlaylistController,
     permissionDenied: Boolean,
@@ -57,7 +55,8 @@ internal fun TopLevelPagerContent(
             modifier = Modifier.fillMaxSize()
         ) { pageIndex ->
             val page = TopLevelPage.entries[pageIndex]
-            val isPageFlowCloudPlaying = !secondaryOpen &&
+            // 卡片流云只跟随页面可见性，不跟随歌曲播放或暂停状态。
+            val isPageFlowCloudActive = !secondaryOpen &&
                 pagerState.currentPage == pageIndex
             when (page) {
                 TopLevelPage.Home -> HomeScreen(
@@ -71,7 +70,7 @@ internal fun TopLevelPagerContent(
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,
                     flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isPageFlowCloudPlaying,
+                    isFlowCloudPlaying = isPageFlowCloudActive,
                     drawBackground = false,
                     scrollState = homeScrollState,
                     modifier = Modifier.fillMaxSize()
@@ -84,7 +83,7 @@ internal fun TopLevelPagerContent(
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,
                     flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isPageFlowCloudPlaying,
+                    isFlowCloudPlaying = isPageFlowCloudActive,
                     playlistController = libraryPlaylistController,
                     modifier = Modifier.fillMaxSize()
                 )

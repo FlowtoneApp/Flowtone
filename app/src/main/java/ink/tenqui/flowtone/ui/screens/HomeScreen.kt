@@ -401,6 +401,7 @@ private fun FrequentPlaylistCardItem(
 ) {
     PlaylistCardSurface(
         visualType = playlistCardVisualTypeFor(playlist.card),
+        appearanceColorKey = playlist.card.appearanceColorKey,
         shape = RoundedCornerShape(8.dp),
         contentPadding = PaddingValues(12.dp),
         clickModifier = Modifier.clickable(onClick = onClick),

@@ -78,4 +78,47 @@ class LibraryPlaylistEditingOverlayTest {
         assertEquals(24f, topPlacement.top, 0.001f)
         assertEquals(458f, bottomPlacement.top, 0.001f)
     }
+
+    @Test
+    fun appearancePickerIsPlacedAboveTheActionButtonsByDefault() {
+        val placement = calculatePlaylistAppearancePickerPlacement(
+            cardBounds = Rect(20f, 180f, 180f, 320f),
+            actionsPlacement = PlaylistEditActionsPlacement(left = 15f, top = 118f),
+            safeBounds = Rect(12f, 12f, 388f, 700f),
+            pickerWidthPx = 300f,
+            pickerHeightPx = 52f,
+            gapPx = 8f
+        )
+
+        assertEquals(12f, placement.left, 0.001f)
+        assertEquals(58f, placement.top, 0.001f)
+    }
+
+    @Test
+    fun appearancePickerMovesBelowTheCardWhenTopSpaceIsInsufficient() {
+        val placement = calculatePlaylistAppearancePickerPlacement(
+            cardBounds = Rect(20f, 24f, 180f, 124f),
+            actionsPlacement = PlaylistEditActionsPlacement(left = 15f, top = 24f),
+            safeBounds = Rect(12f, 24f, 388f, 700f),
+            pickerWidthPx = 300f,
+            pickerHeightPx = 52f,
+            gapPx = 8f
+        )
+
+        assertEquals(132f, placement.top, 0.001f)
+    }
+
+    @Test
+    fun appearancePickerStaysInsideHorizontalSafeBounds() {
+        val placement = calculatePlaylistAppearancePickerPlacement(
+            cardBounds = Rect(300f, 180f, 380f, 320f),
+            actionsPlacement = PlaylistEditActionsPlacement(left = 218f, top = 118f),
+            safeBounds = Rect(12f, 12f, 388f, 700f),
+            pickerWidthPx = 344f,
+            pickerHeightPx = 52f,
+            gapPx = 8f
+        )
+
+        assertEquals(44f, placement.left, 0.001f)
+    }
 }

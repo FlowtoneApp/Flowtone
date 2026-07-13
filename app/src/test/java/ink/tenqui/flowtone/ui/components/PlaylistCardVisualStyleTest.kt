@@ -103,6 +103,23 @@ class PlaylistCardVisualStyleTest {
         )
     }
 
+    @Test
+    fun userPlaylistPaletteHasEightDistinctThemeAwareColors() {
+        val lightColors = PlaylistAppearanceColorKeys.map { key ->
+            playlistAppearanceColors(key, isDarkTheme = false).backgroundColor
+        }
+        val darkColors = PlaylistAppearanceColorKeys.map { key ->
+            playlistAppearanceColors(key, isDarkTheme = true).backgroundColor
+        }
+
+        assertEquals(8, PlaylistAppearanceColorKeys.size)
+        assertEquals(8, lightColors.distinct().size)
+        assertEquals(8, darkColors.distinct().size)
+        PlaylistAppearanceColorKeys.indices.forEach { index ->
+            assertFalse(lightColors[index] == darkColors[index])
+        }
+    }
+
     private fun playlist(
         id: String,
         title: String,

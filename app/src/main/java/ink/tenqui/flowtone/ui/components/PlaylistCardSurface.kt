@@ -1,13 +1,18 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -15,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.ui.player.CrossfadeFlowCloudBackground
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
@@ -30,6 +36,7 @@ internal data class PlaylistCardContentColors(
 @Composable
 internal fun PlaylistCardSurface(
     visualType: PlaylistCardVisualType,
+    appearanceColorKey: PlaylistAppearanceColorKey? = null,
     shape: Shape,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -41,7 +48,15 @@ internal fun PlaylistCardSurface(
     val style = remember(visualType) {
         playlistCardVisualStyleFor(visualType)
     }
-    val visuals = rememberPlaylistCardVisuals(style)
+    val visuals = rememberPlaylistCardVisuals(
+        style = style,
+        appearanceColorKey = appearanceColorKey
+    )
+    val animatesAppearanceColor = style.type == PlaylistCardVisualType.UserPlaylist
+    val contentColors = animatedPlaylistCardContentColors(
+        targetColors = visuals.contentColors,
+        enabled = animatesAppearanceColor
+    )
 
     Box(
         modifier = modifier
@@ -49,6 +64,12 @@ internal fun PlaylistCardSurface(
             .background(visuals.containerColor)
             .then(clickModifier)
     ) {
+        if (animatesAppearanceColor) {
+            PlaylistCardAppearanceBackground(
+                targetColor = visuals.containerColor,
+                modifier = Modifier.matchParentSize()
+            )
+        }
         PlaylistCardBackgroundLayer(
             style = style,
             visuals = visuals,
@@ -61,19 +82,108 @@ internal fun PlaylistCardSurface(
                 .matchParentSize()
                 .padding(contentPadding)
         ) {
-            content(visuals.contentColors)
+            content(contentColors)
         }
     }
 }
 
 @Composable
+private fun PlaylistCardAppearanceBackground(
+    targetColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Crossfade(
+        targetState = targetColor,
+        animationSpec = tween(
+            durationMillis = PlaylistAppearanceColorTransitionDurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        modifier = modifier,
+        label = "playlistAppearanceBackground"
+    ) { backgroundColor ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor)
+        )
+    }
+}
+
+@Composable
+private fun animatedPlaylistCardContentColors(
+    targetColors: PlaylistCardContentColors,
+    enabled: Boolean
+): PlaylistCardContentColors {
+    if (!enabled) {
+        return targetColors
+    }
+    val titleColor by animateColorAsState(
+        targetValue = targetColors.titleColor,
+        animationSpec = tween(
+            durationMillis = PlaylistAppearanceColorTransitionDurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "playlistAppearanceTitleColor"
+    )
+    val subtitleColor by animateColorAsState(
+        targetValue = targetColors.subtitleColor,
+        animationSpec = tween(
+            durationMillis = PlaylistAppearanceColorTransitionDurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "playlistAppearanceSubtitleColor"
+    )
+    val iconContainerColor by animateColorAsState(
+        targetValue = targetColors.iconContainerColor,
+        animationSpec = tween(
+            durationMillis = PlaylistAppearanceColorTransitionDurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "playlistAppearanceIconContainerColor"
+    )
+    val iconColor by animateColorAsState(
+        targetValue = targetColors.iconColor,
+        animationSpec = tween(
+            durationMillis = PlaylistAppearanceColorTransitionDurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "playlistAppearanceIconColor"
+    )
+    val actionColor by animateColorAsState(
+        targetValue = targetColors.actionColor,
+        animationSpec = tween(
+            durationMillis = PlaylistAppearanceColorTransitionDurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "playlistAppearanceActionColor"
+    )
+    return remember(
+        titleColor,
+        subtitleColor,
+        iconContainerColor,
+        iconColor,
+        actionColor
+    ) {
+        PlaylistCardContentColors(
+            titleColor = titleColor,
+            subtitleColor = subtitleColor,
+            iconContainerColor = iconContainerColor,
+            iconColor = iconColor,
+            actionColor = actionColor
+        )
+    }
+}
+
+@Composable
 private fun rememberPlaylistCardVisuals(
-    style: PlaylistCardVisualStyle
+    style: PlaylistCardVisualStyle,
+    appearanceColorKey: PlaylistAppearanceColorKey?
 ): PlaylistCardVisuals {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = colorScheme.background.luminance() <= 0.5f
     return remember(
         style.type,
+        appearanceColorKey,
         isDarkTheme,
         colorScheme.surfaceContainer,
         colorScheme.onSurface,
@@ -83,6 +193,7 @@ private fun rememberPlaylistCardVisuals(
     ) {
         playlistCardVisualsFor(
             type = style.type,
+            appearanceColorKey = appearanceColorKey,
             isDarkTheme = isDarkTheme,
             defaultContainerColor = colorScheme.surfaceContainer,
             defaultContentColors = PlaylistCardContentColors(
@@ -98,6 +209,7 @@ private fun rememberPlaylistCardVisuals(
 
 private fun playlistCardVisualsFor(
     type: PlaylistCardVisualType,
+    appearanceColorKey: PlaylistAppearanceColorKey?,
     isDarkTheme: Boolean,
     defaultContainerColor: Color,
     defaultContentColors: PlaylistCardContentColors
@@ -183,7 +295,23 @@ private fun playlistCardVisualsFor(
             )
         }
 
-        PlaylistCardVisualType.UserPlaylist,
+        PlaylistCardVisualType.UserPlaylist -> {
+            val appearanceColors = playlistAppearanceColors(
+                key = appearanceColorKey ?: PlaylistAppearanceColorKey.PURPLE,
+                isDarkTheme = isDarkTheme
+            )
+            PlaylistCardVisuals(
+                containerColor = appearanceColors.backgroundColor,
+                contentColors = PlaylistCardContentColors(
+                    titleColor = appearanceColors.titleColor,
+                    subtitleColor = appearanceColors.subtitleColor,
+                    iconContainerColor = appearanceColors.iconContainerColor,
+                    iconColor = appearanceColors.iconColor,
+                    actionColor = appearanceColors.actionColor
+                )
+            )
+        }
+
         PlaylistCardVisualType.Default -> PlaylistCardVisuals(
             containerColor = defaultContainerColor,
             contentColors = defaultContentColors
@@ -227,9 +355,18 @@ private fun PlaylistCardBackgroundLayer(
             isPlaying = isFlowCloudPlaying,
             alpha = cloudVisuals.alpha,
             flowCloudSpeed = if (style.usesFlowCloudSpeed) {
-                flowCloudSpeed
+                if (style.type == PlaylistCardVisualType.LikedMusic) {
+                    flowCloudSpeed * LikedMusicFlowCloudSpeedMultiplier
+                } else {
+                    flowCloudSpeed
+                }
             } else {
                 DefaultFlowCloudSpeed
+            },
+            motionRangeMultiplier = if (style.type == PlaylistCardVisualType.LikedMusic) {
+                LikedMusicFlowCloudMotionRangeMultiplier
+            } else {
+                1f
             },
             modifier = Modifier.matchParentSize()
         )
@@ -286,4 +423,7 @@ internal val LikedMusicDarkCloudColors = listOf(
 
 private val LikedMusicLightBackground = Color(0xFFEED1E0)
 private val LikedMusicDarkBackground = Color(0xFF2A1C25)
+private const val LikedMusicFlowCloudSpeedMultiplier = 2f
+private const val LikedMusicFlowCloudMotionRangeMultiplier = 1.4f
+private const val PlaylistAppearanceColorTransitionDurationMillis = 240
 private const val LikedSongsCloudProgress = 0.54f
