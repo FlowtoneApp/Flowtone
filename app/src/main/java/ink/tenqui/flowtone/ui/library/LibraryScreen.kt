@@ -21,11 +21,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Playlist
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
@@ -58,6 +61,8 @@ internal class LibraryPlaylistController internal constructor(
     val listState: LazyListState,
     val panelProgress: Animatable<Float, AnimationVector1D>
 ) {
+    private val editablePlaylistBounds = mutableMapOf<String, Rect>()
+
     var playlists by mutableStateOf(playlistStore.loadCards())
     var playlistName by mutableStateOf("")
     var createPlaylistState by mutableStateOf<CreatePlaylistState>(CreatePlaylistState.Idle)
@@ -65,7 +70,12 @@ internal class LibraryPlaylistController internal constructor(
     var playlistDialogVisualStyle by mutableStateOf(PlaylistDialogVisualStyle.Library)
     var dialogPlaylist by mutableStateOf<LibraryPlaylistCard?>(null)
     var dialogLocked by mutableStateOf(false)
-    var activePlaylistActionId by mutableStateOf<String?>(null)
+    var editingPlaylistId by mutableStateOf<String?>(null)
+        private set
+    var editingPlaylistBounds by mutableStateOf<Rect?>(null)
+        private set
+    var libraryViewportBounds by mutableStateOf<Rect?>(null)
+        private set
     var newlyCreatedPlaylistId by mutableStateOf<String?>(null)
     var shouldSavePlaylists by mutableStateOf(false)
 
@@ -95,7 +105,7 @@ internal class LibraryPlaylistController internal constructor(
         visualStyle: PlaylistDialogVisualStyle = PlaylistDialogVisualStyle.Library
     ) {
         if (createPlaylistState == CreatePlaylistState.Idle) {
-            activePlaylistActionId = null
+            clearPlaylistEditing()
             playlistName = ""
             dialogPlaylist = null
             dialogLocked = false
@@ -106,9 +116,12 @@ internal class LibraryPlaylistController internal constructor(
     }
 
     fun startRenamePlaylist(playlist: LibraryPlaylistCard) {
+        val editablePlaylist = playlists.firstOrNull { candidate ->
+            candidate.id == playlist.id && !candidate.isSystem
+        } ?: return
         if (createPlaylistState == CreatePlaylistState.Idle) {
-            playlistName = playlist.title
-            dialogPlaylist = playlist
+            playlistName = editablePlaylist.title
+            dialogPlaylist = editablePlaylist
             dialogLocked = false
             playlistDialogMode = PlaylistDialogMode.Rename
             playlistDialogVisualStyle = PlaylistDialogVisualStyle.Library
@@ -117,9 +130,12 @@ internal class LibraryPlaylistController internal constructor(
     }
 
     fun startDeletePlaylist(playlist: LibraryPlaylistCard) {
+        val editablePlaylist = playlists.firstOrNull { candidate ->
+            candidate.id == playlist.id && !candidate.isSystem
+        } ?: return
         if (createPlaylistState == CreatePlaylistState.Idle) {
-            playlistName = playlist.title
-            dialogPlaylist = playlist
+            playlistName = editablePlaylist.title
+            dialogPlaylist = editablePlaylist
             dialogLocked = false
             playlistDialogMode = PlaylistDialogMode.Delete
             playlistDialogVisualStyle = PlaylistDialogVisualStyle.Library
@@ -150,12 +166,61 @@ internal class LibraryPlaylistController internal constructor(
         dialogLocked = false
     }
 
-    fun showPlaylistActions(playlistId: String) {
-        activePlaylistActionId = playlistId
+    fun startPlaylistEditing(playlist: LibraryPlaylistCard) {
+        if (createPlaylistState != CreatePlaylistState.Idle) {
+            return
+        }
+        val editablePlaylist = playlists.firstOrNull { candidate ->
+            candidate.id == playlist.id && !candidate.isSystem
+        } ?: return
+        editingPlaylistId = editablePlaylist.id
+        editingPlaylistBounds = editablePlaylistBounds[editablePlaylist.id]
     }
 
-    fun clearPlaylistActions() {
-        activePlaylistActionId = null
+    fun updateEditingPlaylistBounds(
+        playlistId: String,
+        bounds: Rect
+    ) {
+        editablePlaylistBounds[playlistId] = bounds
+        if (editingPlaylistId == playlistId && editingPlaylistBounds != bounds) {
+            editingPlaylistBounds = bounds
+        }
+    }
+
+    fun removePlaylistBounds(playlistId: String) {
+        editablePlaylistBounds.remove(playlistId)
+    }
+
+    fun startPlaylistEditingAt(positionInRoot: Offset): Boolean {
+        val viewportBounds = libraryViewportBounds ?: return false
+        if (
+            positionInRoot.x !in viewportBounds.left..viewportBounds.right ||
+            positionInRoot.y !in viewportBounds.top..viewportBounds.bottom
+        ) {
+            return false
+        }
+        val targetId = playlistIdAtPosition(
+            boundsByPlaylistId = editablePlaylistBounds,
+            excludedPlaylistId = editingPlaylistId,
+            position = positionInRoot
+        )
+            ?: return false
+        val playlist = playlists.firstOrNull { candidate ->
+            candidate.id == targetId && !candidate.isSystem
+        } ?: return false
+        startPlaylistEditing(playlist)
+        return editingPlaylistId == playlist.id
+    }
+
+    fun clearPlaylistEditing() {
+        editingPlaylistId = null
+        editingPlaylistBounds = null
+    }
+
+    fun updateLibraryViewportBounds(bounds: Rect) {
+        if (libraryViewportBounds != bounds) {
+            libraryViewportBounds = bounds
+        }
     }
 
     suspend fun savePlaylists() {
@@ -204,14 +269,40 @@ internal class LibraryPlaylistController internal constructor(
                     id = playlist.id,
                     title = playlist.title,
                     subtitle = "$songCount \u9996\u6b4c\u66f2",
-                    order = playlist.order
+                    order = playlist.order,
+                    appearanceColorKey = playlist.appearanceColorKey
                 )
             }
-        activePlaylistActionId = activePlaylistActionId?.takeIf { activeId ->
-            playlists.any { playlist -> playlist.id == activeId }
+        val activePlaylistIds = playlists.mapTo(mutableSetOf()) { playlist -> playlist.id }
+        editablePlaylistBounds.keys.retainAll(activePlaylistIds)
+        editingPlaylistId = editingPlaylistId?.takeIf { editingId ->
+            playlists.any { playlist -> playlist.id == editingId && !playlist.isSystem }
+        }
+        if (editingPlaylistId == null) {
+            editingPlaylistBounds = null
+        }
+        val dialogTargetStillExists = dialogPlaylist?.id?.let { dialogPlaylistId ->
+            playlists.any { playlist -> playlist.id == dialogPlaylistId && !playlist.isSystem }
+        } ?: true
+        if (!dialogTargetStillExists && playlistDialogMode != PlaylistDialogMode.Create) {
+            clearPlaylistEditing()
+            closeEditing()
         }
         if (createdPlaylistId != null) {
             newlyCreatedPlaylistId = createdPlaylistId
+        }
+    }
+
+    fun previewPlaylistAppearanceColor(
+        playlistId: String,
+        colorKey: PlaylistAppearanceColorKey
+    ) {
+        playlists = playlists.map { playlist ->
+            if (playlist.id == playlistId && !playlist.isSystem) {
+                playlist.copy(appearanceColorKey = colorKey)
+            } else {
+                playlist
+            }
         }
     }
 
@@ -220,6 +311,20 @@ internal class LibraryPlaylistController internal constructor(
             newlyCreatedPlaylistId = null
         }
     }
+}
+
+internal fun playlistIdAtPosition(
+    boundsByPlaylistId: Map<String, Rect>,
+    excludedPlaylistId: String?,
+    position: Offset
+): String? {
+    return boundsByPlaylistId.entries
+        .firstOrNull { (playlistId, bounds) ->
+            playlistId != excludedPlaylistId &&
+                position.x in bounds.left..bounds.right &&
+                position.y in bounds.top..bounds.bottom
+        }
+        ?.key
 }
 
 @Composable
@@ -249,6 +354,8 @@ internal fun LibraryScreen(
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     playlistController: LibraryPlaylistController,
     modifier: Modifier = Modifier
 ) {
@@ -267,7 +374,7 @@ internal fun LibraryScreen(
 
     LaunchedEffect(visible) {
         if (!visible) {
-            playlistController.clearPlaylistActions()
+            playlistController.clearPlaylistEditing()
         }
         libraryCardsProgress.animateTo(
             targetValue = if (visible) 1f else 0f,
@@ -286,28 +393,30 @@ internal fun LibraryScreen(
         playlistCardHeight = playlistCardHeight,
         libraryCardsProgress = libraryCardsProgress.value,
         playlistRowItemOffsetYPx = playlistRowItemOffsetYPx,
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
         listState = playlistController.listState,
-        activePlaylistActionId = playlistController.activePlaylistActionId,
+        editingPlaylistId = playlistController.editingPlaylistId,
         newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,
-        onClearPlaylistActions = playlistController::clearPlaylistActions,
         onOpenLocalLibrary = {
-            playlistController.clearPlaylistActions()
+            playlistController.clearPlaylistEditing()
             onOpenLocalLibrary()
         },
         onCreatePlaylist = {
-            playlistController.clearPlaylistActions()
+            playlistController.clearPlaylistEditing()
             playlistController.startEditing()
         },
         onCreateAnimationFinished = { playlist ->
             playlistController.consumeNewlyCreatedPlaylistAnimation(playlist.id)
         },
         onOpenPlaylist = { playlist ->
-            playlistController.clearPlaylistActions()
+            playlistController.clearPlaylistEditing()
             onOpenPlaylist(playlist)
         },
-        onShowPlaylistActions = playlistController::showPlaylistActions,
-        onRenamePlaylist = playlistController::startRenamePlaylist,
-        onDeletePlaylist = playlistController::startDeletePlaylist,
+        onStartPlaylistEditing = playlistController::startPlaylistEditing,
+        onEditingPlaylistBoundsChanged = playlistController::updateEditingPlaylistBounds,
+        onEditingPlaylistBoundsRemoved = playlistController::removePlaylistBounds,
+        onLibraryViewportBoundsChanged = playlistController::updateLibraryViewportBounds,
         modifier = modifier
     )
 }

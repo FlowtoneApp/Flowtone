@@ -17,8 +17,13 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -30,6 +35,8 @@ import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
+import ink.tenqui.flowtone.ui.library.CreatePlaylistState
+import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.player.MiniPlayer
@@ -37,6 +44,7 @@ import ink.tenqui.flowtone.ui.screens.FlowCloudSpeedOverlay
 import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
 import ink.tenqui.flowtone.ui.search.GlobalSearchOverlay
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @Composable
@@ -50,9 +58,13 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     displayedLibraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     addToPlaylistDialogBackgroundColor: Color,
+    playlistEditingProgress: Float,
+    playlistEditingBlurRadius: Dp,
     onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
     onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
 ) {
+    var playlistAppearanceMutationVersion by remember { mutableIntStateOf(0) }
+    var playlistAppearanceMutationJob by remember { mutableStateOf<Job?>(null) }
     val density = LocalDensity.current
     val searchTopPadding = with(density) {
         WindowInsets.statusBars.getTop(this).toDp()
@@ -237,6 +249,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .padding(bottom = state.miniPlayerBottomProtection)
+            .blur(playlistEditingBlurRadius)
             .zIndex(30f)
     )
     FlowtoneArtistRootLayer(
@@ -246,6 +259,50 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(25f)
+    )
+    val editingPlaylist = libraryPlaylistController.editingPlaylistId?.let { editingId ->
+        libraryPlaylistController.playlists.firstOrNull { playlist ->
+            playlist.id == editingId && !playlist.isSystem
+        }
+    }
+    LibraryPlaylistEditingOverlay(
+        playlist = editingPlaylist,
+        cardBounds = libraryPlaylistController.editingPlaylistBounds,
+        viewportBounds = libraryPlaylistController.libraryViewportBounds,
+        progress = playlistEditingProgress,
+        bottomContentPadding = state.miniPlayerContentBottomPadding,
+        flowCloudSpeed = state.flowCloudSpeed,
+        dialogVisible = libraryPlaylistController.createPlaylistState !=
+            CreatePlaylistState.Idle,
+        onDismissRequest = libraryPlaylistController::clearPlaylistEditing,
+        onLongPressOtherPlaylist = libraryPlaylistController::startPlaylistEditingAt,
+        onDeletePlaylist = libraryPlaylistController::startDeletePlaylist,
+        onRenamePlaylist = libraryPlaylistController::startRenamePlaylist,
+        onAppearanceColorSelected = { playlist, colorKey ->
+            playlistAppearanceMutationVersion += 1
+            val mutationVersion = playlistAppearanceMutationVersion
+            libraryPlaylistController.previewPlaylistAppearanceColor(
+                playlistId = playlist.id,
+                colorKey = colorKey
+            )
+            val previousMutationJob = playlistAppearanceMutationJob
+            playlistAppearanceMutationJob = coroutineScope.launch {
+                previousMutationJob?.join()
+                if (mutationVersion != playlistAppearanceMutationVersion) {
+                    return@launch
+                }
+                playlistRepository.updatePlaylistAppearanceColor(
+                    id = playlist.id,
+                    colorKey = colorKey
+                )
+                if (mutationVersion == playlistAppearanceMutationVersion) {
+                    onRefreshLibraryPlaylistsFromRepository(null)
+                }
+            }
+        },
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(40f)
     )
     CreatePlaylistOverlay(
         playlistController = libraryPlaylistController,
@@ -274,7 +331,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
                 if (result is PlaylistMutationResult.Success) {
                     onRefreshLibraryPlaylistsFromRepository(null)
-                    libraryPlaylistController.clearPlaylistActions()
+                    libraryPlaylistController.clearPlaylistEditing()
                     libraryPlaylistController.closeEditing()
                 } else {
                     libraryPlaylistController.unlockDialog()
@@ -289,7 +346,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 val result = playlistRepository.deletePlaylist(playlistId)
                 if (result is PlaylistMutationResult.Success) {
                     onRefreshLibraryPlaylistsFromRepository(null)
-                    libraryPlaylistController.clearPlaylistActions()
+                    libraryPlaylistController.clearPlaylistEditing()
                     libraryPlaylistController.closeEditing()
                 } else {
                     libraryPlaylistController.unlockDialog()

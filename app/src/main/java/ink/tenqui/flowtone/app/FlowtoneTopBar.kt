@@ -67,10 +67,12 @@ internal fun FlowtoneTopBar(
     secondaryPage: SecondaryPage?,
     additionalPathSegments: List<String>,
     backgroundAlpha: Float,
+    titleVisible: Boolean,
     hideBackButton: Boolean,
     searchActive: Boolean,
     searchQuery: String,
     searchColors: TopLevelSearchColors,
+    secondaryBackgroundAlpha: Float,
     searchFocusRequest: Int,
     searchKeyboardDismissRequest: Int,
     searchReentryProgress: Float,
@@ -111,6 +113,16 @@ internal fun FlowtoneTopBar(
         animationSpec = tween(360, easing = FlowtonePageEasing),
         label = "GlobalSearchTopBarProgress"
     )
+    val searchOverlayAlpha by animateFloatAsState(
+        targetValue = if (searchActive) 1f else 0f,
+        animationSpec = tween(180, easing = FlowtonePageEasing),
+        label = "SearchTopBarBaseBackgroundAlpha"
+    )
+    val titleVisibilityAlpha by animateFloatAsState(
+        targetValue = if (titleVisible) 1f else 0f,
+        animationSpec = tween(160, easing = FlowtonePageEasing),
+        label = "TopBarTitleVisibilityAlpha"
+    )
     val density = LocalDensity.current
     val navigationShiftPx = with(density) { 40.dp.toPx() } * backButtonProgress
     val searchAvailable = secondaryPage == null || searchActive
@@ -121,8 +133,8 @@ internal fun FlowtoneTopBar(
         -56.dp.toPx() * (1f - searchReentryLayerProgress)
     }
     val topBarBackgroundAlpha = backgroundAlpha
-    val topBarBaseBackground = if (searchActive) {
-        MaterialTheme.colorScheme.background.copy(alpha = 0.97f)
+    val topBarBaseBackground = if (searchOverlayAlpha > 0f) {
+        MaterialTheme.colorScheme.background.copy(alpha = searchOverlayAlpha * 0.97f)
     } else {
         Color.Transparent
     }
@@ -132,6 +144,11 @@ internal fun FlowtoneTopBar(
         modifier = modifier
             .fillMaxWidth()
             .background(topBarBaseBackground)
+            .background(
+                MaterialTheme.colorScheme.background.copy(
+                    alpha = secondaryBackgroundAlpha.coerceIn(0f, 1f)
+                )
+            )
             .background(
                 MaterialTheme.colorScheme.surfaceContainer.copy(alpha = rootTopBarBackgroundAlpha)
             )
@@ -167,7 +184,7 @@ internal fun FlowtoneTopBar(
                 .padding(start = 20.dp, end = titleEndPadding)
                 .clipToBounds()
                 .graphicsLayer {
-                    alpha = 1f - searchProgress
+                    alpha = (1f - searchProgress) * titleVisibilityAlpha
                     translationX = -titleExitDistancePx * searchProgress
                     translationY = 0f
                 }
@@ -258,6 +275,16 @@ private fun GlobalSearchTopBarControl(
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val backAlpha = ((progress - 0.18f) / 0.82f).coerceIn(0f, 1f)
     val contentAlpha = ((progress - 0.28f) / 0.72f).coerceIn(0f, 1f)
+    val searchContainerColor = if (active) {
+        colors.container
+    } else {
+        colors.container.copy(alpha = 0.42f)
+    }
+    val searchIconColor = if (active) {
+        colors.content
+    } else {
+        colors.content.copy(alpha = 0.58f)
+    }
 
     LaunchedEffect(focusRequest) {
         if (active && focusRequest > 0) {
@@ -315,7 +342,7 @@ private fun GlobalSearchTopBarControl(
                 .width(fieldWidth)
                 .height(fieldHeight)
                 .clip(RoundedCornerShape(fieldCorner))
-                .background(colors.container)
+                .background(searchContainerColor)
                 .clickable(
                     enabled = !active,
                     interactionSource = noRippleInteractionSource,
@@ -331,7 +358,7 @@ private fun GlobalSearchTopBarControl(
             Icon(
                 imageVector = Icons.Rounded.Search,
                 contentDescription = null,
-                tint = colors.content,
+                tint = searchIconColor,
                 modifier = Modifier.size(iconSize)
             )
             Box(

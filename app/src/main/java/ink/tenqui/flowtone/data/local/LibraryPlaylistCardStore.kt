@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.data.local
 
 import android.content.Context
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
+import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -24,11 +26,12 @@ class LibraryPlaylistCardStore(context: Context) {
                         continue
                     }
 
+                    val id = item.optString(ID_KEY).ifBlank {
+                        "playlist_${index}_${title.hashCode()}"
+                    }
                     add(
                         LibraryPlaylistCard(
-                            id = item.optString(ID_KEY).ifBlank {
-                                "playlist_${index}_${title.hashCode()}"
-                            },
+                            id = id,
                             title = title,
                             subtitle = item.optString(SUBTITLE_KEY, DEFAULT_SUBTITLE)
                                 .ifBlank { DEFAULT_SUBTITLE },
@@ -38,7 +41,10 @@ class LibraryPlaylistCardStore(context: Context) {
                             heightDp = item.optDouble(
                                 HEIGHT_DP_KEY,
                                 DEFAULT_HEIGHT_DP.toDouble()
-                            ).toFloat()
+                            ).toFloat(),
+                            appearanceColorKey = PlaylistAppearanceColorKey.fromStorageValue(
+                                item.optString(APPEARANCE_COLOR_KEY)
+                            ) ?: playlistAppearanceColorKeyForStableId(id)
                         )
                     )
                 }
@@ -65,15 +71,22 @@ class LibraryPlaylistCardStore(context: Context) {
             .distinctByNormalizedTitle()
             .mapIndexed { index, card -> card.copy(order = index) }
 
+        val existingItemsById = loadExistingItemsById()
         val jsonArray = JSONArray()
         normalizedCards.forEach { card ->
             jsonArray.put(
-                JSONObject()
+                (existingItemsById[card.id] ?: JSONObject())
                     .put(ID_KEY, card.id)
                     .put(TITLE_KEY, card.title)
                     .put(SUBTITLE_KEY, card.subtitle)
                     .put(WIDTH_DP_KEY, card.widthDp)
                     .put(HEIGHT_DP_KEY, card.heightDp)
+                    .put(
+                        APPEARANCE_COLOR_KEY,
+                        card.appearanceColorKey
+                            ?.name
+                            ?: playlistAppearanceColorKeyForStableId(card.id).name
+                    )
                     .put(ORDER_KEY, card.order)
             )
         }
@@ -85,6 +98,22 @@ class LibraryPlaylistCardStore(context: Context) {
         return normalizedCards
     }
 
+    private fun loadExistingItemsById(): Map<String, JSONObject> {
+        val rawValue = prefs.getString(PLAYLIST_CARDS_KEY, null) ?: return emptyMap()
+        return runCatching {
+            val jsonArray = JSONArray(rawValue)
+            buildMap {
+                for (index in 0 until jsonArray.length()) {
+                    val item = jsonArray.optJSONObject(index) ?: continue
+                    val id = item.optString(ID_KEY).trim()
+                    if (id.isNotEmpty()) {
+                        put(id, item)
+                    }
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
     private companion object {
         const val PLAYLIST_CARDS_KEY = "playlist_cards"
         const val ID_KEY = "id"
@@ -92,6 +121,7 @@ class LibraryPlaylistCardStore(context: Context) {
         const val SUBTITLE_KEY = "subtitle"
         const val WIDTH_DP_KEY = "widthDp"
         const val HEIGHT_DP_KEY = "heightDp"
+        const val APPEARANCE_COLOR_KEY = "appearanceColorKey"
         const val ORDER_KEY = "order"
         const val DEFAULT_SUBTITLE = "0 \u9996\u6b4c\u66f2"
         const val DEFAULT_WIDTH_DP = 320f

@@ -2,8 +2,10 @@ package ink.tenqui.flowtone.data.local
 
 import android.content.Context
 import ink.tenqui.flowtone.core.model.Playlist
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistCardStyle
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -28,15 +30,19 @@ class PlaylistStorage(context: Context) {
                     }
 
                     val createdAt = item.optLong(CREATED_AT_KEY, loadedAt)
+                    val id = item.optString(ID_KEY).ifBlank {
+                        "playlist_${index}_${title.hashCode()}"
+                    }
                     add(
                         Playlist(
-                            id = item.optString(ID_KEY).ifBlank {
-                                "playlist_${index}_${title.hashCode()}"
-                            },
+                            id = id,
                             title = title,
                             subtitle = item.optString(SUBTITLE_KEY, DEFAULT_SUBTITLE)
                                 .ifBlank { DEFAULT_SUBTITLE },
                             cardStyle = item.optPlaylistCardStyle(),
+                            appearanceColorKey = PlaylistAppearanceColorKey.fromStorageValue(
+                                item.optString(APPEARANCE_COLOR_KEY)
+                            ) ?: playlistAppearanceColorKeyForStableId(id),
                             order = item.optInt(ORDER_KEY, index),
                             createdAt = createdAt,
                             updatedAt = item.optLong(UPDATED_AT_KEY, createdAt)
@@ -62,6 +68,7 @@ class PlaylistStorage(context: Context) {
                         .put(TITLE_KEY, playlist.title)
                         .put(SUBTITLE_KEY, playlist.subtitle)
                         .put(CARD_STYLE_KEY, playlist.cardStyle.name)
+                        .put(APPEARANCE_COLOR_KEY, playlist.appearanceColorKey.name)
                         .put(ORDER_KEY, playlist.order)
                         .put(CREATED_AT_KEY, playlist.createdAt)
                         .put(UPDATED_AT_KEY, playlist.updatedAt)
@@ -145,6 +152,7 @@ class PlaylistStorage(context: Context) {
         const val TITLE_KEY = "title"
         const val SUBTITLE_KEY = "subtitle"
         const val CARD_STYLE_KEY = "cardStyle"
+        const val APPEARANCE_COLOR_KEY = "appearanceColorKey"
         const val LEGACY_SIZE_KEY = "size"
         const val ORDER_KEY = "order"
         const val CREATED_AT_KEY = "createdAt"
@@ -168,6 +176,7 @@ private fun List<Playlist>.toPlaylistJsonArray(): JSONArray {
                     .put("title", playlist.title)
                     .put("subtitle", playlist.subtitle)
                     .put("cardStyle", playlist.cardStyle.name)
+                    .put("appearanceColorKey", playlist.appearanceColorKey.name)
                     .put("order", playlist.order)
                     .put("createdAt", playlist.createdAt)
                     .put("updatedAt", playlist.updatedAt)

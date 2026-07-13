@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.listening.formatListeningDuration
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 
 private val MineListeningRecordCardHeight = 164.dp
@@ -50,11 +51,18 @@ internal fun MineScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .padding(start = 24.dp, top = 48.dp, end = 24.dp, bottom = 16.dp)
     ) {
         StaggeredPageElement(
             visible = !secondaryOpen,
             animationIndex = 0
+        ) {
+            FlowtonePageHeaderPlaceholder()
+        }
+        Spacer(modifier = Modifier.height(30.dp))
+        StaggeredPageElement(
+            visible = !secondaryOpen,
+            animationIndex = 4
         ) {
             Row(
                 modifier = Modifier
@@ -85,7 +93,7 @@ internal fun MineScreen(
             title = "\u8bbe\u7f6e",
             icon = Icons.Rounded.Settings,
             visible = !secondaryOpen,
-            animationIndex = 1,
+            animationIndex = 8,
             onClick = onOpenSettings,
             modifier = Modifier.padding(top = 16.dp)
         )
@@ -93,7 +101,7 @@ internal fun MineScreen(
             title = "\u5173\u4e8e",
             icon = Icons.Rounded.Info,
             visible = !secondaryOpen,
-            animationIndex = 2,
+            animationIndex = 12,
             onClick = onOpenAbout,
             modifier = Modifier.padding(top = 12.dp)
         )

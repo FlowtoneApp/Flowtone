@@ -7,7 +7,12 @@ data class LibraryPlaylistCard(
     val order: Int,
     val widthDp: Float = 320f,
     val heightDp: Float = 236f,
-    val isSystem: Boolean = false
+    val isSystem: Boolean = false,
+    val appearanceColorKey: PlaylistAppearanceColorKey? = if (isSystem) {
+        null
+    } else {
+        playlistAppearanceColorKeyForStableId(id)
+    }
 )
 
 const val LikedSongsPlaylistId = "system_liked_songs"

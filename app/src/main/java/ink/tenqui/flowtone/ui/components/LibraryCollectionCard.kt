@@ -1,10 +1,11 @@
 package ink.tenqui.flowtone.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,53 +16,62 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 @Composable
-fun LibraryCollectionCard(
+internal fun LibraryCollectionCard(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     leadingContent: (@Composable () -> Unit)? = null,
-    showTrailingArrow: Boolean = true
+    showTrailingArrow: Boolean = true,
+    visualType: PlaylistCardVisualType = PlaylistCardVisualType.Default,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    isFlowCloudPlaying: Boolean = true
 ) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        leadingContent?.invoke()
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = if (leadingContent == null) 0.dp else 16.dp)
+    PlaylistCardSurface(
+        visualType = visualType,
+        shape = RoundedCornerShape(24.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        modifier = modifier,
+        clickModifier = Modifier.clickable(onClick = onClick),
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying
+    ) { contentColors ->
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-        if (showTrailingArrow) {
-            Spacer(modifier = Modifier.padding(start = 12.dp))
-            Icon(
-                imageVector = Icons.Rounded.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            leadingContent?.invoke()
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = if (leadingContent == null) 0.dp else 16.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColors.titleColor
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColors.subtitleColor,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            if (showTrailingArrow) {
+                Spacer(modifier = Modifier.padding(start = 12.dp))
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = contentColors.subtitleColor
+                )
+            }
         }
     }
 }

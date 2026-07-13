@@ -1,7 +1,6 @@
 package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,28 +22,33 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PlaylistCardContentColors
+import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
+import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
+import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 
 internal fun LazyListScope.libraryPlaylistRows(
     likedPlaylist: LibraryPlaylistCard,
@@ -51,24 +56,26 @@ internal fun LazyListScope.libraryPlaylistRows(
     playlistCardHeight: Dp,
     libraryCardsProgress: Float,
     playlistRowItemOffsetYPx: Float,
-    activePlaylistActionId: String?,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    editingPlaylistId: String?,
     newlyCreatedPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
     onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    onShowPlaylistActions: (String) -> Unit,
-    onRenamePlaylist: (LibraryPlaylistCard) -> Unit,
-    onDeletePlaylist: (LibraryPlaylistCard) -> Unit
+    onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
+    onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
+    onEditingPlaylistBoundsRemoved: (String) -> Unit
 ) {
     item(key = "library-pinned-playlist-row") {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .libraryPlaylistRowMotion(
-                    globalProgress = libraryCardsProgress,
-                    rowIndex = 1,
-                    rowAppearProgress = 1f,
-                    itemOffsetYPx = playlistRowItemOffsetYPx
+                    .libraryPlaylistRowMotion(
+                        globalProgress = libraryCardsProgress,
+                        rowIndex = 8,
+                        rowAppearProgress = 1f,
+                        itemOffsetYPx = playlistRowItemOffsetYPx
                 ),
             horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
         ) {
@@ -76,19 +83,23 @@ internal fun LazyListScope.libraryPlaylistRows(
                 playlist = likedPlaylist,
                 cardHeight = playlistCardHeight,
                 editable = false,
-                showActions = false,
+                isEditingTarget = false,
                 playCreateAnimation = false,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying,
                 onCreateAnimationFinished = {},
                 onClick = {
                     onOpenPlaylist(likedPlaylist)
                 },
                 onLongClick = {},
-                onEdit = {},
-                onDelete = {},
+                onEditingBoundsChanged = {},
+                onEditingBoundsRemoved = {},
                 modifier = Modifier.weight(1f)
             )
             LibraryCreatePlaylistTileCardView(
                 cardHeight = playlistCardHeight,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying,
                 onClick = onCreatePlaylist,
                 modifier = Modifier.weight(1f)
             )
@@ -104,40 +115,44 @@ internal fun LazyListScope.libraryPlaylistRows(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .libraryPlaylistRowMotion(
-                    globalProgress = libraryCardsProgress,
-                    rowIndex = rowIndex + 2,
-                    rowAppearProgress = 1f,
-                    itemOffsetYPx = playlistRowItemOffsetYPx
+                    .libraryPlaylistRowMotion(
+                        globalProgress = libraryCardsProgress,
+                        rowIndex = 12 + rowIndex * 4,
+                        rowAppearProgress = 1f,
+                        itemOffsetYPx = playlistRowItemOffsetYPx
                 ),
             horizontalArrangement = Arrangement.spacedBy(LibraryActionCardSpacing)
         ) {
             rowPlaylists.forEach { playlist ->
-                val showActions = activePlaylistActionId == playlist.id
                 val editable = !playlist.isSystem
+                val isEditingTarget = editingPlaylistId == playlist.id
                 LibraryPlaylistTileCardView(
                     playlist = playlist,
                     cardHeight = playlistCardHeight,
                     editable = editable,
-                    showActions = editable && showActions,
+                    isEditingTarget = editable && isEditingTarget,
                     playCreateAnimation =
                         newlyCreatedPlaylistId == playlist.id,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
                     onCreateAnimationFinished = {
                         onCreateAnimationFinished(playlist)
                     },
                     onClick = {
-                        onOpenPlaylist(playlist)
+                        if (!isEditingTarget) {
+                            onOpenPlaylist(playlist)
+                        }
                     },
                     onLongClick = {
                         if (editable) {
-                            onShowPlaylistActions(playlist.id)
+                            onStartPlaylistEditing(playlist)
                         }
                     },
-                    onEdit = {
-                        onRenamePlaylist(playlist)
+                    onEditingBoundsChanged = { bounds ->
+                        onEditingPlaylistBoundsChanged(playlist.id, bounds)
                     },
-                    onDelete = {
-                        onDeletePlaylist(playlist)
+                    onEditingBoundsRemoved = {
+                        onEditingPlaylistBoundsRemoved(playlist.id)
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -161,23 +176,17 @@ private fun LibraryPlaylistTileCardView(
     playlist: LibraryPlaylistCard,
     cardHeight: Dp,
     editable: Boolean,
-    showActions: Boolean,
+    isEditingTarget: Boolean,
     playCreateAnimation: Boolean,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     onCreateAnimationFinished: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
+    onEditingBoundsChanged: (Rect) -> Unit,
+    onEditingBoundsRemoved: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val actionProgress by animateFloatAsState(
-        targetValue = if (showActions) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis / 2,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "LibraryPlaylistActionButtons"
-    )
     val createProgress = remember(playlist.id) {
         Animatable(if (playCreateAnimation) 0f else 1f)
     }
@@ -204,104 +213,133 @@ private fun LibraryPlaylistTileCardView(
             )
         }
     }
-    val actionButtonColor = MaterialTheme.colorScheme.onSurface
-    val editActionIconSize = 24.dp
-    val editActionTouchSize = 36.dp
-    val isLikedPlaylist = playlist.isLikedSongsPlaylist()
+    val latestBounds = remember(playlist.id) {
+        arrayOfNulls<Rect>(1)
+    }
+    if (editable) {
+        DisposableEffect(playlist.id) {
+            onDispose(onEditingBoundsRemoved)
+        }
+    }
     val cardClickModifier = if (editable) {
         Modifier.combinedClickable(
             onClick = onClick,
-            onLongClick = onLongClick
+            onLongClick = {
+                onLongClick()
+                latestBounds[0]?.let(onEditingBoundsChanged)
+            }
         )
     } else {
         Modifier.clickable(onClick = onClick)
     }
 
-    LibraryPlaylistTileSurface(
+    val positionedModifier = if (editable) {
+        modifier.onGloballyPositioned { coordinates ->
+            val topLeft = coordinates.positionInRoot()
+            val bounds = Rect(
+                left = topLeft.x,
+                top = topLeft.y,
+                right = topLeft.x + coordinates.size.width,
+                bottom = topLeft.y + coordinates.size.height
+            )
+            latestBounds[0] = bounds
+            onEditingBoundsChanged(bounds)
+        }
+    } else {
+        modifier
+    }
+
+    if (isEditingTarget) {
+        LibraryPlaylistEditingPlaceholder(
+            cardHeight = cardHeight,
+            modifier = positionedModifier
+        )
+        return
+    }
+
+    LibraryPlaylistTileVisual(
+        playlist = playlist,
         cardHeight = cardHeight,
         appearProgress = createProgress.value,
         clickModifier = cardClickModifier,
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
+        modifier = positionedModifier
+    )
+}
+
+@Composable
+internal fun LibraryPlaylistTileVisual(
+    playlist: LibraryPlaylistCard,
+    cardHeight: Dp,
+    appearProgress: Float,
+    clickModifier: Modifier,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val isLikedPlaylist = playlist.isLikedSongsPlaylist()
+    LibraryPlaylistTileSurface(
+        visualType = playlistCardVisualTypeFor(playlist),
+        appearanceColorKey = playlist.appearanceColorKey,
+        cardHeight = cardHeight,
+        appearProgress = appearProgress,
+        clickModifier = clickModifier,
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
         modifier = modifier
-    ) {
+    ) { contentColors ->
         LibraryPlaylistTileTextContent(
             title = playlist.title,
             subtitle = playlist.subtitle,
-            reserveActionWidth = editable,
+            contentColors = contentColors,
             icon = if (isLikedPlaylist) {
                 {
-                    LikedSongsPlaylistTileIcon()
+                    LikedSongsPlaylistTileIcon(contentColors)
                 }
             } else {
                 null
             }
         )
-
-        if (showActions || actionProgress > 0.001f) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .graphicsLayer {
-                        val eased = FlowtoneMotion.Easing.transform(
-                            actionProgress.coerceIn(0f, 1f)
-                        )
-                        alpha = eased
-                        translationX = 18.dp.toPx() * (1f - eased)
-                        scaleX = 0.96f + 0.04f * eased
-                        scaleY = 0.96f + 0.04f * eased
-                        transformOrigin = TransformOrigin(1f, 0.5f)
-                    },
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(editActionTouchSize)
-                        .clickable(onClick = onEdit),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = "\u7f16\u8f91\u6b4c\u5355",
-                        tint = actionButtonColor,
-                        modifier = Modifier.size(editActionIconSize)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(editActionTouchSize)
-                        .clickable(onClick = onDelete),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "\u5220\u9664\u6b4c\u5355",
-                        tint = actionButtonColor,
-                        modifier = Modifier.size(editActionIconSize)
-                    )
-                }
-            }
-        }
     }
+}
+
+@Composable
+private fun LibraryPlaylistEditingPlaceholder(
+    cardHeight: Dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(cardHeight)
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+    )
 }
 
 @Composable
 private fun LibraryCreatePlaylistTileCardView(
     cardHeight: Dp,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LibraryPlaylistTileSurface(
+        visualType = PlaylistCardVisualType.CreatePlaylist,
         cardHeight = cardHeight,
         appearProgress = 1f,
         clickModifier = Modifier.clickable(onClick = onClick),
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
         modifier = modifier
-    ) {
+    ) { contentColors ->
         LibraryPlaylistTileTextContent(
             title = "\u521b\u5efa\u6b4c\u5355",
             subtitle = "\u6dfb\u52a0\u65b0\u7684\u6b4c\u5355",
-            reserveActionWidth = false,
+            contentColors = contentColors,
             icon = {
-                CreatePlaylistTileIcon()
+                CreatePlaylistTileIcon(contentColors)
             }
         )
     }
@@ -309,16 +347,27 @@ private fun LibraryCreatePlaylistTileCardView(
 
 @Composable
 private fun LibraryPlaylistTileSurface(
+    visualType: PlaylistCardVisualType,
+    appearanceColorKey: PlaylistAppearanceColorKey? = null,
     cardHeight: Dp,
     appearProgress: Float,
     clickModifier: Modifier,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable BoxScope.(PlaylistCardContentColors) -> Unit
 ) {
     Box(
         modifier = modifier.height(cardHeight)
     ) {
-        Box(
+        PlaylistCardSurface(
+            visualType = visualType,
+            appearanceColorKey = appearanceColorKey,
+            shape = RoundedCornerShape(24.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            clickModifier = clickModifier,
+            flowCloudSpeed = flowCloudSpeed,
+            isFlowCloudPlaying = isFlowCloudPlaying,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cardHeight)
@@ -328,11 +377,7 @@ private fun LibraryPlaylistTileSurface(
                     )
                     alpha = eased
                     translationY = 18.dp.toPx() * (1f - eased)
-                }
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .then(clickModifier)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                },
             content = content
         )
     }
@@ -342,14 +387,13 @@ private fun LibraryPlaylistTileSurface(
 private fun BoxScope.LibraryPlaylistTileTextContent(
     title: String,
     subtitle: String?,
-    reserveActionWidth: Boolean,
+    contentColors: PlaylistCardContentColors,
     icon: (@Composable () -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
             .align(Alignment.TopStart)
-            .fillMaxWidth()
-            .padding(end = if (reserveActionWidth) 44.dp else 0.dp),
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.Top
     ) {
         if (icon != null) {
@@ -361,7 +405,7 @@ private fun BoxScope.LibraryPlaylistTileTextContent(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = contentColors.titleColor,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -369,7 +413,7 @@ private fun BoxScope.LibraryPlaylistTileTextContent(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = contentColors.subtitleColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp)
@@ -379,28 +423,32 @@ private fun BoxScope.LibraryPlaylistTileTextContent(
 }
 
 @Composable
-private fun LikedSongsPlaylistTileIcon() {
+private fun LikedSongsPlaylistTileIcon(
+    contentColors: PlaylistCardContentColors
+) {
     LibraryPlaylistTileIconContainer(
-        backgroundColor = MaterialTheme.colorScheme.primaryContainer
+        backgroundColor = contentColors.iconContainerColor
     ) {
         Icon(
             imageVector = Icons.Outlined.FavoriteBorder,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            tint = contentColors.iconColor,
             modifier = Modifier.size(22.dp)
         )
     }
 }
 
 @Composable
-private fun CreatePlaylistTileIcon() {
+private fun CreatePlaylistTileIcon(
+    contentColors: PlaylistCardContentColors
+) {
     LibraryPlaylistTileIconContainer(
-        backgroundColor = MaterialTheme.colorScheme.secondaryContainer
+        backgroundColor = contentColors.iconContainerColor
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
             contentDescription = "\u521b\u5efa\u6b4c\u5355",
-            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            tint = contentColors.iconColor,
             modifier = Modifier.size(22.dp)
         )
     }

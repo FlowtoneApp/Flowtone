@@ -1,34 +1,43 @@
 package ink.tenqui.flowtone.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -36,84 +45,437 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.ui.player.isSelectableArtist
-import ink.tenqui.flowtone.ui.player.parseArtistCandidates
+import ink.tenqui.flowtone.data.listening.ListeningSourceStats
+import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
+import ink.tenqui.flowtone.playback.PlaybackSourceType
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
+import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
+import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
+import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 @Composable
 internal fun HomeScreen(
-    songs: List<Song>,
-    currentSong: Song?,
-    onOpenLocalLibrary: () -> Unit,
+    songs: List<Song> = emptyList(),
+    listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot(),
+    playlists: List<LibraryPlaylistCard> = emptyList(),
+    onSongClick: (Song) -> Unit = {},
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit = {},
+    visible: Boolean = true,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    isFlowCloudPlaying: Boolean = true,
+    drawBackground: Boolean = true,
+    scrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier
 ) {
-    val artistCount = remember(songs) {
-        songs
-            .flatMap { song -> parseArtistCandidates(song.artist) }
-            .filter { artist -> isSelectableArtist(artist) }
-            .distinctBy { artist -> artist.lowercase() }
-            .size
-    }
-    val albumCount = remember(songs) {
-        songs
-            .mapNotNull { song -> song.albumId }
-            .distinct()
-            .size
-            .takeIf { count -> count > 0 }
+    val backgroundModifier = if (drawBackground) {
+        Modifier.homeScreenBackground()
+    } else {
+        Modifier
     }
 
-    LazyColumn(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(
-            start = 20.dp,
-            top = 8.dp,
-            end = 20.dp,
-            bottom = 32.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            .then(backgroundModifier)
     ) {
-        item {
-            HomeHeroCard(
-                currentSong = currentSong,
-                onOpenLocalLibrary = onOpenLocalLibrary,
-                modifier = Modifier.fillMaxWidth()
+        HomeContent(
+            songs = songs,
+            listeningStats = listeningStats,
+            playlists = playlists,
+            onSongClick = onSongClick,
+            onOpenPlaylist = onOpenPlaylist,
+            visible = visible,
+            flowCloudSpeed = flowCloudSpeed,
+            isFlowCloudPlaying = isFlowCloudPlaying,
+            scrollState = scrollState,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 21.dp, top = 48.dp, end = 20.dp)
+        )
+    }
+}
+
+@Composable
+internal fun Modifier.homeScreenBackground(): Modifier {
+    return topLevelPageBackground(HomeBackgroundAccent)
+}
+
+@Composable
+internal fun Modifier.topLevelPageBackground(
+    accentColor: Color,
+    cloudAlpha: Float = 1f,
+    cloudPlacement: TopLevelBackgroundCloudPlacement = HomeBackgroundCloudPlacement
+): Modifier {
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val safeCloudAlpha = cloudAlpha.coerceIn(0f, 1f)
+    return drawBehind {
+        drawRect(color = backgroundColor)
+        drawTopPageColorCloud(
+            accentColor = accentColor,
+            backgroundColor = backgroundColor,
+            cloudAlpha = safeCloudAlpha,
+            cloudPlacement = cloudPlacement
+        )
+    }
+}
+
+internal data class TopLevelBackgroundCloudPlacement(
+    val cloudCenterWidthFraction: Float,
+    val cloudCenterRadiusOffsetXFactor: Float,
+    val cloudCenterRadiusOffsetYFactor: Float,
+    val clearCenterWidthFraction: Float,
+    val clearCenterHeightFraction: Float
+)
+
+internal val HomeBackgroundCloudPlacement = TopLevelBackgroundCloudPlacement(
+    cloudCenterWidthFraction = 0f,
+    cloudCenterRadiusOffsetXFactor = -0.08f,
+    cloudCenterRadiusOffsetYFactor = 0.08f,
+    clearCenterWidthFraction = 1f,
+    clearCenterHeightFraction = 1f
+)
+
+internal val LibraryBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
+    cloudCenterWidthFraction = 0.5f,
+    cloudCenterRadiusOffsetXFactor = 0f,
+    cloudCenterRadiusOffsetYFactor = -0.12f
+)
+
+internal val MineBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
+    cloudCenterWidthFraction = 1f,
+    cloudCenterRadiusOffsetXFactor = 0.08f,
+    clearCenterWidthFraction = 0f
+)
+
+private fun DrawScope.drawTopPageColorCloud(
+    accentColor: Color,
+    backgroundColor: Color,
+    cloudAlpha: Float,
+    cloudPlacement: TopLevelBackgroundCloudPlacement
+) {
+    if (cloudAlpha <= 0f) return
+    val cloudDiameter = size.height * TopCloudVisibleHeightFraction * 2f /
+        (1f + HomeBackgroundCloudPlacement.cloudCenterRadiusOffsetYFactor)
+    if (cloudDiameter <= 0f) return
+
+    val cloudRadius = cloudDiameter / 2f
+    val cloudCenter = Offset(
+        x = size.width * cloudPlacement.cloudCenterWidthFraction +
+            cloudRadius * cloudPlacement.cloudCenterRadiusOffsetXFactor,
+        y = cloudRadius * cloudPlacement.cloudCenterRadiusOffsetYFactor
+    )
+
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                accentColor.copy(alpha = 0.34f * cloudAlpha),
+                accentColor.copy(alpha = 0.22f * cloudAlpha),
+                accentColor.copy(alpha = 0.08f * cloudAlpha),
+                Color.Transparent
+            ),
+            center = cloudCenter,
+            radius = cloudRadius
+        ),
+        radius = cloudRadius,
+        center = cloudCenter
+    )
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                backgroundColor.copy(alpha = 0.98f * cloudAlpha),
+                backgroundColor.copy(alpha = 0.72f * cloudAlpha),
+                Color.Transparent
+            ),
+            center = Offset(
+                x = size.width * cloudPlacement.clearCenterWidthFraction,
+                y = size.height * cloudPlacement.clearCenterHeightFraction
+            ),
+            radius = size.minDimension * BottomRightClearRadiusFraction
+        )
+    )
+}
+
+private val HomeBackgroundAccent = Color(0xFF7898F5)
+private const val TopCloudVisibleHeightFraction = 1.30f
+private const val BottomRightClearRadiusFraction = 0.82f
+
+@Composable
+private fun HomeContent(
+    songs: List<Song>,
+    listeningStats: ListeningStatsSnapshot,
+    playlists: List<LibraryPlaylistCard>,
+    onSongClick: (Song) -> Unit,
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    visible: Boolean,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier
+) {
+    val recommendedSongs = remember(songs) {
+        songs.shuffled().take(HomeRecommendationCount)
+    }
+    val frequentPlaylists = remember(listeningStats.totalSources, playlists) {
+        buildFrequentPlaylistCards(
+            sources = listeningStats.totalSources,
+            playlists = playlists
+        )
+    }
+    val frequentPlaylistListState = rememberLazyListState()
+    val recentlyAddedSongs = remember(songs) {
+        songs.sortedWith(
+            compareByDescending<Song> { song -> song.dateAddedSeconds }
+                .thenByDescending { song -> song.id }
+        ).take(HomeRecentlyAddedCount)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(scrollState)
+            .padding(bottom = 32.dp)
+    ) {
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 0
+        ) {
+            FlowtonePageHeaderPlaceholder()
+        }
+        Spacer(modifier = Modifier.height(30.dp))
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 4
+        ) {
+            HomeRecommendationSection(
+                title = "随便听听",
+                songs = recommendedSongs,
+                onSongClick = onSongClick
             )
         }
-        item {
-            HomeSection(title = "快捷入口") {
-                HomeActionCard(
-                    title = "本地曲库",
-                    subtitle = "查看设备中的 ${songs.size} 首歌曲",
-                    icon = Icons.Rounded.LibraryMusic,
-                    onClick = onOpenLocalLibrary,
-                    modifier = Modifier.fillMaxWidth()
+        Spacer(modifier = Modifier.height(28.dp))
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 8
+        ) {
+            FrequentPlaylistSection(
+                playlists = frequentPlaylists,
+                listState = frequentPlaylistListState,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying,
+                onOpenPlaylist = onOpenPlaylist
+            )
+        }
+        Spacer(modifier = Modifier.height(28.dp))
+        StaggeredPageElement(
+            visible = visible,
+            animationIndex = 12
+        ) {
+            RecentlyAddedSection(
+                title = "最近新增",
+                songs = recentlyAddedSongs,
+                onSongClick = onSongClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeRecommendationSection(
+    title: String,
+    songs: List<Song>,
+    onSongClick: (Song) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (songs.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(top = 12.dp)
+            ) {
+                items(
+                    items = songs,
+                    key = { song -> "${song.sourceType}:${song.id}:${song.uri}" }
+                ) { song ->
+                    RecommendationSongCard(
+                        song = song,
+                        onClick = { onSongClick(song) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FrequentPlaylistSection(
+    playlists: List<FrequentPlaylistCard>,
+    listState: LazyListState,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "常听歌单",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing),
+            contentPadding = PaddingValues(end = HomeFrequentPlaylistListEndPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+        ) {
+            if (playlists.isEmpty()) {
+                item(key = "frequent-playlist-placeholder") {
+                    FrequentPlaylistPlaceholderCard(
+                        modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
+                    )
+                }
+                return@LazyRow
+            }
+
+            items(
+                items = playlists,
+                key = { playlist -> playlist.card.id }
+            ) { playlist ->
+                FrequentPlaylistCardItem(
+                    playlist = playlist,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
+                    onClick = { onOpenPlaylist(playlist.card) },
+                    modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
                 )
             }
         }
-        item {
-            HomeSection(title = "本地曲库概览") {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    HomeMetricCard(
-                        label = "歌曲",
-                        value = songs.size.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    HomeMetricCard(
-                        label = "艺术家",
-                        value = artistCount.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    albumCount?.let { count ->
-                        HomeMetricCard(
-                            label = "专辑",
-                            value = count.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
+    }
+}
+
+@Composable
+private fun FrequentPlaylistPlaceholderCard(
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(HomeFrequentPlaylistCardHeight)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "暂无数据",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun FrequentPlaylistCardItem(
+    playlist: FrequentPlaylistCard,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    PlaylistCardSurface(
+        visualType = playlistCardVisualTypeFor(playlist.card),
+        appearanceColorKey = playlist.card.appearanceColorKey,
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(12.dp),
+        clickModifier = Modifier.clickable(onClick = onClick),
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
+        modifier = modifier
+            .height(HomeFrequentPlaylistCardHeight)
+    ) { contentColors ->
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = playlist.card.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = contentColors.titleColor,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = playlist.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = contentColors.subtitleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentlyAddedSection(
+    title: String,
+    songs: List<Song>,
+    onSongClick: (Song) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (songs.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(top = 12.dp)
+            ) {
+                items(
+                    items = songs.chunked(HomeRecentlyAddedRows),
+                    key = { columnSongs ->
+                        columnSongs.joinToString(separator = "|") { song ->
+                            "${song.sourceType}:${song.id}:${song.uri}"
+                        }
+                    }
+                ) { columnSongs ->
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.width(260.dp)
+                    ) {
+                        columnSongs.forEach { song ->
+                            RecentlyAddedSongItem(
+                                song = song,
+                                onClick = { onSongClick(song) }
+                            )
+                        }
+                        if (columnSongs.size == 1) {
+                            Spacer(modifier = Modifier.height(72.dp))
+                        }
                     }
                 }
             }
@@ -122,103 +484,120 @@ internal fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeroCard(
-    currentSong: Song?,
-    onOpenLocalLibrary: () -> Unit,
+private fun RecentlyAddedSongItem(
+    song: Song,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val hasCurrentSong = currentSong != null
-    Surface(
+    Row(
         modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
-            .then(
-                if (hasCurrentSong) {
-                    Modifier
-                } else {
-                    Modifier.clickable(onClick = onOpenLocalLibrary)
-                }
-            ),
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.primaryContainer
+            .height(72.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        RecommendationArtwork(
+            song = song,
+            modifier = Modifier.size(56.dp)
+        )
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 148.dp)
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .weight(1f)
+                .padding(start = 10.dp)
         ) {
-            HomeArtwork(
-                song = currentSong,
-                modifier = Modifier.size(88.dp)
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 18.dp)
-            ) {
-                Text(
-                    text = if (hasCurrentSong) "继续聆听" else "开始聆听",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = currentSong?.title ?: "打开本地曲库",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-                Text(
-                    text = currentSong?.artist ?: "播放设备中的本地音乐",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-            }
-            if (!hasCurrentSong) {
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
-                    modifier = Modifier.padding(start = 12.dp)
-                )
-            }
+            Text(
+                text = song.artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun HomeArtwork(
-    song: Song?,
+private fun RecommendationSongCard(
+    song: Song,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .width(132.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(bottom = 4.dp)
+    ) {
+        RecommendationArtwork(song = song)
+        Text(
+            text = song.title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            text = song.artist,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun RecommendationArtwork(
+    song: Song,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val imageRequest = remember(song?.artworkUri, context) {
-        song?.artworkUri?.let { artworkUri ->
+    val imageRequest: ImageRequest? = remember(song.artworkUri, context) {
+        song.artworkUri?.let { artworkUri ->
             ImageRequest.Builder(context)
                 .data(artworkUri)
-                .size(176, 176)
+                .size(264, 264)
                 .build()
         }
+    }
+    val isSystemDark = isSystemInDarkTheme()
+    val placeholderColor = if (isSystemDark) {
+        Color.Black
+    } else {
+        Color.White
+    }
+    val iconColor = if (isSystemDark) {
+        Color.White.copy(alpha = 0.78f)
+    } else {
+        Color.Black.copy(alpha = 0.72f)
     }
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
+            .size(132.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(placeholderColor),
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = Icons.Filled.MusicNote,
+            imageVector = Icons.Default.MusicNote,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(34.dp)
+            tint = iconColor
         )
         imageRequest?.let { request ->
             AsyncImage(
@@ -231,108 +610,50 @@ private fun HomeArtwork(
     }
 }
 
-@Composable
-private fun HomeSection(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold
-        )
-        content()
-    }
-}
+private const val HomeRecommendationCount = 8
+private const val HomeRecentlyAddedCount = 5
+private const val HomeRecentlyAddedRows = 2
+private val HomeFrequentPlaylistCardWidth = 184.dp
+private val HomeFrequentPlaylistCardHeight = 92.dp
+private val HomeFrequentPlaylistCardSpacing = 12.dp
+private val HomeFrequentPlaylistListEndPadding = 20.dp
 
-@Composable
-private fun HomeActionCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
+private data class FrequentPlaylistCard(
+    val card: LibraryPlaylistCard,
+    val subtitle: String
+)
+
+private fun buildFrequentPlaylistCards(
+    sources: List<ListeningSourceStats>,
+    playlists: List<LibraryPlaylistCard>
+): List<FrequentPlaylistCard> {
+    val playlistsById = playlists.associateBy { playlist -> playlist.id }
+    val listenedPlaylists = sources
+        .asSequence()
+        .filter { source ->
+            source.sourceType == PlaybackSourceType.UserPlaylist ||
+                source.sourceType == PlaybackSourceType.LikedSongs
+        }
+        .mapNotNull { source ->
+            val sourceId = source.sourceId ?: return@mapNotNull null
+            val playlist = playlistsById[sourceId] ?: return@mapNotNull null
+            FrequentPlaylistCard(
+                card = playlist,
+                subtitle = "${source.effectivePlayCount} 次播放"
             )
         }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 14.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-        }
-        Spacer(modifier = Modifier.padding(start = 12.dp))
-        Icon(
-            imageVector = Icons.Rounded.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        .distinctBy { playlist -> playlist.card.id }
+        .toList()
+    val likedSongsPlaylist = playlistsById[LikedSongsPlaylistId]?.let { playlist ->
+        FrequentPlaylistCard(
+            card = playlist,
+            subtitle = playlist.subtitle
         )
     }
+
+    return (listenedPlaylists + listOfNotNull(likedSongsPlaylist))
+        .distinctBy { playlist -> playlist.card.id }
+        .take(HomeFrequentPlaylistCount)
 }
 
-@Composable
-private fun HomeMetricCard(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 14.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.Start
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-    }
-}
+private const val HomeFrequentPlaylistCount = 4

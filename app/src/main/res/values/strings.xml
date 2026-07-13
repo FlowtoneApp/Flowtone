@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Flowtone</string>
+    <string name="top_level_home_title">声流</string>
+    <string name="top_level_home_subtitle">收藏在设备里的每一段声音</string>
+    <string name="top_level_library_title">曲库</string>
+    <string name="top_level_library_subtitle">收集自己喜欢的声音</string>
+    <string name="top_level_mine_title">我的</string>
+    <string name="top_level_mine_subtitle">内部版本，不代表最终品质</string>
 </resources>

@@ -1,10 +1,13 @@
 package ink.tenqui.flowtone.data.repository
 
 import ink.tenqui.flowtone.core.model.Playlist
+import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistCardStyle
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
+import ink.tenqui.flowtone.core.model.randomPlaylistAppearanceColorKey
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +47,8 @@ class PlaylistRepository(
                         id = card.id,
                         title = card.title,
                         subtitle = card.subtitle,
+                        appearanceColorKey = card.appearanceColorKey
+                            ?: playlistAppearanceColorKeyForStableId(card.id),
                         order = index,
                         createdAt = now,
                         updatedAt = now
@@ -52,10 +57,16 @@ class PlaylistRepository(
                     existing.copy(
                         title = card.title,
                         subtitle = card.subtitle,
+                        appearanceColorKey = card.appearanceColorKey
+                            ?: existing.appearanceColorKey,
                         order = index,
                         updatedAt = if (
                             existing.title != card.title ||
                             existing.subtitle != card.subtitle ||
+                            (
+                                card.appearanceColorKey != null &&
+                                    existing.appearanceColorKey != card.appearanceColorKey
+                            ) ||
                             existing.order != index
                         ) {
                             now
@@ -107,9 +118,15 @@ class PlaylistRepository(
             }
 
             val now = System.currentTimeMillis()
+            val mostRecentColorKey = currentPlaylists
+                .maxByOrNull { item -> item.createdAt }
+                ?.appearanceColorKey
             val playlist = Playlist(
                 id = UUID.randomUUID().toString(),
                 title = normalizedTitle,
+                appearanceColorKey = randomPlaylistAppearanceColorKey(
+                    avoiding = mostRecentColorKey
+                ),
                 order = (currentPlaylists.maxOfOrNull { item -> item.order } ?: -1) + 1,
                 createdAt = now,
                 updatedAt = now
@@ -208,6 +225,40 @@ class PlaylistRepository(
             if (playlist.id == id) {
                 playlist.copy(
                     cardStyle = style,
+                    updatedAt = now
+                )
+            } else {
+                playlist
+            }
+        }
+
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = _playlistSongEntries.value,
+            nextPlaylists = nextPlaylists,
+            nextEntries = _playlistSongEntries.value,
+            successValue = Unit
+        )
+    }
+
+    suspend fun updatePlaylistAppearanceColor(
+        id: String,
+        colorKey: PlaylistAppearanceColorKey
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        val currentPlaylist = currentPlaylists.firstOrNull { playlist -> playlist.id == id }
+            ?: return@withLock PlaylistMutationResult.Failure(
+                PlaylistMutationError.NotFound
+            )
+        if (currentPlaylist.appearanceColorKey == colorKey) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val now = System.currentTimeMillis()
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id == id) {
+                playlist.copy(
+                    appearanceColorKey = colorKey,
                     updatedAt = now
                 )
             } else {
