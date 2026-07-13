@@ -93,7 +93,8 @@ internal fun FlowtoneScaffoldContent(
                     permissionDenied = state.permissionDenied,
                     showSwipeHint = state.showSwipeHint,
                     secondaryOpen = state.secondaryOpen,
-                    userScrollEnabled = !state.searchActive,
+                    userScrollEnabled = !state.searchActive &&
+                        libraryPlaylistController.editingPlaylistId == null,
                     onRequestPermission = callbacks.onRequestPermission,
                     onSongClick = callbacks.onSongClick,
                     onOpenSettings = callbacks.onOpenSettings,

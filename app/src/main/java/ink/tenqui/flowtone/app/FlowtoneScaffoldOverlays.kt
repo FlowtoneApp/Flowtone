@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -30,6 +31,8 @@ import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
+import ink.tenqui.flowtone.ui.library.CreatePlaylistState
+import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
 import ink.tenqui.flowtone.ui.player.MiniPlayer
@@ -50,6 +53,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     displayedLibraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     addToPlaylistDialogBackgroundColor: Color,
+    playlistEditingProgress: Float,
+    playlistEditingBlurRadius: Dp,
     onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
     onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
 ) {
@@ -237,6 +242,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .padding(bottom = state.miniPlayerBottomProtection)
+            .blur(playlistEditingBlurRadius)
             .zIndex(30f)
     )
     FlowtoneArtistRootLayer(
@@ -246,6 +252,28 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(25f)
+    )
+    val editingPlaylist = libraryPlaylistController.editingPlaylistId?.let { editingId ->
+        libraryPlaylistController.playlists.firstOrNull { playlist ->
+            playlist.id == editingId && !playlist.isSystem
+        }
+    }
+    LibraryPlaylistEditingOverlay(
+        playlist = editingPlaylist,
+        cardBounds = libraryPlaylistController.editingPlaylistBounds,
+        viewportBounds = libraryPlaylistController.libraryViewportBounds,
+        progress = playlistEditingProgress,
+        bottomContentPadding = state.miniPlayerContentBottomPadding,
+        flowCloudSpeed = state.flowCloudSpeed,
+        dialogVisible = libraryPlaylistController.createPlaylistState !=
+            CreatePlaylistState.Idle,
+        onDismissRequest = libraryPlaylistController::clearPlaylistEditing,
+        onLongPressOtherPlaylist = libraryPlaylistController::startPlaylistEditingAt,
+        onDeletePlaylist = libraryPlaylistController::startDeletePlaylist,
+        onRenamePlaylist = libraryPlaylistController::startRenamePlaylist,
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(40f)
     )
     CreatePlaylistOverlay(
         playlistController = libraryPlaylistController,
@@ -274,7 +302,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
                 if (result is PlaylistMutationResult.Success) {
                     onRefreshLibraryPlaylistsFromRepository(null)
-                    libraryPlaylistController.clearPlaylistActions()
+                    libraryPlaylistController.clearPlaylistEditing()
                     libraryPlaylistController.closeEditing()
                 } else {
                     libraryPlaylistController.unlockDialog()
@@ -289,7 +317,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 val result = playlistRepository.deletePlaylist(playlistId)
                 if (result is PlaylistMutationResult.Success) {
                     onRefreshLibraryPlaylistsFromRepository(null)
-                    libraryPlaylistController.clearPlaylistActions()
+                    libraryPlaylistController.clearPlaylistEditing()
                     libraryPlaylistController.closeEditing()
                 } else {
                     libraryPlaylistController.unlockDialog()
