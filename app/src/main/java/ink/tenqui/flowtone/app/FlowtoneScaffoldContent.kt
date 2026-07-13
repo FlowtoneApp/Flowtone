@@ -15,14 +15,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.screens.topLevelPageBackground
+import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
+import ink.tenqui.flowtone.ui.theme.accentAt
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -50,6 +50,7 @@ internal fun FlowtoneScaffoldContent(
         currentPage = state.pagerState.currentPage,
         currentPageOffsetFraction = state.pagerState.currentPageOffsetFraction
     )
+    val mainPagesCloudPalette = LocalMainPagesCloudPalette.current
     val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -58,9 +59,7 @@ internal fun FlowtoneScaffoldContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .topLevelPageBackground(
-                        accentColor = topLevelPageBackgroundAccent(
-                            pagePosition = pagePosition
-                        ),
+                        accentColor = mainPagesCloudPalette.accentAt(pagePosition),
                         cloudAlpha = rootCloudAlpha,
                         cloudPlacement = cloudPlacement
                     )
@@ -160,22 +159,6 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
-}
-
-private fun topLevelPageBackgroundAccent(pagePosition: Float): Color {
-    val colors = listOf(
-        Color(0xFF7898F5),
-        Color(0xFFA77BDD),
-        Color(0xFFD783A5)
-    )
-    val safePosition = pagePosition.coerceIn(
-        minimumValue = 0f,
-        maximumValue = (colors.lastIndex).toFloat()
-    )
-    val startIndex = kotlin.math.floor(safePosition).toInt().coerceIn(0, colors.lastIndex)
-    val endIndex = (startIndex + 1).coerceAtMost(colors.lastIndex)
-    val fraction = (safePosition - startIndex).coerceIn(0f, 1f)
-    return lerp(colors[startIndex], colors[endIndex], fraction)
 }
 
 private fun topLevelContinuousPagePosition(

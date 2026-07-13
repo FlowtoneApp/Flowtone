@@ -56,6 +56,7 @@ import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
+import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
 
 @Composable
 internal fun HomeScreen(
@@ -101,7 +102,7 @@ internal fun HomeScreen(
 
 @Composable
 internal fun Modifier.homeScreenBackground(): Modifier {
-    return topLevelPageBackground(HomeBackgroundAccent)
+    return topLevelPageBackground(LocalMainPagesCloudPalette.current.homeAccent)
 }
 
 @Composable
@@ -199,7 +200,6 @@ private fun DrawScope.drawTopPageColorCloud(
     )
 }
 
-private val HomeBackgroundAccent = Color(0xFF7898F5)
 private const val TopCloudVisibleHeightFraction = 1.30f
 private const val BottomRightClearRadiusFraction = 0.82f
 

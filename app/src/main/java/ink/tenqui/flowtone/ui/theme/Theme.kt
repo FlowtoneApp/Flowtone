@@ -9,6 +9,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -57,6 +58,7 @@ fun FlowtoneTheme(
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
+    val mainPagesCloudPalette = mainPagesCloudPalette(darkTheme)
 
     val view = LocalView.current
     SideEffect {
@@ -67,9 +69,13 @@ fun FlowtoneTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalMainPagesCloudPalette provides mainPagesCloudPalette
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
