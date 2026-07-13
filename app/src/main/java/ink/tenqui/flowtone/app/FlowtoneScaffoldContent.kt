@@ -102,6 +102,7 @@ internal fun FlowtoneScaffoldContent(
                     onOpenPlaylist = callbacks.onOpenPlaylist,
                     onOpenListeningRecords = callbacks.onOpenListeningRecords,
                     likedSongCount = likedSongCount,
+                    flowCloudSpeed = state.flowCloudSpeed,
                     modifier = Modifier.fillMaxSize()
                 )
                 TopLevelSharedPageHeader(

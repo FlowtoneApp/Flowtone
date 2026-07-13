@@ -1,116 +1,118 @@
 package ink.tenqui.flowtone.ui.components
 
-import android.net.testUri
+import androidx.compose.ui.graphics.Color
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
-import ink.tenqui.flowtone.core.model.PlaylistSongEntry
-import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.core.model.SourceType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaylistCardVisualStyleTest {
     @Test
-    fun likedSongsArtworkSpecUsesStableSystemId() {
-        val playlist = LibraryPlaylistCard(
+    fun likedMusicUsesStableSystemIdentityInsteadOfDisplayName() {
+        val playlist = playlist(
             id = LikedSongsPlaylistId,
             title = "Renamed",
-            order = 0,
             isSystem = true
         )
-        val likedSong = song(id = 1, artworkUri = "content://artwork/liked")
-        val unlikedSong = song(id = 2, artworkUri = "content://artwork/unliked")
 
         assertEquals(
-            listOf("file:///content://artwork/liked"),
-            buildPlaylistArtworkSpecs(
-                playlists = listOf(playlist),
-                songs = listOf(likedSong, unlikedSong),
-                playlistSongEntries = emptyList(),
-                likedSongKeys = listOf(likedSong.id.toString())
-            ).single().samples.map { sample -> sample.artworkKey }
+            PlaylistCardVisualType.LikedMusic,
+            playlistCardVisualTypeFor(playlist)
         )
     }
 
     @Test
-    fun displayNameAloneDoesNotUseLikedSongsArtworkSpec() {
-        val playlist = LibraryPlaylistCard(
+    fun matchingDisplayNameDoesNotMakeUserPlaylistLikedMusic() {
+        val playlist = playlist(
             id = "user_playlist",
             title = "\u6211\u559c\u6b22\u7684\u97f3\u4e50",
-            order = 0,
             isSystem = false
         )
-        val likedSong = song(id = 1, artworkUri = "content://artwork/liked")
 
         assertEquals(
-            emptyList<String>(),
-            buildPlaylistArtworkSpecs(
-                playlists = listOf(playlist),
-                songs = listOf(likedSong),
-                playlistSongEntries = emptyList(),
-                likedSongKeys = listOf(likedSong.id.toString())
-            ).single().samples.map { sample -> sample.artworkKey }
+            PlaylistCardVisualType.UserPlaylist,
+            playlistCardVisualTypeFor(playlist)
         )
     }
 
     @Test
-    fun artworkSamplesAreDeduplicatedAndCapped() {
-        val playlist = LibraryPlaylistCard(
-            id = "playlist",
-            title = "Playlist",
-            order = 0
-        )
-        val songs = (1L..12L).map { id ->
-            val artworkIndex = if (id <= 3L) {
-                1L
-            } else {
-                id
-            }
-            song(id = id, artworkUri = "content://artwork/$artworkIndex")
-        }
-        val entries = songs.mapIndexed { index, song ->
-            PlaylistSongEntry(
-                id = "entry-${song.id}",
-                playlistId = playlist.id,
-                songId = song.id.toString(),
-                addedAt = index.toLong()
-            )
-        }
-
-        val samples = buildPlaylistArtworkSpecs(
-            playlists = listOf(playlist),
-            songs = songs,
-            playlistSongEntries = entries,
-            likedSongKeys = emptyList()
-        ).single().samples.map { sample -> sample.artworkKey }
-
+    fun fixedLikedIdWithoutSystemFlagRemainsUserPlaylist() {
         assertEquals(
-            listOf(
-                "file:///content://artwork/1",
-                "file:///content://artwork/4",
-                "file:///content://artwork/5",
-                "file:///content://artwork/6",
-                "file:///content://artwork/7",
-                "file:///content://artwork/8",
-                "file:///content://artwork/9",
-                "file:///content://artwork/10"
-            ),
-            samples
+            PlaylistCardVisualType.UserPlaylist,
+            playlistCardVisualTypeFor(
+                playlist(
+                    id = LikedSongsPlaylistId,
+                    title = "User playlist",
+                    isSystem = false
+                )
+            )
         )
     }
 
-    private fun song(
-        id: Long,
-        artworkUri: String
-    ): Song {
-        return Song(
+    @Test
+    fun unknownSystemPlaylistUsesDefaultVisuals() {
+        assertEquals(
+            PlaylistCardVisualType.Default,
+            playlistCardVisualTypeFor(
+                playlist(
+                    id = "future_system_playlist",
+                    title = "Future system playlist",
+                    isSystem = true
+                )
+            )
+        )
+    }
+
+    @Test
+    fun onlyLikedMusicUsesFlowCloudAndSpeedSetting() {
+        PlaylistCardVisualType.entries.forEach { type ->
+            val style = playlistCardVisualStyleFor(type)
+            if (type == PlaylistCardVisualType.LikedMusic) {
+                assertEquals(PlaylistCardBackgroundType.FlowCloud, style.backgroundType)
+                assertTrue(style.usesFlowCloudSpeed)
+            } else {
+                assertEquals(PlaylistCardBackgroundType.Static, style.backgroundType)
+                assertFalse(style.usesFlowCloudSpeed)
+            }
+        }
+    }
+
+    @Test
+    fun specialPaletteConstantsRemainThemeSpecific() {
+        assertEquals(Color(0xFFD9CDF2), LocalLibraryLightBackground)
+        assertEquals(Color(0xFF332A47), LocalLibraryDarkBackground)
+        assertEquals(Color(0xFF50396D), CreatePlaylistLightBackground)
+        assertEquals(Color(0xFF2D223D), CreatePlaylistDarkBackground)
+        assertEquals(
+            listOf(
+                Color(0xFFE6A1BE),
+                Color(0xFFB9A3DD),
+                Color(0xFFA6B9E1)
+            ),
+            LikedMusicLightCloudColors
+        )
+        assertEquals(
+            listOf(
+                Color(0xFF8F496B),
+                Color(0xFF66518E),
+                Color(0xFF4D608D)
+            ),
+            LikedMusicDarkCloudColors
+        )
+    }
+
+    private fun playlist(
+        id: String,
+        title: String,
+        isSystem: Boolean
+    ): LibraryPlaylistCard {
+        return LibraryPlaylistCard(
             id = id,
-            sourceType = SourceType.Local,
-            title = "Song $id",
-            artist = "Artist",
-            durationMs = 180_000L,
-            uri = testUri("song-$id"),
-            artworkUri = testUri(artworkUri)
+            title = title,
+            order = 0,
+            isSystem = isSystem
         )
     }
 }

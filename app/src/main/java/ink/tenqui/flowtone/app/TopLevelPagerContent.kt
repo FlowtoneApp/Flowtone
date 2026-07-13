@@ -47,6 +47,7 @@ internal fun TopLevelPagerContent(
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     likedSongCount: Int,
+    flowCloudSpeed: Float,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -56,6 +57,8 @@ internal fun TopLevelPagerContent(
             modifier = Modifier.fillMaxSize()
         ) { pageIndex ->
             val page = TopLevelPage.entries[pageIndex]
+            val isPageFlowCloudPlaying = !secondaryOpen &&
+                pagerState.currentPage == pageIndex
             when (page) {
                 TopLevelPage.Home -> HomeScreen(
                     songs = uiState.songs,
@@ -67,6 +70,8 @@ internal fun TopLevelPagerContent(
                     onSongClick = onSongClick,
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isPageFlowCloudPlaying,
                     drawBackground = false,
                     scrollState = homeScrollState,
                     modifier = Modifier.fillMaxSize()
@@ -78,6 +83,8 @@ internal fun TopLevelPagerContent(
                     onOpenLocalLibrary = onOpenLocalLibrary,
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isPageFlowCloudPlaying,
                     playlistController = libraryPlaylistController,
                     modifier = Modifier.fillMaxSize()
                 )

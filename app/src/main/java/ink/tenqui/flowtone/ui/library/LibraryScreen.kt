@@ -249,6 +249,8 @@ internal fun LibraryScreen(
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     playlistController: LibraryPlaylistController,
     modifier: Modifier = Modifier
 ) {
@@ -286,6 +288,8 @@ internal fun LibraryScreen(
         playlistCardHeight = playlistCardHeight,
         libraryCardsProgress = libraryCardsProgress.value,
         playlistRowItemOffsetYPx = playlistRowItemOffsetYPx,
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
         listState = playlistController.listState,
         activePlaylistActionId = playlistController.activePlaylistActionId,
         newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,

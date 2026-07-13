@@ -52,7 +52,10 @@ import ink.tenqui.flowtone.data.listening.ListeningSourceStats
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.playback.PlaybackSourceType
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
+import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
+import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 @Composable
 internal fun HomeScreen(
@@ -62,6 +65,8 @@ internal fun HomeScreen(
     onSongClick: (Song) -> Unit = {},
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit = {},
     visible: Boolean = true,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    isFlowCloudPlaying: Boolean = true,
     drawBackground: Boolean = true,
     scrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier
@@ -84,6 +89,8 @@ internal fun HomeScreen(
             onSongClick = onSongClick,
             onOpenPlaylist = onOpenPlaylist,
             visible = visible,
+            flowCloudSpeed = flowCloudSpeed,
+            isFlowCloudPlaying = isFlowCloudPlaying,
             scrollState = scrollState,
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -204,6 +211,8 @@ private fun HomeContent(
     onSongClick: (Song) -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     scrollState: ScrollState,
     modifier: Modifier = Modifier
 ) {
@@ -255,6 +264,8 @@ private fun HomeContent(
             FrequentPlaylistSection(
                 playlists = frequentPlaylists,
                 listState = frequentPlaylistListState,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying,
                 onOpenPlaylist = onOpenPlaylist
             )
         }
@@ -311,6 +322,8 @@ private fun HomeRecommendationSection(
 private fun FrequentPlaylistSection(
     playlists: List<FrequentPlaylistCard>,
     listState: LazyListState,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -346,6 +359,8 @@ private fun FrequentPlaylistSection(
             ) { playlist ->
                 FrequentPlaylistCardItem(
                     playlist = playlist,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
                     onClick = { onOpenPlaylist(playlist.card) },
                     modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
                 )
@@ -379,34 +394,42 @@ private fun FrequentPlaylistPlaceholderCard(
 @Composable
 private fun FrequentPlaylistCardItem(
     playlist: FrequentPlaylistCard,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    PlaylistCardSurface(
+        visualType = playlistCardVisualTypeFor(playlist.card),
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(12.dp),
+        clickModifier = Modifier.clickable(onClick = onClick),
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
         modifier = modifier
             .height(HomeFrequentPlaylistCardHeight)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = playlist.card.title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = playlist.subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp)
-        )
+    ) { contentColors ->
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = playlist.card.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = contentColors.titleColor,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = playlist.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = contentColors.subtitleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
     }
 }
 

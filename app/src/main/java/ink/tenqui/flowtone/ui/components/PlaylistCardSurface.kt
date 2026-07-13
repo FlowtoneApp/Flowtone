@@ -15,9 +15,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
-import android.graphics.Color as AndroidColor
-import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.ui.player.CrossfadeFlowCloudBackground
+import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 @Immutable
 internal data class PlaylistCardContentColors(
@@ -29,29 +28,20 @@ internal data class PlaylistCardContentColors(
 )
 
 @Composable
-internal fun defaultPlaylistCardContentColors(): PlaylistCardContentColors {
-    val colorScheme = MaterialTheme.colorScheme
-    return PlaylistCardContentColors(
-        titleColor = colorScheme.onSurface,
-        subtitleColor = colorScheme.onSurfaceVariant,
-        iconContainerColor = colorScheme.primaryContainer,
-        iconColor = colorScheme.onPrimaryContainer,
-        actionColor = colorScheme.onSurface
-    )
-}
-
-@Composable
 internal fun PlaylistCardSurface(
-    playlist: LibraryPlaylistCard,
-    flowCloudSpeed: Float,
-    visualState: PlaylistCardVisualState,
+    visualType: PlaylistCardVisualType,
     shape: Shape,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     clickModifier: Modifier = Modifier,
+    flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    isFlowCloudPlaying: Boolean = true,
     content: @Composable BoxScope.(PlaylistCardContentColors) -> Unit
 ) {
-    val visuals = rememberPlaylistCardVisuals(visualState)
+    val style = remember(visualType) {
+        playlistCardVisualStyleFor(visualType)
+    }
+    val visuals = rememberPlaylistCardVisuals(style)
 
     Box(
         modifier = modifier
@@ -60,8 +50,10 @@ internal fun PlaylistCardSurface(
             .then(clickModifier)
     ) {
         PlaylistCardBackgroundLayer(
+            style = style,
             visuals = visuals,
             flowCloudSpeed = flowCloudSpeed,
+            isFlowCloudPlaying = isFlowCloudPlaying,
             modifier = Modifier.matchParentSize()
         )
         Box(
@@ -76,165 +68,154 @@ internal fun PlaylistCardSurface(
 
 @Composable
 private fun rememberPlaylistCardVisuals(
-    visualState: PlaylistCardVisualState
+    style: PlaylistCardVisualStyle
 ): PlaylistCardVisuals {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = colorScheme.background.luminance() <= 0.5f
     return remember(
-        visualState.baseColorArgb,
+        style.type,
         isDarkTheme,
-        colorScheme.surfaceContainer
+        colorScheme.surfaceContainer,
+        colorScheme.onSurface,
+        colorScheme.onSurfaceVariant,
+        colorScheme.primaryContainer,
+        colorScheme.onPrimaryContainer
     ) {
-        playlistCardVisualsFromBaseColor(
-            baseColorArgb = visualState.baseColorArgb,
-            isDarkTheme = isDarkTheme
+        playlistCardVisualsFor(
+            type = style.type,
+            isDarkTheme = isDarkTheme,
+            defaultContainerColor = colorScheme.surfaceContainer,
+            defaultContentColors = PlaylistCardContentColors(
+                titleColor = colorScheme.onSurface,
+                subtitleColor = colorScheme.onSurfaceVariant,
+                iconContainerColor = colorScheme.primaryContainer,
+                iconColor = colorScheme.onPrimaryContainer,
+                actionColor = colorScheme.onSurface
+            )
         )
     }
 }
 
-private fun playlistCardVisualsFromBaseColor(
-    baseColorArgb: Int?,
-    isDarkTheme: Boolean
+private fun playlistCardVisualsFor(
+    type: PlaylistCardVisualType,
+    isDarkTheme: Boolean,
+    defaultContainerColor: Color,
+    defaultContentColors: PlaylistCardContentColors
 ): PlaylistCardVisuals {
-    val hsv = FloatArray(3)
-    AndroidColor.colorToHSV(
-        baseColorArgb ?: defaultPlaylistBaseColorArgb(isDarkTheme),
-        hsv
-    )
-    val hue = hsv[0]
-    val sourceSaturation = hsv[1]
-    val safeSaturation = sourceSaturation.coerceIn(0.18f, 0.56f)
+    return when (type) {
+        PlaylistCardVisualType.LocalLibrary -> if (isDarkTheme) {
+            PlaylistCardVisuals(
+                containerColor = LocalLibraryDarkBackground,
+                contentColors = PlaylistCardContentColors(
+                    titleColor = Color(0xFFF1EAFB),
+                    subtitleColor = Color(0xFFD2C5E4),
+                    iconContainerColor = Color(0xFF594A73),
+                    iconColor = Color(0xFFF1EAFB),
+                    actionColor = Color(0xFFF1EAFB)
+                )
+            )
+        } else {
+            PlaylistCardVisuals(
+                containerColor = LocalLibraryLightBackground,
+                contentColors = PlaylistCardContentColors(
+                    titleColor = Color(0xFF2B2140),
+                    subtitleColor = Color(0xFF574A6D),
+                    iconContainerColor = Color(0xFF665182),
+                    iconColor = Color(0xFFF7F1FC),
+                    actionColor = Color(0xFF2B2140)
+                )
+            )
+        }
 
-    return if (isDarkTheme) {
-        val containerColor = hsvColor(
-            hue = hue,
-            saturation = (safeSaturation * 0.54f).coerceIn(0.14f, 0.30f),
-            value = 0.13f
-        )
-        PlaylistCardVisuals(
-            containerColor = containerColor,
-            contentColors = PlaylistCardContentColors(
-                titleColor = Color(0xFFF6F0FA),
-                subtitleColor = Color(0xFFD7CBDF),
-                iconContainerColor = hsvColor(
-                    hue = hue,
-                    saturation = (safeSaturation * 0.62f).coerceIn(0.18f, 0.38f),
-                    value = 0.78f
+        PlaylistCardVisualType.LikedMusic -> if (isDarkTheme) {
+            PlaylistCardVisuals(
+                containerColor = LikedMusicDarkBackground,
+                contentColors = PlaylistCardContentColors(
+                    titleColor = Color(0xFFF8EDF3),
+                    subtitleColor = Color(0xFFE2C9D6),
+                    iconContainerColor = Color(0xFFD69AB8),
+                    iconColor = Color(0xFF3B1D2C),
+                    actionColor = Color(0xFFF8EDF3)
                 ),
-                iconColor = hsvColor(
-                    hue = hue,
-                    saturation = 0.42f,
-                    value = 0.18f
-                ),
-                actionColor = Color(0xFFF6F0FA)
-            ),
-            cloudVisuals = PlaylistCardCloudVisuals(
-                colors = listOf(
-                    hsvColor(
-                        hue = hue,
-                        saturation = safeSaturation.coerceIn(0.24f, 0.48f),
-                        value = 0.48f
-                    ),
-                    hsvColor(
-                        hue = shiftHue(hue, 16f),
-                        saturation = (safeSaturation * 0.78f).coerceIn(0.20f, 0.40f),
-                        value = 0.43f
-                    ),
-                    hsvColor(
-                        hue = shiftHue(hue, -18f),
-                        saturation = (safeSaturation * 0.68f).coerceIn(0.18f, 0.34f),
-                        value = 0.38f
-                    )
-                ),
-                alpha = 0.76f,
-                stableScrim = containerColor.copy(alpha = 0.28f),
-                topScrim = Color.Black.copy(alpha = 0.30f),
-                bottomScrim = Color.Black.copy(alpha = 0.18f)
+                cloudVisuals = PlaylistCardCloudVisuals(
+                    colors = LikedMusicDarkCloudColors,
+                    alpha = 0.72f,
+                    stableScrim = Color.Black.copy(alpha = 0.26f),
+                    topScrim = Color.Black.copy(alpha = 0.16f),
+                    bottomScrim = Color.Black.copy(alpha = 0.22f)
+                )
             )
-        )
-    } else {
-        val containerColor = hsvColor(
-            hue = hue,
-            saturation = (safeSaturation * 0.34f).coerceIn(0.08f, 0.20f),
-            value = 0.88f
-        )
-        PlaylistCardVisuals(
-            containerColor = containerColor,
-            contentColors = PlaylistCardContentColors(
-                titleColor = Color(0xFF221829),
-                subtitleColor = Color(0xFF5A4C63),
-                iconContainerColor = hsvColor(
-                    hue = hue,
-                    saturation = safeSaturation.coerceIn(0.22f, 0.42f),
-                    value = 0.46f
+        } else {
+            PlaylistCardVisuals(
+                containerColor = LikedMusicLightBackground,
+                contentColors = PlaylistCardContentColors(
+                    titleColor = Color(0xFF2B1822),
+                    subtitleColor = Color(0xFF624654),
+                    iconContainerColor = Color(0xFF71415A),
+                    iconColor = Color(0xFFFFEDF5),
+                    actionColor = Color(0xFF2B1822)
                 ),
-                iconColor = Color(0xFFFFEAF5),
-                actionColor = Color(0xFF221829)
-            ),
-            cloudVisuals = PlaylistCardCloudVisuals(
-                colors = listOf(
-                    hsvColor(
-                        hue = hue,
-                        saturation = (safeSaturation * 0.66f).coerceIn(0.16f, 0.34f),
-                        value = 0.68f
-                    ),
-                    hsvColor(
-                        hue = shiftHue(hue, 14f),
-                        saturation = (safeSaturation * 0.54f).coerceIn(0.12f, 0.28f),
-                        value = 0.74f
-                    ),
-                    hsvColor(
-                        hue = shiftHue(hue, -16f),
-                        saturation = (safeSaturation * 0.46f).coerceIn(0.10f, 0.24f),
-                        value = 0.62f
-                    )
-                ),
-                alpha = 0.48f,
-                stableScrim = Color(0xFF32243D).copy(alpha = 0.05f),
-                topScrim = Color(0xFFFFF7FB).copy(alpha = 0.10f),
-                bottomScrim = Color(0xFFB2A3BA).copy(alpha = 0.08f)
+                cloudVisuals = PlaylistCardCloudVisuals(
+                    colors = LikedMusicLightCloudColors,
+                    alpha = 0.50f,
+                    stableScrim = Color(0xFF3B2431).copy(alpha = 0.04f),
+                    topScrim = Color.Black.copy(alpha = 0.02f),
+                    bottomScrim = Color.Black.copy(alpha = 0.05f)
+                )
             )
+        }
+
+        PlaylistCardVisualType.CreatePlaylist -> if (isDarkTheme) {
+            PlaylistCardVisuals(
+                containerColor = CreatePlaylistDarkBackground,
+                contentColors = createPlaylistContentColors(
+                    subtitleColor = Color(0xFFD3C7DF),
+                    iconContainerColor = Color(0xFF6A557E)
+                )
+            )
+        } else {
+            PlaylistCardVisuals(
+                containerColor = CreatePlaylistLightBackground,
+                contentColors = createPlaylistContentColors(
+                    subtitleColor = Color(0xFFDDD0E9),
+                    iconContainerColor = Color(0xFF80689A)
+                )
+            )
+        }
+
+        PlaylistCardVisualType.UserPlaylist,
+        PlaylistCardVisualType.Default -> PlaylistCardVisuals(
+            containerColor = defaultContainerColor,
+            contentColors = defaultContentColors
         )
     }
 }
 
-private fun defaultPlaylistBaseColorArgb(isDarkTheme: Boolean): Int {
-    return if (isDarkTheme) {
-        0xFF665E88.toInt()
-    } else {
-        0xFF8B789C.toInt()
-    }
-}
-
-private fun hsvColor(
-    hue: Float,
-    saturation: Float,
-    value: Float
-): Color {
-    return Color(
-        AndroidColor.HSVToColor(
-            floatArrayOf(
-                shiftHue(hue, 0f),
-                saturation.coerceIn(0f, 1f),
-                value.coerceIn(0f, 1f)
-            )
-        )
+private fun createPlaylistContentColors(
+    subtitleColor: Color,
+    iconContainerColor: Color
+): PlaylistCardContentColors {
+    val foregroundColor = Color(0xFFF5EFFA)
+    return PlaylistCardContentColors(
+        titleColor = foregroundColor,
+        subtitleColor = subtitleColor,
+        iconContainerColor = iconContainerColor,
+        iconColor = foregroundColor,
+        actionColor = foregroundColor
     )
-}
-
-private fun shiftHue(
-    hue: Float,
-    delta: Float
-): Float {
-    return (hue + delta + 360f) % 360f
 }
 
 @Composable
 private fun PlaylistCardBackgroundLayer(
+    style: PlaylistCardVisualStyle,
     visuals: PlaylistCardVisuals,
     flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
+    if (style.backgroundType != PlaylistCardBackgroundType.FlowCloud) {
+        return
+    }
     val cloudVisuals = visuals.cloudVisuals ?: return
 
     Box(
@@ -243,9 +224,13 @@ private fun PlaylistCardBackgroundLayer(
         CrossfadeFlowCloudBackground(
             colors = cloudVisuals.colors,
             progress = LikedSongsCloudProgress,
-            isPlaying = true,
+            isPlaying = isFlowCloudPlaying,
             alpha = cloudVisuals.alpha,
-            flowCloudSpeed = flowCloudSpeed,
+            flowCloudSpeed = if (style.usesFlowCloudSpeed) {
+                flowCloudSpeed
+            } else {
+                DefaultFlowCloudSpeed
+            },
             modifier = Modifier.matchParentSize()
         )
         Box(
@@ -272,7 +257,7 @@ private fun PlaylistCardBackgroundLayer(
 private data class PlaylistCardVisuals(
     val containerColor: Color,
     val contentColors: PlaylistCardContentColors,
-    val cloudVisuals: PlaylistCardCloudVisuals?
+    val cloudVisuals: PlaylistCardCloudVisuals? = null
 )
 
 private data class PlaylistCardCloudVisuals(
@@ -283,4 +268,22 @@ private data class PlaylistCardCloudVisuals(
     val bottomScrim: Color
 )
 
+internal val LocalLibraryLightBackground = Color(0xFFD9CDF2)
+internal val LocalLibraryDarkBackground = Color(0xFF332A47)
+internal val CreatePlaylistLightBackground = Color(0xFF50396D)
+internal val CreatePlaylistDarkBackground = Color(0xFF2D223D)
+
+internal val LikedMusicLightCloudColors = listOf(
+    Color(0xFFE6A1BE),
+    Color(0xFFB9A3DD),
+    Color(0xFFA6B9E1)
+)
+internal val LikedMusicDarkCloudColors = listOf(
+    Color(0xFF8F496B),
+    Color(0xFF66518E),
+    Color(0xFF4D608D)
+)
+
+private val LikedMusicLightBackground = Color(0xFFEED1E0)
+private val LikedMusicDarkBackground = Color(0xFF2A1C25)
 private const val LikedSongsCloudProgress = 0.54f
