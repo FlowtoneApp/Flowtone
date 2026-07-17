@@ -57,6 +57,8 @@ import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
+import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
+import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
 
 @Composable
 internal fun HomeScreen(
@@ -110,13 +112,24 @@ internal fun Modifier.topLevelPageBackground(
     accentColor: Color,
     cloudAlpha: Float = 1f,
     cloudPlacement: TopLevelBackgroundCloudPlacement = HomeBackgroundCloudPlacement
+): Modifier = topLevelPageBackground(
+    cloudPalette = monochromeFlowtoneCloudPalette(accentColor),
+    cloudAlpha = cloudAlpha,
+    cloudPlacement = cloudPlacement
+)
+
+@Composable
+internal fun Modifier.topLevelPageBackground(
+    cloudPalette: FlowtoneCloudPalette,
+    cloudAlpha: Float = 1f,
+    cloudPlacement: TopLevelBackgroundCloudPlacement = HomeBackgroundCloudPlacement
 ): Modifier {
     val backgroundColor = MaterialTheme.colorScheme.background
     val safeCloudAlpha = cloudAlpha.coerceIn(0f, 1f)
     return drawBehind {
         drawRect(color = backgroundColor)
         drawTopPageColorCloud(
-            accentColor = accentColor,
+            cloudPalette = cloudPalette,
             backgroundColor = backgroundColor,
             cloudAlpha = safeCloudAlpha,
             cloudPlacement = cloudPlacement
@@ -153,7 +166,7 @@ internal val MineBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
 )
 
 private fun DrawScope.drawTopPageColorCloud(
-    accentColor: Color,
+    cloudPalette: FlowtoneCloudPalette,
     backgroundColor: Color,
     cloudAlpha: Float,
     cloudPlacement: TopLevelBackgroundCloudPlacement
@@ -173,9 +186,9 @@ private fun DrawScope.drawTopPageColorCloud(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                accentColor.copy(alpha = 0.34f * cloudAlpha),
-                accentColor.copy(alpha = 0.22f * cloudAlpha),
-                accentColor.copy(alpha = 0.08f * cloudAlpha),
+                cloudPalette.primary.copy(alpha = 0.34f * cloudAlpha),
+                cloudPalette.secondary.copy(alpha = 0.22f * cloudAlpha),
+                cloudPalette.tertiary.copy(alpha = 0.08f * cloudAlpha),
                 Color.Transparent
             ),
             center = cloudCenter,

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,9 @@ import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
@@ -435,68 +439,97 @@ private fun hasDuplicatePlaylistTitle(
 
 @Composable
 fun LocalLibraryScreen(
+    title: String,
     uiState: MusicUiState,
     currentSong: Song?,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     itemModifier: (Int) -> Modifier = { Modifier },
+    onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
+    headerModifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    when {
-        !uiState.hasPermission -> PermissionContent(
-            permissionDenied = permissionDenied,
-            onRequestPermission = onRequestPermission,
-            modifier = modifier
-        )
+    val showsSongList = uiState.hasPermission &&
+        !uiState.isLoading &&
+        uiState.errorMessage == null &&
+        uiState.hasScanned &&
+        uiState.songs.isNotEmpty()
 
-        uiState.isLoading -> CenterMessage(
-            title = "\u6b63\u5728\u626b\u63cf\u672c\u5730\u97f3\u4e50",
-            subtitle = "\u6211\u4eec\u6b63\u5728\u67e5\u627e\u8bbe\u5907\u4e2d\u7684\u97f3\u4e50\u6587\u4ef6",
-            modifier = modifier,
-            showProgress = true
-        )
+    PlaylistDetailCollapsingHeaderScaffold(
+        title = title,
+        listState = listState.takeIf { showsSongList },
+        onCollapseProgressStateChange = onCollapseProgressStateChange,
+        headerModifier = headerModifier,
+        contentModifier = contentModifier,
+        modifier = modifier
+    ) {
+        when {
+            !uiState.hasPermission -> PermissionContent(
+                permissionDenied = permissionDenied,
+                onRequestPermission = onRequestPermission,
+                modifier = Modifier.fillMaxSize()
+            )
 
-        uiState.errorMessage != null -> CenterMessage(
-            title = uiState.errorMessage,
-            modifier = modifier
-        )
+            uiState.isLoading -> CenterMessage(
+                title = "\u6b63\u5728\u626b\u63cf\u672c\u5730\u97f3\u4e50",
+                subtitle = "\u6211\u4eec\u6b63\u5728\u67e5\u627e\u8bbe\u5907\u4e2d\u7684\u97f3\u4e50\u6587\u4ef6",
+                modifier = Modifier.fillMaxSize(),
+                showProgress = true
+            )
 
-        !uiState.hasScanned -> CenterMessage(
-            title = "\u51c6\u5907\u626b\u63cf\u672c\u5730\u97f3\u4e50",
-            subtitle = "\u6388\u6743\u540e\u5c06\u81ea\u52a8\u663e\u793a\u53ef\u64ad\u653e\u7684\u6b4c\u66f2",
-            modifier = modifier
-        )
+            uiState.errorMessage != null -> CenterMessage(
+                title = uiState.errorMessage,
+                modifier = Modifier.fillMaxSize()
+            )
 
-        uiState.songs.isEmpty() -> CenterMessage(
-            title = "\u6ca1\u6709\u627e\u5230\u672c\u5730\u97f3\u4e50",
-            subtitle = "\u8bf7\u786e\u8ba4\u8bbe\u5907\u4e2d\u5df2\u4fdd\u5b58\u97f3\u4e50\u6587\u4ef6",
-            modifier = modifier
-        )
+            !uiState.hasScanned -> CenterMessage(
+                title = "\u51c6\u5907\u626b\u63cf\u672c\u5730\u97f3\u4e50",
+                subtitle = "\u6388\u6743\u540e\u5c06\u81ea\u52a8\u663e\u793a\u53ef\u64ad\u653e\u7684\u6b4c\u66f2",
+                modifier = Modifier.fillMaxSize()
+            )
 
-        else -> LazyColumn(
-            state = listState,
-            modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 8.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            itemsIndexed(
-                items = uiState.songs,
-                key = { _, song -> song.id }
-            ) { index, song ->
-                val visibleAnimationIndex = (
-                    index - listState.firstVisibleItemIndex
-                    ).coerceIn(0, 10)
-                SongListItem(
-                    song = song,
-                    isCurrentSong = currentSong?.id == song.id,
-                    onClick = onSongClick,
-                    modifier = itemModifier(visibleAnimationIndex)
-                )
+            uiState.songs.isEmpty() -> CenterMessage(
+                title = "\u6ca1\u6709\u627e\u5230\u672c\u5730\u97f3\u4e50",
+                subtitle = "\u8bf7\u786e\u8ba4\u8bbe\u5907\u4e2d\u5df2\u4fdd\u5b58\u97f3\u4e50\u6587\u4ef6",
+                modifier = Modifier.fillMaxSize()
+            )
+
+            else -> LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = FlowtonePageHeaderExpandedTopPadding,
+                    bottom = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                item(key = "local-library-header") {
+                    PlaylistDetailHeaderListItem(
+                        modifier = Modifier.padding(
+                            start = FlowtonePageHeaderExpandedStartPadding,
+                            end = FlowtonePageHeaderExpandedEndPadding
+                        )
+                    )
+                }
+                itemsIndexed(
+                    items = uiState.songs,
+                    key = { _, song -> song.id }
+                ) { index, song ->
+                    val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1)
+                        .coerceAtLeast(0)
+                    val visibleAnimationIndex = (index - firstVisibleSongIndex)
+                        .coerceIn(0, 10)
+                    SongListItem(
+                        song = song,
+                        isCurrentSong = currentSong?.id == song.id,
+                        onClick = onSongClick,
+                        modifier = itemModifier(visibleAnimationIndex)
+                            .padding(horizontal = 8.dp)
+                    )
+                }
             }
         }
     }
@@ -505,15 +538,19 @@ fun LocalLibraryScreen(
 @Composable
 fun PlaylistDetailScreen(
     playlistId: String?,
+    playlistTitle: String,
     allSongs: List<Song>,
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
     onSongClick: (List<Song>, Int) -> Unit,
     itemModifier: (Int) -> Modifier = { Modifier },
+    onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
+    headerModifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
     suppressEmptyState: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
+    val listState = remember(playlistId) { LazyListState() }
     val playlistSongs = remember(playlistId, allSongs, playlistSongEntries) {
         if (playlistId == null) {
             emptyList()
@@ -527,37 +564,65 @@ fun PlaylistDetailScreen(
     }
 
     if (playlistSongs.isEmpty()) {
-        EmptyPlaylistState(
-            visible = !suppressEmptyState,
+        PlaylistDetailCollapsingHeaderScaffold(
+            title = playlistTitle,
+            listState = null,
+            onCollapseProgressStateChange = onCollapseProgressStateChange,
+            headerModifier = headerModifier,
+            contentModifier = contentModifier,
             modifier = modifier
-        )
+        ) {
+            EmptyPlaylistState(
+                visible = !suppressEmptyState,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         return
     }
 
-    LazyColumn(
-        state = listState,
+    PlaylistDetailCollapsingHeaderScaffold(
+        title = playlistTitle,
+        listState = listState,
+        onCollapseProgressStateChange = onCollapseProgressStateChange,
+        headerModifier = headerModifier,
+        contentModifier = contentModifier,
         modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 8.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        itemsIndexed(
-            items = playlistSongs,
-            key = { _, song -> song.id }
-        ) { index, song ->
-            val visibleAnimationIndex = (
-                index - listState.firstVisibleItemIndex
-                ).coerceIn(0, 10)
-            SongListItem(
-                song = song,
-                isCurrentSong = currentSong?.id == song.id,
-                onClick = {
-                    onSongClick(playlistSongs, index)
-                },
-                modifier = itemModifier(visibleAnimationIndex)
-            )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = FlowtonePageHeaderExpandedTopPadding,
+                bottom = 16.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            item(key = "playlist-detail-header") {
+                PlaylistDetailHeaderListItem(
+                    modifier = Modifier.padding(
+                        start = FlowtonePageHeaderExpandedStartPadding,
+                        end = FlowtonePageHeaderExpandedEndPadding
+                    )
+                )
+            }
+            itemsIndexed(
+                items = playlistSongs,
+                key = { _, song -> song.id }
+            ) { index, song ->
+                val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1)
+                    .coerceAtLeast(0)
+                val visibleAnimationIndex = (index - firstVisibleSongIndex)
+                    .coerceIn(0, 10)
+                SongListItem(
+                    song = song,
+                    isCurrentSong = currentSong?.id == song.id,
+                    onClick = {
+                        onSongClick(playlistSongs, index)
+                    },
+                    modifier = itemModifier(visibleAnimationIndex)
+                        .padding(horizontal = 8.dp)
+                )
+            }
         }
     }
 }

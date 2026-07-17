@@ -3,30 +3,37 @@ package ink.tenqui.flowtone.app
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
 
 @Composable
 internal fun FlowtoneScaffoldTopLayer(
     state: FlowtoneAppScaffoldState,
-    callbacks: FlowtoneAppCallbacks
+    callbacks: FlowtoneAppCallbacks,
+    detailHeaderCollapseProgressState: State<Float>?
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
         val isTopLevelRootPage = state.secondaryPage == null
+        val usesContentCollapsingTitle = state.secondaryPage == SecondaryPage.Playlist ||
+            state.secondaryPage == SecondaryPage.LocalLibrary
         val secondaryBackgroundAlpha by animateFloatAsState(
-            targetValue = if (isTopLevelRootPage) 0f else 1f,
+            targetValue = if (isTopLevelRootPage || usesContentCollapsingTitle) 0f else 1f,
             animationSpec = tween(
                 durationMillis = FlowtoneMotion.DurationMillis,
                 easing = FlowtoneMotion.Easing
             ),
             label = "TopBarSecondaryBackgroundAlpha"
         )
-        val backgroundAlpha = if (isTopLevelRootPage || state.searchActive) {
-            0f
-        } else {
-            state.topBarBackgroundAlpha * secondaryBackgroundAlpha
+        val backgroundAlpha = when {
+            isTopLevelRootPage || state.searchActive -> 0f
+            usesContentCollapsingTitle -> flowtoneCollapsingTopBarBackgroundAlpha(
+                detailHeaderCollapseProgressState?.value ?: 0f
+            )
+            else -> state.topBarBackgroundAlpha * secondaryBackgroundAlpha
         }
-        val titleVisible = !isTopLevelRootPage
+        val titleVisible = !isTopLevelRootPage && !usesContentCollapsingTitle
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,

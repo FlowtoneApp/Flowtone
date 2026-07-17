@@ -1,27 +1,25 @@
 package ink.tenqui.flowtone.app
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.R
+import ink.tenqui.flowtone.ui.components.FlowtoneCollapsingPageHeader
+import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarRootTitleOffsetY
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.flowtoneCollapsedTitleScale
+import ink.tenqui.flowtone.ui.components.rememberFlowtoneCollapsedTitleTravelYPx
 import kotlin.math.abs
 
 internal data class TopLevelPageHeaderContent(
@@ -71,92 +69,54 @@ internal fun TopLevelSharedPageHeader(
         val transitionDistancePx = with(LocalDensity.current) {
             TopLevelHeaderTransitionDistance.toPx()
         }
-        val collapsedTravelYPx = with(LocalDensity.current) {
-            TopLevelHeaderCollapsedTravelY.toPx()
-        }
+        val expandedTitleStyle = MaterialTheme.typography.headlineLarge
+        val collapsedTitleStyle = MaterialTheme.typography.titleLarge
         val collapsedTitleScale = topLevelCollapsedTitleScale(
-            expandedStyle = MaterialTheme.typography.headlineLarge,
-            collapsedStyle = MaterialTheme.typography.titleLarge
+            expandedStyle = expandedTitleStyle,
+            collapsedStyle = collapsedTitleStyle
         )
+        val collapsedTravelXPx = with(LocalDensity.current) {
+            (FlowtoneTopBarTitleStartPadding - FlowtonePageHeaderExpandedStartPadding).toPx()
+        }
         val semanticPage = TopLevelPage.entries[
             pagerState.currentPage.coerceIn(0, TopLevelPage.entries.lastIndex)
         ]
 
         Box(modifier = Modifier.fillMaxWidth()) {
             headerContents.forEach { content ->
+                val title = stringResource(content.titleResId)
                 val distance = content.page.index - pagePosition
                 val pagerAlpha = topLevelHeaderAlpha(distance)
                 val pagerTranslationX = distance * transitionDistancePx
                 val pageCollapseProgress = collapseProgress.progressFor(content.page)
+                val collapsedTravelYPx = rememberFlowtoneCollapsedTitleTravelYPx(
+                    text = title,
+                    expandedStyle = expandedTitleStyle,
+                    collapsedStyle = collapsedTitleStyle,
+                    collapsedTitleScale = collapsedTitleScale,
+                    collapsedTitleOffsetY = FlowtoneTopBarRootTitleOffsetY
+                )
                 val semanticsModifier = if (content.page == semanticPage) {
                     Modifier
                 } else {
                     Modifier.clearAndSetSemantics {}
                 }
-                TopLevelCollapsingPageHeader(
-                    title = stringResource(content.titleResId),
+                FlowtoneCollapsingPageHeader(
+                    title = title,
                     subtitle = stringResource(content.subtitleResId),
+                    reserveSubtitleSpace = false,
                     pagerAlpha = pagerAlpha,
                     pagerTranslationX = pagerTranslationX,
                     collapseProgress = pageCollapseProgress,
                     collapsedTravelYPx = collapsedTravelYPx,
                     collapsedTitleScale = collapsedTitleScale,
+                    collapsedTravelXPx = collapsedTravelXPx,
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(semanticsModifier)
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun TopLevelCollapsingPageHeader(
-    title: String,
-    subtitle: String,
-    pagerAlpha: Float,
-    pagerTranslationX: Float,
-    collapseProgress: Float,
-    collapsedTravelYPx: Float,
-    collapsedTitleScale: Float,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer {
-                    translationX = pagerTranslationX
-                    translationY = collapsedTravelYPx * collapseProgress
-                    val titleScale = 1f + (collapsedTitleScale - 1f) * collapseProgress
-                    scaleX = titleScale
-                    scaleY = titleScale
-                    transformOrigin = TransformOrigin(0f, 1f)
-                    alpha = pagerAlpha
-                }
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer {
-                    translationX = pagerTranslationX
-                    alpha = pagerAlpha * topLevelSubtitleAlpha(collapseProgress)
-                }
-        )
     }
 }
 
@@ -173,23 +133,10 @@ private fun topLevelHeaderAlpha(distance: Float): Float {
     return (1f - abs(distance)).coerceIn(0f, 1f)
 }
 
-private fun topLevelSubtitleAlpha(progress: Float): Float {
-    val safeProgress = progress.coerceIn(0f, 1f)
-    val fadeProgress = (
-        safeProgress / TopLevelSubtitleFadeEndProgress
-        ).coerceIn(0f, 1f)
-    return 1f - fadeProgress
-}
-
 private fun topLevelCollapsedTitleScale(
-    expandedStyle: TextStyle,
-    collapsedStyle: TextStyle
-): Float {
-    val expandedSize = expandedStyle.fontSize.value
-    val collapsedSize = collapsedStyle.fontSize.value
-    return if (expandedSize.isFinite() && collapsedSize.isFinite() && expandedSize > 0f) {
-        (collapsedSize / expandedSize).coerceIn(0.6f, 1f)
-    } else {
-        TopLevelCollapsedTitleFallbackScale
-    }
-}
+    expandedStyle: androidx.compose.ui.text.TextStyle,
+    collapsedStyle: androidx.compose.ui.text.TextStyle
+): Float = flowtoneCollapsedTitleScale(
+    expandedStyle = expandedStyle,
+    collapsedStyle = collapsedStyle
+)

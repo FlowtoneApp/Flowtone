@@ -58,6 +58,9 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.pager.PagerState
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import kotlinx.coroutines.delay
 
 @Composable
@@ -124,13 +127,15 @@ internal fun FlowtoneTopBar(
         label = "TopBarTitleVisibilityAlpha"
     )
     val density = LocalDensity.current
-    val navigationShiftPx = with(density) { 40.dp.toPx() } * backButtonProgress
+    val navigationShiftPx = with(density) {
+        FlowtoneTopBarNavigationTitleShift.toPx()
+    } * backButtonProgress
     val searchAvailable = secondaryPage == null || searchActive
     val titleEndPadding = if (searchAvailable) 84.dp else 24.dp
     val titleExitDistancePx = with(density) { 12.dp.toPx() }
     val searchReentryLayerProgress = searchReentryProgress.coerceIn(0f, 1f)
     val searchReentryTranslationY = with(density) {
-        -56.dp.toPx() * (1f - searchReentryLayerProgress)
+        -FlowtoneTopBarContentHeight.toPx() * (1f - searchReentryLayerProgress)
     }
     val topBarBackgroundAlpha = backgroundAlpha
     val topBarBaseBackground = if (searchOverlayAlpha > 0f) {
@@ -153,7 +158,7 @@ internal fun FlowtoneTopBar(
                 MaterialTheme.colorScheme.surfaceContainer.copy(alpha = rootTopBarBackgroundAlpha)
             )
             .statusBarsPadding()
-            .height(56.dp)
+            .height(FlowtoneTopBarContentHeight)
             .clipToBounds(),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -181,7 +186,7 @@ internal fun FlowtoneTopBar(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = titleEndPadding)
+                .padding(start = FlowtoneTopBarTitleStartPadding, end = titleEndPadding)
                 .clipToBounds()
                 .graphicsLayer {
                     alpha = (1f - searchProgress) * titleVisibilityAlpha

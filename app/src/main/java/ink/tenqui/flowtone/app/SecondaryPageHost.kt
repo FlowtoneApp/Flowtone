@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +68,7 @@ internal fun SecondaryPageHost(
     listeningRecordInitialTab: ListeningRecordTab,
     likedSongKeys: List<String>,
     playlistSongEntries: List<PlaylistSongEntry>,
+    onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -218,13 +220,18 @@ internal fun SecondaryPageHost(
             )
 
             SecondaryPage.LocalLibrary -> LocalLibraryScreen(
+                title = SecondaryPage.LocalLibrary.title,
                 uiState = uiState,
                 currentSong = currentSong,
                 permissionDenied = permissionDenied,
                 onRequestPermission = onRequestPermission,
                 onSongClick = onSongClick,
                 itemModifier = ::songItemModifier,
-                modifier = fadingContainerModifier()
+                onCollapseProgressStateChange =
+                    onDetailHeaderCollapseProgressStateChange,
+                headerModifier = elementModifier(0),
+                contentModifier = fadingContainerModifier(),
+                modifier = Modifier
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)
             )
@@ -240,8 +247,10 @@ internal fun SecondaryPageHost(
                 } else {
                     retainedPlaylistTitle
                 }
+                val playlistTitle = activePlaylistTitle ?: SecondaryPage.Playlist.title
                 if (activePlaylistId == LikedSongsPlaylistId) {
                     LikedSongsPlaylistScreen(
+                        playlistTitle = playlistTitle,
                         allSongs = uiState.songs,
                         likedSongKeys = likedSongKeys,
                         currentSong = currentSong,
@@ -249,13 +258,18 @@ internal fun SecondaryPageHost(
                             onPlaylistSongClick(songs, index, PlaybackSource.LikedSongs)
                         },
                         itemModifier = ::songItemModifier,
-                        modifier = fadingContainerModifier()
+                        onCollapseProgressStateChange =
+                            onDetailHeaderCollapseProgressStateChange,
+                        headerModifier = elementModifier(0),
+                        contentModifier = fadingContainerModifier(),
+                        modifier = Modifier
                             .fillMaxSize()
                             .rightSwipeBackGesture(onCloseSecondaryPage)
                     )
                 } else {
                     PlaylistDetailScreen(
                         playlistId = activePlaylistId,
+                        playlistTitle = playlistTitle,
                         allSongs = uiState.songs,
                         playlistSongEntries = playlistSongEntries,
                         currentSong = currentSong,
@@ -270,8 +284,12 @@ internal fun SecondaryPageHost(
                             )
                         },
                         itemModifier = ::songItemModifier,
+                        onCollapseProgressStateChange =
+                            onDetailHeaderCollapseProgressStateChange,
+                        headerModifier = elementModifier(0),
+                        contentModifier = fadingContainerModifier(),
                         suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
-                        modifier = fadingContainerModifier()
+                        modifier = Modifier
                             .fillMaxSize()
                             .rightSwipeBackGesture(onCloseSecondaryPage)
                     )

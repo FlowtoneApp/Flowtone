@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarChildTitleOffsetY
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarRootTitleOffsetY
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -75,10 +77,10 @@ internal fun FlowtonePathTitle(
     val expandedChildStyle = MaterialTheme.typography.headlineSmall
     val rootStyle = interpolateTextStyle(expandedRootStyle, compactStyle, rootProgress)
     val slideDistancePx = with(density) { 36.dp.toPx() }
-    val titleBaseOffsetYPx = with(density) { -3.dp.toPx() }
+    val titleBaseOffsetYPx = with(density) { FlowtoneTopBarRootTitleOffsetY.toPx() }
     val ancestorOffsetYPx = with(density) { -17.dp.toPx() }
     val rootOpticalOffsetXPx = with(density) { 1.dp.toPx() }
-    val childRestingOffsetYPx = with(density) { 3.dp.toPx() }
+    val childRestingOffsetYPx = with(density) { FlowtoneTopBarChildTitleOffsetY.toPx() }
     val childHiddenOffsetYPx = with(density) { 48.dp.toPx() }
     val pathBaselineCorrectionPx = with(density) { 1.dp.toPx() }
     val pathGapPx = with(density) { 2.dp.toPx() }
