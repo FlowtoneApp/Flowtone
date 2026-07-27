@@ -1,7 +1,13 @@
 package ink.tenqui.flowtone.ui.library
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -25,13 +31,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -78,6 +88,8 @@ internal fun LibraryCollectionMenu(
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
     onEditingPlaylistBoundsRemoved: (String) -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
@@ -88,13 +100,13 @@ internal fun LibraryCollectionMenu(
     }
     val outlineColor = MaterialTheme.colorScheme.outline
     val menuShape = RoundedCornerShape(LibraryMenuCornerRadius)
-    val fillBrush = remember(parentColor) {
+    val fillBrush = remember(parentColor, expanded) {
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0f to parentColor,
-                0.28f to parentColor.copy(alpha = 0.82f),
-                0.68f to parentColor.copy(alpha = 0.22f),
-                1f to parentColor.copy(alpha = 0.025f)
+                0.28f to parentColor.copy(alpha = if (expanded) 0.82f else 1f),
+                0.68f to parentColor.copy(alpha = if (expanded) 0.22f else 1f),
+                1f to parentColor.copy(alpha = if (expanded) 0.025f else 1f)
             )
         )
     }
@@ -130,95 +142,184 @@ internal fun LibraryCollectionMenu(
                 onOpenLocalLibrary = onOpenLocalLibrary,
                 modifier = Modifier.fillMaxWidth()
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = LibraryMenuChildHorizontalPadding)
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(
+                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
+                ) + fadeIn(
+                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
+                ),
+                exit = shrinkVertically(
+                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
+                ) + fadeOut(
+                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
+                )
             ) {
-                LibraryPlaylistRowMotion(
-                    progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
-                    itemOffsetYPx = playlistItemOffsetYPx
-                ) {
-                    LibraryPlaylistListItem(
-                        playlist = likedPlaylist,
-                        itemHeight = playlistItemHeight,
-                        editable = false,
-                        isEditingTarget = false,
-                        playCreateAnimation = false,
-                        flowCloudSpeed = flowCloudSpeed,
-                        isFlowCloudPlaying = isFlowCloudPlaying,
-                        onCreateAnimationFinished = {},
-                        onClick = { onOpenPlaylist(likedPlaylist) },
-                        onLongClick = {},
-                        onEditingBoundsChanged = {},
-                        onEditingBoundsRemoved = {}
-                    )
-                }
+                LibraryPlaylistMenuItems(
+                    likedPlaylist = likedPlaylist,
+                    playlists = playlists,
+                    playlistItemHeight = playlistItemHeight,
+                    libraryCardsProgress = libraryCardsProgress,
+                    playlistItemOffsetYPx = playlistItemOffsetYPx,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
+                    editingPlaylistId = editingPlaylistId,
+                    newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                    onCreateAnimationFinished = onCreateAnimationFinished,
+                    onCreatePlaylist = onCreatePlaylist,
+                    onOpenPlaylist = onOpenPlaylist,
+                    onStartPlaylistEditing = onStartPlaylistEditing,
+                    onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
+                    onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved
+                )
             }
-            playlists.forEachIndexed { index, playlist ->
-                key(playlist.id) {
-                    val editable = !playlist.isSystem
-                    val isEditingTarget = editingPlaylistId == playlist.id
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = LibraryMenuChildHorizontalPadding)
+            LibraryMenuToggleButton(
+                expanded = expanded,
+                onClick = { onExpandedChange(!expanded) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryPlaylistMenuItems(
+    likedPlaylist: LibraryPlaylistCard,
+    playlists: List<LibraryPlaylistCard>,
+    playlistItemHeight: Dp,
+    libraryCardsProgress: Float,
+    playlistItemOffsetYPx: Float,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    editingPlaylistId: String?,
+    newlyCreatedPlaylistId: String?,
+    onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
+    onCreatePlaylist: () -> Unit,
+    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
+    onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
+    onEditingPlaylistBoundsRemoved: (String) -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = LibraryMenuChildHorizontalPadding)
+        ) {
+            LibraryPlaylistRowMotion(
+                progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
+                itemOffsetYPx = playlistItemOffsetYPx
+            ) {
+                LibraryPlaylistListItem(
+                    playlist = likedPlaylist,
+                    itemHeight = playlistItemHeight,
+                    editable = false,
+                    isEditingTarget = false,
+                    playCreateAnimation = false,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
+                    onCreateAnimationFinished = {},
+                    onClick = { onOpenPlaylist(likedPlaylist) },
+                    onLongClick = {},
+                    onEditingBoundsChanged = {},
+                    onEditingBoundsRemoved = {}
+                )
+            }
+        }
+        playlists.forEachIndexed { index, playlist ->
+            key(playlist.id) {
+                val editable = !playlist.isSystem
+                val isEditingTarget = editingPlaylistId == playlist.id
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = LibraryMenuChildHorizontalPadding)
+                ) {
+                    LibraryPlaylistRowMotion(
+                        progress = libraryPlaylistItemProgress(
+                            libraryCardsProgress,
+                            12 + index * 2
+                        ),
+                        itemOffsetYPx = playlistItemOffsetYPx
                     ) {
-                        LibraryPlaylistRowMotion(
-                            progress = libraryPlaylistItemProgress(
-                                libraryCardsProgress,
-                                12 + index * 2
-                            ),
-                            itemOffsetYPx = playlistItemOffsetYPx
-                        ) {
-                            LibraryPlaylistListItem(
-                                playlist = playlist,
-                                itemHeight = playlistItemHeight,
-                                editable = editable,
-                                isEditingTarget = editable && isEditingTarget,
-                                playCreateAnimation = newlyCreatedPlaylistId == playlist.id,
-                                flowCloudSpeed = flowCloudSpeed,
-                                isFlowCloudPlaying = isFlowCloudPlaying,
-                                onCreateAnimationFinished = {
-                                    onCreateAnimationFinished(playlist)
-                                },
-                                onClick = {
-                                    if (!isEditingTarget) onOpenPlaylist(playlist)
-                                },
-                                onLongClick = {
-                                    if (editable) onStartPlaylistEditing(playlist)
-                                },
-                                onEditingBoundsChanged = {
-                                    onEditingPlaylistBoundsChanged(playlist.id, it)
-                                },
-                                onEditingBoundsRemoved = {
-                                    onEditingPlaylistBoundsRemoved(playlist.id)
-                                }
-                            )
-                        }
+                        LibraryPlaylistListItem(
+                            playlist = playlist,
+                            itemHeight = playlistItemHeight,
+                            editable = editable,
+                            isEditingTarget = editable && isEditingTarget,
+                            playCreateAnimation = newlyCreatedPlaylistId == playlist.id,
+                            flowCloudSpeed = flowCloudSpeed,
+                            isFlowCloudPlaying = isFlowCloudPlaying,
+                            onCreateAnimationFinished = { onCreateAnimationFinished(playlist) },
+                            onClick = { if (!isEditingTarget) onOpenPlaylist(playlist) },
+                            onLongClick = { if (editable) onStartPlaylistEditing(playlist) },
+                            onEditingBoundsChanged = {
+                                onEditingPlaylistBoundsChanged(playlist.id, it)
+                            },
+                            onEditingBoundsRemoved = {
+                                onEditingPlaylistBoundsRemoved(playlist.id)
+                            }
+                        )
                     }
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = LibraryMenuChildHorizontalPadding)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = LibraryMenuChildHorizontalPadding)
+        ) {
+            LibraryPlaylistRowMotion(
+                progress = libraryPlaylistItemProgress(
+                    libraryCardsProgress,
+                    12 + playlists.size * 2
+                ),
+                itemOffsetYPx = playlistItemOffsetYPx
             ) {
-                LibraryPlaylistRowMotion(
-                    progress = libraryPlaylistItemProgress(
-                        libraryCardsProgress,
-                        12 + playlists.size * 2
-                    ),
-                    itemOffsetYPx = playlistItemOffsetYPx
-                ) {
-                    LibraryCreatePlaylistListItem(
-                        itemHeight = playlistItemHeight,
-                        flowCloudSpeed = flowCloudSpeed,
-                        isFlowCloudPlaying = isFlowCloudPlaying,
-                        onClick = onCreatePlaylist
-                    )
-                }
+                LibraryCreatePlaylistListItem(
+                    itemHeight = playlistItemHeight,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
+                    onClick = onCreatePlaylist
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryMenuToggleButton(
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    val mirrorScale by animateFloatAsState(
+        targetValue = if (expanded) 1f else -1f,
+        animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
+        label = "libraryMenuToggleMirror"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                top = LibraryMenuToggleButtonBottomPadding,
+                bottom = LibraryMenuToggleButtonBottomPadding
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        FilledIconButton(
+            onClick = onClick,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.82f),
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            modifier = Modifier.size(LibraryMenuToggleButtonSize)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowUp,
+                contentDescription = if (expanded) "收起歌单" else "展开歌单",
+                modifier = Modifier.graphicsLayer { scaleY = mirrorScale }
+            )
         }
     }
 }
