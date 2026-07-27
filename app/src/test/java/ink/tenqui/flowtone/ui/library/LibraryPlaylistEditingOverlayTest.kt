@@ -32,7 +32,7 @@ class LibraryPlaylistEditingOverlayTest {
     }
 
     @Test
-    fun actionsAreCenteredAboveTheCard() {
+    fun actionsAreRightAlignedAboveTheCard() {
         val placement = calculatePlaylistEditActionsPlacement(
             cardBounds = Rect(20f, 180f, 180f, 320f),
             safeBounds = Rect(12f, 12f, 388f, 700f),
@@ -41,7 +41,7 @@ class LibraryPlaylistEditingOverlayTest {
             cardGapPx = 12f
         )
 
-        assertEquals(15f, placement.left, 0.001f)
+        assertEquals(12f, placement.left, 0.001f)
         assertEquals(118f, placement.top, 0.001f)
     }
 
@@ -55,7 +55,7 @@ class LibraryPlaylistEditingOverlayTest {
             cardGapPx = 12f
         )
 
-        assertEquals(218f, placement.left, 0.001f)
+        assertEquals(210f, placement.left, 0.001f)
     }
 
     @Test
@@ -75,7 +75,7 @@ class LibraryPlaylistEditingOverlayTest {
             cardGapPx = 12f
         )
 
-        assertEquals(24f, topPlacement.top, 0.001f)
+        assertEquals(92f, topPlacement.top, 0.001f)
         assertEquals(458f, bottomPlacement.top, 0.001f)
     }
 

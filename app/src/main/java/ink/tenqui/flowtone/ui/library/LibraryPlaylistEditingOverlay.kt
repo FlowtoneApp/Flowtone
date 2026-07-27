@@ -303,7 +303,8 @@ internal fun LibraryPlaylistEditingOverlay(
             )
         }
         Row(
-            modifier = Modifier.offsetInParent(placement.left, placement.top),
+            modifier = Modifier
+                .offsetInParent(placement.left, placement.top),
             horizontalArrangement = Arrangement.spacedBy(PlaylistEditActionButtonGap)
         ) {
             PlaylistEditActionButton(
@@ -381,6 +382,11 @@ private fun PlaylistEditActionButton(
             .graphicsLayer {
                 alpha = progress
                 translationY = translation * (1f - progress)
+                shadowElevation = PlaylistEditActionButtonShadowElevation.toPx() * progress
+                shape = CircleShape
+                clip = false
+                ambientShadowColor = Color.Black
+                spotShadowColor = Color.Black
             },
         content = content
     )
@@ -514,14 +520,18 @@ internal fun calculatePlaylistEditActionsPlacement(
     buttonGapPx: Float,
     cardGapPx: Float
 ): PlaylistEditActionsPlacement {
-    val rowWidth = buttonSizePx * PlaylistEditActionCount +
+    val menuWidth = buttonSizePx * PlaylistEditActionCount +
         buttonGapPx * (PlaylistEditActionCount - 1)
-    val desiredLeft = cardBounds.center.x - rowWidth / 2f
-    val maxLeft = max(safeBounds.left, safeBounds.right - rowWidth)
-    val left = desiredLeft.coerceIn(safeBounds.left, maxLeft)
-    val desiredTop = cardBounds.top - cardGapPx - buttonSizePx
+    val maxLeft = max(safeBounds.left, safeBounds.right - menuWidth)
+    val left = (cardBounds.right - menuWidth).coerceIn(safeBounds.left, maxLeft)
+    val aboveTop = cardBounds.top - cardGapPx - buttonSizePx
+    val belowTop = cardBounds.bottom + cardGapPx
     val maxTop = max(safeBounds.top, safeBounds.bottom - buttonSizePx)
-    val top = desiredTop.coerceIn(safeBounds.top, maxTop)
+    val top = when {
+        aboveTop >= safeBounds.top -> aboveTop
+        belowTop + buttonSizePx <= safeBounds.bottom -> belowTop
+        else -> maxTop
+    }.coerceIn(safeBounds.top, maxTop)
     return PlaylistEditActionsPlacement(
         left = left,
         top = top
@@ -596,6 +606,7 @@ private val PlaylistEditCardBorderWidth = 1.5.dp
 private val PlaylistEditActionButtonSize = 52.dp
 private val PlaylistEditActionButtonGap = 10.dp
 private val PlaylistEditActionCardGap = 12.dp
+private val PlaylistEditActionButtonShadowElevation = 6.dp
 private val PlaylistEditActionEnterDistance = 8.dp
 private val PlaylistEditActionSelectedBorderWidth = 2.dp
 private val PlaylistAppearancePickerMaxWidth = 344.dp
