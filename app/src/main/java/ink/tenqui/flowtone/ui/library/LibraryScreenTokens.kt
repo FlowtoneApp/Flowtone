@@ -2,8 +2,13 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.ui.unit.dp
 
-internal val LibraryInfoCardHeight = 112.dp
+internal val LibraryInfoCardHeight = 88.dp
 internal val LibraryPlaylistItemHeight = 72.dp
+internal val LibraryMenuCornerRadius = 24.dp
+internal val LibraryMenuChildHorizontalPadding = 8.dp
+internal val LibraryMenuChildSpacing = 2.dp
+internal val LibraryMenuBottomPadding = 8.dp
+internal val LibraryMenuOutlineWidth = 0.5.dp
 internal val CreatePlaylistPanelHeight = 236.dp
 internal val CreatePlaylistPanelMinWidth = 280.dp
 internal val CreatePlaylistPanelMaxWidth = 360.dp

@@ -82,36 +82,33 @@ internal fun LibraryHomeContent(
                 }
             }
         }
-        item(key = "library-actions") {
+        item(key = "library-collection-menu") {
             StaggeredPageElement(
                 visible = visible,
                 animationIndex = 4,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                LibraryHomeEntryCards(
+                LibraryCollectionMenu(
                     songCount = songCount,
+                    likedPlaylist = likedPlaylist,
+                    playlists = playlists,
+                    playlistItemHeight = playlistItemHeight,
+                    libraryCardsProgress = libraryCardsProgress,
+                    playlistItemOffsetYPx = playlistItemOffsetYPx,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
+                    editingPlaylistId = editingPlaylistId,
+                    newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                    onCreateAnimationFinished = onCreateAnimationFinished,
                     onOpenLocalLibrary = onOpenLocalLibrary,
+                    onCreatePlaylist = onCreatePlaylist,
+                    onOpenPlaylist = onOpenPlaylist,
+                    onStartPlaylistEditing = onStartPlaylistEditing,
+                    onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
+                    onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
-
-        libraryPlaylistRows(
-            likedPlaylist = likedPlaylist,
-            playlists = playlists,
-            playlistItemHeight = playlistItemHeight,
-            libraryCardsProgress = libraryCardsProgress,
-            playlistItemOffsetYPx = playlistItemOffsetYPx,
-            flowCloudSpeed = flowCloudSpeed,
-            isFlowCloudPlaying = isFlowCloudPlaying,
-            editingPlaylistId = editingPlaylistId,
-            newlyCreatedPlaylistId = newlyCreatedPlaylistId,
-            onCreateAnimationFinished = onCreateAnimationFinished,
-            onCreatePlaylist = onCreatePlaylist,
-            onOpenPlaylist = onOpenPlaylist,
-            onStartPlaylistEditing = onStartPlaylistEditing,
-            onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
-            onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved
-        )
     }
 }

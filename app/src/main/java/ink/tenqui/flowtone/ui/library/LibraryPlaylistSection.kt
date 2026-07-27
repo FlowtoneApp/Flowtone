@@ -3,9 +3,12 @@ package ink.tenqui.flowtone.ui.library
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -29,20 +32,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
@@ -50,9 +55,13 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PlaylistCardContentColors
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
+import ink.tenqui.flowtone.ui.components.LocalLibraryDarkBackground
+import ink.tenqui.flowtone.ui.components.LocalLibraryLightBackground
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 
-internal fun LazyListScope.libraryPlaylistRows(
+@Composable
+internal fun LibraryCollectionMenu(
+    songCount: Int,
     likedPlaylist: LibraryPlaylistCard,
     playlists: List<LibraryPlaylistCard>,
     playlistItemHeight: Dp,
@@ -63,70 +72,153 @@ internal fun LazyListScope.libraryPlaylistRows(
     editingPlaylistId: String?,
     newlyCreatedPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
+    onOpenLocalLibrary: () -> Unit,
     onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
-    onEditingPlaylistBoundsRemoved: (String) -> Unit
+    onEditingPlaylistBoundsRemoved: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    item(key = "library-liked-playlist") {
-        LibraryPlaylistRowMotion(
-            progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
-            itemOffsetYPx = playlistItemOffsetYPx
-        ) {
-            LibraryPlaylistListItem(
-                playlist = likedPlaylist,
-                itemHeight = playlistItemHeight,
-                editable = false,
-                isEditingTarget = false,
-                playCreateAnimation = false,
-                flowCloudSpeed = flowCloudSpeed,
-                isFlowCloudPlaying = isFlowCloudPlaying,
-                onCreateAnimationFinished = {},
-                onClick = { onOpenPlaylist(likedPlaylist) },
-                onLongClick = {},
-                onEditingBoundsChanged = {},
-                onEditingBoundsRemoved = {}
-            )
-        }
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val parentColor = if (isDarkTheme) {
+        LocalLibraryDarkBackground
+    } else {
+        LocalLibraryLightBackground
     }
-    item(key = "library-create-playlist") {
-        LibraryPlaylistRowMotion(
-            progress = libraryPlaylistItemProgress(libraryCardsProgress, 9),
-            itemOffsetYPx = playlistItemOffsetYPx
-        ) {
-            LibraryCreatePlaylistListItem(
-                itemHeight = playlistItemHeight,
-                flowCloudSpeed = flowCloudSpeed,
-                isFlowCloudPlaying = isFlowCloudPlaying,
-                onClick = onCreatePlaylist
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val menuShape = RoundedCornerShape(LibraryMenuCornerRadius)
+    val fillBrush = remember(parentColor) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0f to parentColor,
+                0.28f to parentColor.copy(alpha = 0.82f),
+                0.68f to parentColor.copy(alpha = 0.22f),
+                1f to parentColor.copy(alpha = 0.025f)
             )
-        }
+        )
     }
-    items(items = playlists, key = { it.id }) { playlist ->
-        val editable = !playlist.isSystem
-        val isEditingTarget = editingPlaylistId == playlist.id
-        LibraryPlaylistRowMotion(
-            progress = libraryPlaylistItemProgress(
-                libraryCardsProgress,
-                12 + playlists.indexOf(playlist) * 2
-            ),
-            itemOffsetYPx = playlistItemOffsetYPx
-        ) {
-            LibraryPlaylistListItem(
-                playlist = playlist,
-                itemHeight = playlistItemHeight,
-                editable = editable,
-                isEditingTarget = editable && isEditingTarget,
-                playCreateAnimation = newlyCreatedPlaylistId == playlist.id,
-                flowCloudSpeed = flowCloudSpeed,
-                isFlowCloudPlaying = isFlowCloudPlaying,
-                onCreateAnimationFinished = { onCreateAnimationFinished(playlist) },
-                onClick = { if (!isEditingTarget) onOpenPlaylist(playlist) },
-                onLongClick = { if (editable) onStartPlaylistEditing(playlist) },
-                onEditingBoundsChanged = { onEditingPlaylistBoundsChanged(playlist.id, it) },
-                onEditingBoundsRemoved = { onEditingPlaylistBoundsRemoved(playlist.id) }
+    val outlineBrush = remember(outlineColor) {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0f to Color.Transparent,
+                0.48f to Color.Transparent,
+                0.76f to outlineColor.copy(alpha = 0.16f),
+                1f to outlineColor.copy(alpha = 0.64f)
             )
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(menuShape)
+            .background(fillBrush)
+            .border(
+                border = BorderStroke(LibraryMenuOutlineWidth, outlineBrush),
+                shape = menuShape
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = LibraryMenuBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
+        ) {
+            LibraryHomeEntryCards(
+                songCount = songCount,
+                onOpenLocalLibrary = onOpenLocalLibrary,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = LibraryMenuChildHorizontalPadding)
+            ) {
+                LibraryPlaylistRowMotion(
+                    progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
+                    itemOffsetYPx = playlistItemOffsetYPx
+                ) {
+                    LibraryPlaylistListItem(
+                        playlist = likedPlaylist,
+                        itemHeight = playlistItemHeight,
+                        editable = false,
+                        isEditingTarget = false,
+                        playCreateAnimation = false,
+                        flowCloudSpeed = flowCloudSpeed,
+                        isFlowCloudPlaying = isFlowCloudPlaying,
+                        onCreateAnimationFinished = {},
+                        onClick = { onOpenPlaylist(likedPlaylist) },
+                        onLongClick = {},
+                        onEditingBoundsChanged = {},
+                        onEditingBoundsRemoved = {}
+                    )
+                }
+            }
+            playlists.forEachIndexed { index, playlist ->
+                key(playlist.id) {
+                    val editable = !playlist.isSystem
+                    val isEditingTarget = editingPlaylistId == playlist.id
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = LibraryMenuChildHorizontalPadding)
+                    ) {
+                        LibraryPlaylistRowMotion(
+                            progress = libraryPlaylistItemProgress(
+                                libraryCardsProgress,
+                                12 + index * 2
+                            ),
+                            itemOffsetYPx = playlistItemOffsetYPx
+                        ) {
+                            LibraryPlaylistListItem(
+                                playlist = playlist,
+                                itemHeight = playlistItemHeight,
+                                editable = editable,
+                                isEditingTarget = editable && isEditingTarget,
+                                playCreateAnimation = newlyCreatedPlaylistId == playlist.id,
+                                flowCloudSpeed = flowCloudSpeed,
+                                isFlowCloudPlaying = isFlowCloudPlaying,
+                                onCreateAnimationFinished = {
+                                    onCreateAnimationFinished(playlist)
+                                },
+                                onClick = {
+                                    if (!isEditingTarget) onOpenPlaylist(playlist)
+                                },
+                                onLongClick = {
+                                    if (editable) onStartPlaylistEditing(playlist)
+                                },
+                                onEditingBoundsChanged = {
+                                    onEditingPlaylistBoundsChanged(playlist.id, it)
+                                },
+                                onEditingBoundsRemoved = {
+                                    onEditingPlaylistBoundsRemoved(playlist.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = LibraryMenuChildHorizontalPadding)
+            ) {
+                LibraryPlaylistRowMotion(
+                    progress = libraryPlaylistItemProgress(
+                        libraryCardsProgress,
+                        12 + playlists.size * 2
+                    ),
+                    itemOffsetYPx = playlistItemOffsetYPx
+                ) {
+                    LibraryCreatePlaylistListItem(
+                        itemHeight = playlistItemHeight,
+                        flowCloudSpeed = flowCloudSpeed,
+                        isFlowCloudPlaying = isFlowCloudPlaying,
+                        onClick = onCreatePlaylist
+                    )
+                }
+            }
         }
     }
 }
