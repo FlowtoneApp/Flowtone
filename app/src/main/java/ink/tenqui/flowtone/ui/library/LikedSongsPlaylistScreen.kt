@@ -46,6 +46,7 @@ fun LikedSongsPlaylistScreen(
         PlaylistDetailCollapsingHeaderScaffold(
             title = playlistTitle,
             listState = null,
+            showContentHeader = false,
             onCollapseProgressStateChange = onCollapseProgressStateChange,
             headerModifier = headerModifier,
             contentModifier = contentModifier,
@@ -70,6 +71,7 @@ fun LikedSongsPlaylistScreen(
     PlaylistDetailCollapsingHeaderScaffold(
         title = playlistTitle,
         listState = listState,
+        showContentHeader = false,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
         headerModifier = headerModifier,
         contentModifier = contentModifier,
@@ -79,19 +81,11 @@ fun LikedSongsPlaylistScreen(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = FlowtonePageHeaderExpandedTopPadding,
+                top = 16.dp,
                 bottom = 16.dp
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            item(key = "playlist-detail-header") {
-                PlaylistDetailHeaderListItem(
-                    modifier = Modifier.padding(
-                        start = FlowtonePageHeaderExpandedStartPadding,
-                        end = FlowtonePageHeaderExpandedEndPadding
-                    )
-                )
-            }
             itemsIndexed(
                 items = likedSongs,
                 key = { _, song -> song.id }

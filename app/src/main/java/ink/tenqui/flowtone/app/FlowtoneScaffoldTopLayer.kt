@@ -16,10 +16,10 @@ internal fun FlowtoneScaffoldTopLayer(
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
         val isTopLevelRootPage = state.secondaryPage == null
-        val usesContentCollapsingTitle = state.secondaryPage == SecondaryPage.Playlist ||
+        val usesSharedCloudTopBar = state.secondaryPage == SecondaryPage.Playlist ||
             state.secondaryPage == SecondaryPage.LocalLibrary
         val secondaryBackgroundAlpha by animateFloatAsState(
-            targetValue = if (isTopLevelRootPage || usesContentCollapsingTitle) 0f else 1f,
+            targetValue = if (isTopLevelRootPage || usesSharedCloudTopBar) 0f else 1f,
             animationSpec = tween(
                 durationMillis = FlowtoneMotion.DurationMillis,
                 easing = FlowtoneMotion.Easing
@@ -28,12 +28,10 @@ internal fun FlowtoneScaffoldTopLayer(
         )
         val backgroundAlpha = when {
             isTopLevelRootPage || state.searchActive -> 0f
-            usesContentCollapsingTitle -> flowtoneCollapsingTopBarBackgroundAlpha(
-                detailHeaderCollapseProgressState?.value ?: 0f
-            )
+            usesSharedCloudTopBar -> 0f
             else -> state.topBarBackgroundAlpha * secondaryBackgroundAlpha
         }
-        val titleVisible = !isTopLevelRootPage && !usesContentCollapsingTitle
+        val titleVisible = !isTopLevelRootPage
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,

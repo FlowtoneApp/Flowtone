@@ -226,6 +226,7 @@ internal fun SecondaryPageHost(
                 permissionDenied = permissionDenied,
                 onRequestPermission = onRequestPermission,
                 onSongClick = onSongClick,
+                showContentHeader = false,
                 itemModifier = ::songItemModifier,
                 onCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,

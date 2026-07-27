@@ -42,6 +42,7 @@ private val PlaylistDetailCollapsedTitleTravelX =
 internal fun PlaylistDetailCollapsingHeaderScaffold(
     title: String,
     listState: LazyListState?,
+    showContentHeader: Boolean = true,
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
@@ -86,29 +87,33 @@ internal fun PlaylistDetailCollapsingHeaderScaffold(
         Box(modifier = contentModifier.fillMaxSize()) {
             content()
         }
-        FlowtoneCollapsingPageHeader(
-            title = title,
-            subtitle = null,
-            reserveSubtitleSpace = true,
-            collapseProgress = collapseProgress,
-            collapsedTravelYPx = collapsedTravelYPx,
-            collapsedTitleScale = collapsedTitleScale,
-            collapsedTravelXPx = collapsedTravelXPx,
-            modifier = headerModifier
-                .fillMaxWidth()
-                .padding(
-                    start = FlowtonePageHeaderExpandedStartPadding,
-                    top = FlowtonePageHeaderExpandedTopPadding,
-                    end = FlowtonePageHeaderExpandedEndPadding
-                )
-        )
+        if (showContentHeader) {
+            FlowtoneCollapsingPageHeader(
+                title = title,
+                subtitle = null,
+                reserveSubtitleSpace = true,
+                collapseProgress = collapseProgress,
+                collapsedTravelYPx = collapsedTravelYPx,
+                collapsedTitleScale = collapsedTitleScale,
+                collapsedTravelXPx = collapsedTravelXPx,
+                modifier = headerModifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = FlowtonePageHeaderExpandedStartPadding,
+                        top = FlowtonePageHeaderExpandedTopPadding,
+                        end = FlowtonePageHeaderExpandedEndPadding
+                    )
+            )
+        }
     }
 }
 
 @Composable
 internal fun PlaylistDetailHeaderListItem(
+    showContentHeader: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    if (!showContentHeader) return
     Column(modifier = modifier.fillMaxWidth()) {
         FlowtonePageHeaderSpace(modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(PlaylistDetailHeaderItemBottomSpacer))

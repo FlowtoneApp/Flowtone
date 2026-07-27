@@ -444,6 +444,7 @@ fun LocalLibraryScreen(
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
+    showContentHeader: Boolean = true,
     itemModifier: (Int) -> Modifier = { Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
@@ -460,6 +461,7 @@ fun LocalLibraryScreen(
     PlaylistDetailCollapsingHeaderScaffold(
         title = title,
         listState = listState.takeIf { showsSongList },
+        showContentHeader = showContentHeader,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
         headerModifier = headerModifier,
         contentModifier = contentModifier,
@@ -500,18 +502,24 @@ fun LocalLibraryScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    top = FlowtonePageHeaderExpandedTopPadding,
+                    top = if (showContentHeader) {
+                        FlowtonePageHeaderExpandedTopPadding
+                    } else {
+                        16.dp
+                    },
                     bottom = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                item(key = "local-library-header") {
-                    PlaylistDetailHeaderListItem(
-                        modifier = Modifier.padding(
-                            start = FlowtonePageHeaderExpandedStartPadding,
-                            end = FlowtonePageHeaderExpandedEndPadding
+                if (showContentHeader) {
+                    item(key = "local-library-header") {
+                        PlaylistDetailHeaderListItem(
+                            modifier = Modifier.padding(
+                                start = FlowtonePageHeaderExpandedStartPadding,
+                                end = FlowtonePageHeaderExpandedEndPadding
+                            )
                         )
-                    )
+                    }
                 }
                 itemsIndexed(
                     items = uiState.songs,
@@ -566,6 +574,7 @@ fun PlaylistDetailScreen(
         PlaylistDetailCollapsingHeaderScaffold(
             title = playlistTitle,
             listState = null,
+            showContentHeader = false,
             onCollapseProgressStateChange = onCollapseProgressStateChange,
             headerModifier = headerModifier,
             contentModifier = contentModifier,
@@ -582,6 +591,7 @@ fun PlaylistDetailScreen(
     PlaylistDetailCollapsingHeaderScaffold(
         title = playlistTitle,
         listState = listState,
+        showContentHeader = false,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
         headerModifier = headerModifier,
         contentModifier = contentModifier,
@@ -591,19 +601,11 @@ fun PlaylistDetailScreen(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = FlowtonePageHeaderExpandedTopPadding,
+                top = 16.dp,
                 bottom = 16.dp
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            item(key = "playlist-detail-header") {
-                PlaylistDetailHeaderListItem(
-                    modifier = Modifier.padding(
-                        start = FlowtonePageHeaderExpandedStartPadding,
-                        end = FlowtonePageHeaderExpandedEndPadding
-                    )
-                )
-            }
             itemsIndexed(
                 items = playlistSongs,
                 key = { _, song -> song.id }
