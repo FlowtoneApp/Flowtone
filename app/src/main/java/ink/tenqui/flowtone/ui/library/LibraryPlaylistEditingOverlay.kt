@@ -233,9 +233,9 @@ internal fun LibraryPlaylistEditingOverlay(
                     .requiredSize(visibleWidth, visibleHeight)
                     .clipToBounds()
             ) {
-                LibraryPlaylistTileVisual(
+                LibraryPlaylistListVisual(
                     playlist = displayedPlaylist,
-                    cardHeight = cardHeight,
+                    itemHeight = cardHeight,
                     appearProgress = 1f,
                     clickModifier = Modifier.clickable(onClick = {}),
                     flowCloudSpeed = flowCloudSpeed,

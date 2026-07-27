@@ -367,10 +367,9 @@ internal fun LibraryScreen(
     val likedPlaylist = remember(likedSongCount) {
         likedSongsPlaylistCard(likedSongCount)
     }
-    val playlistRows = playlistController.playlists.chunked(2)
-    val playlistCardHeight = LibraryInfoCardHeight * (4f / 3f)
-    val playlistRowItemOffsetYPx = with(density) {
-        playlistCardHeight.toPx() / LibraryItemSlideOffsetDivisor
+    val playlistItemHeight = LibraryPlaylistItemHeight
+    val playlistItemOffsetYPx = with(density) {
+        playlistItemHeight.toPx() / LibraryItemSlideOffsetDivisor
     }
     val libraryCardsProgress = remember {
         Animatable(if (visible) 1f else 0f)
@@ -393,10 +392,10 @@ internal fun LibraryScreen(
         songCount = songCount,
         visible = visible,
         likedPlaylist = likedPlaylist,
-        playlistRows = playlistRows,
-        playlistCardHeight = playlistCardHeight,
+        playlists = playlistController.playlists,
+        playlistItemHeight = playlistItemHeight,
         libraryCardsProgress = libraryCardsProgress.value,
-        playlistRowItemOffsetYPx = playlistRowItemOffsetYPx,
+        playlistItemOffsetYPx = playlistItemOffsetYPx,
         flowCloudSpeed = flowCloudSpeed,
         isFlowCloudPlaying = isFlowCloudPlaying,
         listState = playlistController.listState,
