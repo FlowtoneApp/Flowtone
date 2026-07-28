@@ -2,7 +2,6 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -83,7 +82,9 @@ internal fun LibraryCollectionMenu(
     isFlowCloudPlaying: Boolean,
     editingPlaylistId: String?,
     newlyCreatedPlaylistId: String?,
+    exitingPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
+    onDeleteAnimationFinished: (LibraryPlaylistCard) -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
@@ -175,7 +176,9 @@ internal fun LibraryCollectionMenu(
                     isFlowCloudPlaying = isFlowCloudPlaying,
                     editingPlaylistId = editingPlaylistId,
                     newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                    exitingPlaylistId = exitingPlaylistId,
                     onCreateAnimationFinished = onCreateAnimationFinished,
+                    onDeleteAnimationFinished = onDeleteAnimationFinished,
                     onCreatePlaylist = onCreatePlaylist,
                     onOpenPlaylist = onOpenPlaylist,
                     onStartPlaylistEditing = onStartPlaylistEditing,
@@ -208,27 +211,16 @@ private fun LibraryPlaylistMenuItems(
     isFlowCloudPlaying: Boolean,
     editingPlaylistId: String?,
     newlyCreatedPlaylistId: String?,
+    exitingPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
+    onDeleteAnimationFinished: (LibraryPlaylistCard) -> Unit,
     onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
     onEditingPlaylistBoundsRemoved: (String) -> Unit
 ) {
-    val playlistItemsHeight by animateDpAsState(
-        targetValue = playlistItemHeight * (playlists.size + 2) +
-            LibraryMenuChildSpacing * (playlists.size + 1),
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "libraryPlaylistItemsHeight"
-    )
-
     Column(
-        modifier = Modifier
-            .height(playlistItemsHeight)
-            .clipToBounds(),
         verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
     ) {
         Box(
@@ -246,9 +238,11 @@ private fun LibraryPlaylistMenuItems(
                     editable = false,
                     isEditingTarget = false,
                     playCreateAnimation = false,
+                    playDeleteAnimation = false,
                     flowCloudSpeed = flowCloudSpeed,
                     isFlowCloudPlaying = isFlowCloudPlaying,
                     onCreateAnimationFinished = {},
+                    onDeleteAnimationFinished = {},
                     onClick = { onOpenPlaylist(likedPlaylist) },
                     onLongClick = {},
                     onEditingBoundsChanged = {},
@@ -260,6 +254,7 @@ private fun LibraryPlaylistMenuItems(
             key(playlist.id) {
                 val editable = !playlist.isSystem
                 val isEditingTarget = editingPlaylistId == playlist.id
+                val playDeleteAnimation = exitingPlaylistId == playlist.id
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -275,13 +270,17 @@ private fun LibraryPlaylistMenuItems(
                         LibraryPlaylistListItem(
                             playlist = playlist,
                             itemHeight = playlistItemHeight,
-                            editable = editable,
+                            editable = editable && !playDeleteAnimation,
                             isEditingTarget = editable && isEditingTarget,
                             playCreateAnimation = newlyCreatedPlaylistId == playlist.id,
+                            playDeleteAnimation = playDeleteAnimation,
                             flowCloudSpeed = flowCloudSpeed,
                             isFlowCloudPlaying = isFlowCloudPlaying,
                             onCreateAnimationFinished = { onCreateAnimationFinished(playlist) },
-                            onClick = { if (!isEditingTarget) onOpenPlaylist(playlist) },
+                            onDeleteAnimationFinished = { onDeleteAnimationFinished(playlist) },
+                            onClick = {
+                                if (!isEditingTarget && !playDeleteAnimation) onOpenPlaylist(playlist)
+                            },
                             onLongClick = { if (editable) onStartPlaylistEditing(playlist) },
                             onEditingBoundsChanged = {
                                 onEditingPlaylistBoundsChanged(playlist.id, it)
@@ -393,22 +392,30 @@ private fun LibraryPlaylistListItem(
     editable: Boolean,
     isEditingTarget: Boolean,
     playCreateAnimation: Boolean,
+    playDeleteAnimation: Boolean,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     onCreateAnimationFinished: () -> Unit,
+    onDeleteAnimationFinished: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onEditingBoundsChanged: (Rect) -> Unit,
     onEditingBoundsRemoved: () -> Unit
 ) {
-    val createProgress = remember(playlist.id) { Animatable(if (playCreateAnimation) 0f else 1f) }
-    LaunchedEffect(playCreateAnimation, playlist.id) {
-        if (playCreateAnimation) {
-            createProgress.snapTo(0f)
-            createProgress.animateTo(1f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
+    val visibilityProgress = remember(playlist.id) {
+        Animatable(if (playCreateAnimation) 0f else 1f)
+    }
+    LaunchedEffect(playCreateAnimation, playDeleteAnimation, playlist.id) {
+        if (playDeleteAnimation) {
+            visibilityProgress.snapTo(1f)
+            visibilityProgress.animateTo(0f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
+            onDeleteAnimationFinished()
+        } else if (playCreateAnimation) {
+            visibilityProgress.snapTo(0f)
+            visibilityProgress.animateTo(1f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
             onCreateAnimationFinished()
-        } else if (createProgress.value < 1f) {
-            createProgress.animateTo(1f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
+        } else if (visibilityProgress.value < 1f) {
+            visibilityProgress.animateTo(1f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
         }
     }
     val latestBounds = remember(playlist.id) { arrayOfNulls<Rect>(1) }
@@ -437,15 +444,21 @@ private fun LibraryPlaylistListItem(
                 .background(MaterialTheme.colorScheme.surfaceContainer)
         )
     } else {
-        LibraryPlaylistListVisual(
-            playlist = playlist,
-            itemHeight = itemHeight,
-            appearProgress = createProgress.value,
-            clickModifier = clickModifier,
-            flowCloudSpeed = flowCloudSpeed,
-            isFlowCloudPlaying = isFlowCloudPlaying,
+        Box(
             modifier = positionedModifier
-        )
+                .fillMaxWidth()
+                .height(itemHeight * visibilityProgress.value)
+                .clipToBounds()
+        ) {
+            LibraryPlaylistListVisual(
+                playlist = playlist,
+                itemHeight = itemHeight,
+                appearProgress = visibilityProgress.value,
+                clickModifier = clickModifier,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying
+            )
+        }
     }
 }
 

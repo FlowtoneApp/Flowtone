@@ -81,7 +81,24 @@ internal class LibraryPlaylistController internal constructor(
     var libraryViewportBounds by mutableStateOf<Rect?>(null)
         private set
     var newlyCreatedPlaylistId by mutableStateOf<String?>(null)
+    private var exitingPlaylist by mutableStateOf<LibraryPlaylistCard?>(null)
+    private var exitingPlaylistIndex by mutableStateOf(-1)
+    private var exitAnimationStarted by mutableStateOf(false)
     var shouldSavePlaylists by mutableStateOf(false)
+
+    val displayedPlaylists: List<LibraryPlaylistCard>
+        get() {
+            val exiting = exitingPlaylist ?: return playlists
+            if (playlists.any { playlist -> playlist.id == exiting.id }) {
+                return playlists
+            }
+            return playlists.toMutableList().apply {
+                add(exitingPlaylistIndex.coerceIn(0, size), exiting)
+            }
+        }
+
+    val exitingPlaylistId: String?
+        get() = exitingPlaylist?.id?.takeIf { exitAnimationStarted }
 
     val duplicatePlaylistName: Boolean
         get() = if (dialogLocked) {
@@ -315,6 +332,29 @@ internal class LibraryPlaylistController internal constructor(
             newlyCreatedPlaylistId = null
         }
     }
+
+    fun retainPlaylistForDeleteAnimation(playlistId: String) {
+        val playlistIndex = playlists.indexOfFirst { playlist -> playlist.id == playlistId }
+        if (playlistIndex >= 0) {
+            exitingPlaylist = playlists[playlistIndex]
+            exitingPlaylistIndex = playlistIndex
+            exitAnimationStarted = false
+        }
+    }
+
+    fun startPlaylistDeleteAnimation() {
+        if (exitingPlaylist != null) {
+            exitAnimationStarted = true
+        }
+    }
+
+    fun consumePlaylistDeleteAnimation(playlistId: String) {
+        if (exitingPlaylist?.id == playlistId) {
+            exitingPlaylist = null
+            exitingPlaylistIndex = -1
+            exitAnimationStarted = false
+        }
+    }
 }
 
 internal fun playlistIdAtPosition(
@@ -392,7 +432,7 @@ internal fun LibraryScreen(
         songCount = songCount,
         visible = visible,
         likedPlaylist = likedPlaylist,
-        playlists = playlistController.playlists,
+        playlists = playlistController.displayedPlaylists,
         playlistItemHeight = playlistItemHeight,
         libraryCardsProgress = libraryCardsProgress.value,
         playlistItemOffsetYPx = playlistItemOffsetYPx,
@@ -401,6 +441,7 @@ internal fun LibraryScreen(
         listState = playlistController.listState,
         editingPlaylistId = playlistController.editingPlaylistId,
         newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,
+        exitingPlaylistId = playlistController.exitingPlaylistId,
         onOpenLocalLibrary = {
             playlistController.clearPlaylistEditing()
             onOpenLocalLibrary()
@@ -411,6 +452,9 @@ internal fun LibraryScreen(
         },
         onCreateAnimationFinished = { playlist ->
             playlistController.consumeNewlyCreatedPlaylistAnimation(playlist.id)
+        },
+        onDeleteAnimationFinished = { playlist ->
+            playlistController.consumePlaylistDeleteAnimation(playlist.id)
         },
         onOpenPlaylist = { playlist ->
             playlistController.clearPlaylistEditing()

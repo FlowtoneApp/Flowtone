@@ -39,12 +39,14 @@ import ink.tenqui.flowtone.ui.library.CreatePlaylistState
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistDialogVisualStyle
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.screens.FlowCloudSpeedOverlay
 import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
 import ink.tenqui.flowtone.ui.search.GlobalSearchOverlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -345,9 +347,12 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
                 val result = playlistRepository.deletePlaylist(playlistId)
                 if (result is PlaylistMutationResult.Success) {
+                    libraryPlaylistController.retainPlaylistForDeleteAnimation(playlistId)
                     onRefreshLibraryPlaylistsFromRepository(null)
                     libraryPlaylistController.clearPlaylistEditing()
                     libraryPlaylistController.closeEditing()
+                    delay(FlowtoneMotion.DurationMillis.toLong())
+                    libraryPlaylistController.startPlaylistDeleteAnimation()
                 } else {
                     libraryPlaylistController.unlockDialog()
                 }
