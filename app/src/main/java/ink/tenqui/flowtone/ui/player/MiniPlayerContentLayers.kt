@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackOrderMode
 
 @Composable
 internal fun BoxScope.MiniPlayerBackgroundLayers(
@@ -60,6 +61,7 @@ internal fun BoxScope.MiniPlayerQueueSheetHost(
     sourceQueue: List<Song>,
     currentQueueIndex: Int,
     currentSong: Song?,
+    playbackOrderMode: PlaybackOrderMode,
     displayOrder: QueueDisplayOrder,
     onDisplayOrderChange: (QueueDisplayOrder) -> Unit,
     backgroundImageRequest: ImageRequest?,
@@ -78,6 +80,7 @@ internal fun BoxScope.MiniPlayerQueueSheetHost(
             sourceQueue = sourceQueue,
             currentQueueIndex = currentQueueIndex,
             currentSong = currentSong,
+            playbackOrderMode = playbackOrderMode,
             displayOrder = displayOrder,
             onDisplayOrderChange = onDisplayOrderChange,
             backgroundImageRequest = backgroundImageRequest,

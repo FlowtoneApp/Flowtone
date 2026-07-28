@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackOrderMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -52,6 +53,7 @@ internal fun PlayerQueueBottomSheet(
     sourceQueue: List<Song>,
     currentQueueIndex: Int,
     currentSong: Song?,
+    playbackOrderMode: PlaybackOrderMode,
     displayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
     onDisplayOrderChange: (QueueDisplayOrder) -> Unit = {},
     backgroundImageRequest: ImageRequest?,
@@ -309,6 +311,7 @@ internal fun PlayerQueueBottomSheet(
                 ) {
                     PlayerQueueHeader(
                         queueSize = displayedQueue.size,
+                        playbackOrderMode = playbackOrderMode,
                         displayOrder = displayOrder,
                         onDisplayOrderChange = onDisplayOrderChange
                     )

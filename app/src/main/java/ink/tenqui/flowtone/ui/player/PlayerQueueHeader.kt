@@ -10,10 +10,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import ink.tenqui.flowtone.playback.PlaybackOrderMode
 
 @Composable
 internal fun PlayerQueueHeader(
     queueSize: Int,
+    playbackOrderMode: PlaybackOrderMode,
     displayOrder: QueueDisplayOrder,
     onDisplayOrderChange: (QueueDisplayOrder) -> Unit,
     modifier: Modifier = Modifier
@@ -44,9 +46,11 @@ internal fun PlayerQueueHeader(
                 )
             )
         }
-        QueueDisplayOrderSelector(
-            selectedOrder = displayOrder,
-            onOrderSelected = onDisplayOrderChange
-        )
+        if (playbackOrderMode == PlaybackOrderMode.Shuffle) {
+            QueueDisplayOrderSelector(
+                selectedOrder = displayOrder,
+                onOrderSelected = onDisplayOrderChange
+            )
+        }
     }
 }

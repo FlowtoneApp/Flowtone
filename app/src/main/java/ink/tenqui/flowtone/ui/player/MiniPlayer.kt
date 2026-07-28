@@ -739,6 +739,7 @@ fun MiniPlayer(
             sourceQueue = sourceQueue,
             currentQueueIndex = currentQueueIndex,
             currentSong = currentSong,
+            playbackOrderMode = playerUiState.playbackOrderMode,
             displayOrder = queueDisplayOrder,
             onDisplayOrderChange = onQueueDisplayOrderChange,
             backgroundImageRequest = state.lastStableBackdrop.backgroundImageRequest,
