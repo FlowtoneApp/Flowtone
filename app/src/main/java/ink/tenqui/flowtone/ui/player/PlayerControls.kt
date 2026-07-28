@@ -2,13 +2,18 @@ package ink.tenqui.flowtone.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -29,6 +34,7 @@ internal fun SharedPlaybackControls(
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
+    onControlsRowBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val minimizedTouchSize = 40.dp
@@ -99,6 +105,7 @@ internal fun SharedPlaybackControls(
         onPlayPrevious = onPlayPrevious,
         onTogglePlayPause = onTogglePlayPause,
         onPlayNext = onPlayNext,
+        onControlsRowBounds = onControlsRowBounds,
         modifier = modifier
     )
 }
@@ -124,6 +131,7 @@ internal fun SideButtonsOverlay(
     onAddToPlaylist: () -> Unit,
     onOpenSongInfo: () -> Unit,
     onOpenQueue: () -> Unit,
+    onFullscreenActionBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val enterProgress = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
@@ -191,42 +199,50 @@ internal fun SideButtonsOverlay(
         val fullscreenFavoriteVisible = favoriteEnterProgress > 0.01f
         val moreMenuVisible = hasCurrentSong
         val expandedMoreMenuVisible = moreMenuExpanded && moreMenuVisible
-        FavoriteButton(
-            liked = isCurrentSongLiked,
-            enabled = hasCurrentSong && fullscreenFavoriteVisible && controlsEnabled,
-            onClick = {
-                collapseMoreMenu()
-                onToggleLiked()
-            },
+        Row(
             modifier = Modifier
-                .zIndex(4f)
                 .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
-                .size(buttonSize)
-                .graphicsLayer {
-                    alpha = favoriteEnterProgress
-            },
-            visualEnabled = hasCurrentSong
-        )
-        AnimatedVisibility(
-            visible = moreMenuVisible && !expandedMoreMenuVisible,
-            enter = fullscreenMoreButtonEnterTransition(),
-            exit = fullscreenMoreButtonExitTransition(),
-            modifier = Modifier
-                .offset(x = fullscreenMenuX, y = fullscreenFavoriteY)
-                .size(buttonSize)
-                .graphicsLayer {
-                    alpha = favoriteEnterProgress
-                }
-        ) {
-            MoreMenuButton(
-                iconColor = iconColor,
-                enabled = fullscreenActionsEnabled && controlsEnabled,
-                onClick = {
-                    onMoreMenuExpandedChange(true)
+                .size(height = buttonSize, width = buttonSize * 2f + fullscreenMenuSpacing)
+                .onGloballyPositioned { coordinates ->
+                    onFullscreenActionBounds(coordinates, FullscreenLayerTransform())
                 },
-                modifier = Modifier.size(buttonSize),
+            horizontalArrangement = Arrangement.spacedBy(fullscreenMenuSpacing)
+        ) {
+            FavoriteButton(
+                liked = isCurrentSongLiked,
+                enabled = hasCurrentSong && fullscreenFavoriteVisible && controlsEnabled,
+                onClick = {
+                    collapseMoreMenu()
+                    onToggleLiked()
+                },
+                modifier = Modifier
+                    .zIndex(4f)
+                    .size(buttonSize)
+                    .graphicsLayer {
+                        alpha = favoriteEnterProgress
+                    },
                 visualEnabled = hasCurrentSong
             )
+            AnimatedVisibility(
+                visible = moreMenuVisible && !expandedMoreMenuVisible,
+                enter = fullscreenMoreButtonEnterTransition(),
+                exit = fullscreenMoreButtonExitTransition(),
+                modifier = Modifier
+                    .size(buttonSize)
+                    .graphicsLayer {
+                        alpha = favoriteEnterProgress
+                    }
+            ) {
+                MoreMenuButton(
+                    iconColor = iconColor,
+                    enabled = fullscreenActionsEnabled && controlsEnabled,
+                    onClick = {
+                        onMoreMenuExpandedChange(true)
+                    },
+                    modifier = Modifier.size(buttonSize),
+                    visualEnabled = hasCurrentSong
+                )
+            }
         }
         FullscreenMoreMenu(
             visible = expandedMoreMenuVisible,

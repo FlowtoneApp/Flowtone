@@ -10,10 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -53,6 +57,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     layoutMetrics: MiniPlayerFullscreenLayoutMetrics,
     artworkPlaybackScale: Float,
     artworkPlaybackRotationDegrees: Float,
+    diagnostics: FullscreenLayoutDiagnostics,
+    diagnosticsEnabled: Boolean,
+    onDiagnosticsToggle: () -> Unit,
     titleColor: Color,
     artistColor: Color,
     controlIconColor: Color,
@@ -98,28 +105,70 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onCollapseClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val metrics = layoutMetrics
+    val actualDensity = LocalDensity.current
+    val layoutScale = fullscreenPlayerLayoutScale(playerWidth)
+    val effectiveLayoutScale = lerpFloat(1f, layoutScale, fullscreenProgress)
+    val fullscreenDensity = Density(
+        density = actualDensity.density * effectiveLayoutScale,
+        fontScale = actualDensity.fontScale
+    )
 
-    MorphArtworkLayer(
+    CompositionLocalProvider(LocalDensity provides fullscreenDensity) {
+        val designPlayerWidth = playerWidth / effectiveLayoutScale
+        val designCurrentHeight = currentHeight / effectiveLayoutScale
+        val designVisualPanelHeight = visualPanelHeight / effectiveLayoutScale
+        val designCollapsedHeight = collapsedHeight / effectiveLayoutScale
+        val designMinimizedHeight = minimizedHeight / effectiveLayoutScale
+        val designExpandedHeight = expandedHeight / effectiveLayoutScale
+        val designExpandedArtworkSize = expandedArtworkSize / effectiveLayoutScale
+        val designExpandedArtworkTop = expandedArtworkTop
+        val designExpandedMetadataTop =
+            designExpandedArtworkTop + designExpandedArtworkSize + 14.dp
+        val designExpandedProgressTop = designExpandedMetadataTop + 76.dp
+        val designExpandedControlsTop = designExpandedProgressTop + 58.dp
+        val designFullscreenCoverCenterY = fullscreenCoverCenterY / effectiveLayoutScale
+        val designFullscreenStationaryControlsOffsetY =
+            fullscreenStationaryControlsOffsetY / effectiveLayoutScale
+        val designFullscreenControlsLiftY = fullscreenControlsLiftY
+        val designFullscreenProgressTrackWidth = designPlayerWidth * 0.76f
+        val metrics = layoutMetrics.copy(
+            fullscreenProgressTrackWidth = designFullscreenProgressTrackWidth,
+            fullscreenArtworkX =
+                (designPlayerWidth - designFullscreenProgressTrackWidth) / 2f,
+            fullscreenMetadataTop =
+                designFullscreenCoverCenterY +
+                    designFullscreenProgressTrackWidth / 2f +
+                    14.dp,
+            playbackContentOffsetY =
+                32.dp * layoutMetrics.fullscreenContentExitSharedProgress
+        )
+
+        MorphArtworkLayer(
         imageRequest = imageRequest,
         waitForArtworkLoad = waitForArtworkLoad,
         progress = artworkAnimationProgress,
         scaleProgress = artworkScaleProgress,
-        currentHeight = currentHeight,
-        viewportHeight = currentHeight,
-        collapsedHeight = collapsedHeight,
-        playerWidth = playerWidth,
-        expandedArtworkSize = expandedArtworkSize,
-        expandedArtworkTop = expandedArtworkTop,
+        currentHeight = designCurrentHeight,
+        viewportHeight = designCurrentHeight,
+        collapsedHeight = designCollapsedHeight,
+        playerWidth = designPlayerWidth,
+        expandedArtworkSize = designExpandedArtworkSize,
+        expandedArtworkTop = designExpandedArtworkTop,
         fullscreenProgress = fullscreenProgress,
         fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
-        fullscreenArtworkCenterY = fullscreenCoverCenterY,
+        fullscreenArtworkCenterY = designFullscreenCoverCenterY,
         contentExitProgress = metrics.artworkContentExitProgress,
         addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
         addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
         addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
         playbackScale = artworkPlaybackScale,
         playbackRotationDegrees = artworkPlaybackRotationDegrees,
+        onOuterBounds = { coordinates, transform ->
+            diagnostics.record("artworkOuter", coordinates, transform)
+        },
+        onImageBounds = { coordinates, transform ->
+            diagnostics.record("artworkImage", coordinates, transform)
+        },
         layerAlpha = 1f - metrics.artistExitProgress,
         layerTranslationY =
             16.dp *
@@ -131,7 +180,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(visualPanelHeight)
+            .height(designVisualPanelHeight)
             .align(Alignment.TopCenter)
     ) {
         SharedSongInfo(
@@ -141,11 +190,11 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             progress = animationProgress,
             titleColor = titleColor,
             artistColor = artistColor,
-            playerWidth = playerWidth,
+            playerWidth = designPlayerWidth,
             minimizedProgress = minimizedProgress,
-            minimizedHeight = minimizedHeight,
-            collapsedHeight = collapsedHeight,
-            expandedTop = expandedMetadataTop,
+            minimizedHeight = designMinimizedHeight,
+            collapsedHeight = designCollapsedHeight,
+            expandedTop = designExpandedMetadataTop,
             fullscreenProgress = fullscreenProgress,
             fullscreenX = metrics.fullscreenArtworkX,
             fullscreenTop = metrics.fullscreenMetadataTop,
@@ -153,6 +202,12 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             switchDirection = collapsedMetadataSwitchDirection,
             artistClickEnabled = artistClickEnabled,
             onArtistClick = onArtistClick,
+            onTitleBounds = { coordinates, transform ->
+                diagnostics.record("title", coordinates, transform)
+            },
+            onArtistBounds = { coordinates, transform ->
+                diagnostics.record("artist", coordinates, transform)
+            },
             modifier = Modifier
                 .align(Alignment.TopStart)
         )
@@ -183,7 +238,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onNewPlaylistCreateAnimationFinished = onNewPlaylistCreateAnimationFinished,
                 listState = addToPlaylistListState,
                 progress = metrics.addToPlaylistSharedProgress,
-                screenWidth = playerWidth,
+                screenWidth = designPlayerWidth,
                 pullToDismissEnabled = isAddToPlaylistBackGestureEnabled(fullscreenContentMode),
                 onDismissAtTop = onDismissAddToPlaylistAtTop,
                 onCreatePlaylistClick = onCreatePlaylistClick,
@@ -202,8 +257,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 .graphicsLayer {
                     alpha = metrics.playbackContentAlpha
                     translationY =
-                        (fullscreenStationaryControlsOffsetY -
-                            fullscreenControlsLiftY +
+                        (designFullscreenStationaryControlsOffsetY -
+                            designFullscreenControlsLiftY +
                             metrics.playbackContentOffsetY).toPx()
                 }
         ) {
@@ -222,33 +277,42 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onSeekTo = callbacks.onSeekTo,
                 onLockPlayPauseVisual = onLockPlayPauseVisual,
                 onScrubbingChange = onScrubbingChange,
+                onProgressBounds = { coordinates, transform ->
+                    diagnostics.record("progress", coordinates, transform)
+                },
+                onTimeLabelsBounds = { coordinates, transform ->
+                    diagnostics.record("timeLabels", coordinates, transform)
+                },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = expandedProgressTop)
+                    .padding(top = designExpandedProgressTop)
             )
             SharedPlaybackControls(
                 progress = animationProgress,
                 isPlaying = visualIsPlaying,
                 iconColor = controlIconColor,
-                screenWidth = playerWidth,
+                screenWidth = designPlayerWidth,
                 minimizedProgress = minimizedProgress,
-                minimizedHeight = minimizedHeight,
-                collapsedHeight = collapsedHeight,
-                expandedTop = expandedControlsTop,
+                minimizedHeight = designMinimizedHeight,
+                collapsedHeight = designCollapsedHeight,
+                expandedTop = designExpandedControlsTop,
                 fullscreenProgress = fullscreenProgress,
                 controlsExitProgress = metrics.fullscreenContentExitSharedProgress,
                 onPlayPrevious = onPlayPrevious,
                 onTogglePlayPause = onTogglePlayPause,
                 onPlayNext = onPlayNext,
+                onControlsRowBounds = { coordinates, transform ->
+                    diagnostics.record("controls", coordinates, transform)
+                },
                 modifier = Modifier.align(Alignment.TopStart)
             )
             SideButtonsOverlay(
                 progress = animationProgress,
-                playerWidth = playerWidth,
-                currentHeight = currentHeight,
-                expandedHeight = expandedHeight,
-                expandedProgressTop = expandedProgressTop,
-                expandedControlsTop = expandedControlsTop,
+                playerWidth = designPlayerWidth,
+                currentHeight = designCurrentHeight,
+                expandedHeight = designExpandedHeight,
+                expandedProgressTop = designExpandedProgressTop,
+                expandedControlsTop = designExpandedControlsTop,
                 hasCurrentSong = hasCurrentSong,
                 isCurrentSongLiked = isCurrentSongLiked,
                 playbackOrderMode = playerUiState.playbackOrderMode,
@@ -265,7 +329,10 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     .align(Alignment.TopStart)
                     .fillMaxSize()
                     .zIndex(2f),
-                onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
+                onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode,
+                onFullscreenActionBounds = { coordinates, transform ->
+                    diagnostics.record("actions", coordinates, transform)
+                }
             )
             MiniPlayerLyricsHost(
                 currentSong = playerUiState.currentSong,
@@ -286,7 +353,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             artistPlaceholderProgress = artistPlaceholderProgress,
             currentSong = playerUiState.currentSong,
             fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
-            visualPanelHeight = visualPanelHeight,
+            visualPanelHeight = designVisualPanelHeight,
             songInfoProgress = songInfoProgress,
             songInfoTopPadding = metrics.addToPlaylistCardsTop,
             onBack = onArtistHostBack,
@@ -298,8 +365,25 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         progress = fullscreenProgress,
         interactionSource = collapseInteractionSource,
         onClick = onCollapseClick,
+        onLongClick = onDiagnosticsToggle,
+        longClickEnabled = isFullscreenLayoutDiagnosticsAvailable(),
+        onVisibleBounds = { coordinates, transform ->
+            diagnostics.record("collapseArrow", coordinates, transform)
+        },
         modifier = Modifier
             .align(Alignment.TopCenter)
             .zIndex(10f)
     )
+    }
+    if (diagnosticsEnabled && fullscreenProgress > 0.99f) {
+        FullscreenLayoutDiagnosticsOverlay(
+            diagnostics = diagnostics,
+            animationProgress = animationProgress,
+            fullscreenProgress = fullscreenProgress,
+            layoutScale = layoutScale,
+            artworkScale = artworkPlaybackScale,
+            artworkRotationZ = artworkPlaybackRotationDegrees,
+            modifier = Modifier.align(Alignment.TopStart)
+        )
+    }
 }

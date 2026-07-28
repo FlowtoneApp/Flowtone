@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -118,6 +122,9 @@ fun MiniPlayer(
         context = context,
         allSongs = allSongs
     )
+    val diagnosticsAvailable = isFullscreenLayoutDiagnosticsAvailable()
+    var diagnosticsEnabled by remember { mutableStateOf(false) }
+    val fullscreenDiagnostics = remember { FullscreenLayoutDiagnostics() }
     val transitions = MiniPlayerTransitions(state)
     val collapsedHeight = MiniPlayerCollapsedHeight
     val minimizedHeight = MiniPlayerMinimizedHeight
@@ -593,6 +600,11 @@ fun MiniPlayer(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(visualPanelHeight)
+                    .onGloballyPositioned { coordinates ->
+                        if (diagnosticsAvailable) {
+                            fullscreenDiagnostics.record(FullscreenDiagnosticsRoot, coordinates)
+                        }
+                    }
                     .pointerInput(
                         state.expandedMoreMenu,
                         state.fullscreenContentMode
@@ -679,6 +691,13 @@ fun MiniPlayer(
                         layoutMetrics = fullscreenLayoutMetrics,
                         artworkPlaybackScale = artworkPlaybackScale,
                         artworkPlaybackRotationDegrees = artworkPlaybackRotationDegrees,
+                        diagnostics = fullscreenDiagnostics,
+                        diagnosticsEnabled = diagnosticsAvailable && diagnosticsEnabled,
+                        onDiagnosticsToggle = {
+                            if (diagnosticsAvailable) {
+                                diagnosticsEnabled = !diagnosticsEnabled
+                            }
+                        },
                         titleColor = titleColor,
                         artistColor = artistColor,
                         controlIconColor = controlIconColor,

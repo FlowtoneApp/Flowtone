@@ -21,7 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -43,6 +47,8 @@ internal fun PlaybackProgressBar(
     onScrubbingChange: (Boolean) -> Unit,
     enterProgress: Float,
     fullscreenProgress: Float,
+    onProgressBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
+    onTimeLabelsBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var isScrubbing by remember { mutableStateOf(false) }
@@ -222,6 +228,14 @@ internal fun PlaybackProgressBar(
         }
     }
 
+    val progressLayerTransform = with(LocalDensity.current) {
+        FullscreenLayerTransform(
+            translationY = (300.dp * (1f - enterProgress)).toPx(),
+            scaleX = lerpFloat(2.6f, 1f, enterProgress),
+            scaleY = lerpFloat(2.6f, 1f, enterProgress)
+        )
+    }
+
     Box(modifier = modifier) {
         PlayerProgressBarContent(
             enterProgress = enterProgress
@@ -235,10 +249,16 @@ internal fun PlaybackProgressBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(PlaybackProgressCanvasHeight)
+                    .onGloballyPositioned { coordinates ->
+                        onProgressBounds(coordinates, progressLayerTransform)
+                    }
             )
             PlayerProgressBarLabels(
                 displayTimePositionMs = displayTimePositionMs,
-                durationMs = durationMs
+                durationMs = durationMs,
+                modifier = Modifier.onGloballyPositioned { coordinates ->
+                    onTimeLabelsBounds(coordinates, progressLayerTransform)
+                }
             )
         }
         PlayerProgressBarGestureLayer(

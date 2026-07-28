@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
 
 @Composable
 internal fun ExpandedOnlyContent(
@@ -23,6 +24,8 @@ internal fun ExpandedOnlyContent(
     onSeekTo: (Long) -> Unit,
     onLockPlayPauseVisual: (Boolean) -> Unit,
     onScrubbingChange: (Boolean) -> Unit,
+    onProgressBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
+    onTimeLabelsBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val progressEnterProgress = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
@@ -47,6 +50,8 @@ internal fun ExpandedOnlyContent(
             onScrubbingChange = onScrubbingChange,
             enterProgress = progressEnterProgress,
             fullscreenProgress = fullscreenProgress,
+            onProgressBounds = onProgressBounds,
+            onTimeLabelsBounds = onTimeLabelsBounds,
             modifier = Modifier
                 .fillMaxWidth(0.76f)
         )
