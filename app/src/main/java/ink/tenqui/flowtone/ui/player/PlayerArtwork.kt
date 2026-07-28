@@ -41,8 +41,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -152,8 +150,6 @@ internal fun MorphArtworkLayer(
     playbackRotationDegrees: Float = 0f,
     layerAlpha: Float = 1f,
     layerTranslationY: Dp = 0.dp,
-    onOuterBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
-    onImageBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val baseArtworkSize = expandedArtworkSize
@@ -180,14 +176,6 @@ internal fun MorphArtworkLayer(
     val containerScale = lerpFloat(collapsedContainerScale, 1f, scaleProgress)
     val artworkScale = lerpFloat(playbackScale, 1f, addProgress)
     val artworkRotationDegrees = lerpFloat(playbackRotationDegrees, 0f, addProgress)
-    val artworkTransform = with(LocalDensity.current) {
-        FullscreenLayerTransform(
-            translationY = layerTranslationY.toPx(),
-            scaleX = containerScale * artworkScale,
-            scaleY = containerScale * artworkScale,
-            rotationZ = artworkRotationDegrees
-        )
-    }
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
     val coverBackgroundColor = if (imageRequest == null) {
@@ -217,9 +205,6 @@ internal fun MorphArtworkLayer(
                 rotationZ = artworkRotationDegrees
                 transformOrigin = TransformOrigin.Center
                 compositingStrategy = CompositingStrategy.Offscreen
-            }
-            .onGloballyPositioned { coordinates ->
-                onOuterBounds(coordinates, artworkTransform)
             }
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
@@ -258,10 +243,7 @@ internal fun MorphArtworkLayer(
                 .width(artworkSize)
                 .height(artworkSize)
                 .clip(coverShape)
-                .background(coverBackgroundColor)
-                .onGloballyPositioned { coordinates ->
-                    onImageBounds(coordinates, artworkTransform)
-                },
+                .background(coverBackgroundColor),
             contentAlignment = Alignment.Center
         ) {
             Box(

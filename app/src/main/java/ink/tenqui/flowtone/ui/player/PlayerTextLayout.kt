@@ -9,7 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -46,8 +45,6 @@ internal fun PlayerTextLayout(
     textAlign: TextAlign,
     canClickArtist: Boolean,
     onArtistClick: ((String) -> Unit)?,
-    onTitleBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
-    onArtistBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val titleWidth = with(density) {
@@ -105,10 +102,6 @@ internal fun PlayerTextLayout(
     )
     val fullscreenArtistTopPadding = lerpDp(4.dp, 14.dp, fullscreenProgress)
     val artistMinimizedAlpha = lerpFloat(minimizedProgress, 1f, progress)
-    val metadataContentTranslationY = with(density) {
-        (12.dp * (1f - minimizedProgress)).toPx()
-    }
-
     Column(
         modifier = modifier
             .width(viewportWidth)
@@ -130,15 +123,7 @@ internal fun PlayerTextLayout(
             offsetX = titleX,
             lineHorizontalPadding = lineHorizontalPadding,
             scale = fullscreenTitleScale,
-            textAlign = textAlign,
-            onBounds = { coordinates, transform ->
-                onTitleBounds(
-                    coordinates,
-                    transform.copy(
-                        translationY = transform.translationY + metadataContentTranslationY
-                    )
-                )
-            }
+            textAlign = textAlign
         )
         PlayerArtistText(
             artist = artist,
@@ -154,15 +139,7 @@ internal fun PlayerTextLayout(
             scale = fullscreenArtistScale,
             textAlign = textAlign,
             canClickArtist = canClickArtist,
-            onArtistClick = onArtistClick,
-            onBounds = { coordinates, transform ->
-                onArtistBounds(
-                    coordinates,
-                    transform.copy(
-                        translationY = transform.translationY + metadataContentTranslationY
-                    )
-                )
-            }
+            onArtistClick = onArtistClick
         )
     }
 }

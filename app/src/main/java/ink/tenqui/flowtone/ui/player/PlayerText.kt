@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -47,8 +46,6 @@ internal fun SharedSongInfo(
     switchDirection: Int,
     artistClickEnabled: Boolean = false,
     onArtistClick: ((String) -> Unit)? = null,
-    onTitleBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
-    onArtistBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val metadataGroupHeight = 60.dp
@@ -107,13 +104,6 @@ internal fun SharedSongInfo(
     )
     val metadataSwitchDistance = 20.dp
     val metadataSwitchDistancePx = with(density) { metadataSwitchDistance.roundToPx() }
-    val sharedMetadataTransform = with(density) {
-        FullscreenLayerTransform(
-            translationX = viewportX.toPx() - metadataSwitchDistance.toPx(),
-            translationY = viewportY.toPx() + fullTextExitOffsetY.toPx()
-        )
-    }
-
     Box(
         modifier = modifier
             .width(viewportClipWidth + metadataSwitchDistance * 2f)
@@ -162,31 +152,10 @@ internal fun SharedSongInfo(
                 canClickArtist = artistClickEnabled &&
                     onArtistClick != null &&
                     isSelectableArtist(state.artist),
-                onArtistClick = onArtistClick,
-                onTitleBounds = { coordinates, transform ->
-                    onTitleBounds(
-                        coordinates,
-                        transform.withAdditionalTranslation(sharedMetadataTransform)
-                    )
-                },
-                onArtistBounds = { coordinates, transform ->
-                    onArtistBounds(
-                        coordinates,
-                        transform.withAdditionalTranslation(sharedMetadataTransform)
-                    )
-                }
+                onArtistClick = onArtistClick
             )
         }
     }
-}
-
-private fun FullscreenLayerTransform.withAdditionalTranslation(
-    additional: FullscreenLayerTransform
-): FullscreenLayerTransform {
-    return copy(
-        translationX = translationX + additional.translationX,
-        translationY = translationY + additional.translationY
-    )
 }
 
 @Composable

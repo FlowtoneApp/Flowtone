@@ -14,9 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 
 @Composable
@@ -37,22 +34,12 @@ internal fun PlayerMainControls(
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
-    onControlsRowBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
     Box(
         modifier = modifier
             .width(screenWidth)
             .height(playPauseTouchSize)
-            .onGloballyPositioned { coordinates ->
-                onControlsRowBounds(
-                    coordinates,
-                    FullscreenLayerTransform(
-                        translationY = with(density) { currentTop.toPx() }
-                    )
-                )
-            }
             .graphicsLayer {
                 translationY = currentTop.toPx()
             }

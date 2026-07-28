@@ -1,6 +1,6 @@
 package ink.tenqui.flowtone.ui.player
 
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,8 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -74,9 +72,6 @@ internal fun FullscreenCollapseArrow(
     progress: Float,
     interactionSource: MutableInteractionSource,
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {},
-    longClickEnabled: Boolean = false,
-    onVisibleBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val visibleProgress = SoftElementEasing.transform(progress.coerceIn(0f, 1f))
@@ -93,21 +88,11 @@ internal fun FullscreenCollapseArrow(
         modifier = modifier
             .offset(y = arrowOffsetY)
             .size(width = 42.dp, height = 30.dp)
-            .onGloballyPositioned { coordinates ->
-                onVisibleBounds(
-                    coordinates,
-                    FullscreenLayerTransform(
-                        scaleX = lerpFloat(0.72f, 1f, visibleProgress),
-                        scaleY = lerpFloat(0.72f, 1f, visibleProgress)
-                    )
-                )
-            }
-            .combinedClickable(
+            .clickable(
                 enabled = progress > 0.72f,
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick,
-                onLongClick = if (longClickEnabled) onLongClick else null
+                onClick = onClick
             )
             .graphicsLayer {
                 alpha = visibleProgress

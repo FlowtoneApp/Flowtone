@@ -12,8 +12,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -34,7 +32,6 @@ internal fun SharedPlaybackControls(
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
-    onControlsRowBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val minimizedTouchSize = 40.dp
@@ -105,7 +102,6 @@ internal fun SharedPlaybackControls(
         onPlayPrevious = onPlayPrevious,
         onTogglePlayPause = onTogglePlayPause,
         onPlayNext = onPlayNext,
-        onControlsRowBounds = onControlsRowBounds,
         modifier = modifier
     )
 }
@@ -131,7 +127,6 @@ internal fun SideButtonsOverlay(
     onAddToPlaylist: () -> Unit,
     onOpenSongInfo: () -> Unit,
     onOpenQueue: () -> Unit,
-    onFullscreenActionBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val enterProgress = ((progress - 0.08f) / 0.92f).coerceIn(0f, 1f)
@@ -202,10 +197,7 @@ internal fun SideButtonsOverlay(
         Row(
             modifier = Modifier
                 .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
-                .size(height = buttonSize, width = buttonSize * 2f + fullscreenMenuSpacing)
-                .onGloballyPositioned { coordinates ->
-                    onFullscreenActionBounds(coordinates, FullscreenLayerTransform())
-                },
+                .size(height = buttonSize, width = buttonSize * 2f + fullscreenMenuSpacing),
             horizontalArrangement = Arrangement.spacedBy(fullscreenMenuSpacing)
         ) {
             FavoriteButton(

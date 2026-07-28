@@ -14,8 +14,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,7 +36,6 @@ internal fun PlayerArtistText(
     textAlign: TextAlign,
     canClickArtist: Boolean,
     onArtistClick: ((String) -> Unit)?,
-    onBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val artistClickShape = RoundedCornerShape(4.dp)
@@ -53,12 +50,6 @@ internal fun PlayerArtistText(
                 scaleX = scale
                 scaleY = scale
                 transformOrigin = TransformOrigin(0f, 0f)
-            }
-            .onGloballyPositioned { coordinates ->
-                onBounds(
-                    coordinates,
-                    FullscreenLayerTransform(scaleX = scale, scaleY = scale)
-                )
             }
     ) {
         Text(

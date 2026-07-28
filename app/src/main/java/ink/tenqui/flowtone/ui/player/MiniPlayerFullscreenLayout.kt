@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -57,9 +56,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     layoutMetrics: MiniPlayerFullscreenLayoutMetrics,
     artworkPlaybackScale: Float,
     artworkPlaybackRotationDegrees: Float,
-    diagnostics: FullscreenLayoutDiagnostics,
-    diagnosticsEnabled: Boolean,
-    onDiagnosticsToggle: () -> Unit,
     titleColor: Color,
     artistColor: Color,
     controlIconColor: Color,
@@ -163,12 +159,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
         playbackScale = artworkPlaybackScale,
         playbackRotationDegrees = artworkPlaybackRotationDegrees,
-        onOuterBounds = { coordinates, transform ->
-            diagnostics.record("artworkOuter", coordinates, transform)
-        },
-        onImageBounds = { coordinates, transform ->
-            diagnostics.record("artworkImage", coordinates, transform)
-        },
         layerAlpha = 1f - metrics.artistExitProgress,
         layerTranslationY =
             16.dp *
@@ -202,12 +192,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             switchDirection = collapsedMetadataSwitchDirection,
             artistClickEnabled = artistClickEnabled,
             onArtistClick = onArtistClick,
-            onTitleBounds = { coordinates, transform ->
-                diagnostics.record("title", coordinates, transform)
-            },
-            onArtistBounds = { coordinates, transform ->
-                diagnostics.record("artist", coordinates, transform)
-            },
             modifier = Modifier
                 .align(Alignment.TopStart)
         )
@@ -277,12 +261,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onSeekTo = callbacks.onSeekTo,
                 onLockPlayPauseVisual = onLockPlayPauseVisual,
                 onScrubbingChange = onScrubbingChange,
-                onProgressBounds = { coordinates, transform ->
-                    diagnostics.record("progress", coordinates, transform)
-                },
-                onTimeLabelsBounds = { coordinates, transform ->
-                    diagnostics.record("timeLabels", coordinates, transform)
-                },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = designExpandedProgressTop)
@@ -301,9 +279,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onPlayPrevious = onPlayPrevious,
                 onTogglePlayPause = onTogglePlayPause,
                 onPlayNext = onPlayNext,
-                onControlsRowBounds = { coordinates, transform ->
-                    diagnostics.record("controls", coordinates, transform)
-                },
                 modifier = Modifier.align(Alignment.TopStart)
             )
             SideButtonsOverlay(
@@ -329,10 +304,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     .align(Alignment.TopStart)
                     .fillMaxSize()
                     .zIndex(2f),
-                onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode,
-                onFullscreenActionBounds = { coordinates, transform ->
-                    diagnostics.record("actions", coordinates, transform)
-                }
+                onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
             )
             MiniPlayerLyricsHost(
                 currentSong = playerUiState.currentSong,
@@ -365,25 +337,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         progress = fullscreenProgress,
         interactionSource = collapseInteractionSource,
         onClick = onCollapseClick,
-        onLongClick = onDiagnosticsToggle,
-        longClickEnabled = isFullscreenLayoutDiagnosticsAvailable(),
-        onVisibleBounds = { coordinates, transform ->
-            diagnostics.record("collapseArrow", coordinates, transform)
-        },
         modifier = Modifier
             .align(Alignment.TopCenter)
             .zIndex(10f)
     )
-    }
-    if (diagnosticsEnabled && fullscreenProgress > 0.99f) {
-        FullscreenLayoutDiagnosticsOverlay(
-            diagnostics = diagnostics,
-            animationProgress = animationProgress,
-            fullscreenProgress = fullscreenProgress,
-            layoutScale = layoutScale,
-            artworkScale = artworkPlaybackScale,
-            artworkRotationZ = artworkPlaybackRotationDegrees,
-            modifier = Modifier.align(Alignment.TopStart)
-        )
     }
 }

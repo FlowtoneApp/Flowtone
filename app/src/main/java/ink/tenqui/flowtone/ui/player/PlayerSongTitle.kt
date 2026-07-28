@@ -11,8 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,7 +27,6 @@ internal fun PlayerSongTitle(
     lineHorizontalPadding: Dp,
     scale: Float,
     textAlign: TextAlign,
-    onBounds: (LayoutCoordinates, FullscreenLayerTransform) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -40,12 +37,6 @@ internal fun PlayerSongTitle(
                 scaleX = scale
                 scaleY = scale
                 transformOrigin = TransformOrigin(0f, 0f)
-            }
-            .onGloballyPositioned { coordinates ->
-                onBounds(
-                    coordinates,
-                    FullscreenLayerTransform(scaleX = scale, scaleY = scale)
-                )
             }
     ) {
         Text(
