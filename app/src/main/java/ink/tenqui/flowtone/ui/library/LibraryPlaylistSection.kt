@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -52,6 +53,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
@@ -213,7 +215,20 @@ private fun LibraryPlaylistMenuItems(
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
     onEditingPlaylistBoundsRemoved: (String) -> Unit
 ) {
+    val playlistItemsHeight by animateDpAsState(
+        targetValue = playlistItemHeight * (playlists.size + 2) +
+            LibraryMenuChildSpacing * (playlists.size + 1),
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "libraryPlaylistItemsHeight"
+    )
+
     Column(
+        modifier = Modifier
+            .height(playlistItemsHeight)
+            .clipToBounds(),
         verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
     ) {
         Box(
