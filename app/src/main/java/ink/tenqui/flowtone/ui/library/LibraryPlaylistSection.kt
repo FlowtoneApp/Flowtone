@@ -14,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -33,9 +35,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,23 +100,31 @@ internal fun LibraryCollectionMenu(
     }
     val outlineColor = MaterialTheme.colorScheme.outline
     val menuShape = RoundedCornerShape(LibraryMenuCornerRadius)
-    val fillBrush = remember(parentColor, expanded) {
+    val colorTransitionProgress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "libraryMenuColorTransition"
+    )
+    val fillBrush = remember(parentColor, colorTransitionProgress) {
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0f to parentColor,
-                0.28f to parentColor.copy(alpha = if (expanded) 0.82f else 1f),
-                0.68f to parentColor.copy(alpha = if (expanded) 0.22f else 1f),
-                1f to parentColor.copy(alpha = if (expanded) 0.025f else 1f)
+                0.28f to parentColor.copy(alpha = 1f - 0.18f * colorTransitionProgress),
+                0.68f to parentColor.copy(alpha = 1f - 0.78f * colorTransitionProgress),
+                1f to parentColor.copy(alpha = 1f - 0.975f * colorTransitionProgress)
             )
         )
     }
-    val outlineBrush = remember(outlineColor) {
+    val outlineBrush = remember(outlineColor, colorTransitionProgress) {
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0f to Color.Transparent,
                 0.48f to Color.Transparent,
-                0.76f to outlineColor.copy(alpha = 0.16f),
-                1f to outlineColor.copy(alpha = 0.64f)
+                0.76f to outlineColor.copy(alpha = 0.16f * colorTransitionProgress),
+                1f to outlineColor.copy(alpha = 0.64f * colorTransitionProgress)
             )
         )
     }
@@ -173,11 +181,17 @@ internal fun LibraryCollectionMenu(
                     onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved
                 )
             }
+        }
             LibraryMenuToggleButton(
                 expanded = expanded,
-                onClick = { onExpandedChange(!expanded) }
+                onClick = { onExpandedChange(!expanded) },
+                lineGapColor = if (expanded) {
+                    MaterialTheme.colorScheme.background
+                } else {
+                    parentColor
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
-        }
     }
 }
 
@@ -291,36 +305,51 @@ private fun LibraryPlaylistMenuItems(
 @Composable
 private fun LibraryMenuToggleButton(
     expanded: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    lineGapColor: Color,
+    modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val mirrorScale by animateFloatAsState(
         targetValue = if (expanded) 1f else -1f,
         animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
         label = "libraryMenuToggleMirror"
     )
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (isPressed) 0.055f else 0f,
+        animationSpec = tween(durationMillis = 90, easing = FlowtoneMotion.Easing),
+        label = "libraryMenuTogglePress"
+    )
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(
-                top = LibraryMenuToggleButtonBottomPadding,
-                bottom = LibraryMenuToggleButtonBottomPadding
+            .height(LibraryMenuToggleButtonSize)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
-        FilledIconButton(
-            onClick = onClick,
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.82f),
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ),
-            modifier = Modifier.size(LibraryMenuToggleButtonSize)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.KeyboardArrowUp,
-                contentDescription = if (expanded) "收起歌单" else "展开歌单",
-                modifier = Modifier.graphicsLayer { scaleY = mirrorScale }
-            )
-        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = pressAlpha))
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .width(LibraryMenuToggleLineGapWidth)
+                .height(LibraryMenuToggleLineGapHeight)
+                .background(lineGapColor)
+        )
+        Icon(
+            imageVector = Icons.Rounded.KeyboardArrowUp,
+            contentDescription = if (expanded) "收起歌单" else "展开歌单",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.graphicsLayer { scaleY = mirrorScale }
+        )
     }
 }
 
