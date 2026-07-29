@@ -97,7 +97,7 @@ internal fun HomeScreen(
             scrollState = scrollState,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 21.dp, top = 48.dp, end = 20.dp)
+                .padding(top = 48.dp)
         )
     }
 }
@@ -303,19 +303,23 @@ private fun HomeRecommendationSection(
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(top = 12.dp)
+                contentPadding = PaddingValues(start = HomeHorizontalListStartPadding),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
             ) {
                 items(
                     items = songs,
@@ -347,12 +351,13 @@ private fun FrequentPlaylistSection(
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         LazyRow(
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing),
-            contentPadding = PaddingValues(end = HomeFrequentPlaylistListEndPadding),
+            contentPadding = PaddingValues(start = HomeHorizontalListStartPadding),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp)
@@ -454,19 +459,23 @@ private fun RecentlyAddedSection(
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(top = 12.dp)
+                contentPadding = PaddingValues(start = HomeHorizontalListStartPadding),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
             ) {
                 items(
                     items = songs.chunked(HomeRecentlyAddedRows),
@@ -624,12 +633,12 @@ private fun RecommendationArtwork(
 }
 
 private const val HomeRecommendationCount = 8
-private const val HomeRecentlyAddedCount = 5
+private const val HomeRecentlyAddedCount = 6
 private const val HomeRecentlyAddedRows = 2
+private val HomeHorizontalListStartPadding = 20.dp
 private val HomeFrequentPlaylistCardWidth = 184.dp
 private val HomeFrequentPlaylistCardHeight = 92.dp
 private val HomeFrequentPlaylistCardSpacing = 12.dp
-private val HomeFrequentPlaylistListEndPadding = 20.dp
 
 private data class FrequentPlaylistCard(
     val card: LibraryPlaylistCard,
