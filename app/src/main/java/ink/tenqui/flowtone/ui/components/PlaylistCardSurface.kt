@@ -411,14 +411,14 @@ internal val CreatePlaylistLightBackground = Color(0xFF50396D)
 internal val CreatePlaylistDarkBackground = Color(0xFF2D223D)
 
 internal val LikedMusicLightCloudColors = listOf(
-    Color(0xFFE6A1BE),
-    Color(0xFFB9A3DD),
-    Color(0xFFA6B9E1)
+    Color(0xFFF2C6D9),
+    Color(0xFFDCCEEF),
+    Color(0xFFCDDDF3)
 )
 internal val LikedMusicDarkCloudColors = listOf(
-    Color(0xFF8F496B),
-    Color(0xFF66518E),
-    Color(0xFF4D608D)
+    Color(0xFFA96A84),
+    Color(0xFF7A69A7),
+    Color(0xFF637CA9)
 )
 
 private val LikedMusicLightBackground = Color(0xFFEED1E0)
