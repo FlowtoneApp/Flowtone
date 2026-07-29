@@ -355,8 +355,11 @@ private fun HomeRecommendationSection(
                     .fillMaxWidth()
                     .trackHorizontalListGesture(scrollState, onGestureActiveChange)
                     .horizontalScroll(scrollState)
-                    .padding(start = HomeHorizontalListStartPadding)
-                    .padding(top = 12.dp)
+                    .padding(
+                        start = HomeHorizontalListStartPadding,
+                        end = HomeHorizontalListEndPadding,
+                        top = 12.dp
+                    )
             ) {
                 songs.forEach { song ->
                     RecommendationSongCard(
@@ -395,8 +398,11 @@ private fun FrequentPlaylistSection(
                 .fillMaxWidth()
                 .trackHorizontalListGesture(scrollState, onGestureActiveChange)
                 .horizontalScroll(scrollState)
-                .padding(start = HomeHorizontalListStartPadding)
-                .padding(top = 12.dp)
+                .padding(
+                    start = HomeHorizontalListStartPadding,
+                    end = HomeHorizontalListEndPadding,
+                    top = 12.dp
+                )
         ) {
             if (playlists.isEmpty()) {
                 FrequentPlaylistPlaceholderCard(
@@ -508,8 +514,11 @@ private fun RecentlyAddedSection(
                     .fillMaxWidth()
                     .trackHorizontalListGesture(scrollState, onGestureActiveChange)
                     .horizontalScroll(scrollState)
-                    .padding(start = HomeHorizontalListStartPadding)
-                    .padding(top = 12.dp)
+                    .padding(
+                        start = HomeHorizontalListStartPadding,
+                        end = HomeHorizontalListEndPadding,
+                        top = 12.dp
+                    )
             ) {
                 songs.chunked(HomeRecentlyAddedRows).forEach { columnSongs ->
                     Column(
@@ -663,6 +672,7 @@ private const val HomeRecommendationCount = 8
 private const val HomeRecentlyAddedCount = 6
 private const val HomeRecentlyAddedRows = 2
 private val HomeHorizontalListStartPadding = 20.dp
+private val HomeHorizontalListEndPadding = 20.dp
 private val HomeFrequentPlaylistCardWidth = 184.dp
 private val HomeFrequentPlaylistCardHeight = 92.dp
 private val HomeFrequentPlaylistCardSpacing = 12.dp
