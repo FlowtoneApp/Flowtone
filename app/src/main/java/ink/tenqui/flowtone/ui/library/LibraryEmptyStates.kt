@@ -43,7 +43,6 @@ internal fun EmptyPlaylistState(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 28.dp),
         contentAlignment = Alignment.Center
     ) {
