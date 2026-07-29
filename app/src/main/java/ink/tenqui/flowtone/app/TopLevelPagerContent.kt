@@ -15,6 +15,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -48,10 +52,12 @@ internal fun TopLevelPagerContent(
     flowCloudSpeed: Float,
     modifier: Modifier = Modifier
 ) {
+    var horizontalListGestureActive by remember { mutableStateOf(false) }
+
     Box(modifier = modifier) {
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = userScrollEnabled,
+            userScrollEnabled = userScrollEnabled && !horizontalListGestureActive,
             modifier = Modifier.fillMaxSize()
         ) { pageIndex ->
             val page = TopLevelPage.entries[pageIndex]
@@ -73,6 +79,9 @@ internal fun TopLevelPagerContent(
                     isFlowCloudPlaying = isPageFlowCloudActive,
                     drawBackground = false,
                     scrollState = homeScrollState,
+                    onHorizontalListGestureActiveChange = { isActive ->
+                        horizontalListGestureActive = isActive
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
 

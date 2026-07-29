@@ -3,6 +3,10 @@ package ink.tenqui.flowtone.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,10 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +74,7 @@ internal fun HomeScreen(
     isFlowCloudPlaying: Boolean = true,
     drawBackground: Boolean = true,
     scrollState: ScrollState = rememberScrollState(),
+    onHorizontalListGestureActiveChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val backgroundModifier = if (drawBackground) {
@@ -95,6 +98,7 @@ internal fun HomeScreen(
             flowCloudSpeed = flowCloudSpeed,
             isFlowCloudPlaying = isFlowCloudPlaying,
             scrollState = scrollState,
+            onHorizontalListGestureActiveChange = onHorizontalListGestureActiveChange,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 48.dp)
@@ -217,6 +221,27 @@ private const val TopCloudVisibleHeightFraction = 1.30f
 private const val BottomRightClearRadiusFraction = 0.82f
 
 @Composable
+private fun Modifier.trackHorizontalListGesture(
+    scrollState: ScrollState,
+    onGestureActiveChange: (Boolean) -> Unit
+): Modifier {
+    val latestOnGestureActiveChange = rememberUpdatedState(onGestureActiveChange)
+    return pointerInput(scrollState) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false)
+            val listOwnsGesture = scrollState.canScrollForward
+            if (listOwnsGesture) {
+                latestOnGestureActiveChange.value(true)
+            }
+            waitForUpOrCancellation()
+            if (listOwnsGesture) {
+                latestOnGestureActiveChange.value(false)
+            }
+        }
+    }
+}
+
+@Composable
 private fun HomeContent(
     songs: List<Song>,
     listeningStats: ListeningStatsSnapshot,
@@ -227,6 +252,7 @@ private fun HomeContent(
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     scrollState: ScrollState,
+    onHorizontalListGestureActiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val recommendedSongs = remember(songs) {
@@ -238,7 +264,9 @@ private fun HomeContent(
             playlists = playlists
         )
     }
-    val frequentPlaylistListState = rememberLazyListState()
+    val recommendationScrollState = rememberScrollState()
+    val frequentPlaylistScrollState = rememberScrollState()
+    val recentlyAddedScrollState = rememberScrollState()
     val recentlyAddedSongs = remember(songs) {
         songs.sortedWith(
             compareByDescending<Song> { song -> song.dateAddedSeconds }
@@ -266,6 +294,8 @@ private fun HomeContent(
             HomeRecommendationSection(
                 title = "随便听听",
                 songs = recommendedSongs,
+                scrollState = recommendationScrollState,
+                onGestureActiveChange = onHorizontalListGestureActiveChange,
                 onSongClick = onSongClick
             )
         }
@@ -276,7 +306,8 @@ private fun HomeContent(
         ) {
             FrequentPlaylistSection(
                 playlists = frequentPlaylists,
-                listState = frequentPlaylistListState,
+                scrollState = frequentPlaylistScrollState,
+                onGestureActiveChange = onHorizontalListGestureActiveChange,
                 flowCloudSpeed = flowCloudSpeed,
                 isFlowCloudPlaying = isFlowCloudPlaying,
                 onOpenPlaylist = onOpenPlaylist
@@ -290,6 +321,8 @@ private fun HomeContent(
             RecentlyAddedSection(
                 title = "最近新增",
                 songs = recentlyAddedSongs,
+                scrollState = recentlyAddedScrollState,
+                onGestureActiveChange = onHorizontalListGestureActiveChange,
                 onSongClick = onSongClick
             )
         }
@@ -300,6 +333,8 @@ private fun HomeContent(
 private fun HomeRecommendationSection(
     title: String,
     songs: List<Song>,
+    scrollState: ScrollState,
+    onGestureActiveChange: (Boolean) -> Unit,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -314,17 +349,16 @@ private fun HomeRecommendationSection(
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
-            LazyRow(
+            Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(start = HomeHorizontalListStartPadding),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .trackHorizontalListGesture(scrollState, onGestureActiveChange)
+                    .horizontalScroll(scrollState)
+                    .padding(start = HomeHorizontalListStartPadding)
                     .padding(top = 12.dp)
             ) {
-                items(
-                    items = songs,
-                    key = { song -> "${song.sourceType}:${song.id}:${song.uri}" }
-                ) { song ->
+                songs.forEach { song ->
                     RecommendationSongCard(
                         song = song,
                         onClick = { onSongClick(song) }
@@ -338,7 +372,8 @@ private fun HomeRecommendationSection(
 @Composable
 private fun FrequentPlaylistSection(
     playlists: List<FrequentPlaylistCard>,
-    listState: LazyListState,
+    scrollState: ScrollState,
+    onGestureActiveChange: (Boolean) -> Unit,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
@@ -354,34 +389,29 @@ private fun FrequentPlaylistSection(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
-        LazyRow(
-            state = listState,
+        Row(
             horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing),
-            contentPadding = PaddingValues(start = HomeHorizontalListStartPadding),
             modifier = Modifier
                 .fillMaxWidth()
+                .trackHorizontalListGesture(scrollState, onGestureActiveChange)
+                .horizontalScroll(scrollState)
+                .padding(start = HomeHorizontalListStartPadding)
                 .padding(top = 12.dp)
         ) {
             if (playlists.isEmpty()) {
-                item(key = "frequent-playlist-placeholder") {
-                    FrequentPlaylistPlaceholderCard(
+                FrequentPlaylistPlaceholderCard(
+                    modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
+                )
+            } else {
+                playlists.forEach { playlist ->
+                    FrequentPlaylistCardItem(
+                        playlist = playlist,
+                        flowCloudSpeed = flowCloudSpeed,
+                        isFlowCloudPlaying = isFlowCloudPlaying,
+                        onClick = { onOpenPlaylist(playlist.card) },
                         modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
                     )
                 }
-                return@LazyRow
-            }
-
-            items(
-                items = playlists,
-                key = { playlist -> playlist.card.id }
-            ) { playlist ->
-                FrequentPlaylistCardItem(
-                    playlist = playlist,
-                    flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isFlowCloudPlaying,
-                    onClick = { onOpenPlaylist(playlist.card) },
-                    modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
-                )
             }
         }
     }
@@ -456,6 +486,8 @@ private fun FrequentPlaylistCardItem(
 private fun RecentlyAddedSection(
     title: String,
     songs: List<Song>,
+    scrollState: ScrollState,
+    onGestureActiveChange: (Boolean) -> Unit,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -470,21 +502,16 @@ private fun RecentlyAddedSection(
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
-            LazyRow(
+            Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(start = HomeHorizontalListStartPadding),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .trackHorizontalListGesture(scrollState, onGestureActiveChange)
+                    .horizontalScroll(scrollState)
+                    .padding(start = HomeHorizontalListStartPadding)
                     .padding(top = 12.dp)
             ) {
-                items(
-                    items = songs.chunked(HomeRecentlyAddedRows),
-                    key = { columnSongs ->
-                        columnSongs.joinToString(separator = "|") { song ->
-                            "${song.sourceType}:${song.id}:${song.uri}"
-                        }
-                    }
-                ) { columnSongs ->
+                songs.chunked(HomeRecentlyAddedRows).forEach { columnSongs ->
                     Column(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.width(260.dp)
