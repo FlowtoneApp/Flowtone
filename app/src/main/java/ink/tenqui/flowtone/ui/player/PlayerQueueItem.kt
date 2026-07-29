@@ -22,6 +22,7 @@ internal fun PlayerQueueItem(
         artistColor = Color.White,
         durationColor = Color.White,
         currentSongBackgroundColor = Color.Black.copy(alpha = 0.28f),
+        compact = true,
         modifier = modifier.padding(vertical = PlayerQueueItemVerticalPadding)
     )
 }

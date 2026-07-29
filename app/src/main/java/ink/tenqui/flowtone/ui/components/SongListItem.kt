@@ -41,8 +41,13 @@ fun SongListItem(
     titleColor: Color? = null,
     artistColor: Color? = null,
     durationColor: Color? = null,
-    currentSongBackgroundColor: Color? = null
+    currentSongBackgroundColor: Color? = null,
+    compact: Boolean = false
 ) {
+    val itemMinHeight = if (compact) 64.dp else 72.dp
+    val itemVerticalPadding = if (compact) 6.dp else 8.dp
+    val artworkSize = if (compact) 48.dp else 56.dp
+    val artistTopPadding = if (compact) 0.dp else 2.dp
     val contentColor = if (isCurrentSong) {
         MaterialTheme.colorScheme.onSecondaryContainer
     } else {
@@ -62,13 +67,14 @@ fun SongListItem(
             .clip(rowShape)
             .then(rowBackground)
             .clickable { onClick(song) }
-            .heightIn(min = 72.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .heightIn(min = itemMinHeight)
+            .padding(horizontal = 12.dp, vertical = itemVerticalPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AlbumArtwork(
             song = song,
-            isCurrentSong = isCurrentSong
+            isCurrentSong = isCurrentSong,
+            modifier = Modifier.size(artworkSize)
         )
         Column(
             modifier = Modifier
@@ -93,7 +99,7 @@ fun SongListItem(
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp)
+                modifier = Modifier.padding(top = artistTopPadding)
             )
         }
         Box(
