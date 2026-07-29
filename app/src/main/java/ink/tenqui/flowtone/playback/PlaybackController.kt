@@ -172,6 +172,35 @@ class PlaybackController(
         }
     }
 
+    fun addSongsNext(
+        songs: List<Song>,
+        source: PlaybackSource = PlaybackSource.Unknown
+    ): Boolean {
+        if (songs.isEmpty()) return false
+        val controller = currentControllerOrNull() ?: return false
+        val currentIndex = controller.currentMediaItemIndex
+        if (currentIndex == C.INDEX_UNSET) return false
+        return runCatching {
+            controller.addMediaItems(
+                currentIndex + 1,
+                songs.map { it.toMediaItem(source) }
+            )
+            true
+        }.getOrDefault(false)
+    }
+
+    fun appendSongsToQueue(
+        songs: List<Song>,
+        source: PlaybackSource = PlaybackSource.Unknown
+    ): Boolean {
+        if (songs.isEmpty()) return false
+        val controller = currentControllerOrNull() ?: return false
+        return runCatching {
+            controller.addMediaItems(songs.map { it.toMediaItem(source) })
+            true
+        }.getOrDefault(false)
+    }
+
     fun updateCurrentSong(song: Song) {
         _playbackState.update {
             it.copy(

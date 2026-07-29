@@ -584,6 +584,10 @@ internal fun Song.queueItemKey(): String {
     return "${sourceType.name}:$id:$uri"
 }
 
+internal fun Song.queueItemKey(queueIndex: Int): String {
+    return "${queueItemKey()}:$queueIndex"
+}
+
 private fun Song.queueSongKey(): QueueSongKey {
     return QueueSongKey(
         id = id,

@@ -27,7 +27,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +40,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -61,6 +67,7 @@ import androidx.compose.foundation.pager.PagerState
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
+import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import kotlinx.coroutines.delay
 
 @Composable
@@ -71,6 +78,7 @@ internal fun FlowtoneTopBar(
     additionalPathSegments: List<String>,
     backgroundAlpha: Float,
     titleVisible: Boolean,
+    songSelectionState: PlaylistSelectionTopBarState?,
     hideBackButton: Boolean,
     searchActive: Boolean,
     searchQuery: String,
@@ -126,6 +134,20 @@ internal fun FlowtoneTopBar(
         animationSpec = tween(160, easing = FlowtonePageEasing),
         label = "TopBarTitleVisibilityAlpha"
     )
+    var retainedSelectionState by remember {
+        mutableStateOf<PlaylistSelectionTopBarState?>(null)
+    }
+    LaunchedEffect(songSelectionState) {
+        if (songSelectionState != null) {
+            retainedSelectionState = songSelectionState
+        }
+    }
+    val selectionProgress by animateFloatAsState(
+        targetValue = if (songSelectionState != null) 1f else 0f,
+        animationSpec = tween(220, easing = FlowtonePageEasing),
+        label = "PlaylistSelectionTopBarProgress"
+    )
+    val displayedSelectionState = songSelectionState ?: retainedSelectionState
     val density = LocalDensity.current
     val navigationShiftPx = with(density) {
         FlowtoneTopBarNavigationTitleShift.toPx()
@@ -189,9 +211,11 @@ internal fun FlowtoneTopBar(
                 .padding(start = FlowtoneTopBarTitleStartPadding, end = titleEndPadding)
                 .clipToBounds()
                 .graphicsLayer {
-                    alpha = (1f - searchProgress) * titleVisibilityAlpha
+                    alpha = (1f - searchProgress) * titleVisibilityAlpha *
+                        (1f - selectionProgress)
                     translationX = -titleExitDistancePx * searchProgress
-                    translationY = 0f
+                    // 进入多选时原标题向下退出，退出多选时向上回到原位。
+                    translationY = titleExitDistancePx * selectionProgress
                 }
         ) {
             FlowtonePathTitle(
@@ -201,6 +225,89 @@ internal fun FlowtoneTopBar(
                 navigationShiftPx = navigationShiftPx,
                 modifier = Modifier.fillMaxSize()
             )
+        }
+        if (displayedSelectionState != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = (1f - searchProgress) * selectionProgress
+                    }
+            ) {
+                Text(
+                    text = "已选择 ${displayedSelectionState.selectedCount} 首",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = FlowtoneTopBarTitleStartPadding)
+                        .graphicsLayer {
+                            translationX = navigationShiftPx
+                            // 提示进入时从上方向下，退出时向上离开。
+                            translationY = -titleExitDistancePx * (1f - selectionProgress)
+                        }
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp)
+                        .graphicsLayer {
+                            alpha = selectionProgress
+                            // 操作图标进入时向左，退出时向右。
+                            translationX = titleExitDistancePx * (1f - selectionProgress)
+                        }
+                ) {
+                    IconButton(
+                        onClick = displayedSelectionState.onAddNext,
+                        enabled = !displayedSelectionState.busy
+                    ) {
+                        Box(modifier = Modifier.size(26.dp)) {
+                            Icon(
+                                imageVector = Icons.Rounded.MusicNote,
+                                contentDescription = "添加到下一首",
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .size(22.dp)
+                            )
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(14.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = displayedSelectionState.onAddToPlaylist,
+                        enabled = !displayedSelectionState.busy
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                            contentDescription = "添加到歌单"
+                        )
+                    }
+                    displayedSelectionState.onDelete?.let { onDelete ->
+                        IconButton(
+                            onClick = onDelete,
+                            enabled = !displayedSelectionState.busy
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = "从歌单中移除",
+                                tint = if (displayedSelectionState.busy) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
         if (searchAvailable && searchActive) {
             Box(

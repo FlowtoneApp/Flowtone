@@ -25,12 +25,13 @@ import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
 import ink.tenqui.flowtone.ui.components.SongListItem
 
 @Composable
-fun LikedSongsPlaylistScreen(
+internal fun LikedSongsPlaylistScreen(
     playlistTitle: String,
     allSongs: List<Song>,
     likedSongKeys: List<String>,
     currentSong: Song?,
     onSongClick: (List<Song>, Int) -> Unit,
+    batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     itemModifier: (Int) -> Modifier = { Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
@@ -77,33 +78,31 @@ fun LikedSongsPlaylistScreen(
         contentModifier = contentModifier,
         modifier = modifier
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = 16.dp,
-                bottom = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            itemsIndexed(
-                items = likedSongs,
-                key = { _, song -> song.id }
-            ) { index, song ->
-                val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1)
-                    .coerceAtLeast(0)
-                val visibleAnimationIndex = (index - firstVisibleSongIndex)
-                    .coerceIn(0, 10)
-                SongListItem(
-                    song = song,
-                    isCurrentSong = currentSong?.id == song.id,
-                    onClick = {
-                        onSongClick(likedSongs, index)
-                    },
-                    modifier = itemModifier(visibleAnimationIndex)
-                        .padding(horizontal = 8.dp)
+        SelectablePlaylistSongList(
+            sourceKey = LikedSongsPlaylistId,
+            source = PlaylistSelectionSource.LikedSongs,
+            playlistTitle = playlistTitle,
+            entries = likedSongs.map { song ->
+                SelectablePlaylistSong(
+                    selectionKey = "liked:${song.id}:${song.uri}",
+                    song = song
                 )
-            }
-        }
+            },
+            listState = listState,
+            currentSong = currentSong,
+            likedSongKeys = batchActions.likedSongKeys,
+            editablePlaylists = batchActions.editablePlaylists,
+            clearSelectionRequest = batchActions.clearSelectionRequest,
+            onSelectionModeChange = batchActions.onSelectionModeChange,
+            onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
+            onSongClick = onSongClick,
+            onAddSongsNext = batchActions.onAddSongsNext,
+            onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
+            onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
+            onSetSongsLiked = batchActions.onSetSongsLiked,
+            onRemoveEntries = { _, done -> done(false) },
+            itemModifier = itemModifier,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }

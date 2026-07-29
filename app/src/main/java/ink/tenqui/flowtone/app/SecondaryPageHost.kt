@@ -30,6 +30,7 @@ import ink.tenqui.flowtone.ui.library.ArtistDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
+import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
@@ -68,6 +69,7 @@ internal fun SecondaryPageHost(
     listeningRecordInitialTab: ListeningRecordTab,
     likedSongKeys: List<String>,
     playlistSongEntries: List<PlaylistSongEntry>,
+    playlistBatchActions: PlaylistBatchActions,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
@@ -82,6 +84,20 @@ internal fun SecondaryPageHost(
     onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var songSelectionActive by remember { mutableStateOf(false) }
+    val activeBatchActions = playlistBatchActions.copy(
+        onSelectionModeChange = { active ->
+            songSelectionActive = active
+            playlistBatchActions.onSelectionModeChange(active)
+        }
+    )
+    fun closeSelectionOrPage() {
+        if (songSelectionActive) {
+            playlistBatchActions.onRequestClearSelection()
+        } else {
+            onCloseSecondaryPage()
+        }
+    }
     var retainedPlaylistId by remember { mutableStateOf<String?>(null) }
     var retainedPlaylistTitle by remember { mutableStateOf<String?>(null) }
     var retainedArtistName by remember { mutableStateOf<String?>(null) }
@@ -226,6 +242,7 @@ internal fun SecondaryPageHost(
                 permissionDenied = permissionDenied,
                 onRequestPermission = onRequestPermission,
                 onSongClick = onSongClick,
+                batchActions = activeBatchActions,
                 showContentHeader = false,
                 itemModifier = ::songItemModifier,
                 onCollapseProgressStateChange =
@@ -234,7 +251,7 @@ internal fun SecondaryPageHost(
                 contentModifier = fadingContainerModifier(),
                 modifier = Modifier
                     .fillMaxSize()
-                    .rightSwipeBackGesture(onCloseSecondaryPage)
+                    .rightSwipeBackGesture(::closeSelectionOrPage)
             )
 
             SecondaryPage.Playlist -> {
@@ -258,6 +275,7 @@ internal fun SecondaryPageHost(
                         onSongClick = { songs, index ->
                             onPlaylistSongClick(songs, index, PlaybackSource.LikedSongs)
                         },
+                        batchActions = activeBatchActions,
                         itemModifier = ::songItemModifier,
                         onCollapseProgressStateChange =
                             onDetailHeaderCollapseProgressStateChange,
@@ -265,7 +283,7 @@ internal fun SecondaryPageHost(
                         contentModifier = fadingContainerModifier(),
                         modifier = Modifier
                             .fillMaxSize()
-                            .rightSwipeBackGesture(onCloseSecondaryPage)
+                            .rightSwipeBackGesture(::closeSelectionOrPage)
                     )
                 } else {
                     PlaylistDetailScreen(
@@ -284,6 +302,7 @@ internal fun SecondaryPageHost(
                                 )
                             )
                         },
+                        batchActions = activeBatchActions,
                         itemModifier = ::songItemModifier,
                         onCollapseProgressStateChange =
                             onDetailHeaderCollapseProgressStateChange,
@@ -292,7 +311,7 @@ internal fun SecondaryPageHost(
                         suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
                         modifier = Modifier
                             .fillMaxSize()
-                            .rightSwipeBackGesture(onCloseSecondaryPage)
+                            .rightSwipeBackGesture(::closeSelectionOrPage)
                     )
                 }
             }

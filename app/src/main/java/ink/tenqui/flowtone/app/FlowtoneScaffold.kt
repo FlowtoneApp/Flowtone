@@ -23,11 +23,17 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
+import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
+import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
+import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
+import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun FlowtoneScaffold(
@@ -47,6 +53,10 @@ internal fun FlowtoneScaffold(
     var detailHeaderCollapseProgressState by remember {
         mutableStateOf<State<Float>?>(null)
     }
+    var songSelectionTopBarState by remember {
+        mutableStateOf<PlaylistSelectionTopBarState?>(null)
+    }
+    var clearSongSelectionRequest by remember { mutableStateOf(0) }
     val onDetailHeaderCollapseProgressStateChange = remember {
         { progressState: State<Float>? ->
             detailHeaderCollapseProgressState = progressState
@@ -140,6 +150,64 @@ internal fun FlowtoneScaffold(
             createdPlaylistId = createdPlaylistId
         )
     }
+    val playlistBatchActions = PlaylistBatchActions(
+        likedSongKeys = state.likedSongKeys,
+        editablePlaylists = displayedLibraryPlaylists,
+        clearSelectionRequest = clearSongSelectionRequest,
+        onSelectionModeChange = {},
+        onSelectionTopBarStateChange = { selectionState ->
+            songSelectionTopBarState = selectionState
+        },
+        onRequestClearSelection = { clearSongSelectionRequest += 1 },
+        onAddSongsNext = callbacks.onAddSongsToNext,
+        onAppendSongsToQueue = callbacks.onAppendSongsToQueue,
+        onSetSongsLiked = callbacks.onSetSongsLiked,
+        onAddSongsToPlaylists = { playlistIds, songs, done ->
+            coroutineScope.launch {
+                val userPlaylistIds = playlistIds - LikedSongsPlaylistId
+                val addToLikedSongs = LikedSongsPlaylistId in playlistIds
+                val currentEntries = playlistRepository.playlistSongEntries.value
+                val duplicateSongIds = songs
+                    .filter { song ->
+                        val songId = song.id.toString()
+                        (addToLikedSongs && isSongLiked(song, state.likedSongKeys)) ||
+                            currentEntries.any { entry ->
+                                entry.playlistId in userPlaylistIds &&
+                                    entry.songId == songId
+                            }
+                    }
+                    .mapTo(mutableSetOf()) { song -> song.id.toString() }
+
+                playlistRepository.syncLibraryPlaylistCards(
+                    libraryPlaylistController.playlists
+                )
+                val result = playlistRepository.addSongsToPlaylists(userPlaylistIds, songs)
+                if (result is PlaylistMutationResult.Success) {
+                    if (addToLikedSongs) {
+                        callbacks.onSetSongsLiked(songs, true)
+                    }
+                    refreshLibraryPlaylistsFromRepository()
+                    done(true, duplicateSongIds.size)
+                } else {
+                    done(false, 0)
+                }
+            }
+        },
+        onRemoveEntries = { playlistId, entryIds, done ->
+            coroutineScope.launch {
+                val result = playlistRepository.removeEntriesFromPlaylist(
+                    playlistId = playlistId,
+                    entryIds = entryIds
+                )
+                if (result is PlaylistMutationResult.Success) {
+                    refreshLibraryPlaylistsFromRepository()
+                    done(true)
+                } else {
+                    done(false)
+                }
+            }
+        }
+    )
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         Scaffold(
@@ -152,7 +220,9 @@ internal fun FlowtoneScaffold(
                 FlowtoneScaffoldTopLayer(
                     state = state,
                     callbacks = callbacks,
-                    detailHeaderCollapseProgressState = detailHeaderCollapseProgressState
+                    detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
+                    songSelectionState = songSelectionTopBarState,
+                    onCloseSongSelection = { clearSongSelectionRequest += 1 }
                 )
             }
         ) { innerPadding ->
@@ -164,6 +234,7 @@ internal fun FlowtoneScaffold(
                 topLevelPageCollapseProgress = topLevelPageCollapseProgress,
                 libraryPlaylistController = libraryPlaylistController,
                 playlistSongEntries = playlistSongEntries,
+                playlistBatchActions = playlistBatchActions,
                 likedSongCount = likedSongCount,
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,

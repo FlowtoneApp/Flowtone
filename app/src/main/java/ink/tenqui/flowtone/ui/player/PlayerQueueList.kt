@@ -40,7 +40,8 @@ internal fun PlayerQueueList(
     ) {
         itemsIndexed(
             items = displayedQueue,
-            key = { _, song -> song.queueItemKey() }
+            // 播放队列允许同一首歌曲出现多次，位置参与 key 可避免 Compose 重复键崩溃。
+            key = { index, song -> song.queueItemKey(index) }
         ) { index, song ->
             val isCurrentSong = when {
                 currentSong != null -> song.id == currentSong.id || song.uri == currentSong.uri

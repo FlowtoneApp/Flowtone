@@ -7,12 +7,15 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
+import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 
 @Composable
 internal fun FlowtoneScaffoldTopLayer(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
-    detailHeaderCollapseProgressState: State<Float>?
+    detailHeaderCollapseProgressState: State<Float>?,
+    songSelectionState: PlaylistSelectionTopBarState?,
+    onCloseSongSelection: () -> Unit
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
         val isTopLevelRootPage = state.secondaryPage == null
@@ -40,6 +43,7 @@ internal fun FlowtoneScaffoldTopLayer(
             additionalPathSegments = state.secondaryPathSegments,
             backgroundAlpha = backgroundAlpha,
             titleVisible = titleVisible,
+            songSelectionState = songSelectionState,
             hideBackButton = state.hideSecondaryBackButton,
             searchActive = state.searchActive,
             searchQuery = state.searchUiState.queryText,
@@ -48,7 +52,11 @@ internal fun FlowtoneScaffoldTopLayer(
             searchFocusRequest = state.searchFocusRequest,
             searchKeyboardDismissRequest = state.searchKeyboardDismissRequest,
             searchReentryProgress = state.searchReentryProgress,
-            onBack = callbacks.onNavigateBack,
+            onBack = if (songSelectionState != null) {
+                onCloseSongSelection
+            } else {
+                callbacks.onNavigateBack
+            },
             onSearchClick = callbacks.onOpenSearch,
             onSearchQueryChange = callbacks.onSearchQueryChange,
             onExitSearch = callbacks.onExitSearch,

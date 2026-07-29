@@ -385,6 +385,76 @@ class PlaylistRepository(
         )
     }
 
+    suspend fun addSongsToPlaylists(
+        playlistIds: Set<String>,
+        songs: List<Song>
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        val existingPlaylistIds = currentPlaylists.mapTo(mutableSetOf()) { it.id }
+        val targetPlaylistIds = playlistIds
+            .filterTo(mutableSetOf()) { it.isNotBlank() && it in existingPlaylistIds }
+        if (targetPlaylistIds.isEmpty() || songs.isEmpty()) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val currentEntries = _playlistSongEntries.value
+        // A multi-selection may include repeated playlist entries. Keep only one
+        // playlist entry per song and treat a repeat add as a recency/weight boost.
+        val uniqueSongs = songs.distinctBy { song -> song.stablePlaylistSongId() }
+        val now = System.currentTimeMillis()
+        var sequence = 0L
+        val nextEntries = currentEntries.toMutableList()
+        targetPlaylistIds.forEach { playlistId ->
+            uniqueSongs.forEach { song ->
+                val songId = song.stablePlaylistSongId()
+                val matchingIndices = nextEntries.indices.filter { index ->
+                    nextEntries[index].playlistId == playlistId &&
+                        nextEntries[index].songId == songId
+                }
+                val weightedAddedAt = now + sequence++
+                if (matchingIndices.isEmpty()) {
+                    nextEntries += PlaylistSongEntry(
+                        id = UUID.randomUUID().toString(),
+                        playlistId = playlistId,
+                        songId = songId,
+                        addedAt = weightedAddedAt
+                    )
+                } else {
+                    // Preserve the newest existing entry, remove historical duplicates,
+                    // then update its timestamp so the song receives a higher recency weight.
+                    val retainedIndex = matchingIndices.maxBy { index ->
+                        nextEntries[index].addedAt
+                    }
+                    val retainedEntry = nextEntries[retainedIndex].copy(addedAt = weightedAddedAt)
+                    matchingIndices
+                        .filter { index -> index != retainedIndex }
+                        .sortedDescending()
+                        .forEach(nextEntries::removeAt)
+                    val updatedIndex = nextEntries.indexOfFirst { entry ->
+                        entry.id == retainedEntry.id
+                    }
+                    if (updatedIndex >= 0) {
+                        nextEntries[updatedIndex] = retainedEntry
+                    }
+                }
+            }
+        }
+        if (nextEntries == currentEntries) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id in targetPlaylistIds) playlist.copy(updatedAt = now) else playlist
+        }
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = currentEntries,
+            nextPlaylists = nextPlaylists,
+            nextEntries = nextEntries,
+            successValue = Unit
+        )
+    }
+
     suspend fun removeSongFromPlaylist(
         playlistId: String,
         songId: String
@@ -418,6 +488,37 @@ class PlaylistRepository(
             }
         }
 
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = currentEntries,
+            nextPlaylists = nextPlaylists,
+            nextEntries = nextEntries,
+            successValue = Unit
+        )
+    }
+
+    suspend fun removeEntriesFromPlaylist(
+        playlistId: String,
+        entryIds: Set<String>
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        if (currentPlaylists.none { it.id == playlistId }) {
+            return@withLock PlaylistMutationResult.Failure(PlaylistMutationError.NotFound)
+        }
+        if (entryIds.isEmpty()) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+        val currentEntries = _playlistSongEntries.value
+        val nextEntries = currentEntries.filterNot {
+            it.playlistId == playlistId && it.id in entryIds
+        }
+        if (nextEntries.size == currentEntries.size) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+        val now = System.currentTimeMillis()
+        val nextPlaylists = currentPlaylists.map {
+            if (it.id == playlistId) it.copy(updatedAt = now) else it
+        }
         commitMutation(
             previousPlaylists = currentPlaylists,
             previousEntries = currentEntries,

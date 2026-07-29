@@ -482,13 +482,14 @@ private fun hasDuplicatePlaylistTitle(
 }
 
 @Composable
-fun LocalLibraryScreen(
+internal fun LocalLibraryScreen(
     title: String,
     uiState: MusicUiState,
     currentSong: Song?,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
+    batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     showContentHeader: Boolean = true,
     itemModifier: (Int) -> Modifier = { Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
@@ -543,58 +544,45 @@ fun LocalLibraryScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            else -> LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = if (showContentHeader) {
-                        FlowtonePageHeaderExpandedTopPadding
-                    } else {
-                        16.dp
-                    },
-                    bottom = 16.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (showContentHeader) {
-                    item(key = "local-library-header") {
-                        PlaylistDetailHeaderListItem(
-                            modifier = Modifier.padding(
-                                start = FlowtonePageHeaderExpandedStartPadding,
-                                end = FlowtonePageHeaderExpandedEndPadding
-                            )
-                        )
-                    }
-                }
-                itemsIndexed(
-                    items = uiState.songs,
-                    key = { _, song -> song.id }
-                ) { index, song ->
-                    val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1)
-                        .coerceAtLeast(0)
-                    val visibleAnimationIndex = (index - firstVisibleSongIndex)
-                        .coerceIn(0, 10)
-                    SongListItem(
-                        song = song,
-                        isCurrentSong = currentSong?.id == song.id,
-                        onClick = onSongClick,
-                        modifier = itemModifier(visibleAnimationIndex)
-                            .padding(horizontal = 8.dp)
+            else -> SelectablePlaylistSongList(
+                sourceKey = "local-library",
+                source = PlaylistSelectionSource.LocalLibrary,
+                playlistTitle = title,
+                entries = uiState.songs.map { song ->
+                    SelectablePlaylistSong(
+                        selectionKey = "local:${song.id}:${song.uri}",
+                        song = song
                     )
-                }
-            }
+                },
+                listState = listState,
+                currentSong = currentSong,
+                likedSongKeys = batchActions.likedSongKeys,
+                editablePlaylists = batchActions.editablePlaylists,
+                clearSelectionRequest = batchActions.clearSelectionRequest,
+                onSelectionModeChange = batchActions.onSelectionModeChange,
+                onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
+                onSongClick = { songs, index -> onSongClick(songs[index]) },
+                onAddSongsNext = batchActions.onAddSongsNext,
+                onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
+                onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
+                onSetSongsLiked = batchActions.onSetSongsLiked,
+                onRemoveEntries = { _, done -> done(false) },
+                itemModifier = itemModifier,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
 
 @Composable
-fun PlaylistDetailScreen(
+internal fun PlaylistDetailScreen(
     playlistId: String?,
     playlistTitle: String,
     allSongs: List<Song>,
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
     onSongClick: (List<Song>, Int) -> Unit,
+    batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     itemModifier: (Int) -> Modifier = { Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
@@ -611,7 +599,15 @@ fun PlaylistDetailScreen(
             playlistSongEntries
                 .filter { entry -> entry.playlistId == playlistId }
                 .sortedBy { entry -> entry.addedAt }
-                .mapNotNull { entry -> songsById[entry.songId] }
+                .mapNotNull { entry ->
+                    songsById[entry.songId]?.let { song ->
+                        SelectablePlaylistSong(
+                            selectionKey = entry.id,
+                            song = song,
+                            playlistEntryId = entry.id
+                        )
+                    }
+                }
         }
     }
 
@@ -642,33 +638,28 @@ fun PlaylistDetailScreen(
         contentModifier = contentModifier,
         modifier = modifier
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = 16.dp,
-                bottom = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            itemsIndexed(
-                items = playlistSongs,
-                key = { _, song -> song.id }
-            ) { index, song ->
-                val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1)
-                    .coerceAtLeast(0)
-                val visibleAnimationIndex = (index - firstVisibleSongIndex)
-                    .coerceIn(0, 10)
-                SongListItem(
-                    song = song,
-                    isCurrentSong = currentSong?.id == song.id,
-                    onClick = {
-                        onSongClick(playlistSongs, index)
-                    },
-                    modifier = itemModifier(visibleAnimationIndex)
-                        .padding(horizontal = 8.dp)
-                )
-            }
-        }
+        SelectablePlaylistSongList(
+            sourceKey = playlistId.orEmpty(),
+            source = PlaylistSelectionSource.UserPlaylist,
+            playlistTitle = playlistTitle,
+            entries = playlistSongs,
+            listState = listState,
+            currentSong = currentSong,
+            likedSongKeys = batchActions.likedSongKeys,
+            editablePlaylists = batchActions.editablePlaylists,
+            clearSelectionRequest = batchActions.clearSelectionRequest,
+            onSelectionModeChange = batchActions.onSelectionModeChange,
+            onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
+            onSongClick = onSongClick,
+            onAddSongsNext = batchActions.onAddSongsNext,
+            onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
+            onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
+            onSetSongsLiked = batchActions.onSetSongsLiked,
+            onRemoveEntries = { entryIds, done ->
+                batchActions.onRemoveEntries(playlistId.orEmpty(), entryIds, done)
+            },
+            itemModifier = itemModifier,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }

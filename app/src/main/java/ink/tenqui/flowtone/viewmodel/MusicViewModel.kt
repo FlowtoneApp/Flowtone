@@ -352,6 +352,39 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun addSongsToNext(songs: List<Song>): Boolean {
+        if (songs.isEmpty()) return false
+        val currentSong = playbackState.value.currentSong
+        if (currentSong == null) {
+            playSongQueue(songs, 0, PlaybackSource.Unknown)
+            return true
+        }
+        syncCurrentQueueIndex()
+        val insertionIndex = (currentQueueIndex + 1).coerceIn(0, playbackQueue.size)
+        if (!playbackController.addSongsNext(songs, currentPlaybackSource)) return false
+        playbackQueue = playbackQueue.toMutableList().apply {
+            addAll(insertionIndex, songs)
+        }
+        sourceQueue = playbackQueue
+        publishPlaybackQueue()
+        scheduleNextSongsPreload()
+        return true
+    }
+
+    fun appendSongsToQueue(songs: List<Song>): Boolean {
+        if (songs.isEmpty()) return false
+        if (playbackState.value.currentSong == null) {
+            playSongQueue(songs, 0, PlaybackSource.Unknown)
+            return true
+        }
+        if (!playbackController.appendSongsToQueue(songs, currentPlaybackSource)) return false
+        playbackQueue = playbackQueue + songs
+        sourceQueue = playbackQueue
+        publishPlaybackQueue()
+        scheduleNextSongsPreload()
+        return true
+    }
+
     private fun playSongAt(
         index: Int,
         source: PlaybackSource = currentPlaybackSource

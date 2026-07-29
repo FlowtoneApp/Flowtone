@@ -1,7 +1,16 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,20 +20,29 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,8 +60,12 @@ fun SongListItem(
     artistColor: Color? = null,
     durationColor: Color? = null,
     currentSongBackgroundColor: Color? = null,
-    compact: Boolean = false
+    compact: Boolean = false,
+    selectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onLongClick: ((Song) -> Unit)? = null
 ) {
+    val hapticFeedback = LocalHapticFeedback.current
     val itemMinHeight = if (compact) 64.dp else 72.dp
     val itemVerticalPadding = if (compact) 6.dp else 8.dp
     val artworkSize = if (compact) 48.dp else 56.dp
@@ -54,28 +76,73 @@ fun SongListItem(
         MaterialTheme.colorScheme.onSurface
     }
     val rowShape = MaterialTheme.shapes.medium
-    val rowBackground = if (isCurrentSong) {
-        Modifier
-            .background(currentSongBackgroundColor ?: MaterialTheme.colorScheme.secondaryContainer)
-    } else {
-        Modifier
+    val targetBackground = when {
+        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        isCurrentSong -> currentSongBackgroundColor
+            ?: MaterialTheme.colorScheme.secondaryContainer
+        else -> Color.Transparent
     }
+    val rowBackground by animateColorAsState(
+        targetValue = targetBackground,
+        animationSpec = tween(durationMillis = 170),
+        label = "SongSelectionBackground"
+    )
+    val targetBorderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    } else {
+        Color.Transparent
+    }
+    val rowBorderColor by animateColorAsState(
+        targetValue = targetBorderColor,
+        animationSpec = tween(durationMillis = 170),
+        label = "SongSelectionBorder"
+    )
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(rowShape)
-            .then(rowBackground)
-            .clickable { onClick(song) }
+            .background(rowBackground)
+            .border(width = 1.dp, color = rowBorderColor, shape = rowShape)
+            .combinedClickable(
+                onClick = { onClick(song) },
+                onLongClick = if (!selectionMode && onLongClick != null) {
+                    {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongClick(song)
+                    }
+                } else {
+                    null
+                }
+            )
+            .semantics {
+                if (selectionMode) {
+                    selected = isSelected
+                    onClick(
+                        label = if (isSelected) "点按取消选择" else "点按选择"
+                    ) {
+                        onClick(song)
+                        true
+                    }
+                }
+            }
             .heightIn(min = itemMinHeight)
             .padding(horizontal = 12.dp, vertical = itemVerticalPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AlbumArtwork(
-            song = song,
-            isCurrentSong = isCurrentSong,
-            modifier = Modifier.size(artworkSize)
-        )
+        Box(modifier = Modifier.size(artworkSize)) {
+            AlbumArtwork(
+                song = song,
+                isCurrentSong = isCurrentSong,
+                modifier = Modifier.matchParentSize()
+            )
+            if (selectionMode) {
+                SongSelectionIndicator(
+                    selected = isSelected,
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -128,6 +195,64 @@ fun SongListItem(
                 },
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.CenterEnd)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SongSelectionIndicator(
+    selected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val pageBackground = MaterialTheme.colorScheme.background
+    val indicatorFill by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = tween(durationMillis = 170),
+        label = "SongSelectionIndicatorFill"
+    )
+    val indicatorScale by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.9f,
+        animationSpec = tween(durationMillis = 170),
+        label = "SongSelectionIndicatorScale"
+    )
+
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .graphicsLayer {
+                scaleX = indicatorScale
+                scaleY = indicatorScale
+            }
+            // Outer page-colored ring keeps the control legible over any album art.
+            .background(pageBackground, CircleShape)
+            .padding(2.dp)
+            .background(indicatorFill, CircleShape)
+            .border(
+                width = if (selected) 0.dp else 1.5.dp,
+                color = if (selected) Color.Transparent else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                },
+                shape = CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(
+            visible = selected,
+            enter = fadeIn(tween(170)) + scaleIn(
+                initialScale = 0.72f,
+                animationSpec = tween(170)
+            ),
+            exit = fadeOut(tween(140)) + scaleOut(
+                targetScale = 0.72f,
+                animationSpec = tween(140)
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(16.dp)
             )
         }
     }

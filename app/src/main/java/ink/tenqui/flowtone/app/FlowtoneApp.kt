@@ -339,6 +339,15 @@ fun FlowtoneApp(
     fun toggleSongLiked(song: Song) {
         setSongLiked(song, !isSongLiked(song, appState.likedSongKeys))
     }
+    fun setSongsLiked(songs: List<Song>, liked: Boolean) {
+        val nextKeys = songs.fold(appState.likedSongKeys) { keys, song ->
+            nextLikedSongKeys(song = song, liked = liked, currentKeys = keys)
+        }
+        if (nextKeys != appState.likedSongKeys) {
+            appState.likedSongKeys = nextKeys
+            likedSongsStore.saveLikedSongKeys(nextKeys)
+        }
+    }
     val exitMiniPlayerFullscreen: () -> Unit = {
         appState.miniPlayerFullscreen = false
         if (appState.miniPlayerFullscreenEnteredFromCollapsed) {
@@ -646,7 +655,10 @@ fun FlowtoneApp(
             onSeekTo = musicViewModel::seekTo,
             onTogglePlaybackOrderMode = musicViewModel::togglePlaybackOrderMode,
             onPlayQueueSong = musicViewModel::playQueueSong,
+            onAddSongsToNext = musicViewModel::addSongsToNext,
+            onAppendSongsToQueue = musicViewModel::appendSongsToQueue,
             onSetSongLiked = ::setSongLiked,
+            onSetSongsLiked = ::setSongsLiked,
             onToggleSongLiked = ::toggleSongLiked,
             onOpenSearch = ::enterSearchMode,
             onExitSearch = ::exitSearchMode,
