@@ -168,6 +168,16 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun hasRequestedAudioPermission(): Boolean {
+        return prefs.getBoolean(AUDIO_PERMISSION_REQUESTED_KEY, false)
+    }
+
+    fun markAudioPermissionRequested() {
+        prefs.edit()
+            .putBoolean(AUDIO_PERMISSION_REQUESTED_KEY, true)
+            .apply()
+    }
+
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
@@ -180,6 +190,7 @@ class AppPreferences(context: Context) {
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
+        const val AUDIO_PERMISSION_REQUESTED_KEY = "audio_permission_requested"
         const val DEFAULT_PRELOAD_COUNT = 5
         const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30
         const val MIN_SONG_RECORD_THRESHOLD_SECONDS = 1

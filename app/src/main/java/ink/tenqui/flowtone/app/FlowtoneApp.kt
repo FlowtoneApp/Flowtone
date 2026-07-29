@@ -1,12 +1,15 @@
 package ink.tenqui.flowtone.app
 
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -29,15 +33,23 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.local.LikedSongsStore
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.permissions.currentAudioPermission
+import ink.tenqui.flowtone.permissions.hasAudioPermission
+import ink.tenqui.flowtone.permissions.openAppPermissionSettings
+import ink.tenqui.flowtone.permissions.shouldOpenAudioPermissionSettings
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.PlayerUiState
+import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.Job
@@ -53,6 +65,7 @@ fun FlowtoneApp(
     onOpenExpandedPlayerRequestConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val uiState by musicViewModel.uiState.collectAsState()
@@ -70,6 +83,17 @@ fun FlowtoneApp(
     }
     val appState = rememberFlowtoneAppState(appPreferences)
     val coroutineScope = rememberCoroutineScope()
+    val permissionActivity = context as? Activity
+    var audioPermissionGranted by remember(context) {
+        mutableStateOf(hasAudioPermission(context))
+    }
+    var mainTabsVisible by remember {
+        mutableStateOf(audioPermissionGranted)
+    }
+    var hasShownPermissionGate by remember {
+        mutableStateOf(!audioPermissionGranted)
+    }
+    var permissionRequestResultVersion by remember { mutableStateOf(0) }
 
     val pagerState = rememberPagerState(
         initialPage = defaultStartPage.index,
@@ -210,10 +234,43 @@ fun FlowtoneApp(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        musicViewModel.setPermissionStatus(granted)
+        audioPermissionGranted = granted
         appState.permissionDenied = !granted
-        if (granted) {
+        permissionRequestResultVersion += 1
+    }
+    val permissionGateRequiresSettings = remember(
+        audioPermissionGranted,
+        permissionRequestResultVersion
+    ) {
+        !audioPermissionGranted && shouldOpenAudioPermissionSettings(
+            activity = permissionActivity,
+            hasRequestedPermissionBefore = appPreferences.hasRequestedAudioPermission()
+        )
+    }
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                audioPermissionGranted = hasAudioPermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(audioPermissionGranted) {
+        musicViewModel.setPermissionStatus(audioPermissionGranted)
+        if (audioPermissionGranted) {
             musicViewModel.scanSongs()
+            if (hasShownPermissionGate) {
+                mainTabsVisible = false
+                withFrameNanos { }
+                mainTabsVisible = true
+            }
+        } else {
+            hasShownPermissionGate = true
+            mainTabsVisible = false
         }
     }
 
@@ -492,7 +549,6 @@ fun FlowtoneApp(
         hasCurrentSong = hasCurrentSong,
         hasScanned = uiState.hasScanned,
         songs = uiState.songs,
-        context = context,
         likedSongsStore = likedSongsStore,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
@@ -525,8 +581,28 @@ fun FlowtoneApp(
         }
     )
 
-    FlowtoneScaffold(
-        state = flowtoneAppScaffoldState(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+        if (!audioPermissionGranted) {
+            AudioPermissionGateScreen(
+                openSettings = permissionGateRequiresSettings,
+                onPrimaryAction = {
+                    if (permissionGateRequiresSettings) {
+                        openAppPermissionSettings(context)
+                    } else {
+                        appPreferences.markAudioPermissionRequested()
+                        permissionLauncher.launch(currentAudioPermission())
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            FlowtoneScaffold(
+            mainTabsVisible = mainTabsVisible,
+            state = flowtoneAppScaffoldState(
             appState = appState,
             uiState = uiState,
             playerUiState = playerUiState,
@@ -546,8 +622,8 @@ fun FlowtoneApp(
             searchUiState = searchUiState,
             searchColors = activeSearchColors,
             searchReentryProgress = searchReentryProgress
-        ),
-        callbacks = flowtoneAppCallbacks(
+            ),
+            callbacks = flowtoneAppCallbacks(
             appState = appState,
             appPreferences = appPreferences,
             onThemeModeChange = onThemeModeChange,
@@ -576,9 +652,11 @@ fun FlowtoneApp(
             onExitSearch = ::exitSearchMode,
             onSearchQueryChange = musicViewModel::updateSearchQuery,
             onClearSearch = musicViewModel::clearSearchQuery
-        ),
-        modifier = Modifier.fillMaxSize()
-    )
+            ),
+            modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
 }
 
 private fun searchColorSnapshotOrNull(

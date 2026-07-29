@@ -41,6 +41,7 @@ import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
 internal fun FlowtoneScaffoldContent(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
+    mainTabsVisible: Boolean,
     homeScrollState: ScrollState,
     topLevelPageCollapseProgress: TopLevelPageCollapseProgress,
     libraryPlaylistController: LibraryPlaylistController,
@@ -197,7 +198,7 @@ internal fun FlowtoneScaffoldContent(
                     libraryPlaylistController = libraryPlaylistController,
                     permissionDenied = state.permissionDenied,
                     showSwipeHint = state.showSwipeHint,
-                    secondaryOpen = state.secondaryOpen,
+                    secondaryOpen = state.secondaryOpen || !mainTabsVisible,
                     userScrollEnabled = !state.searchActive &&
                         libraryPlaylistController.editingPlaylistId == null,
                     onRequestPermission = callbacks.onRequestPermission,
@@ -214,7 +215,8 @@ internal fun FlowtoneScaffoldContent(
                 TopLevelSharedPageHeader(
                     pagerState = state.pagerState,
                     collapseProgress = topLevelPageCollapseProgress,
-                    visible = state.rootPage == FlowtoneRootPage.MainTabs && !state.secondaryOpen,
+                    visible = state.rootPage == FlowtoneRootPage.MainTabs &&
+                        !state.secondaryOpen && mainTabsVisible,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 21.dp, top = 48.dp, end = 20.dp)

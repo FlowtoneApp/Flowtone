@@ -1,11 +1,9 @@
 package ink.tenqui.flowtone.app
 
-import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.local.LikedSongsStore
-import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
 
@@ -19,7 +17,6 @@ internal fun FlowtoneAppEffects(
     hasCurrentSong: Boolean,
     hasScanned: Boolean,
     songs: List<Song>,
-    context: Context,
     likedSongsStore: LikedSongsStore,
     preloadSongMetadataCount: Int,
     songRecordThresholdSeconds: Int,
@@ -59,14 +56,6 @@ internal fun FlowtoneAppEffects(
             onOpenExpandedPlayerRequestConsumed()
         } else if (hasScanned && songs.isEmpty()) {
             onOpenExpandedPlayerRequestConsumed()
-        }
-    }
-
-    LaunchedEffect(context) {
-        val granted = hasAudioPermission(context)
-        musicViewModel.setPermissionStatus(granted)
-        if (granted) {
-            musicViewModel.scanSongs()
         }
     }
 

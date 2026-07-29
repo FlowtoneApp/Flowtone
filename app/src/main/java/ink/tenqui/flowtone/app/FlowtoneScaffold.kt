@@ -33,6 +33,7 @@ import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
 internal fun FlowtoneScaffold(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
+    mainTabsVisible: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -158,6 +159,7 @@ internal fun FlowtoneScaffold(
             FlowtoneScaffoldContent(
                 state = state,
                 callbacks = callbacks,
+                mainTabsVisible = mainTabsVisible,
                 homeScrollState = homeScrollState,
                 topLevelPageCollapseProgress = topLevelPageCollapseProgress,
                 libraryPlaylistController = libraryPlaylistController,
