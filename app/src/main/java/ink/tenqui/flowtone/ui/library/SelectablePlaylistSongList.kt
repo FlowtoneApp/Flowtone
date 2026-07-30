@@ -43,6 +43,9 @@ import ink.tenqui.flowtone.ui.components.SongListItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val SelectionSlotPadding = 2.dp
+private val SelectionListContentPadding = 14.dp
+
 internal data class SelectablePlaylistSong(
     val selectionKey: String,
     val song: Song,
@@ -99,6 +102,7 @@ internal fun SelectablePlaylistSongList(
     val hapticFeedback = LocalHapticFeedback.current
     val selectionMode = selectedKeys.isNotEmpty()
     val entriesByKey = entries.associateBy { it.selectionKey }
+    val selectedKeySet = remember(selectedKeys) { selectedKeys.toSet() }
     // 按 selectionKey 被加入集合的先后生成操作列表。
     val selectedEntries = selectedKeys.mapNotNull(entriesByKey::get)
     val selectedSongs = selectedEntries.map { it.song }
@@ -207,6 +211,14 @@ internal fun SelectablePlaylistSongList(
                         val visibleItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
                             y.toInt() in item.offset until (item.offset + item.size)
                         } ?: return null
+                        val slotPaddingPx = SelectionSlotPadding.toPx()
+                        val positionInItem = y - visibleItem.offset
+                        if (
+                            positionInItem < slotPaddingPx ||
+                            positionInItem >= visibleItem.size - slotPaddingPx
+                        ) {
+                            return null
+                        }
                         return entries.getOrNull(visibleItem.index)
                     }
 
@@ -255,18 +267,30 @@ internal fun SelectablePlaylistSongList(
                         }
                     )
                 },
-            contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            // The original 4.dp gap is split between adjacent fixed slots. Song content
+            // keeps the same coordinates while selection backgrounds can meet in the slot.
+            contentPadding = PaddingValues(
+                top = SelectionListContentPadding,
+                bottom = SelectionListContentPadding
+            ),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             itemsIndexed(entries, key = { _, entry -> entry.selectionKey }) { index, entry ->
                 val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1).coerceAtLeast(0)
                 val animationIndex = (index - firstVisibleSongIndex).coerceIn(0, 10)
-                val selected = entry.selectionKey in selectedKeys
+                val selected = entry.selectionKey in selectedKeySet
+                val isPreviousSelected = index > 0 &&
+                    entries[index - 1].selectionKey in selectedKeySet
+                val isNextSelected = index < entries.lastIndex &&
+                    entries[index + 1].selectionKey in selectedKeySet
                 SongListItem(
                     song = entry.song,
                     isCurrentSong = currentSong?.id == entry.song.id,
                     selectionMode = selectionMode,
                     isSelected = selected,
+                    isPreviousSelected = isPreviousSelected,
+                    isNextSelected = isNextSelected,
+                    selectionSlotPadding = SelectionSlotPadding,
                     onClick = {
                         if (suppressLongPressReleaseClick) {
                             suppressLongPressReleaseClick = false
