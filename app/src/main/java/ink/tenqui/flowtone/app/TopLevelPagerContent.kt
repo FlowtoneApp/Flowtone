@@ -11,14 +11,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,12 +49,14 @@ internal fun TopLevelPagerContent(
     flowCloudSpeed: Float,
     modifier: Modifier = Modifier
 ) {
-    var horizontalListGestureActive by remember { mutableStateOf(false) }
-
+    val pagerFlingBehavior = PagerDefaults.flingBehavior(pagerState)
     Box(modifier = modifier) {
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = userScrollEnabled && !horizontalListGestureActive,
+            // Never change this flag during an active pointer gesture. Cancelling a
+            // running Pager drag can leave it between pages until the next swipe.
+            userScrollEnabled = userScrollEnabled,
+            flingBehavior = pagerFlingBehavior,
             modifier = Modifier.fillMaxSize()
         ) { pageIndex ->
             val page = TopLevelPage.entries[pageIndex]
@@ -66,6 +65,8 @@ internal fun TopLevelPagerContent(
                 pagerState.currentPage == pageIndex
             when (page) {
                 TopLevelPage.Home -> HomeScreen(
+                    pagerState = pagerState,
+                    pagerFlingBehavior = pagerFlingBehavior,
                     songs = uiState.songs,
                     listeningStats = uiState.listeningStats,
                     playlists = flowtoneDisplayedLibraryPlaylists(
@@ -79,9 +80,6 @@ internal fun TopLevelPagerContent(
                     isFlowCloudPlaying = isPageFlowCloudActive,
                     drawBackground = false,
                     scrollState = homeScrollState,
-                    onHorizontalListGestureActiveChange = { isActive ->
-                        horizontalListGestureActive = isActive
-                    },
                     modifier = Modifier.fillMaxSize()
                 )
 

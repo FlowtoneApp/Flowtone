@@ -1,12 +1,12 @@
 package ink.tenqui.flowtone.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,8 +34,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +47,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -61,9 +69,14 @@ import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
 import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
 import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @Composable
 internal fun HomeScreen(
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior,
     songs: List<Song> = emptyList(),
     listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot(),
     playlists: List<LibraryPlaylistCard> = emptyList(),
@@ -74,7 +87,6 @@ internal fun HomeScreen(
     isFlowCloudPlaying: Boolean = true,
     drawBackground: Boolean = true,
     scrollState: ScrollState = rememberScrollState(),
-    onHorizontalListGestureActiveChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val backgroundModifier = if (drawBackground) {
@@ -89,6 +101,8 @@ internal fun HomeScreen(
             .then(backgroundModifier)
     ) {
         HomeContent(
+            pagerState = pagerState,
+            pagerFlingBehavior = pagerFlingBehavior,
             songs = songs,
             listeningStats = listeningStats,
             playlists = playlists,
@@ -98,7 +112,6 @@ internal fun HomeScreen(
             flowCloudSpeed = flowCloudSpeed,
             isFlowCloudPlaying = isFlowCloudPlaying,
             scrollState = scrollState,
-            onHorizontalListGestureActiveChange = onHorizontalListGestureActiveChange,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 48.dp)
@@ -221,28 +234,259 @@ private const val TopCloudVisibleHeightFraction = 1.30f
 private const val BottomRightClearRadiusFraction = 0.82f
 
 @Composable
-private fun Modifier.trackHorizontalListGesture(
+private fun Modifier.controlledHorizontalListGesture(
     scrollState: ScrollState,
-    onGestureActiveChange: (Boolean) -> Unit
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior
 ): Modifier {
-    val latestOnGestureActiveChange = rememberUpdatedState(onGestureActiveChange)
-    return pointerInput(scrollState) {
-        awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false)
-            val listOwnsGesture = scrollState.canScrollForward
-            if (listOwnsGesture) {
-                latestOnGestureActiveChange.value(true)
+    val listFlingBehavior = ScrollableDefaults.flingBehavior()
+    var nextGestureId by remember { mutableLongStateOf(0L) }
+    return pointerInput(scrollState, pagerState, pagerFlingBehavior) {
+        coroutineScope {
+            awaitEachGesture {
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = PointerEventPass.Main
+            )
+            val gestureId = ++nextGestureId
+            val atLeftAtDown = !scrollState.canScrollBackward
+            val atRightAtDown = !scrollState.canScrollForward
+            logHomeHorizontalGesture(
+                "DOWN id=$gestureId startInList=true owner=PENDING " +
+                    "left=$atLeftAtDown right=$atRightAtDown " +
+                    "page=${pagerState.currentPage} offset=${pagerState.currentPageOffsetFraction} " +
+                    "pagerScrolling=${pagerState.isScrollInProgress}"
+            )
+
+            var multiTouch = false
+            var owner: HomeHorizontalGestureOwner? = null
+            var firstOwnerChange: androidx.compose.ui.input.pointer.PointerInputChange? = null
+            while (owner == null) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val change = event.changes.firstOrNull { pointer -> pointer.id == down.id }
+                    ?: event.changes.firstOrNull()
+                    ?: break
+                if (!change.pressed) {
+                    logHomeHorizontalGesture("UP id=$gestureId owner=PENDING")
+                    break
+                }
+                if (event.changes.count { pointer -> pointer.pressed } > 1) {
+                    multiTouch = true
+                }
+                val totalX = change.position.x - down.position.x
+                val totalY = change.position.y - down.position.y
+                val movedEnough = abs(totalX) > viewConfiguration.touchSlop ||
+                    abs(totalY) > viewConfiguration.touchSlop
+                if (!movedEnough) continue
+                if (abs(totalX) <= abs(totalY)) {
+                    logHomeHorizontalGesture(
+                        "SLOP id=$gestureId direction=VERTICAL owner=NONE"
+                    )
+                    break
+                }
+                val movingLeft = totalX < 0f
+                val listCanScrollInDirection = if (movingLeft) {
+                    scrollState.canScrollForward
+                } else {
+                    scrollState.canScrollBackward
+                }
+                owner = when {
+                    listCanScrollInDirection -> HomeHorizontalGestureOwner.List
+                    movingLeft && !scrollState.canScrollForward &&
+                        pagerState.currentPage < pagerState.pageCount - 1 -> {
+                        HomeHorizontalGestureOwner.PagerNext
+                    }
+                    !movingLeft && !scrollState.canScrollBackward &&
+                        pagerState.currentPage > 0 -> {
+                        HomeHorizontalGestureOwner.PagerPrevious
+                    }
+                    else -> HomeHorizontalGestureOwner.List
+                }
+                val reason = when (owner) {
+                    HomeHorizontalGestureOwner.List -> if (listCanScrollInDirection) {
+                        "LIST_CAN_SCROLL"
+                    } else {
+                        "LIST_EDGE_WITHOUT_PAGER_TARGET"
+                    }
+                    HomeHorizontalGestureOwner.PagerNext -> "RIGHT_EDGE_LEFT_DRAG"
+                    HomeHorizontalGestureOwner.PagerPrevious -> "LEFT_EDGE_RIGHT_DRAG"
+                }
+                logHomeHorizontalGesture(
+                    "SLOP id=$gestureId direction=${if (movingLeft) "LEFT" else "RIGHT"} " +
+                        "owner=$owner reason=$reason"
+                )
+                firstOwnerChange = change
             }
-            waitForUpOrCancellation()
-            if (listOwnsGesture) {
-                latestOnGestureActiveChange.value(false)
+
+            val finalOwner = owner ?: return@awaitEachGesture
+            val initialChange = firstOwnerChange ?: return@awaitEachGesture
+            var lastEventTime = initialChange.uptimeMillis
+            var endVelocityX = 0f
+
+            fun updateVelocity(change: androidx.compose.ui.input.pointer.PointerInputChange) {
+                val deltaX = change.position.x - change.previousPosition.x
+                val elapsedMillis = change.uptimeMillis - lastEventTime
+                if (elapsedMillis > 0L && deltaX != 0f) {
+                    endVelocityX = deltaX / elapsedMillis * 1_000f
+                }
+                lastEventTime = change.uptimeMillis
+            }
+
+            val frames = kotlinx.coroutines.channels.Channel<HomeHorizontalGestureFrame>(
+                capacity = kotlinx.coroutines.channels.Channel.UNLIMITED
+            )
+            this@coroutineScope.launch {
+                try {
+                    for (frame in frames) {
+                        when (frame) {
+                            is HomeHorizontalGestureFrame.Drag -> {
+                                if (finalOwner == HomeHorizontalGestureOwner.List) {
+                                    var rawConsumption = 0f
+                                    scrollState.scroll(MutatePriority.UserInput) {
+                                        rawConsumption = scrollBy(-frame.deltaX)
+                                    }
+                                    val consumption = -rawConsumption
+                                    logHomeHorizontalGesture(
+                                        "DRAG id=$gestureId owner=$finalOwner delta=${frame.deltaX} " +
+                                            "listConsumed=$consumption " +
+                                            "remaining=${frame.deltaX - consumption} " +
+                                            "page=${pagerState.currentPage} " +
+                                            "offset=${pagerState.currentPageOffsetFraction} " +
+                                            "pagerScrolling=${pagerState.isScrollInProgress}"
+                                    )
+                                } else {
+                                    var rawConsumption = 0f
+                                    pagerState.scroll(MutatePriority.UserInput) {
+                                        rawConsumption = scrollBy(-frame.deltaX)
+                                    }
+                                    val consumption = -rawConsumption
+                                    logHomeHorizontalGesture(
+                                        "DRAG id=$gestureId owner=$finalOwner delta=${frame.deltaX} " +
+                                            "pagerConsumed=$consumption " +
+                                            "remaining=${frame.deltaX - consumption} " +
+                                            "page=${pagerState.currentPage} " +
+                                            "offset=${pagerState.currentPageOffsetFraction} " +
+                                            "pagerScrolling=${pagerState.isScrollInProgress}"
+                                    )
+                                }
+                            }
+
+                            is HomeHorizontalGestureFrame.End -> {
+                                val flingVelocity = if (frame.cancelled || frame.multiTouch) {
+                                    0f
+                                } else {
+                                    -frame.velocityX
+                                }
+                                if (finalOwner == HomeHorizontalGestureOwner.List) {
+                                    scrollState.scroll(MutatePriority.UserInput) {
+                                        performConfiguredFling(listFlingBehavior, flingVelocity)
+                                    }
+                                } else {
+                                    logHomeHorizontalGesture(
+                                        "${if (frame.cancelled) "CANCEL" else "UP"} id=$gestureId " +
+                                            "owner=$finalOwner velocity=$flingVelocity " +
+                                            "target=${pagerState.targetPage}"
+                                    )
+                                    pagerState.scroll(MutatePriority.UserInput) {
+                                        performConfiguredFling(pagerFlingBehavior, flingVelocity)
+                                    }
+                                    logHomeHorizontalGesture(
+                                        "SETTLED id=$gestureId page=${pagerState.settledPage} " +
+                                            "offset=${pagerState.currentPageOffsetFraction} " +
+                                            "pagerScrolling=${pagerState.isScrollInProgress}"
+                                    )
+                                }
+                                break
+                            }
+                        }
+                    }
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    logHomeHorizontalGesture("SCROLL_CANCEL id=$gestureId owner=$finalOwner")
+                    throw error
+                } finally {
+                    frames.close()
+                }
+            }
+
+            fun enqueueDrag(change: androidx.compose.ui.input.pointer.PointerInputChange) {
+                val deltaX = change.position.x - change.previousPosition.x
+                if (deltaX == 0f) return
+                updateVelocity(change)
+                // The custom owner consumes raw movement before HorizontalPager can
+                // observe it. The actor above is the only code that scrolls state.
+                change.consume()
+                frames.trySend(HomeHorizontalGestureFrame.Drag(deltaX))
+            }
+
+            enqueueDrag(initialChange)
+            var endedNormally = false
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Main)
+                    val change = event.changes.firstOrNull { it.id == down.id }
+                        ?: event.changes.firstOrNull()
+                        ?: break
+                    if (!change.pressed) {
+                        endedNormally = true
+                        frames.trySend(
+                            HomeHorizontalGestureFrame.End(
+                                velocityX = endVelocityX,
+                                multiTouch = multiTouch,
+                                cancelled = false
+                            )
+                        )
+                        break
+                    }
+                    if (event.changes.count { it.pressed } > 1) multiTouch = true
+                    enqueueDrag(change)
+                }
+            } finally {
+                if (!endedNormally) {
+                    frames.trySend(
+                        HomeHorizontalGestureFrame.End(
+                            velocityX = 0f,
+                            multiTouch = true,
+                            cancelled = true
+                        )
+                    )
+                }
+            }
             }
         }
     }
 }
 
+private enum class HomeHorizontalGestureOwner {
+    List,
+    PagerNext,
+    PagerPrevious
+}
+
+private sealed interface HomeHorizontalGestureFrame {
+    data class Drag(val deltaX: Float) : HomeHorizontalGestureFrame
+
+    data class End(
+        val velocityX: Float,
+        val multiTouch: Boolean,
+        val cancelled: Boolean
+    ) : HomeHorizontalGestureFrame
+}
+
+private suspend fun ScrollScope.performConfiguredFling(
+    flingBehavior: FlingBehavior,
+    velocity: Float
+): Float {
+    return with(flingBehavior) { performFling(velocity) }
+}
+
+private fun logHomeHorizontalGesture(message: String) {
+    Log.d("FlowtoneGesture", message)
+}
+
 @Composable
 private fun HomeContent(
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior,
     songs: List<Song>,
     listeningStats: ListeningStatsSnapshot,
     playlists: List<LibraryPlaylistCard>,
@@ -252,7 +496,6 @@ private fun HomeContent(
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     scrollState: ScrollState,
-    onHorizontalListGestureActiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val recommendedSongs = remember(songs) {
@@ -295,7 +538,8 @@ private fun HomeContent(
                 title = "随便听听",
                 songs = recommendedSongs,
                 scrollState = recommendationScrollState,
-                onGestureActiveChange = onHorizontalListGestureActiveChange,
+                pagerState = pagerState,
+                pagerFlingBehavior = pagerFlingBehavior,
                 onSongClick = onSongClick
             )
         }
@@ -307,7 +551,8 @@ private fun HomeContent(
             FrequentPlaylistSection(
                 playlists = frequentPlaylists,
                 scrollState = frequentPlaylistScrollState,
-                onGestureActiveChange = onHorizontalListGestureActiveChange,
+                pagerState = pagerState,
+                pagerFlingBehavior = pagerFlingBehavior,
                 flowCloudSpeed = flowCloudSpeed,
                 isFlowCloudPlaying = isFlowCloudPlaying,
                 onOpenPlaylist = onOpenPlaylist
@@ -322,7 +567,8 @@ private fun HomeContent(
                 title = "最近新增",
                 songs = recentlyAddedSongs,
                 scrollState = recentlyAddedScrollState,
-                onGestureActiveChange = onHorizontalListGestureActiveChange,
+                pagerState = pagerState,
+                pagerFlingBehavior = pagerFlingBehavior,
                 onSongClick = onSongClick
             )
         }
@@ -334,7 +580,8 @@ private fun HomeRecommendationSection(
     title: String,
     songs: List<Song>,
     scrollState: ScrollState,
-    onGestureActiveChange: (Boolean) -> Unit,
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -353,8 +600,12 @@ private fun HomeRecommendationSection(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .trackHorizontalListGesture(scrollState, onGestureActiveChange)
-                    .horizontalScroll(scrollState)
+                    .controlledHorizontalListGesture(
+                        scrollState,
+                        pagerState,
+                        pagerFlingBehavior
+                    )
+                    .horizontalScroll(scrollState, enabled = false)
                     .padding(
                         start = HomeHorizontalListStartPadding,
                         end = HomeHorizontalListEndPadding,
@@ -376,7 +627,8 @@ private fun HomeRecommendationSection(
 private fun FrequentPlaylistSection(
     playlists: List<FrequentPlaylistCard>,
     scrollState: ScrollState,
-    onGestureActiveChange: (Boolean) -> Unit,
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
@@ -396,8 +648,12 @@ private fun FrequentPlaylistSection(
             horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing),
             modifier = Modifier
                 .fillMaxWidth()
-                .trackHorizontalListGesture(scrollState, onGestureActiveChange)
-                .horizontalScroll(scrollState)
+                .controlledHorizontalListGesture(
+                    scrollState,
+                    pagerState,
+                    pagerFlingBehavior
+                )
+                .horizontalScroll(scrollState, enabled = false)
                 .padding(
                     start = HomeHorizontalListStartPadding,
                     end = HomeHorizontalListEndPadding,
@@ -493,7 +749,8 @@ private fun RecentlyAddedSection(
     title: String,
     songs: List<Song>,
     scrollState: ScrollState,
-    onGestureActiveChange: (Boolean) -> Unit,
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -512,8 +769,12 @@ private fun RecentlyAddedSection(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .trackHorizontalListGesture(scrollState, onGestureActiveChange)
-                    .horizontalScroll(scrollState)
+                    .controlledHorizontalListGesture(
+                        scrollState,
+                        pagerState,
+                        pagerFlingBehavior
+                    )
+                    .horizontalScroll(scrollState, enabled = false)
                     .padding(
                         start = HomeHorizontalListStartPadding,
                         end = HomeHorizontalListEndPadding,
