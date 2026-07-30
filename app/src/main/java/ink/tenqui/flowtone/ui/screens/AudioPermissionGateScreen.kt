@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -25,7 +24,7 @@ fun AudioPermissionGateScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -33,7 +32,7 @@ fun AudioPermissionGateScreen(
         Text(
             text = "需要音频权限",
             style = MaterialTheme.typography.headlineMedium,
-            color = Color.Black,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
         Text(
@@ -43,7 +42,7 @@ fun AudioPermissionGateScreen(
                 "允许后，Flowtone 才能扫描并播放设备中的本地音乐。"
             },
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.Black.copy(alpha = 0.68f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp)
         )
