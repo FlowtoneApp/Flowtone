@@ -246,7 +246,7 @@ private fun playlistCardVisualsFor(
                     titleColor = Color(0xFFF8EDF3),
                     subtitleColor = Color(0xFFE2C9D6),
                     iconContainerColor = Color(0xFFD69AB8),
-                    iconColor = Color(0xFF3B1D2C),
+                    iconColor = Color.White,
                     actionColor = Color(0xFFF8EDF3)
                 ),
                 cloudVisuals = PlaylistCardCloudVisuals(
