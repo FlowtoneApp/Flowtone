@@ -48,6 +48,7 @@ fun MiniPlayer(
     fullscreenHeight: Dp,
     allowFullscreenFromCollapsed: Boolean = false,
     allowFullscreenFromExpanded: Boolean = true,
+    openExpandedOnMediaClick: Boolean = true,
     disablePausedArtworkTilt: Boolean = false,
     strictProgressBar: Boolean = false,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
@@ -584,7 +585,9 @@ fun MiniPlayer(
             handleMiniPlayerActivate(
                 minimized = minimized,
                 onMinimizedChange = onMinimizedChange,
-                onExpandedChange = onExpandedChange
+                onExpandedChange = onExpandedChange,
+                onFullscreenChange = onFullscreenChange,
+                openExpandedOnMediaClick = openExpandedOnMediaClick
             )
         },
         modifier = modifier,

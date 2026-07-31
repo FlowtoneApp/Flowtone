@@ -575,11 +575,19 @@ fun FlowtoneApp(
             clearArtistRootPage()
         },
         onOpenExpandedMiniPlayer = {
-            if (!appState.miniPlayerExpanded) {
+            if (appState.openExpandedMiniPlayerOnMediaClick) {
+                if (!appState.miniPlayerExpanded) {
+                    appState.miniPlayerMinimized = false
+                    appState.miniPlayerExpanded = true
+                }
+                appState.miniPlayerFullscreen = false
+            } else {
+                appState.miniPlayerFullscreenEnteredFromCollapsed =
+                    !appState.miniPlayerExpanded
                 appState.miniPlayerMinimized = false
                 appState.miniPlayerExpanded = true
+                appState.miniPlayerFullscreen = true
             }
-            appState.miniPlayerFullscreen = false
         },
         onOpenExpandedPlayerRequestConsumed = onOpenExpandedPlayerRequestConsumed,
         onLikedSongKeysLoaded = { keys ->

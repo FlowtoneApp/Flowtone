@@ -102,6 +102,16 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun shouldOpenExpandedMiniPlayerOnMediaClick(): Boolean {
+        return prefs.getBoolean(OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY, true)
+    }
+
+    fun setOpenExpandedMiniPlayerOnMediaClick(openExpanded: Boolean) {
+        prefs.edit()
+            .putBoolean(OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY, openExpanded)
+            .apply()
+    }
+
     fun getSongMetadataPreloadCount(): Int {
         val savedValue = prefs.getInt(SONG_METADATA_PRELOAD_COUNT_KEY, DEFAULT_PRELOAD_COUNT)
         return PRELOAD_COUNT_OPTIONS.minBy { option ->
@@ -186,6 +196,8 @@ class AppPreferences(context: Context) {
         const val HIDE_SECONDARY_BACK_BUTTON_KEY = "hide_secondary_back_button"
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
+        const val OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY =
+            "open_expanded_mini_player_on_media_click"
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"

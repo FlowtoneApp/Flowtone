@@ -55,6 +55,8 @@ internal fun SecondaryPageHost(
     onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     allowFullscreenFromCollapsed: Boolean,
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
+    openExpandedMiniPlayerOnMediaClick: Boolean,
+    onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
@@ -210,6 +212,9 @@ internal fun SecondaryPageHost(
                 onResumePlaybackAfterCallChange = onResumePlaybackAfterCallChange,
                 allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
                 onAllowFullscreenFromCollapsedChange = onAllowFullscreenFromCollapsedChange,
+                openExpandedMiniPlayerOnMediaClick = openExpandedMiniPlayerOnMediaClick,
+                onOpenExpandedMiniPlayerOnMediaClickChange =
+                    onOpenExpandedMiniPlayerOnMediaClickChange,
                 preloadSongMetadataCount = preloadSongMetadataCount,
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
                 songRecordThresholdSeconds = songRecordThresholdSeconds,

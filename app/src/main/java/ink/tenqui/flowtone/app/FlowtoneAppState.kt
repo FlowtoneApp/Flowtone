@@ -53,6 +53,7 @@ internal class FlowtoneAppState(
     hideSecondaryBackButtonState: MutableState<Boolean>,
     resumePlaybackAfterCallState: MutableState<Boolean>,
     allowFullscreenFromCollapsedState: MutableState<Boolean>,
+    openExpandedMiniPlayerOnMediaClickState: MutableState<Boolean>,
     disablePausedArtworkTiltState: MutableState<Boolean>,
     strictProgressBarState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
@@ -96,6 +97,7 @@ internal class FlowtoneAppState(
     var hideSecondaryBackButton by hideSecondaryBackButtonState
     var resumePlaybackAfterCall by resumePlaybackAfterCallState
     var allowFullscreenFromCollapsed by allowFullscreenFromCollapsedState
+    var openExpandedMiniPlayerOnMediaClick by openExpandedMiniPlayerOnMediaClickState
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
     var strictProgressBar by strictProgressBarState
     var preloadSongMetadataCount by preloadSongMetadataCountState
@@ -180,6 +182,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     }
     val allowFullscreenFromCollapsed = rememberSaveable {
         mutableStateOf(appPreferences.shouldAllowFullscreenFromCollapsed())
+    }
+    val openExpandedMiniPlayerOnMediaClick = rememberSaveable {
+        mutableStateOf(appPreferences.shouldOpenExpandedMiniPlayerOnMediaClick())
     }
     val disablePausedArtworkTilt = rememberSaveable {
         mutableStateOf(appPreferences.shouldDisablePausedArtworkTilt())
@@ -267,6 +272,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         hideSecondaryBackButtonState = hideSecondaryBackButton,
         resumePlaybackAfterCallState = resumePlaybackAfterCall,
         allowFullscreenFromCollapsedState = allowFullscreenFromCollapsed,
+        openExpandedMiniPlayerOnMediaClickState = openExpandedMiniPlayerOnMediaClick,
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
         strictProgressBarState = strictProgressBar,
         preloadSongMetadataCountState = preloadSongMetadataCount,
@@ -313,6 +319,7 @@ internal data class FlowtoneAppScaffoldState(
     val hideSecondaryBackButton: Boolean,
     val resumePlaybackAfterCall: Boolean,
     val allowFullscreenFromCollapsed: Boolean,
+    val openExpandedMiniPlayerOnMediaClick: Boolean,
     val preloadSongMetadataCount: Int,
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
@@ -387,6 +394,7 @@ internal fun flowtoneAppScaffoldState(
         hideSecondaryBackButton = appState.hideSecondaryBackButton,
         resumePlaybackAfterCall = appState.resumePlaybackAfterCall,
         allowFullscreenFromCollapsed = appState.allowFullscreenFromCollapsed,
+        openExpandedMiniPlayerOnMediaClick = appState.openExpandedMiniPlayerOnMediaClick,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,

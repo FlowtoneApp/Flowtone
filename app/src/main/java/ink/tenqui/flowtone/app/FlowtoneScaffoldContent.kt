@@ -239,6 +239,10 @@ internal fun FlowtoneScaffoldContent(
                     allowFullscreenFromCollapsed = state.allowFullscreenFromCollapsed,
                     onAllowFullscreenFromCollapsedChange =
                         callbacks.onAllowFullscreenFromCollapsedChange,
+                    openExpandedMiniPlayerOnMediaClick =
+                        state.openExpandedMiniPlayerOnMediaClick,
+                    onOpenExpandedMiniPlayerOnMediaClickChange =
+                        callbacks.onOpenExpandedMiniPlayerOnMediaClickChange,
                     preloadSongMetadataCount = state.preloadSongMetadataCount,
                     onPreloadSongMetadataCountChange =
                         callbacks.onPreloadSongMetadataCountChange,

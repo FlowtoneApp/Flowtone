@@ -127,9 +127,13 @@ internal fun miniPlayerFullscreenInteractionHandlers(
 internal fun handleMiniPlayerActivate(
     minimized: Boolean,
     onMinimizedChange: (Boolean) -> Unit,
-    onExpandedChange: (Boolean) -> Unit
+    onExpandedChange: (Boolean) -> Unit,
+    onFullscreenChange: (Boolean) -> Unit,
+    openExpandedOnMediaClick: Boolean
 ) {
-    if (minimized) {
+    if (!openExpandedOnMediaClick) {
+        onFullscreenChange(true)
+    } else if (minimized) {
         onMinimizedChange(false)
     } else {
         onExpandedChange(true)

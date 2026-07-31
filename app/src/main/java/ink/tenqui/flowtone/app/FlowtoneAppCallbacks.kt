@@ -15,6 +15,7 @@ internal data class FlowtoneAppCallbacks(
     val onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     val onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     val onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
+    val onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
     val onPreloadSongMetadataCountChange: (Int) -> Unit,
     val onSongRecordThresholdSecondsChange: (Int) -> Unit,
     val onOpenSongRecordThresholdDialog: () -> Unit,
@@ -116,6 +117,10 @@ internal fun flowtoneAppCallbacks(
         onAllowFullscreenFromCollapsedChange = { allow ->
             appState.allowFullscreenFromCollapsed = allow
             appPreferences.setAllowFullscreenFromCollapsed(allow)
+        },
+        onOpenExpandedMiniPlayerOnMediaClickChange = { openExpanded ->
+            appState.openExpandedMiniPlayerOnMediaClick = openExpanded
+            appPreferences.setOpenExpandedMiniPlayerOnMediaClick(openExpanded)
         },
         onPreloadSongMetadataCountChange = { count ->
             appState.preloadSongMetadataCount = count
