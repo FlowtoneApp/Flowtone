@@ -5,6 +5,7 @@ import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 
 class AppPreferences(context: Context) {
     private val prefs = context.getSharedPreferences(
@@ -178,6 +179,20 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getLyricsBackgroundStyle(): LyricsBackgroundStyle {
+        val savedValue = prefs.getString(LYRICS_BACKGROUND_STYLE_KEY, null)
+            ?: return LyricsBackgroundStyle.BlurredArtwork
+        return runCatching {
+            LyricsBackgroundStyle.valueOf(savedValue)
+        }.getOrDefault(LyricsBackgroundStyle.BlurredArtwork)
+    }
+
+    fun setLyricsBackgroundStyle(style: LyricsBackgroundStyle) {
+        prefs.edit()
+            .putString(LYRICS_BACKGROUND_STYLE_KEY, style.name)
+            .apply()
+    }
+
     fun hasRequestedAudioPermission(): Boolean {
         return prefs.getBoolean(AUDIO_PERMISSION_REQUESTED_KEY, false)
     }
@@ -202,6 +217,7 @@ class AppPreferences(context: Context) {
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
+        const val LYRICS_BACKGROUND_STYLE_KEY = "lyrics_background_style"
         const val AUDIO_PERMISSION_REQUESTED_KEY = "audio_permission_requested"
         const val DEFAULT_PRELOAD_COUNT = 5
         const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30

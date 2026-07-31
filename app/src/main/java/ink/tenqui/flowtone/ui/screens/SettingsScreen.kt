@@ -73,6 +73,7 @@ import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -105,6 +106,8 @@ internal fun SettingsScreen(
     onOpenSongRecordThresholdDialog: () -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -200,6 +203,8 @@ internal fun SettingsScreen(
                 openExpandedMiniPlayerOnMediaClick = openExpandedMiniPlayerOnMediaClick,
                 onOpenExpandedMiniPlayerOnMediaClickChange =
                     onOpenExpandedMiniPlayerOnMediaClickChange,
+                lyricsBackgroundStyle = lyricsBackgroundStyle,
+                onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 elementModifier = ::viewElementModifier
             )
         }

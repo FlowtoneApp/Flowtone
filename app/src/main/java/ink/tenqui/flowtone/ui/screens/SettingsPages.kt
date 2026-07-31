@@ -70,6 +70,8 @@ import ink.tenqui.flowtone.app.FlowtonePageEasing
 import ink.tenqui.flowtone.app.TopLevelPage
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
+import ink.tenqui.flowtone.ui.components.LyricsBackgroundStyleSelector
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -196,6 +198,8 @@ internal fun GeneralSettingsPage(
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     openExpandedMiniPlayerOnMediaClick: Boolean,
     onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -235,6 +239,11 @@ internal fun GeneralSettingsPage(
                 subtitle = "\u5173\u95ed\u540e\uff0c\u5355\u51fb\u5a92\u4f53\u63a7\u4ef6\u5c06\u8fdb\u5165\u5168\u5c4f\u6001",
                 checked = openExpandedMiniPlayerOnMediaClick,
                 onCheckedChange = onOpenExpandedMiniPlayerOnMediaClickChange,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            LyricsBackgroundStyleSelector(
+                selectedStyle = lyricsBackgroundStyle,
+                onStyleSelected = onLyricsBackgroundStyleChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }

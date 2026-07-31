@@ -1,8 +1,29 @@
 package ink.tenqui.flowtone.ui.player
 
+import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
+
 internal class MiniPlayerTransitions(
     private val state: MiniPlayerState
 ) {
+    fun enterLyricsMode() {
+        if (
+            state.fullscreenContentMode != FullscreenContentMode.Playback ||
+            !state.isFullscreenPlayer
+        ) {
+            return
+        }
+        state.expandedMoreMenu = false
+        state.fullscreenPlaybackContentMode = FullscreenPlaybackContentMode.Lyrics
+    }
+
+    fun exitLyricsMode() {
+        state.fullscreenPlaybackContentMode = FullscreenPlaybackContentMode.Artwork
+    }
+
+    fun resetFullscreenPlaybackContentMode() {
+        state.fullscreenPlaybackContentMode = FullscreenPlaybackContentMode.Artwork
+    }
+
     fun enterAddToPlaylistMode() {
         state.artistPlaceholderArtists = emptyList()
         state.expandedMoreMenu = false

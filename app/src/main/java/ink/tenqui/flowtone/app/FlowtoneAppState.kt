@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
@@ -60,6 +61,7 @@ internal class FlowtoneAppState(
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
     flowCloudSpeedState: MutableState<Float>,
+    lyricsBackgroundStyleState: MutableState<LyricsBackgroundStyle>,
     flowCloudSpeedDialogStateState: MutableState<FlowCloudSpeedDialogState>,
     playbackQueueDisplayOrderState: MutableState<QueueDisplayOrder>,
     likedSongKeysState: MutableState<List<String>>,
@@ -104,6 +106,7 @@ internal class FlowtoneAppState(
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
     var flowCloudSpeed by flowCloudSpeedState
+    var lyricsBackgroundStyle by lyricsBackgroundStyleState
     var flowCloudSpeedDialogState by flowCloudSpeedDialogStateState
     var playbackQueueDisplayOrder by playbackQueueDisplayOrderState
     var likedSongKeys by likedSongKeysState
@@ -204,6 +207,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val flowCloudSpeed = rememberSaveable {
         mutableStateOf(appPreferences.getFlowCloudSpeed())
     }
+    val lyricsBackgroundStyle = rememberSaveable {
+        mutableStateOf(appPreferences.getLyricsBackgroundStyle())
+    }
     val flowCloudSpeedDialogState = rememberSaveable {
         mutableStateOf(FlowCloudSpeedDialogState.Idle)
     }
@@ -279,6 +285,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
         flowCloudSpeedState = flowCloudSpeed,
+        lyricsBackgroundStyleState = lyricsBackgroundStyle,
         flowCloudSpeedDialogStateState = flowCloudSpeedDialogState,
         playbackQueueDisplayOrderState = playbackQueueDisplayOrder,
         likedSongKeysState = likedSongKeys,
@@ -324,6 +331,7 @@ internal data class FlowtoneAppScaffoldState(
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
     val flowCloudSpeed: Float,
+    val lyricsBackgroundStyle: LyricsBackgroundStyle,
     val flowCloudSpeedDialogState: FlowCloudSpeedDialogState,
     val playbackQueueDisplayOrder: QueueDisplayOrder,
     val permissionDenied: Boolean,
@@ -399,6 +407,7 @@ internal fun flowtoneAppScaffoldState(
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
         flowCloudSpeed = appState.flowCloudSpeed,
+        lyricsBackgroundStyle = appState.lyricsBackgroundStyle,
         flowCloudSpeedDialogState = appState.flowCloudSpeedDialogState,
         playbackQueueDisplayOrder = appState.playbackQueueDisplayOrder,
         permissionDenied = appState.permissionDenied,

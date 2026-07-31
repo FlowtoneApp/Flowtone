@@ -37,6 +37,8 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
+import ink.tenqui.flowtone.ui.player.lyrics.isLyricsPlaybackContentActive
 
 @Composable
 fun MiniPlayer(
@@ -52,6 +54,7 @@ fun MiniPlayer(
     disablePausedArtworkTilt: Boolean = false,
     strictProgressBar: Boolean = false,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
+    lyricsBackgroundStyle: LyricsBackgroundStyle = LyricsBackgroundStyle.BlurredArtwork,
     minimized: Boolean,
     onMinimizedChange: (Boolean) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -279,6 +282,42 @@ fun MiniPlayer(
         label = "ArtistPlaceholderProgress",
         finishedListener = transitions::finishArtistPlaceholderProgress
     )
+    val lyricsModeActive = isLyricsPlaybackContentActive(
+        playbackContentMode = state.fullscreenPlaybackContentMode,
+        fullscreenContentMode = state.fullscreenContentMode,
+        fullscreen = fullscreen,
+        expanded = expanded,
+        hasCurrentSong = hasCurrentSong
+    )
+    val artworkVisibilityProgress by animateFloatAsState(
+        targetValue = if (lyricsModeActive) 0f else 1f,
+        animationSpec = if (lyricsModeActive) {
+            tween(durationMillis = 220, easing = FastOutSlowInEasing)
+        } else {
+            tween(durationMillis = 260, delayMillis = 60, easing = FastOutSlowInEasing)
+        },
+        label = "FullscreenArtworkVisibilityProgress"
+    )
+    val lyricsVisibilityProgress by animateFloatAsState(
+        targetValue = if (lyricsModeActive) 1f else 0f,
+        animationSpec = if (lyricsModeActive) {
+            tween(durationMillis = 260, delayMillis = 70, easing = FastOutSlowInEasing)
+        } else {
+            tween(durationMillis = 180, easing = FastOutSlowInEasing)
+        },
+        label = "FullscreenLyricsVisibilityProgress"
+    )
+    val lyricsBlurredArtworkProgress by animateFloatAsState(
+        targetValue = if (
+            lyricsModeActive && lyricsBackgroundStyle == LyricsBackgroundStyle.BlurredArtwork
+        ) {
+            1f
+        } else {
+            0f
+        },
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+        label = "LyricsBlurredArtworkBackgroundProgress"
+    )
     val hostHeight = lerpDp(
         currentHeight + dragHotZoneHeight,
         fullscreenTargetHeight,
@@ -375,6 +414,8 @@ fun MiniPlayer(
         currentSong = currentSong,
         onFullscreenPlayerChange = { state.isFullscreenPlayer = it },
         resetFullscreenContentMode = transitions::resetFullscreenContentMode,
+        resetFullscreenPlaybackContentMode =
+            transitions::resetFullscreenPlaybackContentMode,
         exitFullscreenContentModeForSongChange = {
             transitions.exitFullscreenContentModeForSongChange(artistPlaceholderProgress)
         }
@@ -639,6 +680,7 @@ fun MiniPlayer(
                         isPlaying = playerUiState.isPlaying,
                         flowCloudSpeed = flowCloudSpeed,
                         waitForArtworkLoad = useLocalArtworkLoading,
+                        lyricsBlurredArtworkProgress = lyricsBlurredArtworkProgress
                     )
                     val addToPlaylistStatusBarsTop = with(density) {
                         WindowInsets.statusBars.getTop(this).toDp()
@@ -683,6 +725,8 @@ fun MiniPlayer(
                         layoutMetrics = fullscreenLayoutMetrics,
                         artworkPlaybackScale = artworkPlaybackScale,
                         artworkPlaybackRotationDegrees = artworkPlaybackRotationDegrees,
+                        artworkVisibilityProgress = artworkVisibilityProgress,
+                        lyricsVisibilityProgress = lyricsVisibilityProgress,
                         titleColor = titleColor,
                         artistColor = artistColor,
                         controlIconColor = controlIconColor,
@@ -692,6 +736,7 @@ fun MiniPlayer(
                             state.collapsedMetadataSwitchDirection,
                         artistClickEnabled = artistClickEnabled,
                         fullscreenContentMode = state.fullscreenContentMode,
+                        fullscreenPlaybackContentMode = state.fullscreenPlaybackContentMode,
                         libraryPlaylists = libraryPlaylists,
                         playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,
@@ -732,7 +777,9 @@ fun MiniPlayer(
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
                             fullscreenInteractionHandlers.onArtistHostArtistClick,
-                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick
+                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick,
+                        onArtworkClick = transitions::enterLyricsMode,
+                        onLyricsClick = transitions::exitLyricsMode
                     )
             }
         },

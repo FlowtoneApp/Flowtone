@@ -186,6 +186,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         disablePausedArtworkTilt = state.disablePausedArtworkTilt,
         strictProgressBar = state.strictProgressBar,
         flowCloudSpeed = state.flowCloudSpeed,
+        lyricsBackgroundStyle = state.lyricsBackgroundStyle,
         minimized = state.miniPlayerMinimized,
         onMinimizedChange = callbacks.onMinimizedChange,
         onTogglePlayPause = callbacks.onTogglePlayPause,

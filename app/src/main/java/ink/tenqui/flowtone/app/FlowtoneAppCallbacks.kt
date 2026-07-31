@@ -5,6 +5,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 
@@ -22,6 +23,7 @@ internal data class FlowtoneAppCallbacks(
     val onCloseSongRecordThresholdDialog: () -> Unit,
     val onSongRecordThresholdDialogClosed: () -> Unit,
     val onFlowCloudSpeedChange: (Float) -> Unit,
+    val onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     val onOpenFlowCloudSpeedDialog: () -> Unit,
     val onCloseFlowCloudSpeedDialog: () -> Unit,
     val onFlowCloudSpeedDialogClosed: () -> Unit,
@@ -149,6 +151,10 @@ internal fun flowtoneAppCallbacks(
             val safeSpeed = speed.coerceFlowCloudSpeed()
             appState.flowCloudSpeed = safeSpeed
             appPreferences.setFlowCloudSpeed(safeSpeed)
+        },
+        onLyricsBackgroundStyleChange = { style ->
+            appState.lyricsBackgroundStyle = style
+            appPreferences.setLyricsBackgroundStyle(style)
         },
         onOpenFlowCloudSpeedDialog = {
             if (appState.flowCloudSpeedDialogState == FlowCloudSpeedDialogState.Idle) {

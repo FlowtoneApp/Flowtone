@@ -20,10 +20,12 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 
 @Stable
 internal class MiniPlayerState internal constructor(
     fullscreenContentModeState: MutableState<FullscreenContentMode>,
+    fullscreenPlaybackContentModeState: MutableState<FullscreenPlaybackContentMode>,
     artistPlaceholderArtistsState: MutableState<List<String>>,
     collapsedMetadataSwitchDirectionState: MutableState<Int>,
     isFullscreenPlayerState: MutableState<Boolean>,
@@ -50,6 +52,7 @@ internal class MiniPlayerState internal constructor(
     val artistPlaceholderLocalSongs: List<Song>
 ) {
     var fullscreenContentMode by fullscreenContentModeState
+    var fullscreenPlaybackContentMode by fullscreenPlaybackContentModeState
     var artistPlaceholderArtists by artistPlaceholderArtistsState
     var collapsedMetadataSwitchDirection by collapsedMetadataSwitchDirectionState
     var isFullscreenPlayer by isFullscreenPlayerState
@@ -137,6 +140,9 @@ internal fun rememberMiniPlayerState(
     val fullscreenContentModeState = rememberSaveable {
         mutableStateOf(FullscreenContentMode.Playback)
     }
+    val fullscreenPlaybackContentModeState = rememberSaveable {
+        mutableStateOf(FullscreenPlaybackContentMode.Artwork)
+    }
     val artistPlaceholderArtistsState = rememberSaveable {
         mutableStateOf(emptyList<String>())
     }
@@ -174,6 +180,7 @@ internal fun rememberMiniPlayerState(
 
     return MiniPlayerState(
         fullscreenContentModeState = fullscreenContentModeState,
+        fullscreenPlaybackContentModeState = fullscreenPlaybackContentModeState,
         artistPlaceholderArtistsState = artistPlaceholderArtistsState,
         collapsedMetadataSwitchDirectionState = collapsedMetadataSwitchDirectionState,
         isFullscreenPlayerState = isFullscreenPlayerState,

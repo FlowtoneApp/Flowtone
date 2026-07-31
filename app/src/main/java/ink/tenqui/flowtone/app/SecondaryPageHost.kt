@@ -37,6 +37,7 @@ import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
 @Composable
@@ -63,6 +64,8 @@ internal fun SecondaryPageHost(
     onOpenSongRecordThresholdDialog: () -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
     selectedPlaylistId: String?,
@@ -221,6 +224,8 @@ internal fun SecondaryPageHost(
                 onOpenSongRecordThresholdDialog = onOpenSongRecordThresholdDialog,
                 flowCloudSpeed = flowCloudSpeed,
                 onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
+                lyricsBackgroundStyle = lyricsBackgroundStyle,
+                onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 elementModifier = ::elementModifier,
                 modifier = Modifier.fillMaxSize()
             )

@@ -181,22 +181,27 @@ internal fun MiniPlayerFullscreenContentEffects(
     currentSong: Song?,
     onFullscreenPlayerChange: (Boolean) -> Unit,
     resetFullscreenContentMode: () -> Unit,
+    resetFullscreenPlaybackContentMode: () -> Unit,
     exitFullscreenContentModeForSongChange: () -> Unit
 ) {
     LaunchedEffect(fullscreen, expanded, hasCurrentSong) {
         if (!fullscreen || !expanded) {
             onFullscreenPlayerChange(false)
             resetFullscreenContentMode()
+            resetFullscreenPlaybackContentMode()
         } else if (!hasCurrentSong) {
             onFullscreenPlayerChange(false)
             exitFullscreenContentModeForSongChange()
+            resetFullscreenPlaybackContentMode()
         }
     }
     LaunchedEffect(fullscreen, hasCurrentSong, currentSong?.id) {
         if (!fullscreen) {
             resetFullscreenContentMode()
+            resetFullscreenPlaybackContentMode()
         } else if (!hasCurrentSong) {
             exitFullscreenContentModeForSongChange()
+            resetFullscreenPlaybackContentMode()
         } else if (currentSong?.id != null) {
             exitFullscreenContentModeForSongChange()
         }

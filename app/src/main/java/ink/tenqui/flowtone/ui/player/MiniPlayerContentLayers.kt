@@ -10,6 +10,7 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsBlurredArtworkBackground
 
 @Composable
 internal fun BoxScope.MiniPlayerBackgroundLayers(
@@ -21,7 +22,8 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
     animationProgress: Float,
     isPlaying: Boolean,
     flowCloudSpeed: Float,
-    waitForArtworkLoad: Boolean
+    waitForArtworkLoad: Boolean,
+    lyricsBlurredArtworkProgress: Float
 ) {
     Box(
         modifier = Modifier
@@ -45,6 +47,12 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
         progress = animationProgress,
         isPlaying = isPlaying,
         flowCloudSpeed = flowCloudSpeed,
+        modifier = Modifier.matchParentSize()
+    )
+    LyricsBlurredArtworkBackground(
+        imageRequest = backgroundImageRequest,
+        visibilityProgress = lyricsBlurredArtworkProgress,
+        waitForArtworkLoad = waitForArtworkLoad,
         modifier = Modifier.matchParentSize()
     )
     Box(
