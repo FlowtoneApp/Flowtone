@@ -206,19 +206,27 @@ internal fun GeneralSettingsPage(
                 selectedPage = selectedStartPage,
                 onPageSelected = onStartPageSelected
             )
+        }
+        OptionGroup(
+            title = "\u8def\u5f84\u9876\u680f",
+            modifier = elementModifier(1).padding(top = 24.dp)
+        ) {
             SettingSwitchRow(
                 title = "关闭子菜单返回按钮",
                 subtitle = "右滑屏幕即可返回上一级",
                 checked = hideSecondaryBackButton,
                 onCheckedChange = onHideSecondaryBackButtonChange,
-                modifier = Modifier.padding(top = 12.dp)
             )
+        }
+        OptionGroup(
+            title = "MiniPlayer",
+            modifier = elementModifier(2).padding(top = 24.dp)
+        ) {
             SettingSwitchRow(
                 title = "正常态上滑直达全屏",
                 subtitle = "关闭后需要先展开 MiniPlayer，再上滑进入全屏",
                 checked = allowFullscreenFromCollapsed,
                 onCheckedChange = onAllowFullscreenFromCollapsedChange,
-                modifier = Modifier.padding(top = 12.dp)
             )
         }
     }
