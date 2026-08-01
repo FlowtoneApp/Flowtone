@@ -30,6 +30,7 @@ internal fun LikedSongsPlaylistScreen(
     allSongs: List<Song>,
     likedSongKeys: List<String>,
     currentSong: Song?,
+    songSort: PlaylistSongSort = PlaylistSongSort(),
     onSongClick: (List<Song>, Int) -> Unit,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     itemModifier: (Int) -> Modifier = { Modifier },
@@ -87,7 +88,7 @@ internal fun LikedSongsPlaylistScreen(
                     selectionKey = "liked:${song.id}:${song.uri}",
                     song = song
                 )
-            },
+            }.sortedForPlaylist(songSort),
             listState = listState,
             currentSong = currentSong,
             likedSongKeys = batchActions.likedSongKeys,

@@ -31,6 +31,7 @@ import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
+import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 import ink.tenqui.flowtone.ui.screens.topLevelPageBackground
 import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
@@ -50,6 +51,7 @@ internal fun FlowtoneScaffoldContent(
     playlistBatchActions: PlaylistBatchActions,
     likedSongCount: Int,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
+    playlistSongSort: PlaylistSongSort,
     innerPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -263,6 +265,7 @@ internal fun FlowtoneScaffoldContent(
                     playlistBatchActions = playlistBatchActions,
                     onDetailHeaderCollapseProgressStateChange =
                         onDetailHeaderCollapseProgressStateChange,
+                    playlistSongSort = playlistSongSort,
                     permissionDenied = state.permissionDenied,
                     onRequestPermission = callbacks.onRequestPermission,
                     onSongClick = callbacks.onSongClick,

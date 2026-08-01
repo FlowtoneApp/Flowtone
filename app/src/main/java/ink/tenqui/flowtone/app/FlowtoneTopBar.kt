@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.pager.PagerState
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
@@ -96,6 +97,12 @@ internal fun FlowtoneTopBar(
     onSearchKeyboardDismissRequestConsumed: () -> Unit,
     onSearchInputFocusChange: (Boolean) -> Unit,
     onSearchImeAction: () -> Unit,
+    showPlaylistSortButton: Boolean = false,
+    playlistSongSort: ink.tenqui.flowtone.ui.library.PlaylistSongSort =
+        ink.tenqui.flowtone.ui.library.PlaylistSongSort(),
+    playlistSortPanelOpen: Boolean = false,
+    onPlaylistSortChange: (ink.tenqui.flowtone.ui.library.PlaylistSongSort) -> Unit = {},
+    onPlaylistSortPanelOpenChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pathSegments = when (secondaryPage) {
@@ -147,6 +154,22 @@ internal fun FlowtoneTopBar(
         animationSpec = tween(220, easing = FlowtonePageEasing),
         label = "PlaylistSelectionTopBarProgress"
     )
+    val playlistSortProgress by animateFloatAsState(
+        targetValue = if (playlistSortPanelOpen) 1f else 0f,
+        animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
+        label = "PlaylistSortPathProgress"
+    )
+    var playlistSortOrderMenuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(playlistSortPanelOpen) {
+        if (!playlistSortPanelOpen) {
+            playlistSortOrderMenuOpen = false
+        }
+    }
+    val playlistSortOrderMenuProgress by animateFloatAsState(
+        targetValue = if (playlistSortOrderMenuOpen) 1f else 0f,
+        animationSpec = tween(280, easing = FlowtonePageEasing),
+        label = "PlaylistSortOrderMenuProgress"
+    )
     val displayedSelectionState = songSelectionState ?: retainedSelectionState
     val density = LocalDensity.current
     val navigationShiftPx = with(density) {
@@ -166,6 +189,10 @@ internal fun FlowtoneTopBar(
         Color.Transparent
     }
     val rootTopBarBackgroundAlpha = if (searchActive) 0f else topBarBackgroundAlpha
+    val topBarHeight = FlowtoneTopBarContentHeight +
+        PlaylistSortPanelHeight * playlistSortProgress +
+        PlaylistSortOrderMenuHeight * playlistSortProgress *
+            playlistSortOrderMenuProgress
 
     Box(
         modifier = modifier
@@ -180,7 +207,7 @@ internal fun FlowtoneTopBar(
                 MaterialTheme.colorScheme.surfaceContainer.copy(alpha = rootTopBarBackgroundAlpha)
             )
             .statusBarsPadding()
-            .height(FlowtoneTopBarContentHeight)
+            .height(topBarHeight)
             .clipToBounds(),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -190,7 +217,9 @@ internal fun FlowtoneTopBar(
                 slideInHorizontally(tween(260, easing = FlowtonePageEasing)) { -it * 2 },
             exit = fadeOut(tween(140, easing = FlowtonePageEasing)) +
                 slideOutHorizontally(tween(260, easing = FlowtonePageEasing)) { -it * 2 },
-            modifier = Modifier.offset(x = (-8).dp)
+            modifier = Modifier
+                .offset(x = (-8).dp)
+                .graphicsLayer { alpha = 1f - playlistSortProgress }
         ) {
             IconButton(
                 onClick = onBack,
@@ -207,13 +236,14 @@ internal fun FlowtoneTopBar(
         }
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .height(FlowtoneTopBarContentHeight)
                 .padding(start = FlowtoneTopBarTitleStartPadding, end = titleEndPadding)
                 .clipToBounds()
                 .graphicsLayer {
                     alpha = (1f - searchProgress) * titleVisibilityAlpha *
-                        (1f - selectionProgress)
-                    translationX = -titleExitDistancePx * searchProgress
+                        (1f - selectionProgress) * (1f - playlistSortProgress)
+                    translationX = -titleExitDistancePx * (searchProgress + playlistSortProgress)
                     // 进入多选时原标题向下退出，退出多选时向上回到原位。
                     translationY = titleExitDistancePx * selectionProgress
                 }
@@ -358,6 +388,19 @@ internal fun FlowtoneTopBar(
                 onInputFocusChange = onSearchInputFocusChange,
                 onImeAction = onSearchImeAction,
                 modifier = Modifier.fillMaxSize()
+            )
+        }
+        if (showPlaylistSortButton || playlistSortPanelOpen) {
+            PlaylistSortTopBar(
+                visible = playlistSortPanelOpen,
+                progress = playlistSortProgress,
+                orderMenuExpanded = playlistSortOrderMenuOpen,
+                orderMenuProgress = playlistSortOrderMenuProgress,
+                sort = playlistSongSort,
+                onSortChange = onPlaylistSortChange,
+                onVisibleChange = onPlaylistSortPanelOpenChange,
+                onOrderMenuExpandedChange = { playlistSortOrderMenuOpen = it },
+                modifier = Modifier.align(Alignment.TopStart)
             )
         }
     }

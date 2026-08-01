@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
+import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
 @Composable
 internal fun FlowtoneScaffoldTopLayer(
@@ -15,7 +16,11 @@ internal fun FlowtoneScaffoldTopLayer(
     callbacks: FlowtoneAppCallbacks,
     detailHeaderCollapseProgressState: State<Float>?,
     songSelectionState: PlaylistSelectionTopBarState?,
-    onCloseSongSelection: () -> Unit
+    onCloseSongSelection: () -> Unit,
+    playlistSongSort: PlaylistSongSort,
+    playlistSortPanelOpen: Boolean,
+    onPlaylistSortChange: (PlaylistSongSort) -> Unit,
+    onPlaylistSortPanelOpenChange: (Boolean) -> Unit
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
         val isTopLevelRootPage = state.secondaryPage == null
@@ -65,7 +70,17 @@ internal fun FlowtoneScaffoldTopLayer(
             onSearchKeyboardDismissRequestConsumed =
                 callbacks.onSearchKeyboardDismissRequestConsumed,
             onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
-            onSearchImeAction = callbacks.onSearchImeAction
+            onSearchImeAction = callbacks.onSearchImeAction,
+            showPlaylistSortButton = (
+                state.secondaryPage == SecondaryPage.LocalLibrary ||
+                    (state.secondaryPage == SecondaryPage.Playlist &&
+                        state.selectedPlaylistId != null)
+                ) &&
+                songSelectionState == null && !state.searchActive,
+            playlistSongSort = playlistSongSort,
+            playlistSortPanelOpen = playlistSortPanelOpen,
+            onPlaylistSortChange = onPlaylistSortChange,
+            onPlaylistSortPanelOpenChange = onPlaylistSortPanelOpenChange
         )
     }
 }

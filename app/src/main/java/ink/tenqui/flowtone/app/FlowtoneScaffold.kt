@@ -32,6 +32,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
+import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
 import kotlinx.coroutines.launch
 
@@ -57,6 +58,8 @@ internal fun FlowtoneScaffold(
         mutableStateOf<PlaylistSelectionTopBarState?>(null)
     }
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
+    var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
+    var playlistSortPanelOpen by remember { mutableStateOf(false) }
     val onDetailHeaderCollapseProgressStateChange = remember {
         { progressState: State<Float>? ->
             detailHeaderCollapseProgressState = progressState
@@ -134,6 +137,12 @@ internal fun FlowtoneScaffold(
             !state.searchActive
         if (!editingAllowed) {
             libraryPlaylistController.clearPlaylistEditing()
+        }
+        if (
+            state.secondaryPage != SecondaryPage.Playlist &&
+            state.secondaryPage != SecondaryPage.LocalLibrary
+        ) {
+            playlistSortPanelOpen = false
         }
     }
 
@@ -223,7 +232,11 @@ internal fun FlowtoneScaffold(
                     callbacks = callbacks,
                     detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
                     songSelectionState = songSelectionTopBarState,
-                    onCloseSongSelection = { clearSongSelectionRequest += 1 }
+                    onCloseSongSelection = { clearSongSelectionRequest += 1 },
+                    playlistSongSort = playlistSongSort,
+                    playlistSortPanelOpen = playlistSortPanelOpen,
+                    onPlaylistSortChange = { playlistSongSort = it },
+                    onPlaylistSortPanelOpenChange = { playlistSortPanelOpen = it }
                 )
             }
         ) { innerPadding ->
@@ -239,6 +252,7 @@ internal fun FlowtoneScaffold(
                 likedSongCount = likedSongCount,
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,
+                playlistSongSort = playlistSongSort,
                 innerPadding = innerPadding
             )
         }

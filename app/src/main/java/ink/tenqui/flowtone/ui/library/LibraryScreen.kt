@@ -486,6 +486,7 @@ internal fun LocalLibraryScreen(
     title: String,
     uiState: MusicUiState,
     currentSong: Song?,
+    songSort: PlaylistSongSort = PlaylistSongSort(),
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -553,7 +554,7 @@ internal fun LocalLibraryScreen(
                         selectionKey = "local:${song.id}:${song.uri}",
                         song = song
                     )
-                },
+                }.sortedForPlaylist(songSort),
                 listState = listState,
                 currentSong = currentSong,
                 likedSongKeys = batchActions.likedSongKeys,
@@ -582,6 +583,7 @@ internal fun PlaylistDetailScreen(
     allSongs: List<Song>,
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
+    songSort: PlaylistSongSort = PlaylistSongSort(),
     onSongClick: (List<Song>, Int) -> Unit,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     itemModifier: (Int) -> Modifier = { Modifier },
@@ -592,7 +594,7 @@ internal fun PlaylistDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val listState = remember(playlistId) { LazyListState() }
-    val playlistSongs = remember(playlistId, allSongs, playlistSongEntries) {
+    val playlistSongs = remember(playlistId, allSongs, playlistSongEntries, songSort) {
         if (playlistId == null) {
             emptyList()
         } else {
@@ -609,6 +611,7 @@ internal fun PlaylistDetailScreen(
                         )
                     }
                 }
+                .sortedForPlaylist(songSort)
         }
     }
 

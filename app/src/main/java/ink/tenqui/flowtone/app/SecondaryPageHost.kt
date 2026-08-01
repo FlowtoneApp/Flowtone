@@ -39,6 +39,7 @@ import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.viewmodel.MusicUiState
+import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
 @Composable
 internal fun SecondaryPageHost(
@@ -76,6 +77,7 @@ internal fun SecondaryPageHost(
     playlistSongEntries: List<PlaylistSongEntry>,
     playlistBatchActions: PlaylistBatchActions,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
+    playlistSongSort: PlaylistSongSort,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -249,6 +251,7 @@ internal fun SecondaryPageHost(
                 title = SecondaryPage.LocalLibrary.title,
                 uiState = uiState,
                 currentSong = currentSong,
+                songSort = playlistSongSort,
                 permissionDenied = permissionDenied,
                 onRequestPermission = onRequestPermission,
                 onSongClick = onSongClick,
@@ -282,6 +285,7 @@ internal fun SecondaryPageHost(
                         allSongs = uiState.songs,
                         likedSongKeys = likedSongKeys,
                         currentSong = currentSong,
+                        songSort = playlistSongSort,
                         onSongClick = { songs, index ->
                             onPlaylistSongClick(songs, index, PlaybackSource.LikedSongs)
                         },
@@ -302,6 +306,7 @@ internal fun SecondaryPageHost(
                         allSongs = uiState.songs,
                         playlistSongEntries = playlistSongEntries,
                         currentSong = currentSong,
+                        songSort = playlistSongSort,
                         onSongClick = { songs, index ->
                             onPlaylistSongClick(
                                 songs,
