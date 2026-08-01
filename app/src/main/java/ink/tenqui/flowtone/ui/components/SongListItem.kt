@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui.components
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDp
@@ -9,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -77,6 +77,25 @@ fun SongListItem(
     val hapticFeedback = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
     val itemIndication = if (selectionMode) null else LocalIndication.current
+    val itemClickModifier = if (!selectionMode && onLongClick != null) {
+        Modifier.combinedClickable(
+            interactionSource = interactionSource,
+            indication = itemIndication,
+            onClick = { onClick(song) },
+            onLongClick = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                onLongClick(song)
+            }
+        )
+    } else {
+        // Playlist drag-selection owns long presses at the list level. Keeping the row
+        // on a plain click recognizer prevents both recognizers from tracking the tap.
+        Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = itemIndication,
+            onClick = { onClick(song) }
+        )
+    }
     val itemMinHeight = if (compact) 64.dp else 72.dp
     val itemVerticalPadding = if (compact) 6.dp else 8.dp
     val artworkSize = if (compact) 48.dp else 56.dp
@@ -171,15 +190,11 @@ fun SongListItem(
             0f
         }
     }
-    val currentSongBackground by animateColorAsState(
-        targetValue = if (isCurrentSong && !isSelected) {
-            currentSongBackgroundColor ?: MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            Color.Transparent
-        },
-        animationSpec = tween(durationMillis = 170),
-        label = "CurrentSongBackground"
-    )
+    val currentSongBackground = if (isCurrentSong && !isSelected) {
+        currentSongBackgroundColor ?: MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        Color.Transparent
+    }
 
     Box(
         modifier = modifier
@@ -223,19 +238,7 @@ fun SongListItem(
                 .padding(vertical = selectionSlotPadding)
                 .clip(rowShape)
                 .background(currentSongBackground)
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = itemIndication,
-                    onClick = { onClick(song) },
-                    onLongClick = if (!selectionMode && onLongClick != null) {
-                        {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onLongClick(song)
-                        }
-                    } else {
-                        null
-                    }
-                )
+                .then(itemClickModifier)
                 .semantics {
                     if (selectionMode) {
                         selected = isSelected
