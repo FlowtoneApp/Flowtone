@@ -6,23 +6,34 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -48,10 +59,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
+import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
+import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.SongListItem
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -109,6 +125,7 @@ internal data class PlaylistBatchActions(
         (Set<String>, List<Song>, (Boolean, Int) -> Unit) -> Unit =
         { _, _, done -> done(false, 0) },
     val onSetSongsLiked: (List<Song>, Boolean) -> Unit = { _, _ -> },
+    val onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     val onRemoveEntries:
         (String, Set<String>, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) }
 )
@@ -131,6 +148,7 @@ internal fun SelectablePlaylistSongList(
     onAppendSongsToQueue: (List<Song>) -> Boolean,
     onAddSongsToPlaylists: (Set<String>, List<Song>, (Boolean, Int) -> Unit) -> Unit,
     onSetSongsLiked: (List<Song>, Boolean) -> Unit,
+    onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit,
     onRemoveEntries: (Set<String>, (Boolean) -> Unit) -> Unit,
     itemModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
@@ -657,7 +675,7 @@ internal fun SelectablePlaylistSongList(
             text = {
                 Text(
                     "文件将从设备存储中删除，且可能无法撤销。" +
-                        "当前版本尚未接入安全的系统删除授权流程。"
+                        "接下来将由系统再次确认删除操作。"
                 )
             },
             dismissButton = {
@@ -668,13 +686,24 @@ internal fun SelectablePlaylistSongList(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        busy = true
                         showDeleteDialog = false
-                        scope.launch {
-                            snackbarHostState.showSnackbar("暂不支持安全删除本地文件")
+                        onDeleteSongs(selectedSongs) { success ->
+                            if (success) {
+                                finishWith("已删除 ${selectedSongs.size} 首本地歌曲")
+                            } else {
+                                busy = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "未删除本地歌曲：操作被取消、被系统拒绝或设备不支持"
+                                    )
+                                }
+                            }
                         }
-                    }
+                    },
+                    enabled = !busy
                 ) {
-                    Text("暂不可用", color = MaterialTheme.colorScheme.error)
+                    Text("删除", color = MaterialTheme.colorScheme.error)
                 }
             }
         )
@@ -725,24 +754,27 @@ private fun AddSelectedSongsToPlaylistsDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("添加 $songCount 首歌曲到歌单") },
         text = {
-            androidx.compose.foundation.layout.Column {
-                playlists.forEach { playlist ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    ) {
-                        Checkbox(
-                            checked = playlist.id in selectedIds,
-                            onCheckedChange = { checked ->
-                                if (checked) selectedIds.add(playlist.id)
-                                else selectedIds.remove(playlist.id)
+            if (playlists.isEmpty()) {
+                Text("暂无可编辑歌单")
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.heightIn(max = 280.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(playlists, key = LibraryPlaylistCard::id) { playlist ->
+                        val selected = playlist.id in selectedIds
+                        PlaylistDestinationCard(
+                            playlist = playlist,
+                            selected = selected,
+                            enabled = !busy,
+                            onClick = {
+                                if (selected) selectedIds.remove(playlist.id)
+                                else selectedIds.add(playlist.id)
                             }
                         )
-                        Text(playlist.title)
                     }
-                }
-                if (playlists.isEmpty()) {
-                    Text("暂无可编辑歌单")
                 }
             }
         },
@@ -760,4 +792,59 @@ private fun AddSelectedSongsToPlaylistsDialog(
             }
         }
     )
+}
+
+@Composable
+private fun PlaylistDestinationCard(
+    playlist: LibraryPlaylistCard,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = MaterialTheme.shapes.small
+    val outlineColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)
+    }
+    val visualType = if (playlist.isLikedSongsPlaylist()) {
+        PlaylistCardVisualType.LikedMusic
+    } else {
+        PlaylistCardVisualType.UserPlaylist
+    }
+
+    PlaylistCardSurface(
+        visualType = visualType,
+        appearanceColorKey = playlist.appearanceColorKey,
+        shape = shape,
+        contentPadding = PaddingValues(12.dp),
+        isFlowCloudPlaying = false,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(94.dp)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = outlineColor,
+                shape = shape
+            ),
+        clickModifier = Modifier.clickable(enabled = enabled, onClick = onClick)
+    ) { colors ->
+        Text(
+            text = playlist.title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.titleColor,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.BottomStart)
+        )
+        if (selected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "已选择",
+                tint = colors.iconColor,
+                modifier = Modifier.align(Alignment.TopEnd)
+            )
+        }
+    }
 }

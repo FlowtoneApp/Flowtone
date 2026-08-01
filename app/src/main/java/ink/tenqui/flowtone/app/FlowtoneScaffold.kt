@@ -162,6 +162,7 @@ internal fun FlowtoneScaffold(
         onAddSongsNext = callbacks.onAddSongsToNext,
         onAppendSongsToQueue = callbacks.onAppendSongsToQueue,
         onSetSongsLiked = callbacks.onSetSongsLiked,
+        onDeleteSongs = callbacks.onDeleteSongs,
         onAddSongsToPlaylists = { playlistIds, songs, done ->
             coroutineScope.launch {
                 val userPlaylistIds = playlistIds - LikedSongsPlaylistId

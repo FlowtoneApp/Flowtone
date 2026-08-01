@@ -100,6 +100,7 @@ internal fun LikedSongsPlaylistScreen(
             onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
             onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
             onSetSongsLiked = batchActions.onSetSongsLiked,
+            onDeleteSongs = batchActions.onDeleteSongs,
             onRemoveEntries = { _, done -> done(false) },
             itemModifier = itemModifier,
             modifier = Modifier.fillMaxSize()

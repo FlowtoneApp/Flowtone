@@ -304,6 +304,25 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun handleLocalSongsDeleted(deletedSongs: List<Song>) {
+        if (deletedSongs.isEmpty()) {
+            return
+        }
+        val currentSong = playbackState.value.currentSong
+        if (currentSong != null && deletedSongs.any { deletedSong ->
+                isSameSong(deletedSong, currentSong)
+            }
+        ) {
+            playbackController.clearPlayback()
+            sourceQueue = emptyList()
+            playbackQueue = emptyList()
+            currentQueueIndex = -1
+            currentPlaybackSource = PlaybackSource.Unknown
+            publishPlaybackQueue()
+        }
+        scanSongs()
+    }
+
     fun playSong(
         song: Song,
         source: PlaybackSource = PlaybackSource.LocalLibrary

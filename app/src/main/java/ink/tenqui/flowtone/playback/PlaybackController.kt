@@ -375,6 +375,21 @@ class PlaybackController(
         }
     }
 
+    fun clearPlayback() {
+        currentControllerOrNull()?.apply {
+            pause()
+            clearMediaItems()
+        }
+        _playbackState.update { currentState ->
+            currentState.copy(
+                currentSong = null,
+                isPlaying = false,
+                positionMs = 0L,
+                durationMs = 0L
+            )
+        }
+    }
+
     fun togglePlayPause() {
         val controller = currentControllerOrNull()
         val isPlaying = controller?.isPlaying ?: playbackState.value.isPlaying

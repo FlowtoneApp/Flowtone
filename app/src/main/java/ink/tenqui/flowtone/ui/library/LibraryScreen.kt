@@ -566,6 +566,7 @@ internal fun LocalLibraryScreen(
                 onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
                 onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
                 onSetSongsLiked = batchActions.onSetSongsLiked,
+                onDeleteSongs = batchActions.onDeleteSongs,
                 onRemoveEntries = { _, done -> done(false) },
                 itemModifier = itemModifier,
                 modifier = Modifier.fillMaxSize()
@@ -655,6 +656,7 @@ internal fun PlaylistDetailScreen(
             onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
             onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
             onSetSongsLiked = batchActions.onSetSongsLiked,
+            onDeleteSongs = batchActions.onDeleteSongs,
             onRemoveEntries = { entryIds, done ->
                 batchActions.onRemoveEntries(playlistId.orEmpty(), entryIds, done)
             },

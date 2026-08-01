@@ -1,7 +1,10 @@
 package ink.tenqui.flowtone.app
 
 import android.app.Activity
+import android.os.Build
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -56,6 +59,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private data class PendingSongDeletion(
+    val songs: List<Song>,
+    val onResult: (Boolean) -> Unit
+)
+
 @Composable
 fun FlowtoneApp(
     musicViewModel: MusicViewModel = viewModel(),
@@ -94,6 +102,7 @@ fun FlowtoneApp(
         mutableStateOf(!audioPermissionGranted)
     }
     var permissionRequestResultVersion by remember { mutableStateOf(0) }
+    var pendingSongDeletion by remember { mutableStateOf<PendingSongDeletion?>(null) }
 
     val pagerState = rememberPagerState(
         initialPage = defaultStartPage.index,
@@ -237,6 +246,40 @@ fun FlowtoneApp(
         audioPermissionGranted = granted
         appState.permissionDenied = !granted
         permissionRequestResultVersion += 1
+    }
+    val deleteSongsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val pendingDeletion = pendingSongDeletion ?: return@rememberLauncherForActivityResult
+        pendingSongDeletion = null
+        val deleted = result.resultCode == Activity.RESULT_OK
+        if (deleted) {
+            musicViewModel.handleLocalSongsDeleted(pendingDeletion.songs)
+        }
+        pendingDeletion.onResult(deleted)
+    }
+    val requestSongDeletion: (List<Song>, (Boolean) -> Unit) -> Unit = { songs, onResult ->
+        if (songs.isEmpty() || pendingSongDeletion != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            onResult(false)
+        } else {
+            val deleteRequest = runCatching {
+                MediaStore.createDeleteRequest(
+                    context.contentResolver,
+                    songs.map(Song::uri).distinct()
+                )
+            }.getOrNull()
+            if (deleteRequest == null) {
+                onResult(false)
+            } else {
+                pendingSongDeletion = PendingSongDeletion(
+                    songs = songs,
+                    onResult = onResult
+                )
+                deleteSongsLauncher.launch(
+                    IntentSenderRequest.Builder(deleteRequest.intentSender).build()
+                )
+            }
+        }
     }
     val permissionGateRequiresSettings = remember(
         audioPermissionGranted,
@@ -667,6 +710,7 @@ fun FlowtoneApp(
             onAppendSongsToQueue = musicViewModel::appendSongsToQueue,
             onSetSongLiked = ::setSongLiked,
             onSetSongsLiked = ::setSongsLiked,
+            onDeleteSongs = requestSongDeletion,
             onToggleSongLiked = ::toggleSongLiked,
             onOpenSearch = ::enterSearchMode,
             onExitSearch = ::exitSearchMode,
