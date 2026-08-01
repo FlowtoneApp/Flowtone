@@ -2,7 +2,10 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +24,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,23 +32,63 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.SongListItem
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.channels.Channel
+import kotlin.math.abs
 
 private val SelectionSlotPadding = 2.dp
 private val SelectionListContentPadding = 14.dp
+private val SelectionAutoScrollEdgeSize = 72.dp
+private val SelectionAutoScrollStep = 4.dp
+private val SelectionDirectionChangeThreshold = 2.dp
+private const val SelectionAutoScrollFrameMillis = 32L
+private const val SelectionLongPressTimeoutMillis = 300L
+
+private class PlaylistSelectionGestureState {
+    var lastToggledKey: String? = null
+    var primaryPositionY: Float? = null
+    var verticalDirection: Int = 0
+    var pendingDirection: Int = 0
+    var pendingDirectionDistance: Float = 0f
+
+    fun reset(primaryPositionY: Float? = null) {
+        lastToggledKey = null
+        this.primaryPositionY = primaryPositionY
+        verticalDirection = 0
+        pendingDirection = 0
+        pendingDirectionDistance = 0f
+    }
+}
+
+private sealed interface SecondaryScrollCommand {
+    data class Drag(val deltaY: Float) : SecondaryScrollCommand
+    data class Fling(val velocityY: Float) : SecondaryScrollCommand
+}
 
 internal data class SelectablePlaylistSong(
     val selectionKey: String,
@@ -97,15 +141,85 @@ internal fun SelectablePlaylistSongList(
     var showRemoveDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var suppressLongPressReleaseClick by remember(sourceKey) { mutableStateOf(false) }
+    var selectionGestureActive by remember(sourceKey) { mutableStateOf(false) }
+    var primarySelectionPointerId by remember(sourceKey) { mutableStateOf<PointerId?>(null) }
+    var primarySelectionObserverOwnsGesture by remember(sourceKey) { mutableStateOf(false) }
+    var secondaryPointerIntervened by remember(sourceKey) { mutableStateOf(false) }
+    var secondaryScrollOwnsGesture by remember(sourceKey) { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val hapticFeedback = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val flingBehavior = ScrollableDefaults.flingBehavior()
+    val defaultViewConfiguration = LocalViewConfiguration.current
+    val selectionViewConfiguration = remember(defaultViewConfiguration) {
+        object : ViewConfiguration by defaultViewConfiguration {
+            override val longPressTimeoutMillis: Long = SelectionLongPressTimeoutMillis
+        }
+    }
+    val selectionGestureState = remember(sourceKey) { PlaylistSelectionGestureState() }
     val selectionMode = selectedKeys.isNotEmpty()
     val entriesByKey = entries.associateBy { it.selectionKey }
+    val entryKeys = remember(entries) { entries.map { it.selectionKey } }
+    val latestEntries by rememberUpdatedState(entries)
     val selectedKeySet = remember(selectedKeys) { selectedKeys.toSet() }
     // 按 selectionKey 被加入集合的先后生成操作列表。
     val selectedEntries = selectedKeys.mapNotNull(entriesByKey::get)
     val selectedSongs = selectedEntries.map { it.song }
+
+    fun entryAt(y: Float): SelectablePlaylistSong? {
+        val visibleItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+            y.toInt() in item.offset until (item.offset + item.size)
+        } ?: return null
+        val slotPaddingPx = with(density) { SelectionSlotPadding.toPx() }
+        val positionInItem = y - visibleItem.offset
+        if (
+            positionInItem < slotPaddingPx ||
+            positionInItem >= visibleItem.size - slotPaddingPx
+        ) {
+            return null
+        }
+        return latestEntries.getOrNull(visibleItem.index)
+    }
+
+    fun toggleSelectionAt(y: Float, force: Boolean = false) {
+        val entry = entryAt(y) ?: return
+        if (force || entry.selectionKey != selectionGestureState.lastToggledKey) {
+            selectionGestureState.lastToggledKey = entry.selectionKey
+            selectedKeys = if (entry.selectionKey in selectedKeys) {
+                selectedKeys - entry.selectionKey
+            } else {
+                selectedKeys + entry.selectionKey
+            }
+        }
+    }
+
+    fun handlePrimarySelectionDrag(y: Float, deltaY: Float) {
+        val direction = when {
+            deltaY > 0f -> 1
+            deltaY < 0f -> -1
+            else -> 0
+        }
+        var forceToggle = false
+        if (direction != 0) {
+            if (direction == selectionGestureState.pendingDirection) {
+                selectionGestureState.pendingDirectionDistance += abs(deltaY)
+            } else {
+                selectionGestureState.pendingDirection = direction
+                selectionGestureState.pendingDirectionDistance = abs(deltaY)
+            }
+            val thresholdPx = with(density) { SelectionDirectionChangeThreshold.toPx() }
+            if (
+                selectionGestureState.pendingDirectionDistance >= thresholdPx &&
+                direction != selectionGestureState.verticalDirection
+            ) {
+                forceToggle = selectionGestureState.verticalDirection != 0
+                selectionGestureState.verticalDirection = direction
+                selectionGestureState.pendingDirectionDistance = 0f
+            }
+        }
+        toggleSelectionAt(y = y, force = forceToggle)
+    }
 
     fun clearSelection() {
         selectedKeys = emptyList()
@@ -200,70 +314,242 @@ internal fun SelectablePlaylistSongList(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
+        CompositionLocalProvider(
+            LocalViewConfiguration provides selectionViewConfiguration
+        ) {
+            LazyColumn(
             state = listState,
+            userScrollEnabled = !selectionGestureActive,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(entries) {
-                    var visitedKeys = emptySet<String>()
+                .pointerInput(sourceKey, entryKeys) {
+                    awaitEachGesture {
+                        var secondaryPointerId: PointerId? = null
+                        var secondaryDragDistance = 0f
+                        var pointersPressed: Boolean
+                        val secondaryVelocityTracker = VelocityTracker()
+                        var secondaryScrollChannel: Channel<SecondaryScrollCommand>? = null
 
-                    fun entryAt(y: Float): SelectablePlaylistSong? {
-                        val visibleItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
-                            y.toInt() in item.offset until (item.offset + item.size)
-                        } ?: return null
-                        val slotPaddingPx = SelectionSlotPadding.toPx()
-                        val positionInItem = y - visibleItem.offset
-                        if (
-                            positionInItem < slotPaddingPx ||
-                            positionInItem >= visibleItem.size - slotPaddingPx
-                        ) {
-                            return null
+                        fun startSecondaryScrollSession(): Channel<SecondaryScrollCommand> {
+                            secondaryScrollChannel?.close()
+                            return Channel<SecondaryScrollCommand>(Channel.UNLIMITED).also { channel ->
+                                secondaryScrollChannel = channel
+                                scope.launch {
+                                    val followSelectionJob = launch {
+                                        snapshotFlow {
+                                            listState.firstVisibleItemIndex to
+                                                listState.firstVisibleItemScrollOffset
+                                        }.collect {
+                                            selectionGestureState.primaryPositionY
+                                                ?.let(::toggleSelectionAt)
+                                        }
+                                    }
+                                    try {
+                                        // Once the second pointer takes over, incidental movement
+                                        // from the held primary pointer must not cancel the fling.
+                                        listState.scroll(MutatePriority.PreventUserInput) {
+                                            for (command in channel) {
+                                                when (command) {
+                                                    is SecondaryScrollCommand.Drag ->
+                                                        scrollBy(-command.deltaY)
+
+                                                    is SecondaryScrollCommand.Fling -> {
+                                                        with(flingBehavior) {
+                                                            performFling(-command.velocityY)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } finally {
+                                        followSelectionJob.cancel()
+                                    }
+                                }
+                            }
                         }
-                        return entries.getOrNull(visibleItem.index)
+
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val pressedChanges = event.changes.filter { it.pressed }
+                            pointersPressed = pressedChanges.isNotEmpty()
+
+                            if (primarySelectionPointerId == null) {
+                                primarySelectionPointerId = pressedChanges.firstOrNull()?.id
+                            }
+
+                            if (selectionGestureActive || secondaryScrollOwnsGesture) {
+                                if (secondaryPointerId == null) {
+                                    secondaryPointerId = pressedChanges.firstOrNull { change ->
+                                        change.id != primarySelectionPointerId
+                                    }?.id
+                                    secondaryVelocityTracker.resetTracking()
+                                }
+
+                                val secondaryChange = event.changes.firstOrNull { change ->
+                                    change.id == secondaryPointerId
+                                }
+                                if (secondaryChange != null) {
+                                    val delta = secondaryChange.positionChange()
+                                    secondaryVelocityTracker.addPosition(
+                                        secondaryChange.uptimeMillis,
+                                        secondaryChange.position
+                                    )
+                                    if (delta.y != 0f) {
+                                        secondaryPointerIntervened = true
+                                        secondaryChange.consume()
+                                    }
+                                    if (!secondaryScrollOwnsGesture) {
+                                        secondaryDragDistance += delta.y
+                                        if (abs(secondaryDragDistance) >= viewConfiguration.touchSlop) {
+                                            secondaryScrollOwnsGesture = true
+                                            startSecondaryScrollSession()
+                                        }
+                                    }
+                                    if (secondaryScrollOwnsGesture && delta.y != 0f) {
+                                        val channel = secondaryScrollChannel
+                                            ?: startSecondaryScrollSession()
+                                        channel.trySend(SecondaryScrollCommand.Drag(delta.y))
+                                    }
+                                    if (!secondaryChange.pressed) {
+                                        if (secondaryScrollOwnsGesture) {
+                                            val velocityY = secondaryVelocityTracker
+                                                .calculateVelocity()
+                                                .y
+                                            secondaryScrollChannel?.trySend(
+                                                SecondaryScrollCommand.Fling(velocityY)
+                                            )
+                                            secondaryScrollChannel?.close()
+                                            secondaryScrollChannel = null
+                                        }
+                                        secondaryPointerId = null
+                                        secondaryDragDistance = 0f
+                                    }
+                                }
+
+                                if (
+                                    primarySelectionObserverOwnsGesture ||
+                                    secondaryPointerIntervened
+                                ) {
+                                    val primaryChange = event.changes.firstOrNull { change ->
+                                        change.id == primarySelectionPointerId
+                                    }
+                                    if (primaryChange != null) {
+                                        val primaryDelta = primaryChange.positionChange()
+                                        if (primaryChange.pressed && primaryDelta.y != 0f) {
+                                            selectionGestureState.primaryPositionY =
+                                                primaryChange.position.y
+                                            handlePrimarySelectionDrag(
+                                                y = primaryChange.position.y,
+                                                deltaY = primaryDelta.y
+                                            )
+                                            primaryChange.consume()
+                                        }
+                                        if (!primaryChange.pressed) {
+                                            selectionGestureActive = false
+                                            primarySelectionObserverOwnsGesture = false
+                                            selectionGestureState.primaryPositionY = null
+                                            suppressLongPressReleaseClick = false
+                                        }
+                                    }
+                                }
+                            }
+                        } while (pointersPressed)
+
+                        selectionGestureActive = false
+                        primarySelectionPointerId = null
+                        primarySelectionObserverOwnsGesture = false
+                        secondaryPointerIntervened = false
+                        secondaryScrollOwnsGesture = false
+                        secondaryScrollChannel?.close()
+                    }
+                }
+                .pointerInput(sourceKey, entryKeys) {
+                    var autoScrollJob: Job? = null
+                    var autoScrollDirection = 0
+
+                    fun stopAutoScroll() {
+                        autoScrollJob?.cancel()
+                        autoScrollJob = null
+                        autoScrollDirection = 0
                     }
 
-                    fun selectAt(y: Float) {
-                        val entry = entryAt(y) ?: return
-                        if (entry.selectionKey !in visitedKeys) {
-                            visitedKeys = visitedKeys + entry.selectionKey
-                            if (entry.selectionKey !in selectedKeys) {
-                                selectedKeys = selectedKeys + entry.selectionKey
+                    fun updateAutoScroll(direction: Int) {
+                        if (secondaryPointerIntervened) {
+                            stopAutoScroll()
+                            return
+                        }
+                        if (direction == 0) {
+                            stopAutoScroll()
+                            return
+                        }
+                        if (
+                            autoScrollDirection == direction &&
+                            autoScrollJob?.isActive == true
+                        ) {
+                            return
+                        }
+                        stopAutoScroll()
+                        autoScrollDirection = direction
+
+                        autoScrollJob = scope.launch {
+                            val stepPx = SelectionAutoScrollStep.toPx() * direction
+                            while (isActive && !secondaryPointerIntervened) {
+                                listState.scrollBy(stepPx)
+                                selectionGestureState.primaryPositionY?.let(::toggleSelectionAt)
+                                delay(SelectionAutoScrollFrameMillis)
                             }
                         }
                     }
 
                     detectDragGesturesAfterLongPress(
                         onDragStart = { position ->
-                            visitedKeys = emptySet()
+                            selectionGestureState.reset(position.y)
+                            selectionGestureActive = true
+                            primarySelectionObserverOwnsGesture = false
+                            secondaryPointerIntervened = false
+                            secondaryScrollOwnsGesture = false
                             // Long press starts selection immediately. The child click recognizer can
                             // still receive the eventual finger-up event, so suppress that one release.
                             suppressLongPressReleaseClick = true
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            selectAt(position.y)
+                            toggleSelectionAt(position.y)
                         },
                         onDragEnd = {
-                            visitedKeys = emptySet()
+                            selectionGestureState.reset()
+                            selectionGestureActive = false
+                            primarySelectionObserverOwnsGesture = false
+                            stopAutoScroll()
                             scope.launch {
                                 delay(180)
                                 suppressLongPressReleaseClick = false
                             }
                         },
                         onDragCancel = {
-                            visitedKeys = emptySet()
-                            suppressLongPressReleaseClick = false
+                            stopAutoScroll()
+                            if (selectionGestureActive) {
+                                // Continue tracking the held primary pointer after Compose
+                                // cancels the original long-press drag recognizer.
+                                primarySelectionObserverOwnsGesture = true
+                            } else if (!secondaryPointerIntervened) {
+                                selectionGestureState.reset()
+                                selectionGestureActive = false
+                                suppressLongPressReleaseClick = false
+                            }
                         },
-                        onDrag = { change, _ ->
+                        onDrag = { change, dragAmount ->
                             change.consume()
-                            selectAt(change.position.y)
-                            val edgeSize = 72.dp.toPx()
-                            val scrollDelta = when {
-                                change.position.y < edgeSize -> -24.dp.toPx()
-                                change.position.y > size.height - edgeSize -> 24.dp.toPx()
-                                else -> 0f
+                            selectionGestureState.primaryPositionY = change.position.y
+                            handlePrimarySelectionDrag(
+                                y = change.position.y,
+                                deltaY = dragAmount.y
+                            )
+                            val edgeSize = SelectionAutoScrollEdgeSize.toPx()
+                            val scrollDirection = when {
+                                change.position.y < edgeSize -> -1
+                                change.position.y > size.height - edgeSize -> 1
+                                else -> 0
                             }
-                            if (scrollDelta != 0f) {
-                                scope.launch { listState.scrollBy(scrollDelta) }
-                            }
+                            updateAutoScroll(scrollDirection)
                         }
                     )
                 },
@@ -274,8 +560,8 @@ internal fun SelectablePlaylistSongList(
                 bottom = SelectionListContentPadding
             ),
             verticalArrangement = Arrangement.spacedBy(0.dp)
-        ) {
-            itemsIndexed(entries, key = { _, entry -> entry.selectionKey }) { index, entry ->
+            ) {
+                itemsIndexed(entries, key = { _, entry -> entry.selectionKey }) { index, entry ->
                 val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1).coerceAtLeast(0)
                 val animationIndex = (index - firstVisibleSongIndex).coerceIn(0, 10)
                 val selected = entry.selectionKey in selectedKeySet
@@ -314,6 +600,7 @@ internal fun SelectablePlaylistSongList(
                     onLongClick = null,
                     modifier = itemModifier(animationIndex).padding(horizontal = 8.dp)
                 )
+                }
             }
         }
         SnackbarHost(
