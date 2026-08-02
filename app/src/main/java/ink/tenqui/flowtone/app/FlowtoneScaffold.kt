@@ -3,9 +3,12 @@ package ink.tenqui.flowtone.app
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -19,9 +22,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.data.local.isSongLiked
@@ -33,7 +38,9 @@ import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
+import ink.tenqui.flowtone.ui.library.PlaylistSongSortCriterion
 import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
+import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import kotlinx.coroutines.launch
 
 @Composable
@@ -60,6 +67,22 @@ internal fun FlowtoneScaffold(
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
+    val playlistSortProgress by animateFloatAsState(
+        targetValue = if (playlistSortPanelOpen) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        label = "PlaylistSortOverlayProgress"
+    )
+    val playlistSortCharacterSectionProgress by animateFloatAsState(
+        targetValue = if (playlistSongSort.criterion == PlaylistSongSortCriterion.Title) 1f else 0f,
+        animationSpec = tween(200),
+        label = "PlaylistSortCharacterSectionProgress"
+    )
+    val playlistSortPanelHeight = PlaylistSortPanelCollapsedHeight +
+        (PlaylistSortPanelHeight - PlaylistSortPanelCollapsedHeight) *
+            playlistSortCharacterSectionProgress
     val onDetailHeaderCollapseProgressStateChange = remember {
         { progressState: State<Float>? ->
             detailHeaderCollapseProgressState = progressState
@@ -152,6 +175,12 @@ internal fun FlowtoneScaffold(
         }
     }
 
+    LaunchedEffect(songSelectionTopBarState) {
+        if (songSelectionTopBarState != null) {
+            playlistSortPanelOpen = false
+        }
+    }
+
     fun refreshLibraryPlaylistsFromRepository(createdPlaylistId: String? = null) {
         libraryPlaylistController.applyRepositoryPlaylists(
             repositoryPlaylists = playlistRepository.playlists.value,
@@ -233,13 +262,15 @@ internal fun FlowtoneScaffold(
                     detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
                     songSelectionState = songSelectionTopBarState,
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
-                    playlistSongSort = playlistSongSort,
-                    playlistSortPanelOpen = playlistSortPanelOpen,
-                    onPlaylistSortChange = { playlistSongSort = it },
-                    onPlaylistSortPanelOpenChange = { playlistSortPanelOpen = it }
+                    playlistSortProgress = playlistSortProgress
                 )
             }
         ) { innerPadding ->
+            val contentInnerPadding = PaddingValues(
+                top = innerPadding.calculateTopPadding() +
+                    playlistSortPanelHeight * playlistSortProgress.coerceIn(0f, 1f),
+                bottom = innerPadding.calculateBottomPadding()
+            )
             FlowtoneScaffoldContent(
                 state = state,
                 callbacks = callbacks,
@@ -253,7 +284,38 @@ internal fun FlowtoneScaffold(
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,
                 playlistSongSort = playlistSongSort,
-                innerPadding = innerPadding
+                playlistSortPanelOpen = playlistSortPanelOpen,
+                onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
+                innerPadding = contentInnerPadding,
+                modifier = Modifier.blur(
+                    PlaylistSortContentBlurRadius *
+                        playlistSortProgress.coerceIn(0f, 1f)
+                )
+            )
+        }
+        val playlistSortAvailable = (
+            state.secondaryPage == SecondaryPage.LocalLibrary ||
+                (state.secondaryPage == SecondaryPage.Playlist &&
+                    state.selectedPlaylistId != null)
+            ) && songSelectionTopBarState == null && !state.searchActive
+        if (playlistSortPanelOpen || playlistSortProgress > 0f) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .rightSwipeBackGesture { playlistSortPanelOpen = false }
+            )
+        }
+        if (playlistSortAvailable || playlistSortPanelOpen || playlistSortProgress > 0f) {
+            PlaylistSortTopBar(
+                visible = playlistSortPanelOpen,
+                progress = playlistSortProgress,
+                sort = playlistSongSort,
+                onSortChange = { playlistSongSort = it },
+                onVisibleChange = { playlistSortPanelOpen = it },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .rightSwipeBackGesture { playlistSortPanelOpen = false }
             )
         }
         FlowtoneScaffoldOverlays(

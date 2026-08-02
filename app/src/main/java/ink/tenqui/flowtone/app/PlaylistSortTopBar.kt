@@ -1,22 +1,31 @@
 package ink.tenqui.flowtone.app
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
-import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,45 +39,43 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 import ink.tenqui.flowtone.ui.library.PlaylistSongSortCriterion
-import ink.tenqui.flowtone.ui.library.PlaylistSongSortOrder
+import ink.tenqui.flowtone.ui.library.PlaylistSongSortDirection
+import ink.tenqui.flowtone.ui.library.PlaylistSongTitleCharacterPriority
 
-internal val PlaylistSortPanelHeight = 260.dp
-internal val PlaylistSortOrderMenuHeight = 152.dp
+internal val PlaylistSortPanelHeight = 350.dp
+internal val PlaylistSortPanelCollapsedHeight = 252.dp
+internal val PlaylistSortContentBlurRadius = 14.dp
+
+private val SortOptionShape = RoundedCornerShape(8.dp)
+private const val SortOptionColorDurationMillis = 180
 
 @Composable
 internal fun PlaylistSortTopBar(
     visible: Boolean,
     progress: Float,
-    orderMenuExpanded: Boolean,
-    orderMenuProgress: Float,
     sort: PlaylistSongSort,
     onSortChange: (PlaylistSongSort) -> Unit,
     onVisibleChange: (Boolean) -> Unit,
-    onOrderMenuExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val clampedProgress = progress.coerceIn(0f, 1f)
-    val clampedOrderProgress = orderMenuProgress.coerceIn(0f, 1f)
-    val expandedMenuHeight = PlaylistSortOrderMenuHeight * clampedOrderProgress
-    val height = FlowtoneTopBarContentHeight +
-        PlaylistSortPanelHeight * clampedProgress +
-        expandedMenuHeight * clampedProgress
-    val contentAlpha = clampedProgress
-    val noRippleInteractionSource = remember { MutableInteractionSource() }
+    val characterSectionProgress by animateFloatAsState(
+        targetValue = if (sort.criterion == PlaylistSongSortCriterion.Title) 1f else 0f,
+        animationSpec = tween(200),
+        label = "SortCharacterSectionHeight"
+    )
+    val panelHeight = PlaylistSortPanelCollapsedHeight +
+        (PlaylistSortPanelHeight - PlaylistSortPanelCollapsedHeight) *
+        characterSectionProgress
+    val height = FlowtoneTopBarContentHeight + panelHeight * clampedProgress
     val contentEnabled = visible && clampedProgress >= 0.98f
 
-    BackHandler(enabled = visible) {
-        if (orderMenuExpanded) {
-            onOrderMenuExpandedChange(false)
-        } else {
-            onVisibleChange(false)
-        }
-    }
+    BackHandler(enabled = visible) { onVisibleChange(false) }
 
     Box(
         modifier = modifier
@@ -97,7 +104,6 @@ internal fun PlaylistSortTopBar(
             Text(
                 text = "排序方式",
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 modifier = Modifier
@@ -113,86 +119,52 @@ internal fun PlaylistSortTopBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(PlaylistSortPanelHeight + expandedMenuHeight)
+                .height(panelHeight)
                 .offset(y = FlowtoneTopBarContentHeight)
-                .clickable(
-                    enabled = visible,
-                    interactionSource = noRippleInteractionSource,
-                    indication = null,
-                    onClick = { onVisibleChange(false) }
-                )
         )
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset(y = FlowtoneTopBarContentHeight)
-                .padding(horizontal = 4.dp, vertical = 5.dp)
+                .padding(horizontal = 12.dp, vertical = 14.dp)
                 .graphicsLayer {
-                    alpha = contentAlpha
-                    translationY = -10.dp.toPx() * (1f - clampedProgress)
+                    alpha = clampedProgress
+                    translationY = 12.dp.toPx() * (1f - clampedProgress)
                 }
         ) {
-            PlaylistSortSectionLabel(text = "排序")
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-            ) {
-                PlaylistSortRow(
-                    label = sort.order.label,
-                    selected = false,
-                    enabled = contentEnabled,
-                    onClick = { onOrderMenuExpandedChange(!orderMenuExpanded) },
-                    trailingContent = {
-                        Icon(
-                            imageVector = Icons.Rounded.ExpandMore,
-                            contentDescription = if (orderMenuExpanded) "收起排序菜单" else "展开排序菜单",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.graphicsLayer {
-                                rotationZ = 180f * clampedOrderProgress
-                            }
-                        )
-                    }
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(expandedMenuHeight)
-                        .clipToBounds()
-                        .graphicsLayer { alpha = clampedOrderProgress }
-                ) {
-                    PlaylistSongSortOrder.entries.forEach { order ->
-                        PlaylistSortRow(
-                            label = order.label,
-                            selected = sort.order == order,
-                            enabled = contentEnabled && clampedOrderProgress >= 0.98f,
-                            onClick = {
-                                onSortChange(sort.copy(order = order))
-                                onOrderMenuExpandedChange(false)
-                            }
-                        )
-                    }
-                }
-            }
-
-            PlaylistSortSectionLabel(
-                text = "筛选",
-                modifier = Modifier.padding(top = 10.dp)
+            SortSectionLabel("排序依据")
+            Spacer(modifier = Modifier.height(8.dp))
+            SortCriterionGrid(
+                selected = sort.criterion,
+                enabled = contentEnabled,
+                onSelect = { criterion -> onSortChange(sort.copy(criterion = criterion)) }
             )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
+
+            Spacer(modifier = Modifier.height(22.dp))
+            SortSectionLabel("排序顺序")
+            Spacer(modifier = Modifier.height(8.dp))
+            SortDirectionRow(
+                selected = sort.direction,
+                enabled = contentEnabled,
+                onSelect = { direction -> onSortChange(sort.copy(direction = direction)) }
+            )
+
+            AnimatedVisibility(
+                visible = sort.criterion == PlaylistSongSortCriterion.Title,
+                enter = fadeIn(tween(180)) + expandVertically(tween(200), expandFrom = Alignment.Top),
+                exit = fadeOut(tween(150)) + shrinkVertically(tween(180), shrinkTowards = Alignment.Top)
             ) {
-                PlaylistSongSortCriterion.entries.forEach { criterion ->
-                    PlaylistSortRow(
-                        label = criterion.label,
-                        selected = sort.criterion == criterion,
+                Column {
+                    Spacer(modifier = Modifier.height(22.dp))
+                    SortSectionLabel("字符优先级")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TitleCharacterPriorityRow(
+                        selected = sort.titleCharacterPriority,
                         enabled = contentEnabled,
-                        onClick = { onSortChange(sort.copy(criterion = criterion)) }
+                        onSelect = { priority ->
+                            onSortChange(sort.copy(titleCharacterPriority = priority))
+                        }
                     )
                 }
             }
@@ -201,48 +173,140 @@ internal fun PlaylistSortTopBar(
 }
 
 @Composable
-private fun PlaylistSortSectionLabel(
-    text: String,
-    modifier: Modifier = Modifier
-) {
+private fun SortSectionLabel(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 12.dp, bottom = 3.dp)
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
 @Composable
-private fun PlaylistSortRow(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-    trailingContent: (@Composable () -> Unit)? = null
+private fun SortCriterionGrid(
+    selected: PlaylistSongSortCriterion,
+    enabled: Boolean,
+    onSelect: (PlaylistSongSortCriterion) -> Unit
+) {
+    val criteria = PlaylistSongSortCriterion.entries
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        criteria.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { criterion ->
+                    SortChoiceCell(
+                        label = criterion.label,
+                        selected = selected == criterion,
+                        enabled = enabled,
+                        onClick = { onSelect(criterion) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SortDirectionRow(
+    selected: PlaylistSongSortDirection,
+    enabled: Boolean,
+    onSelect: (PlaylistSongSortDirection) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(38.dp)
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-                } else {
-                    Color.Transparent
-                }
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        PlaylistSongSortDirection.entries.forEach { direction ->
+            SortChoiceCell(
+                label = direction.label,
+                selected = selected == direction,
+                enabled = enabled,
+                onClick = { onSelect(direction) },
+                modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+private fun TitleCharacterPriorityRow(
+    selected: PlaylistSongTitleCharacterPriority,
+    enabled: Boolean,
+    onSelect: (PlaylistSongTitleCharacterPriority) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        PlaylistSongTitleCharacterPriority.entries.forEach { priority ->
+            SortChoiceCell(
+                label = priority.label,
+                selected = selected == priority,
+                enabled = enabled,
+                compact = true,
+                showCheck = false,
+                onClick = { onSelect(priority) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SortChoiceCell(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    showCheck: Boolean = true
+) {
+    val selectedContainer = MaterialTheme.colorScheme.secondaryContainer
+    val unselectedContainer = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f)
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) selectedContainer else unselectedContainer,
+        animationSpec = tween(SortOptionColorDurationMillis),
+        label = "SortOptionContainer"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(SortOptionColorDurationMillis),
+        label = "SortOptionContent"
+    )
+
+    Row(
+        modifier = modifier
+            .height(48.dp)
+            .clip(SortOptionShape)
+            .background(containerColor)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = if (compact) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = contentColor,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
-        trailingContent?.invoke()
+        if (selected && showCheck) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = "已选择",
+                tint = contentColor,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(16.dp)
+            )
+        }
     }
 }

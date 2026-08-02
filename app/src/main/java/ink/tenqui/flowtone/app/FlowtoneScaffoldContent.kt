@@ -52,6 +52,8 @@ internal fun FlowtoneScaffoldContent(
     likedSongCount: Int,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
+    playlistSortPanelOpen: Boolean,
+    onClosePlaylistSortPanel: () -> Unit,
     innerPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -266,6 +268,8 @@ internal fun FlowtoneScaffoldContent(
                     onDetailHeaderCollapseProgressStateChange =
                         onDetailHeaderCollapseProgressStateChange,
                     playlistSongSort = playlistSongSort,
+                    playlistSortPanelOpen = playlistSortPanelOpen,
+                    onClosePlaylistSortPanel = onClosePlaylistSortPanel,
                     permissionDenied = state.permissionDenied,
                     onRequestPermission = callbacks.onRequestPermission,
                     onSongClick = callbacks.onSongClick,

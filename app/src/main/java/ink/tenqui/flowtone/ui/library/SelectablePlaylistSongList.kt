@@ -1,6 +1,9 @@
 package ink.tenqui.flowtone.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.ScrollableDefaults
@@ -47,8 +50,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
@@ -69,6 +74,9 @@ import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.player.MINI_PLAYER_ANIMATION_DURATION_MS
+import ink.tenqui.flowtone.ui.player.MiniPlayerEasing
+import ink.tenqui.flowtone.ui.player.PlayerQueueOrderTransitionDistance
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -84,6 +92,8 @@ private val SelectionAutoScrollStep = 4.dp
 private val SelectionDirectionChangeThreshold = 2.dp
 private const val SelectionAutoScrollFrameMillis = 32L
 private const val SelectionLongPressTimeoutMillis = 300L
+private const val SortItemStaggerMillis = 18
+private const val SortStaggeredItemCount = 10
 
 private class PlaylistSelectionGestureState {
     var lastToggledKey: String? = null
@@ -150,6 +160,7 @@ internal fun SelectablePlaylistSongList(
     onSetSongsLiked: (List<Song>, Boolean) -> Unit,
     onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit,
     onRemoveEntries: (Set<String>, (Boolean) -> Unit) -> Unit,
+    reorderAnimationKey: Any? = null,
     itemModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -177,13 +188,72 @@ internal fun SelectablePlaylistSongList(
     }
     val selectionGestureState = remember(sourceKey) { PlaylistSelectionGestureState() }
     val selectionMode = selectedKeys.isNotEmpty()
-    val entriesByKey = entries.associateBy { it.selectionKey }
-    val entryKeys = remember(entries) { entries.map { it.selectionKey } }
-    val latestEntries by rememberUpdatedState(entries)
+    var lastReorderAnimationKey by remember(sourceKey) {
+        mutableStateOf(reorderAnimationKey)
+    }
+    var renderedEntries by remember(sourceKey) { mutableStateOf(entries) }
+    var outgoingEntries by remember(sourceKey) {
+        mutableStateOf<List<SelectablePlaylistSong>?>(null)
+    }
+    var outgoingListState by remember(sourceKey) {
+        mutableStateOf<LazyListState?>(null)
+    }
+    val reorderProgress = remember(sourceKey) { Animatable(1f) }
+    val reorderAnimationActive = outgoingEntries != null
+    val reorderDistancePx = with(density) { PlayerQueueOrderTransitionDistance.toPx() }
+    val reorderTotalDurationMillis = MINI_PLAYER_ANIMATION_DURATION_MS +
+        SortItemStaggerMillis * SortStaggeredItemCount
+    val entriesByKey = renderedEntries.associateBy { it.selectionKey }
+    val entryKeys = remember(renderedEntries) { renderedEntries.map { it.selectionKey } }
+    val latestEntries by rememberUpdatedState(renderedEntries)
     val selectedKeySet = remember(selectedKeys) { selectedKeys.toSet() }
     // 按 selectionKey 被加入集合的先后生成操作列表。
     val selectedEntries = selectedKeys.mapNotNull(entriesByKey::get)
     val selectedSongs = selectedEntries.map { it.song }
+
+    LaunchedEffect(entries) {
+        // 曲库扫描或歌单内容变更不应被误认为一次排序切换。
+        if (reorderAnimationKey == lastReorderAnimationKey && outgoingEntries == null) {
+            renderedEntries = entries
+        }
+    }
+
+    LaunchedEffect(reorderAnimationKey) {
+        if (reorderAnimationKey == lastReorderAnimationKey) {
+            renderedEntries = entries
+            return@LaunchedEffect
+        }
+
+        val previousEntries = renderedEntries
+        lastReorderAnimationKey = reorderAnimationKey
+        // 旧层必须从当前精确位置接管；默认 LazyListState 会从索引 0 绘制，造成闪帧。
+        outgoingListState = LazyListState(
+            firstVisibleItemIndex = listState.firstVisibleItemIndex,
+            firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset
+        )
+        // 取消上一轮时不清理旧层。下一轮会先接管这层，避免中间露出空白帧。
+        outgoingEntries = previousEntries
+        reorderProgress.snapTo(0f)
+        renderedEntries = entries
+        // 数据换序后再请求回顶，覆盖 LazyColumn 根据稳定 key 保持原可见歌曲的行为。
+        listState.requestScrollToItem(0, 0)
+        // 旧层保持完全可见，先让新列表完成重组与测量。
+        withFrameNanos { }
+        withFrameNanos { }
+        // 在新顺序已经进入 LazyColumn 后再次回顶，避免稳定 key 的位置保持覆盖请求。
+        listState.scrollToItem(0, 0)
+        withFrameNanos { }
+        reorderProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = reorderTotalDurationMillis,
+                easing = LinearEasing
+            )
+        )
+        outgoingEntries = null
+        outgoingListState = null
+        reorderProgress.snapTo(1f)
+    }
 
     fun entryAt(y: Float): SelectablePlaylistSong? {
         val visibleItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
@@ -337,7 +407,7 @@ internal fun SelectablePlaylistSongList(
         ) {
             LazyColumn(
             state = listState,
-            userScrollEnabled = !selectionGestureActive,
+            userScrollEnabled = !selectionGestureActive && !reorderAnimationActive,
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(sourceKey, entryKeys) {
@@ -579,14 +649,23 @@ internal fun SelectablePlaylistSongList(
             ),
             verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                itemsIndexed(entries, key = { _, entry -> entry.selectionKey }) { index, entry ->
+                itemsIndexed(renderedEntries, key = { _, entry -> entry.selectionKey }) { index, entry ->
                 val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1).coerceAtLeast(0)
                 val animationIndex = (index - firstVisibleSongIndex).coerceIn(0, 10)
+                val elapsedMillis = reorderProgress.value * reorderTotalDurationMillis
+                val itemDelayMillis = animationIndex * SortItemStaggerMillis
+                val itemRawProgress = if (reorderAnimationActive) {
+                    ((elapsedMillis - itemDelayMillis) / MINI_PLAYER_ANIMATION_DURATION_MS)
+                        .coerceIn(0f, 1f)
+                } else {
+                    1f
+                }
+                val itemReorderProgress = MiniPlayerEasing.transform(itemRawProgress)
                 val selected = entry.selectionKey in selectedKeySet
                 val isPreviousSelected = index > 0 &&
-                    entries[index - 1].selectionKey in selectedKeySet
-                val isNextSelected = index < entries.lastIndex &&
-                    entries[index + 1].selectionKey in selectedKeySet
+                    renderedEntries[index - 1].selectionKey in selectedKeySet
+                val isNextSelected = index < renderedEntries.lastIndex &&
+                    renderedEntries[index + 1].selectionKey in selectedKeySet
                 SongListItem(
                     song = entry.song,
                     isCurrentSong = currentSong?.id == entry.song.id,
@@ -611,13 +690,59 @@ internal fun SelectablePlaylistSongList(
                                 onSelectionTopBarStateChange(null)
                             }
                         } else {
-                            onSongClick(entries.map { it.song }, index)
+                            onSongClick(renderedEntries.map { it.song }, index)
                         }
                     },
                     // 长按与拖动统一由 LazyColumn 识别，避免松手时再触发播放。
                     onLongClick = null,
-                    modifier = itemModifier(animationIndex).padding(horizontal = 8.dp)
+                    modifier = itemModifier(animationIndex)
+                        .graphicsLayer {
+                            alpha = itemReorderProgress
+                            translationY = reorderDistancePx * (1f - itemReorderProgress)
+                        }
+                        .padding(horizontal = 8.dp)
                 )
+                }
+            }
+
+            outgoingEntries?.let { previousEntries ->
+                val previousListState = outgoingListState ?: return@let
+                val elapsedMillis = reorderProgress.value * reorderTotalDurationMillis
+                val outgoingRawProgress =
+                    (elapsedMillis / MINI_PLAYER_ANIMATION_DURATION_MS).coerceIn(0f, 1f)
+                val outgoingProgress = MiniPlayerEasing.transform(outgoingRawProgress)
+                LazyColumn(
+                    state = previousListState,
+                    userScrollEnabled = false,
+                    contentPadding = PaddingValues(
+                        top = SelectionListContentPadding,
+                        bottom = SelectionListContentPadding
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = 1f - outgoingProgress
+                            translationY = -reorderDistancePx * outgoingProgress * 0.35f
+                        }
+                ) {
+                    itemsIndexed(
+                        items = previousEntries,
+                        key = { _, entry -> "sort-outgoing:${entry.selectionKey}" }
+                    ) { _, entry ->
+                        SongListItem(
+                            song = entry.song,
+                            isCurrentSong = currentSong?.id == entry.song.id,
+                            selectionMode = false,
+                            isSelected = false,
+                            isPreviousSelected = false,
+                            isNextSelected = false,
+                            selectionSlotPadding = SelectionSlotPadding,
+                            onClick = {},
+                            onLongClick = null,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                    }
                 }
             }
         }

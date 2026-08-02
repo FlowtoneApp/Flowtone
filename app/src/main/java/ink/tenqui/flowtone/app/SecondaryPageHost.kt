@@ -78,6 +78,8 @@ internal fun SecondaryPageHost(
     playlistBatchActions: PlaylistBatchActions,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
+    playlistSortPanelOpen: Boolean,
+    onClosePlaylistSortPanel: () -> Unit,
     permissionDenied: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -99,7 +101,9 @@ internal fun SecondaryPageHost(
         }
     )
     fun closeSelectionOrPage() {
-        if (songSelectionActive) {
+        if (playlistSortPanelOpen) {
+            onClosePlaylistSortPanel()
+        } else if (songSelectionActive) {
             playlistBatchActions.onRequestClearSelection()
         } else {
             onCloseSecondaryPage()

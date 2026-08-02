@@ -103,6 +103,7 @@ internal fun LikedSongsPlaylistScreen(
             onSetSongsLiked = batchActions.onSetSongsLiked,
             onDeleteSongs = batchActions.onDeleteSongs,
             onRemoveEntries = { _, done -> done(false) },
+            reorderAnimationKey = songSort,
             itemModifier = itemModifier,
             modifier = Modifier.fillMaxSize()
         )

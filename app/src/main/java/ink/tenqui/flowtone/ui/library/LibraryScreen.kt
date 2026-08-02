@@ -569,6 +569,7 @@ internal fun LocalLibraryScreen(
                 onSetSongsLiked = batchActions.onSetSongsLiked,
                 onDeleteSongs = batchActions.onDeleteSongs,
                 onRemoveEntries = { _, done -> done(false) },
+                reorderAnimationKey = songSort,
                 itemModifier = itemModifier,
                 modifier = Modifier.fillMaxSize()
             )
@@ -663,6 +664,7 @@ internal fun PlaylistDetailScreen(
             onRemoveEntries = { entryIds, done ->
                 batchActions.onRemoveEntries(playlistId.orEmpty(), entryIds, done)
             },
+            reorderAnimationKey = songSort,
             itemModifier = itemModifier,
             modifier = Modifier.fillMaxSize()
         )

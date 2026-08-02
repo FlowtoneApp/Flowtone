@@ -17,10 +17,7 @@ internal fun FlowtoneScaffoldTopLayer(
     detailHeaderCollapseProgressState: State<Float>?,
     songSelectionState: PlaylistSelectionTopBarState?,
     onCloseSongSelection: () -> Unit,
-    playlistSongSort: PlaylistSongSort,
-    playlistSortPanelOpen: Boolean,
-    onPlaylistSortChange: (PlaylistSongSort) -> Unit,
-    onPlaylistSortPanelOpenChange: (Boolean) -> Unit
+    playlistSortProgress: Float
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
         val isTopLevelRootPage = state.secondaryPage == null
@@ -71,16 +68,7 @@ internal fun FlowtoneScaffoldTopLayer(
                 callbacks.onSearchKeyboardDismissRequestConsumed,
             onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
             onSearchImeAction = callbacks.onSearchImeAction,
-            showPlaylistSortButton = (
-                state.secondaryPage == SecondaryPage.LocalLibrary ||
-                    (state.secondaryPage == SecondaryPage.Playlist &&
-                        state.selectedPlaylistId != null)
-                ) &&
-                songSelectionState == null && !state.searchActive,
-            playlistSongSort = playlistSongSort,
-            playlistSortPanelOpen = playlistSortPanelOpen,
-            onPlaylistSortChange = onPlaylistSortChange,
-            onPlaylistSortPanelOpenChange = onPlaylistSortPanelOpenChange
+            playlistSortProgress = playlistSortProgress
         )
     }
 }

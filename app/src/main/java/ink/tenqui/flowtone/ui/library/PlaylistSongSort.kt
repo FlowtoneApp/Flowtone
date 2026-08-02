@@ -5,22 +5,32 @@ import java.text.Collator
 import java.util.Locale
 
 internal enum class PlaylistSongSortCriterion(val label: String) {
-    Alphabetical("按字母排序"),
-    ChineseFirst("中文优先排序"),
-    OtherCharactersFirst("其他字符优先排序"),
-    Duration("歌曲时长排序")
-}
-
-internal enum class PlaylistSongSortOrder(val label: String) {
-    Ascending("正序"),
-    Descending("倒序"),
+    Title("标题"),
     DateAdded("添加时间"),
-    FileDate("文件时间")
+    FileTime("文件时间"),
+    Duration("歌曲时长")
 }
 
+internal enum class PlaylistSongSortDirection(val label: String) {
+    Ascending("正序"),
+    Descending("倒序")
+}
+
+internal enum class PlaylistSongTitleCharacterPriority(val label: String) {
+    Default("默认"),
+    ChineseFirst("中文优先"),
+    OtherFirst("其他字符优先")
+}
+
+/**
+ * 排序条件被明确拆成依据、方向和标题字符优先级三部分。
+ * 标题以外的依据保留 [titleCharacterPriority]，便于切回标题时恢复用户的上次选择。
+ */
 internal data class PlaylistSongSort(
-    val criterion: PlaylistSongSortCriterion = PlaylistSongSortCriterion.Alphabetical,
-    val order: PlaylistSongSortOrder = PlaylistSongSortOrder.Ascending
+    val criterion: PlaylistSongSortCriterion = PlaylistSongSortCriterion.Title,
+    val direction: PlaylistSongSortDirection = PlaylistSongSortDirection.Ascending,
+    val titleCharacterPriority: PlaylistSongTitleCharacterPriority =
+        PlaylistSongTitleCharacterPriority.Default
 )
 
 internal fun List<SelectablePlaylistSong>.sortedForPlaylist(
@@ -28,67 +38,63 @@ internal fun List<SelectablePlaylistSong>.sortedForPlaylist(
 ): List<SelectablePlaylistSong> {
     val titleCollator = Collator.getInstance(Locale.CHINA)
     val comparator = Comparator<SelectablePlaylistSong> { first, second ->
-        when (sort.order) {
-            PlaylistSongSortOrder.DateAdded ->
-                second.song.dateAddedSeconds.compareTo(first.song.dateAddedSeconds)
-            PlaylistSongSortOrder.FileDate ->
-                second.song.dateModifiedSeconds.compareTo(first.song.dateModifiedSeconds)
-            PlaylistSongSortOrder.Ascending,
-            PlaylistSongSortOrder.Descending -> compareUsingCriterion(
-                first = first,
-                second = second,
-                criterion = sort.criterion,
-                titleCollator = titleCollator
-            )
-        }.takeIf { it != 0 } ?: first.selectionKey.compareTo(second.selectionKey)
+        compareUsingCriterion(
+            first = first,
+            second = second,
+            sort = sort,
+            titleCollator = titleCollator
+        ).takeIf { it != 0 } ?: first.selectionKey.compareTo(second.selectionKey)
     }
-    return if (sort.order == PlaylistSongSortOrder.Descending) {
-        sortedWith(comparator.reversed())
-    } else {
-        sortedWith(comparator)
+    return when (sort.direction) {
+        PlaylistSongSortDirection.Ascending -> sortedWith(comparator)
+        PlaylistSongSortDirection.Descending -> sortedWith(comparator.reversed())
     }
 }
 
 private fun compareUsingCriterion(
     first: SelectablePlaylistSong,
     second: SelectablePlaylistSong,
-    criterion: PlaylistSongSortCriterion,
+    sort: PlaylistSongSort,
     titleCollator: Collator
 ): Int {
-    return when (criterion) {
-        PlaylistSongSortCriterion.Alphabetical ->
-            titleCollator.compare(first.song.title, second.song.title)
-        PlaylistSongSortCriterion.ChineseFirst -> comparePriorityGroup(
+    return when (sort.criterion) {
+        PlaylistSongSortCriterion.Title -> compareTitle(
             first = first.song,
             second = second.song,
-            firstHasPriority = { song ->
-                song.title.firstOrNull()?.isChineseCharacter() == true
-            },
+            priority = sort.titleCharacterPriority,
             titleCollator = titleCollator
         )
-        PlaylistSongSortCriterion.OtherCharactersFirst -> comparePriorityGroup(
-            first = first.song,
-            second = second.song,
-            firstHasPriority = { song ->
-                song.title.firstOrNull()?.isSymbolCharacter() == true
-            },
-            titleCollator = titleCollator
-        )
+        PlaylistSongSortCriterion.DateAdded ->
+            first.song.dateAddedSeconds.compareTo(second.song.dateAddedSeconds)
+        PlaylistSongSortCriterion.FileTime ->
+            first.song.dateModifiedSeconds.compareTo(second.song.dateModifiedSeconds)
         PlaylistSongSortCriterion.Duration ->
             first.song.durationMs.compareTo(second.song.durationMs)
     }
 }
 
-private fun comparePriorityGroup(
+private fun compareTitle(
     first: Song,
     second: Song,
-    firstHasPriority: (Song) -> Boolean,
+    priority: PlaylistSongTitleCharacterPriority,
     titleCollator: Collator
 ): Int {
-    val firstIsPriority = firstHasPriority(first)
-    val secondIsPriority = firstHasPriority(second)
-    if (firstIsPriority != secondIsPriority) {
-        return if (firstIsPriority) -1 else 1
+    val firstHasPriority = when (priority) {
+        PlaylistSongTitleCharacterPriority.Default -> false
+        PlaylistSongTitleCharacterPriority.ChineseFirst ->
+            first.title.firstOrNull()?.isChineseCharacter() == true
+        PlaylistSongTitleCharacterPriority.OtherFirst ->
+            first.title.firstOrNull()?.isSymbolCharacter() == true
+    }
+    val secondHasPriority = when (priority) {
+        PlaylistSongTitleCharacterPriority.Default -> false
+        PlaylistSongTitleCharacterPriority.ChineseFirst ->
+            second.title.firstOrNull()?.isChineseCharacter() == true
+        PlaylistSongTitleCharacterPriority.OtherFirst ->
+            second.title.firstOrNull()?.isSymbolCharacter() == true
+    }
+    if (firstHasPriority != secondHasPriority) {
+        return if (firstHasPriority) -1 else 1
     }
     return titleCollator.compare(first.title, second.title)
 }

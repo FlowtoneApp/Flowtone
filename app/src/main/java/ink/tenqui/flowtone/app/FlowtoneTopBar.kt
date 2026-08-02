@@ -97,12 +97,7 @@ internal fun FlowtoneTopBar(
     onSearchKeyboardDismissRequestConsumed: () -> Unit,
     onSearchInputFocusChange: (Boolean) -> Unit,
     onSearchImeAction: () -> Unit,
-    showPlaylistSortButton: Boolean = false,
-    playlistSongSort: ink.tenqui.flowtone.ui.library.PlaylistSongSort =
-        ink.tenqui.flowtone.ui.library.PlaylistSongSort(),
-    playlistSortPanelOpen: Boolean = false,
-    onPlaylistSortChange: (ink.tenqui.flowtone.ui.library.PlaylistSongSort) -> Unit = {},
-    onPlaylistSortPanelOpenChange: (Boolean) -> Unit = {},
+    playlistSortProgress: Float = 0f,
     modifier: Modifier = Modifier
 ) {
     val pathSegments = when (secondaryPage) {
@@ -154,22 +149,6 @@ internal fun FlowtoneTopBar(
         animationSpec = tween(220, easing = FlowtonePageEasing),
         label = "PlaylistSelectionTopBarProgress"
     )
-    val playlistSortProgress by animateFloatAsState(
-        targetValue = if (playlistSortPanelOpen) 1f else 0f,
-        animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
-        label = "PlaylistSortPathProgress"
-    )
-    var playlistSortOrderMenuOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(playlistSortPanelOpen) {
-        if (!playlistSortPanelOpen) {
-            playlistSortOrderMenuOpen = false
-        }
-    }
-    val playlistSortOrderMenuProgress by animateFloatAsState(
-        targetValue = if (playlistSortOrderMenuOpen) 1f else 0f,
-        animationSpec = tween(280, easing = FlowtonePageEasing),
-        label = "PlaylistSortOrderMenuProgress"
-    )
     val displayedSelectionState = songSelectionState ?: retainedSelectionState
     val density = LocalDensity.current
     val navigationShiftPx = with(density) {
@@ -189,11 +168,6 @@ internal fun FlowtoneTopBar(
         Color.Transparent
     }
     val rootTopBarBackgroundAlpha = if (searchActive) 0f else topBarBackgroundAlpha
-    val topBarHeight = FlowtoneTopBarContentHeight +
-        PlaylistSortPanelHeight * playlistSortProgress +
-        PlaylistSortOrderMenuHeight * playlistSortProgress *
-            playlistSortOrderMenuProgress
-
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -207,7 +181,7 @@ internal fun FlowtoneTopBar(
                 MaterialTheme.colorScheme.surfaceContainer.copy(alpha = rootTopBarBackgroundAlpha)
             )
             .statusBarsPadding()
-            .height(topBarHeight)
+            .height(FlowtoneTopBarContentHeight)
             .clipToBounds(),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -388,19 +362,6 @@ internal fun FlowtoneTopBar(
                 onInputFocusChange = onSearchInputFocusChange,
                 onImeAction = onSearchImeAction,
                 modifier = Modifier.fillMaxSize()
-            )
-        }
-        if (showPlaylistSortButton || playlistSortPanelOpen) {
-            PlaylistSortTopBar(
-                visible = playlistSortPanelOpen,
-                progress = playlistSortProgress,
-                orderMenuExpanded = playlistSortOrderMenuOpen,
-                orderMenuProgress = playlistSortOrderMenuProgress,
-                sort = playlistSongSort,
-                onSortChange = onPlaylistSortChange,
-                onVisibleChange = onPlaylistSortPanelOpenChange,
-                onOrderMenuExpandedChange = { playlistSortOrderMenuOpen = it },
-                modifier = Modifier.align(Alignment.TopStart)
             )
         }
     }
