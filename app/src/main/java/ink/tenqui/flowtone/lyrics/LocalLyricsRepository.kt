@@ -28,10 +28,20 @@ class LocalLyricsRepository(
         synchronized(cache) { cache[key] }?.let { return LyricsLoadResult.Found(it) }
 
         Log.d(TAG, "loading for song=${song.id}")
-        val candidates = findCandidates(song)
+        val search = findCandidates(song)
+        val candidates = search.candidates
         if (candidates.isEmpty()) {
             Log.d(TAG, "not found")
-            return LyricsLoadResult.NotFound
+            return when (search.treeResult) {
+                TreeCandidateResult.DirectoryNotSelected ->
+                    LyricsLoadResult.DirectoryNotSelected
+                TreeCandidateResult.DirectoryPermissionLost ->
+                    LyricsLoadResult.DirectoryPermissionLost
+                TreeCandidateResult.OutsideSelectedDirectory ->
+                    LyricsLoadResult.OutsideSelectedDirectory
+                TreeCandidateResult.NotFound,
+                is TreeCandidateResult.Found -> LyricsLoadResult.NotFound
+            }
         }
         var lastError: Throwable? = null
         for (candidate in candidates) {
@@ -57,13 +67,19 @@ class LocalLyricsRepository(
         synchronized(cache) { cache.clear() }
     }
 
-    private fun findCandidates(song: Song): List<Uri> = buildList {
+    private fun findCandidates(song: Song): CandidateSearch {
+        val treeResult = findTreeCandidate(song)
+        val candidates = buildList {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             findMediaStoreCandidate(song)?.let(::add)
         }
-        findTreeCandidate(song)?.let(::add)
+            if (treeResult is TreeCandidateResult.Found) {
+                add(treeResult.uri)
+            }
         findLegacyFileCandidate(song)?.let(::add)
-    }.distinct()
+        }.distinct()
+        return CandidateSearch(candidates = candidates, treeResult = treeResult)
+    }
 
     private fun expectedLyricsName(song: Song): String? {
         val displayName = song.displayName ?: song.filePath?.let(::File)?.name ?: return null
@@ -96,20 +112,36 @@ class LocalLyricsRepository(
         }.onFailure { Log.d(TAG, "MediaStore lookup failed=${it::class.simpleName}") }.getOrNull()
     }
 
-    private fun findTreeCandidate(song: Song): Uri? {
-        val treeUri = directoryStore.getTreeUri() ?: return null
-        val expectedName = expectedLyricsName(song) ?: return null
-        val relativeSegments = relativeSegmentsWithinTree(treeUri, song.relativePath) ?: return null
-        var directoryUri = DocumentsContract.buildDocumentUriUsingTree(
-            treeUri,
-            DocumentsContract.getTreeDocumentId(treeUri)
-        )
-        for (segment in relativeSegments) {
-            val child = findChild(directoryUri, segment, requireDirectory = true) ?: return null
-            directoryUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, child)
+    private fun findTreeCandidate(song: Song): TreeCandidateResult {
+        val treeUri = directoryStore.getTreeUri()
+            ?: return TreeCandidateResult.DirectoryNotSelected
+        val permissionPersisted = contentResolver.persistedUriPermissions.any { permission ->
+            permission.uri == treeUri && permission.isReadPermission
         }
-        val childDocumentId = findChild(directoryUri, expectedName, requireDirectory = false) ?: return null
-        return DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocumentId)
+        if (!permissionPersisted) {
+            return TreeCandidateResult.DirectoryPermissionLost
+        }
+        val expectedName = expectedLyricsName(song) ?: return TreeCandidateResult.NotFound
+        val relativeSegments = relativeSegmentsWithinTree(treeUri, song.relativePath)
+            ?: return TreeCandidateResult.OutsideSelectedDirectory
+        return try {
+            var directoryUri = DocumentsContract.buildDocumentUriUsingTree(
+                treeUri,
+                DocumentsContract.getTreeDocumentId(treeUri)
+            )
+            for (segment in relativeSegments) {
+                val child = findChild(directoryUri, segment, requireDirectory = true)
+                    ?: return TreeCandidateResult.NotFound
+                directoryUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, child)
+            }
+            val childDocumentId = findChild(directoryUri, expectedName, requireDirectory = false)
+                ?: return TreeCandidateResult.NotFound
+            TreeCandidateResult.Found(
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocumentId)
+            )
+        } catch (_: SecurityException) {
+            TreeCandidateResult.DirectoryPermissionLost
+        }
     }
 
     private fun relativeSegmentsWithinTree(treeUri: Uri, songRelativePath: String?): List<String>? {
@@ -167,7 +199,23 @@ class LocalLyricsRepository(
 }
 
 sealed interface LyricsLoadResult {
+    data object DirectoryNotSelected : LyricsLoadResult
+    data object DirectoryPermissionLost : LyricsLoadResult
+    data object OutsideSelectedDirectory : LyricsLoadResult
     data object NotFound : LyricsLoadResult
     data class Found(val lines: List<LyricLine>) : LyricsLoadResult
     data class Failed(val throwable: Throwable) : LyricsLoadResult
+}
+
+private data class CandidateSearch(
+    val candidates: List<Uri>,
+    val treeResult: TreeCandidateResult
+)
+
+private sealed interface TreeCandidateResult {
+    data object DirectoryNotSelected : TreeCandidateResult
+    data object DirectoryPermissionLost : TreeCandidateResult
+    data object OutsideSelectedDirectory : TreeCandidateResult
+    data object NotFound : TreeCandidateResult
+    data class Found(val uri: Uri) : TreeCandidateResult
 }

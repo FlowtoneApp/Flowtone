@@ -8,6 +8,9 @@ data class LyricLine(
 sealed interface LyricsState {
     data object Idle : LyricsState
     data object Loading : LyricsState
+    data object DirectoryNotSelected : LyricsState
+    data object DirectoryPermissionLost : LyricsState
+    data object OutsideSelectedDirectory : LyricsState
     data object NotFound : LyricsState
 
     data class Available(

@@ -37,11 +37,30 @@ internal fun LyricsContent(
     when (state) {
         LyricsState.Idle,
         LyricsState.Loading -> LyricsMessage("正在读取歌词", visibleModifier)
-        LyricsState.NotFound -> LyricsMessage(
+        LyricsState.DirectoryNotSelected -> LyricsMessage(
             primary = "暂无歌词",
             secondary = "声流需要外部文件夹读取权限才能读取歌词",
             actionLabel = "选择歌词目录",
             onAction = onChooseLyricsDirectory,
+            modifier = visibleModifier
+        )
+        LyricsState.DirectoryPermissionLost -> LyricsMessage(
+            primary = "歌词目录授权已失效",
+            secondary = "请重新选择歌词目录以恢复读取权限",
+            actionLabel = "重新选择歌词目录",
+            onAction = onChooseLyricsDirectory,
+            modifier = visibleModifier
+        )
+        LyricsState.OutsideSelectedDirectory -> LyricsMessage(
+            primary = "暂无歌词",
+            secondary = "当前歌曲不在已授权的歌词目录中",
+            actionLabel = "重新选择歌词目录",
+            onAction = onChooseLyricsDirectory,
+            modifier = visibleModifier
+        )
+        LyricsState.NotFound -> LyricsMessage(
+            primary = "暂无歌词",
+            secondary = "未找到与歌曲文件同名的 .lrc 文件",
             modifier = visibleModifier
         )
         is LyricsState.Error -> LyricsMessage("歌词读取失败", visibleModifier)

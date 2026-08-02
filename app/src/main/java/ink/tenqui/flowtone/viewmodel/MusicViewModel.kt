@@ -522,6 +522,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
                     _lyricsState.value = when (result) {
                         is LyricsLoadResult.Found -> LyricsState.Available(result.lines)
+                        LyricsLoadResult.DirectoryNotSelected ->
+                            LyricsState.DirectoryNotSelected
+                        LyricsLoadResult.DirectoryPermissionLost ->
+                            LyricsState.DirectoryPermissionLost
+                        LyricsLoadResult.OutsideSelectedDirectory ->
+                            LyricsState.OutsideSelectedDirectory
                         LyricsLoadResult.NotFound -> LyricsState.NotFound
                         is LyricsLoadResult.Failed -> {
                             Log.d("Lyrics", "failed=${result.throwable::class.simpleName}")
