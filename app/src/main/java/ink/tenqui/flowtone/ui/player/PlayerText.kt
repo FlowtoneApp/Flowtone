@@ -42,6 +42,7 @@ internal fun SharedSongInfo(
     fullscreenProgress: Float = 0f,
     fullscreenX: Dp = 0.dp,
     fullscreenTop: Dp = 0.dp,
+    lyricsMetadataProgress: Float = 0f,
     contentExitProgress: Float = 0f,
     switchDirection: Int,
     artistClickEnabled: Boolean = false,
@@ -91,6 +92,8 @@ internal fun SharedSongInfo(
     val viewportClipHeight = metadataGroupHeight * fullscreenTitleScale
     val fullTextExitProgress = contentExitProgress.coerceIn(0f, 1f)
     val fullTextExitOffsetY = (-24).dp * fullTextExitProgress
+    val lyricsTextExitProgress = lyricsMetadataProgress.coerceIn(0f, 1f)
+    val lyricsTextExitOffsetY = (-24).dp * lyricsTextExitProgress
     val lineHorizontalPadding = lerpDp(
         lerpDp(0.dp, metadataLineHorizontalPadding, progress),
         0.dp,
@@ -109,9 +112,11 @@ internal fun SharedSongInfo(
             .width(viewportClipWidth + metadataSwitchDistance * 2f)
             .height(viewportClipHeight)
             .graphicsLayer {
-                alpha = 1f - fullTextExitProgress
+                alpha = (1f - fullTextExitProgress) * (1f - lyricsTextExitProgress)
                 translationX = viewportX.toPx() - metadataSwitchDistance.toPx()
-                translationY = viewportY.toPx() + fullTextExitOffsetY.toPx()
+                translationY = viewportY.toPx() +
+                    fullTextExitOffsetY.toPx() +
+                    lyricsTextExitOffsetY.toPx()
             }
             .clipToBounds()
     ) {

@@ -60,6 +60,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     artworkPlaybackRotationDegrees: Float,
     artworkVisibilityProgress: Float,
     lyricsVisibilityProgress: Float,
+    lyricsMetadataProgress: Float,
     titleColor: Color,
     artistColor: Color,
     controlIconColor: Color,
@@ -167,7 +168,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             16.dp *
                 (1f - minimizedProgress) *
                 (1f - fullscreenProgress) -
-                24.dp * metrics.artistExitProgress,
+                24.dp * metrics.artistExitProgress -
+                24.dp * (1f - artworkVisibilityProgress),
         modifier = modifier.align(Alignment.TopStart)
     )
     Box(
@@ -191,6 +193,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             fullscreenProgress = fullscreenProgress,
             fullscreenX = metrics.fullscreenArtworkX,
             fullscreenTop = metrics.fullscreenMetadataTop,
+            lyricsMetadataProgress = lyricsMetadataProgress,
             contentExitProgress = metrics.fullscreenContentExitSharedProgress,
             switchDirection = collapsedMetadataSwitchDirection,
             artistClickEnabled = artistClickEnabled,
@@ -211,6 +214,17 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     x = metrics.addToPlaylistTextStart,
                     y = metrics.addToPlaylistArtworkTop
                 )
+        )
+        LyricsPlaceholderSongInfo(
+            title = title,
+            artist = artist,
+            visibilityProgress = lyricsMetadataProgress,
+            titleColor = titleColor,
+            artistColor = artistColor,
+            playerWidth = designPlayerWidth,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .zIndex(5f)
         )
         if (
             shouldShowAddToPlaylistGrid(
@@ -316,13 +330,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             positionMs = playerUiState.positionMs,
             playbackProgress = animationProgress,
             fullscreenProgress = fullscreenProgress,
-            fullscreen = fullscreen && expanded && hasCurrentSong,
-            visibilityProgress = lyricsVisibilityProgress,
-            contentLeft = metrics.fullscreenArtworkX,
-            contentTop = designFullscreenCoverCenterY -
-                metrics.fullscreenProgressTrackWidth / 2f,
-            contentSize = metrics.fullscreenProgressTrackWidth,
-            onLyricSeekRequested = callbacks.onSeekTo,
+                fullscreen = fullscreen && expanded && hasCurrentSong,
+                visibilityProgress = lyricsVisibilityProgress,
+                onLyricSeekRequested = callbacks.onSeekTo,
             modifier = Modifier
                 .matchParentSize()
                 .zIndex(4f)

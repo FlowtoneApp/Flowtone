@@ -681,16 +681,22 @@ fun MiniPlayer(
                         expanded &&
                         hasCurrentSong &&
                         state.fullscreenContentMode == FullscreenContentMode.Playback
-                    val fullscreenContentTop = fullscreenCoverCenterY -
-                        fullscreenLayoutMetrics.fullscreenProgressTrackWidth / 2f
+                    val fullscreenContentTapTop = 0.dp
+                    val fullscreenContentTapHeight = (
+                        expandedProgressTop +
+                            fullscreenStationaryControlsOffsetY -
+                            fullscreenControlsLiftY -
+                            56.dp
+                        ).coerceAtLeast(0.dp)
+                    val lyricsMetadataProgress = 1f - artworkVisibilityProgress
 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .fullscreenContentTapGesture(
                                 enabled = fullscreenContentTapEnabled,
-                                contentTop = fullscreenContentTop,
-                                contentHeight = fullscreenLayoutMetrics.fullscreenProgressTrackWidth,
+                                contentTop = fullscreenContentTapTop,
+                                contentHeight = fullscreenContentTapHeight,
                                 onTap = {
                                     if (
                                         state.fullscreenPlaybackContentMode ==
@@ -751,6 +757,7 @@ fun MiniPlayer(
                         artworkPlaybackRotationDegrees = artworkPlaybackRotationDegrees,
                         artworkVisibilityProgress = artworkVisibilityProgress,
                         lyricsVisibilityProgress = lyricsVisibilityProgress,
+                        lyricsMetadataProgress = lyricsMetadataProgress,
                         titleColor = titleColor,
                         artistColor = artistColor,
                         controlIconColor = controlIconColor,
@@ -803,8 +810,8 @@ fun MiniPlayer(
                     )
                     FullscreenContentTapAreaSemantics(
                         enabled = fullscreenContentTapEnabled,
-                        contentTop = fullscreenContentTop,
-                        contentHeight = fullscreenLayoutMetrics.fullscreenProgressTrackWidth,
+                        contentTop = fullscreenContentTapTop,
+                        contentHeight = fullscreenContentTapHeight,
                         showingLyrics = state.fullscreenPlaybackContentMode ==
                             FullscreenPlaybackContentMode.LyricsPlaceholder,
                         onClick = {

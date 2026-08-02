@@ -68,6 +68,54 @@ internal fun AddToPlaylistItemSongInfo(
 }
 
 @Composable
+internal fun LyricsPlaceholderSongInfo(
+    title: String,
+    artist: String,
+    visibilityProgress: Float,
+    titleColor: Color,
+    artistColor: Color,
+    playerWidth: Dp,
+    modifier: Modifier = Modifier
+) {
+    if (visibilityProgress <= 0.001f) return
+
+    val density = LocalDensity.current
+    val safeTopPadding = with(density) {
+        WindowInsets.statusBars.getTop(this).toDp()
+    }
+    val contentProgress = visibilityProgress.coerceIn(0f, 1f)
+
+    Column(
+        modifier = modifier
+            .offset(x = 24.dp, y = safeTopPadding + 56.dp)
+            .width((playerWidth - 48.dp).coerceAtLeast(0.dp))
+            .height(56.dp)
+            .graphicsLayer {
+                alpha = contentProgress
+                translationY = (16.dp * (1f - contentProgress)).toPx()
+            },
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = titleColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = artist,
+            style = MaterialTheme.typography.bodyMedium,
+            color = artistColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+    }
+}
+
+@Composable
 internal fun FullscreenCollapseArrow(
     progress: Float,
     interactionSource: MutableInteractionSource,
