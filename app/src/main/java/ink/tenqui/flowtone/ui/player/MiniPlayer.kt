@@ -705,7 +705,8 @@ fun MiniPlayer(
                     val fullscreenContentTapEnabled = fullscreen &&
                         expanded &&
                         hasCurrentSong &&
-                        state.fullscreenContentMode == FullscreenContentMode.Playback
+                        state.fullscreenContentMode == FullscreenContentMode.Playback &&
+                        !state.expandedMoreMenu
                     val lyricsTapTop = with(density) {
                         WindowInsets.statusBars.getTop(this).toDp()
                     } + 56.dp + 60.dp + 12.dp
@@ -725,15 +726,25 @@ fun MiniPlayer(
                         (fullscreenContentTapBottom - fullscreenContentTapTop).coerceAtLeast(0.dp)
                     val showingLyrics = state.fullscreenPlaybackContentMode ==
                         FullscreenPlaybackContentMode.Lyrics
+                    val lyricsMetadataTapRangePx = if (showingLyrics) {
+                        with(density) {
+                            val top = WindowInsets.statusBars.getTop(this).toDp() + 56.dp
+                            top.toPx()..(top + 56.dp).toPx()
+                        }
+                    } else {
+                        null
+                    }
                     val lyricsMetadataProgress = 1f - artworkVisibilityProgress
 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .then(songSwipeModifier)
                             .fullscreenContentTapGesture(
                                 enabled = fullscreenContentTapEnabled,
                                 contentTop = fullscreenContentTapTop,
                                 contentHeight = fullscreenContentTapHeight,
+                                ignoredStartYRangePx = lyricsMetadataTapRangePx,
                                 onTap = {
                                     if (
                                         state.fullscreenPlaybackContentMode ==
@@ -748,7 +759,7 @@ fun MiniPlayer(
                     ) {
                     MiniPlayerBackgroundLayers(
                         gestureModifier = gestureModifier,
-                        songSwipeModifier = songSwipeModifier,
+                        songSwipeModifier = Modifier,
                         backgroundColor = coverTintDialogBackgroundColor(
                             state.lastStableBackdrop.colors
                         ),

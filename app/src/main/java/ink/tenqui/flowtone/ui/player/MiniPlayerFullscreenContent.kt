@@ -75,6 +75,8 @@ internal fun LyricsPlaceholderSongInfo(
     titleColor: Color,
     artistColor: Color,
     playerWidth: Dp,
+    artistClickable: Boolean = false,
+    onArtistClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (visibilityProgress <= 0.001f) return
@@ -110,7 +112,12 @@ internal fun LyricsPlaceholderSongInfo(
             color = artistColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .clickable(
+                    enabled = artistClickable && onArtistClick != null,
+                    onClick = { onArtistClick?.invoke() }
+                )
         )
     }
 }

@@ -239,6 +239,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             titleColor = titleColor,
             artistColor = artistColor,
             playerWidth = designPlayerWidth,
+            artistClickable = artistClickEnabled && isSelectableArtist(artist),
+            onArtistClick = { onArtistClick(artist) },
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .zIndex(5f)

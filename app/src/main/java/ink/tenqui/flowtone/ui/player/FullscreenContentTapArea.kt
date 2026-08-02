@@ -29,17 +29,27 @@ internal fun Modifier.fullscreenContentTapGesture(
     enabled: Boolean,
     contentTop: Dp,
     contentHeight: Dp,
+    ignoredStartYRangePx: ClosedFloatingPointRange<Float>? = null,
     onTap: () -> Unit
 ): Modifier = composed {
     val currentOnTap by rememberUpdatedState(onTap)
 
-    pointerInput(enabled, contentTop, contentHeight) {
+    pointerInput(
+        enabled,
+        contentTop,
+        contentHeight,
+        ignoredStartYRangePx?.start,
+        ignoredStartYRangePx?.endInclusive
+    ) {
     val contentTopPx = contentTop.toPx()
     val contentBottomPx = contentTopPx + contentHeight.toPx()
 
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         if (!enabled || !down.position.isWithinVerticalRange(contentTopPx, contentBottomPx)) {
+            return@awaitEachGesture
+        }
+        if (ignoredStartYRangePx != null && down.position.y in ignoredStartYRangePx) {
             return@awaitEachGesture
         }
 
