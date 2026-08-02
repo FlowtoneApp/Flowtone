@@ -169,6 +169,8 @@ internal fun SettingsScreen(
                 onStrictProgressBarChange = onStrictProgressBarChange,
                 flowCloudSpeed = flowCloudSpeed,
                 onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
+                lyricsBackgroundStyle = lyricsBackgroundStyle,
+                onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 elementModifier = ::viewElementModifier
             )
 
@@ -203,8 +205,6 @@ internal fun SettingsScreen(
                 openExpandedMiniPlayerOnMediaClick = openExpandedMiniPlayerOnMediaClick,
                 onOpenExpandedMiniPlayerOnMediaClickChange =
                     onOpenExpandedMiniPlayerOnMediaClickChange,
-                lyricsBackgroundStyle = lyricsBackgroundStyle,
-                onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 elementModifier = ::viewElementModifier
             )
         }

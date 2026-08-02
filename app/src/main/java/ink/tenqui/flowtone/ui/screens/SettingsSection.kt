@@ -80,7 +80,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 
 internal enum class SettingsSection(val title: String) {
-    Appearance("外观"),
+    Appearance("主题"),
     Playback("播放"),
     Record("记录"),
     Advanced("高级"),

@@ -99,8 +99,8 @@ internal fun SettingsSectionList(
             modifier = elementModifier(0)
         )
         SettingsSectionRow(
-            title = "外观",
-            subtitle = "主题模式",
+            title = "主题",
+            subtitle = "主题模式与播放器外观",
             icon = Icons.Rounded.Palette,
             onClick = { onSectionClick(SettingsSection.Appearance) },
             modifier = elementModifier(1).padding(top = 12.dp)

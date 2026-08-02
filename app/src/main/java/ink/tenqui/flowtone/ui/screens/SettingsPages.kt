@@ -91,6 +91,8 @@ internal fun AppearanceSettingsPage(
     onStrictProgressBarChange: (Boolean) -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -110,16 +112,25 @@ internal fun AppearanceSettingsPage(
                 onCheckedChange = onDisablePausedArtworkTiltChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
+        }
+        OptionGroup(
+            title = "播放器",
+            modifier = elementModifier(1).padding(top = 24.dp)
+        ) {
             FlowCloudSpeedRow(
                 speed = flowCloudSpeed,
-                onOpenDialog = onOpenFlowCloudSpeedDialog,
-                modifier = Modifier.padding(top = 12.dp)
+                onOpenDialog = onOpenFlowCloudSpeedDialog
             )
             SettingSwitchRow(
                 title = "\u4e25\u683c\u8fdb\u5ea6\u6761",
                 subtitle = "\u5f00\u542f\u540e\uff0c\u64ad\u653e\u65f6\u95f4\u5c06\u7cbe\u786e\u663e\u793a\u62d6\u52a8\u6216\u8df3\u8f6c\u4f4d\u7f6e",
                 checked = strictProgressBar,
                 onCheckedChange = onStrictProgressBarChange,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            LyricsBackgroundStyleSelector(
+                selectedStyle = lyricsBackgroundStyle,
+                onStyleSelected = onLyricsBackgroundStyleChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
@@ -198,8 +209,6 @@ internal fun GeneralSettingsPage(
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     openExpandedMiniPlayerOnMediaClick: Boolean,
     onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
-    lyricsBackgroundStyle: LyricsBackgroundStyle,
-    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -239,11 +248,6 @@ internal fun GeneralSettingsPage(
                 subtitle = "\u5173\u95ed\u540e\uff0c\u5355\u51fb\u5a92\u4f53\u63a7\u4ef6\u5c06\u8fdb\u5165\u5168\u5c4f\u6001",
                 checked = openExpandedMiniPlayerOnMediaClick,
                 onCheckedChange = onOpenExpandedMiniPlayerOnMediaClickChange,
-                modifier = Modifier.padding(top = 12.dp)
-            )
-            LyricsBackgroundStyleSelector(
-                selectedStyle = lyricsBackgroundStyle,
-                onStyleSelected = onLyricsBackgroundStyleChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
