@@ -294,7 +294,8 @@ fun MiniPlayer(
             durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = MiniPlayerEasing
         ),
-        label = "FullscreenSongInfoProgress"
+        label = "FullscreenSongInfoProgress",
+        finishedListener = transitions::finishSongInfoProgress
     )
     val artistPlaceholderActive = isArtistPlaceholderActive(
         fullscreenContentMode = state.fullscreenContentMode,
@@ -819,6 +820,7 @@ fun MiniPlayer(
                         fullscreenContentMode = state.fullscreenContentMode,
                         addToPlaylistEnteredFromLyrics =
                             state.addToPlaylistEnteredFromLyrics,
+                        songInfoEnteredFromLyrics = state.songInfoEnteredFromLyrics,
                         libraryPlaylists = libraryPlaylists,
                         playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,

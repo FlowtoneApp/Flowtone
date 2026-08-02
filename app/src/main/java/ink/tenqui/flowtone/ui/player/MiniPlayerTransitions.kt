@@ -52,7 +52,15 @@ internal class MiniPlayerTransitions(
         }
         state.artistPlaceholderArtists = emptyList()
         state.expandedMoreMenu = false
+        state.songInfoEnteredFromLyrics =
+            state.fullscreenPlaybackContentMode == FullscreenPlaybackContentMode.Lyrics
         state.fullscreenContentMode = FullscreenContentMode.SongInfo
+    }
+
+    fun finishSongInfoProgress(finalValue: Float) {
+        if (finalValue == 0f && state.fullscreenContentMode != FullscreenContentMode.SongInfo) {
+            state.songInfoEnteredFromLyrics = false
+        }
     }
 
     fun enterArtistPlaceholderMode(

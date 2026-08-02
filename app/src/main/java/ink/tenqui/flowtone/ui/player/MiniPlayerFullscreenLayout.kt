@@ -75,6 +75,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     artistClickEnabled: Boolean,
     fullscreenContentMode: FullscreenContentMode,
     addToPlaylistEnteredFromLyrics: Boolean,
+    songInfoEnteredFromLyrics: Boolean,
     libraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     newlyCreatedPlaylistId: String?,
@@ -157,6 +158,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         } else {
             0f
         }
+        val hidePlaybackSharedArtwork =
+            addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
 
         MorphArtworkLayer(
         imageRequest = imageRequest,
@@ -178,7 +181,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
         playbackScale = artworkPlaybackScale,
         playbackRotationDegrees = artworkPlaybackRotationDegrees,
-        layerAlpha = if (addToPlaylistEnteredFromLyrics) {
+        layerAlpha = if (hidePlaybackSharedArtwork) {
             0f
         } else {
             (1f - metrics.artistExitProgress) * artworkVisibilityProgress
@@ -221,6 +224,31 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     }
             )
         }
+        if (songInfoEnteredFromLyrics && songInfoProgress > 0.001f) {
+            MorphArtworkLayer(
+                imageRequest = imageRequest,
+                waitForArtworkLoad = waitForArtworkLoad,
+                progress = 1f,
+                scaleProgress = 1f,
+                currentHeight = designCurrentHeight,
+                viewportHeight = designCurrentHeight,
+                collapsedHeight = designCollapsedHeight,
+                playerWidth = designPlayerWidth,
+                expandedArtworkSize = designExpandedArtworkSize,
+                expandedArtworkTop = designExpandedArtworkTop,
+                fullscreenProgress = 1f,
+                fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
+                fullscreenArtworkCenterY = designFullscreenCoverCenterY,
+                contentExitProgress = 1f,
+                addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
+                addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
+                addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
+                playbackScale = 1f,
+                playbackRotationDegrees = 0f,
+                layerAlpha = songInfoProgress,
+                modifier = modifier.align(Alignment.TopStart)
+            )
+        }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -243,7 +271,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             fullscreenX = metrics.fullscreenArtworkX,
             fullscreenTop = metrics.fullscreenMetadataTop,
             lyricsMetadataProgress = lyricsMetadataProgress,
-            contentExitProgress = if (addToPlaylistEnteredFromLyrics) {
+            contentExitProgress = if (
+                addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
+            ) {
                 1f
             } else {
                 metrics.fullscreenContentExitSharedProgress
