@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.local.AudioScanner
 import ink.tenqui.flowtone.lyrics.LocalLyricsRepository
 import ink.tenqui.flowtone.lyrics.LyricsLoadResult
+import ink.tenqui.flowtone.lyrics.LyricsLoadSource
+import ink.tenqui.flowtone.lyrics.LyricsPreloadScheduler
 import ink.tenqui.flowtone.lyrics.LyricsState
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
@@ -81,7 +83,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
+    private var preloadLyricsCount: Int = 5
     private var preloadJob: Job? = null
+    private var metadataPreloadUris: List<String> = emptyList()
+    private val lyricsPreloadScheduler by lazy {
+        LyricsPreloadScheduler(viewModelScope, localLyricsRepository)
+    }
     private var searchJob: Job? = null
     private var playbackOrderModeJob: Job? = null
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
@@ -115,6 +122,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         preloadSongMetadataCount = sanitizedCount
+        scheduleNextSongsPreload()
+    }
+
+    fun setPreloadLyricsCount(count: Int) {
+        val allowedValues = listOf(1, 3, 5, 7, 10)
+        val sanitizedCount = allowedValues.minBy { kotlin.math.abs(it - count) }
+        if (preloadLyricsCount == sanitizedCount) {
+            return
+        }
+
+        preloadLyricsCount = sanitizedCount
         scheduleNextSongsPreload()
     }
 
@@ -320,8 +338,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setLyricsDirectory(treeUri: Uri) {
+        lyricsPreloadScheduler.clear()
         localLyricsRepository.saveLyricsDirectory(treeUri)
         lyricsReloadVersion.update { it + 1 }
+        scheduleNextSongsPreload()
     }
 
     fun handleLocalSongsDeleted(deletedSongs: List<Song>) {
@@ -509,11 +529,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         return@collectLatest
                     }
 
-                    _lyricsState.value = LyricsState.Loading
+                    val request = localLyricsRepository.request(currentSong)
+                    Log.d(
+                        "Lyrics",
+                        "foreground request song=${currentSong.id} source=${request.source}"
+                    )
+                    _lyricsState.value = if (request.source == LyricsLoadSource.NewRead) {
+                        LyricsState.Loading
+                    } else {
+                        LyricsState.Idle
+                    }
                     val result = try {
-                        withContext(Dispatchers.IO) {
-                            localLyricsRepository.load(currentSong)
-                        }
+                        request.deferred.await()
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Throwable) {
@@ -634,25 +661,47 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun scheduleNextSongsPreload() {
-        preloadJob?.cancel()
+        val maximumPreloadCount = maxOf(preloadSongMetadataCount, preloadLyricsCount)
+        val upcomingSongs = upcomingSongsInPlaybackOrder(maximumPreloadCount)
+
+        val metadataSongs = upcomingSongs.take(preloadSongMetadataCount)
+        val nextMetadataPreloadUris = metadataSongs.map { it.uri.toString() }
+        if (nextMetadataPreloadUris != metadataPreloadUris) {
+            metadataPreloadUris = nextMetadataPreloadUris
+            preloadJob?.cancel()
+            preloadJob = viewModelScope.launch {
+                songMetadataPreloader.preload(metadataSongs)
+            }
+        }
+
+        val songsToPreload = upcomingSongs.take(preloadLyricsCount)
+        lyricsPreloadScheduler.update(
+            currentIndex = playbackController.getCurrentMediaItemIndex() ?: currentQueueIndex,
+            currentSong = playbackState.value.currentSong
+                ?: playbackQueue.getOrNull(currentQueueIndex),
+            songsInPlaybackOrder = songsToPreload
+        )
+    }
+
+    private fun upcomingSongsInPlaybackOrder(limit: Int): List<Song> {
+        if (limit <= 0 || playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
+            return emptyList()
+        }
+
+        val mediaIds = playbackController.getUpcomingMediaIdsInPlaybackOrder(limit)
+        if (mediaIds != null) {
+            return mediaIds.mapNotNull { mediaId ->
+                val songId = mediaId.toLongOrNull()
+                sourceQueue.firstOrNull { it.id == songId }
+                    ?: playbackQueue.firstOrNull { it.id == songId }
+            }
+        }
+
         val startIndex = currentQueueIndex + 1
-        if (
-            preloadSongMetadataCount <= 0 ||
-            playbackQueue.isEmpty() ||
-            startIndex !in playbackQueue.indices
-        ) {
-            return
-        }
-
-        val songsToPreload = playbackQueue
-            .drop(startIndex)
-            .take(preloadSongMetadataCount)
-        if (songsToPreload.isEmpty()) {
-            return
-        }
-
-        preloadJob = viewModelScope.launch {
-            songMetadataPreloader.preload(songsToPreload)
+        return if (startIndex in playbackQueue.indices) {
+            playbackQueue.drop(startIndex).take(limit)
+        } else {
+            emptyList()
         }
     }
 
@@ -826,6 +875,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         searchJob?.cancel()
         playbackOrderModeJob?.cancel()
+        lyricsPreloadScheduler.clear()
+        localLyricsRepository.close()
         playbackController.release()
         super.onCleared()
     }

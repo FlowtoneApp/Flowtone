@@ -11,24 +11,107 @@ import ink.tenqui.flowtone.core.model.Song
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.LinkedHashMap
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 class LocalLyricsRepository(
     context: Context
 ) {
     private val contentResolver = context.contentResolver
     private val directoryStore = LyricsDirectoryStore(context.applicationContext)
-    private val cache = object : LinkedHashMap<String, List<LyricLine>>(CACHE_SIZE, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<LyricLine>>?): Boolean {
-            return size > CACHE_SIZE
+    private val requestScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val requestLock = Any()
+    private val inFlightRequests = mutableMapOf<String, InFlightLyricsRequest>()
+    private var directoryGeneration = 0
+    private var preloadGeneration = 0L
+    private var desiredPreloadUris: Set<String> = emptySet()
+    private val cache = LinkedHashMap<String, List<LyricLine>>(CACHE_SIZE, 0.75f, true)
+    private var pinnedCacheKeys: Set<String> = emptySet()
+
+    fun getCachedLyrics(song: Song): List<LyricLine>? {
+        return synchronized(requestLock) { cache[song.uri.toString()] }
+    }
+
+    fun updatePreloadWindow(
+        generation: Long,
+        currentSong: Song?,
+        preloadSongs: List<Song>
+    ) {
+        synchronized(requestLock) {
+            preloadGeneration = generation
+            desiredPreloadUris = preloadSongs.mapTo(mutableSetOf()) { it.uri.toString() }
+            inFlightRequests.forEach { (uri, request) ->
+                if (uri in desiredPreloadUris && !request.hasForegroundRequester) {
+                    request.preloadGeneration = generation
+                }
+            }
+            pinnedCacheKeys = desiredPreloadUris.toMutableSet().apply {
+                currentSong?.uri?.toString()?.let(::add)
+            }
+            trimCacheLocked()
         }
     }
 
-    fun load(song: Song): LyricsLoadResult {
+    fun request(
+        song: Song,
+        role: LyricsRequestRole = LyricsRequestRole.Foreground
+    ): LyricsLoadRequest = synchronized(requestLock) {
         val key = song.uri.toString()
-        synchronized(cache) { cache[key] }?.let { return LyricsLoadResult.Found(it) }
+        cache[key]?.let { lines ->
+            Log.d(TAG, "cache hit for song=${song.id}")
+            return LyricsLoadRequest(
+                deferred = CompletableDeferred(LyricsLoadResult.Found(lines)),
+                source = LyricsLoadSource.Cache
+            )
+        }
+        inFlightRequests[key]?.let { inFlight ->
+            if (role == LyricsRequestRole.Foreground) {
+                inFlight.hasForegroundRequester = true
+            }
+            Log.d(TAG, "joining in-flight load for song=${song.id}")
+            return LyricsLoadRequest(inFlight.deferred, LyricsLoadSource.InFlight)
+        }
 
+        val requestGeneration = directoryGeneration
+        lateinit var deferred: Deferred<LyricsLoadResult>
+        deferred = requestScope.async(start = CoroutineStart.LAZY) {
+            loadUncached(song, key, requestGeneration, deferred)
+        }
+        val inFlight = InFlightLyricsRequest(
+            deferred = deferred,
+            hasForegroundRequester = role == LyricsRequestRole.Foreground,
+            preloadGeneration = preloadGeneration.takeIf { role == LyricsRequestRole.Preload }
+        )
+        inFlightRequests[key] = inFlight
+        deferred.invokeOnCompletion {
+            synchronized(requestLock) {
+                if (inFlightRequests[key] === inFlight) {
+                    inFlightRequests.remove(key)
+                }
+            }
+        }
+        deferred.start()
+        LyricsLoadRequest(deferred, LyricsLoadSource.NewRead)
+    }
+
+    private suspend fun loadUncached(
+        song: Song,
+        key: String,
+        requestGeneration: Int,
+        requestDeferred: Deferred<LyricsLoadResult>
+    ): LyricsLoadResult {
         Log.d(TAG, "loading for song=${song.id}")
         val search = findCandidates(song)
+        coroutineContext.ensureActive()
         val candidates = search.candidates
         if (candidates.isEmpty()) {
             Log.d(TAG, "not found")
@@ -45,15 +128,33 @@ class LocalLyricsRepository(
         }
         var lastError: Throwable? = null
         for (candidate in candidates) {
+            coroutineContext.ensureActive()
             try {
                 Log.d(TAG, "candidate found=$candidate")
                 val text = contentResolver.openInputStream(candidate)?.use { input ->
                     input.readBytes().toString(StandardCharsets.UTF_8).removePrefix("\uFEFF")
                 } ?: throw IllegalStateException("Unable to open lyrics file")
+                coroutineContext.ensureActive()
                 val lines = LrcParser.parse(text)
-                synchronized(cache) { cache[key] = lines }
+                coroutineContext.ensureActive()
+                synchronized(requestLock) {
+                    val activeRequest = inFlightRequests[key]
+                    val belongsToCurrentWindow =
+                        activeRequest?.preloadGeneration == preloadGeneration &&
+                            key in desiredPreloadUris
+                    val canWriteCache =
+                        directoryGeneration == requestGeneration &&
+                            activeRequest?.deferred === requestDeferred &&
+                            (activeRequest.hasForegroundRequester || belongsToCurrentWindow)
+                    if (canWriteCache) {
+                        cache[key] = lines
+                        trimCacheLocked()
+                    }
+                }
                 Log.d(TAG, "parsed lines=${lines.size}")
                 return LyricsLoadResult.Found(lines)
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 lastError = error
                 Log.d(TAG, "candidate failed=${error::class.simpleName}")
@@ -64,7 +165,41 @@ class LocalLyricsRepository(
 
     fun saveLyricsDirectory(treeUri: Uri) {
         directoryStore.saveTreeUri(treeUri)
-        synchronized(cache) { cache.clear() }
+        val requestsToCancel = synchronized(requestLock) {
+            directoryGeneration += 1
+            preloadGeneration += 1
+            desiredPreloadUris = emptySet()
+            cache.clear()
+            pinnedCacheKeys = emptySet()
+            inFlightRequests.values.map { it.deferred }.also {
+                inFlightRequests.clear()
+            }
+        }
+        requestsToCancel.forEach { it.cancel() }
+    }
+
+    fun cancelPreload(key: String) {
+        val requestToCancel = synchronized(requestLock) {
+            val request = inFlightRequests[key]
+            if (request == null || request.hasForegroundRequester) {
+                null
+            } else {
+                inFlightRequests.remove(key)
+                request.deferred
+            }
+        }
+        requestToCancel?.cancel()
+    }
+
+    fun close() {
+        requestScope.cancel()
+    }
+
+    private fun trimCacheLocked() {
+        while (cache.size > CACHE_SIZE) {
+            val removableKey = cache.keys.firstOrNull { it !in pinnedCacheKeys } ?: return
+            cache.remove(removableKey)
+        }
     }
 
     private fun findCandidates(song: Song): CandidateSearch {
@@ -79,6 +214,11 @@ class LocalLyricsRepository(
         findLegacyFileCandidate(song)?.let(::add)
         }.distinct()
         return CandidateSearch(candidates = candidates, treeResult = treeResult)
+    }
+
+    suspend fun preload(song: Song) {
+        coroutineContext.ensureActive()
+        request(song, LyricsRequestRole.Preload).deferred.await()
     }
 
     private fun expectedLyricsName(song: Song): String? {
@@ -206,6 +346,28 @@ sealed interface LyricsLoadResult {
     data class Found(val lines: List<LyricLine>) : LyricsLoadResult
     data class Failed(val throwable: Throwable) : LyricsLoadResult
 }
+
+data class LyricsLoadRequest(
+    val deferred: Deferred<LyricsLoadResult>,
+    val source: LyricsLoadSource
+)
+
+enum class LyricsLoadSource {
+    Cache,
+    InFlight,
+    NewRead
+}
+
+enum class LyricsRequestRole {
+    Foreground,
+    Preload
+}
+
+private data class InFlightLyricsRequest(
+    val deferred: Deferred<LyricsLoadResult>,
+    var hasForegroundRequester: Boolean,
+    var preloadGeneration: Long?
+)
 
 private data class CandidateSearch(
     val candidates: List<Uri>,

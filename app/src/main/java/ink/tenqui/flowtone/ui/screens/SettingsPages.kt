@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -183,17 +184,24 @@ internal fun RecordSettingsPage(
 internal fun AdvancedSettingsPage(
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
+    preloadLyricsCount: Int,
+    onPreloadLyricsCountChange: (Int) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
     SettingsPageColumn(modifier = modifier) {
         OptionGroup(
-            title = "高级",
+            title = "预载",
             modifier = elementModifier(0)
         ) {
             PreloadStrengthRow(
                 selectedCount = preloadSongMetadataCount,
                 onSelectedCountChange = onPreloadSongMetadataCountChange
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            LyricsPreloadStrengthRow(
+                selectedCount = preloadLyricsCount,
+                onSelectedCountChange = onPreloadLyricsCountChange
             )
         }
     }

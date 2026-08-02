@@ -59,6 +59,7 @@ internal class FlowtoneAppState(
     disablePausedArtworkTiltState: MutableState<Boolean>,
     strictProgressBarState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
+    preloadLyricsCountState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
     flowCloudSpeedState: MutableState<Float>,
@@ -104,6 +105,7 @@ internal class FlowtoneAppState(
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
     var strictProgressBar by strictProgressBarState
     var preloadSongMetadataCount by preloadSongMetadataCountState
+    var preloadLyricsCount by preloadLyricsCountState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
     var flowCloudSpeed by flowCloudSpeedState
@@ -199,6 +201,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val preloadSongMetadataCount = rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
     }
+    val preloadLyricsCount = rememberSaveable {
+        mutableStateOf(appPreferences.getLyricsPreloadCount())
+    }
     val songRecordThresholdSeconds = rememberSaveable {
         mutableStateOf(appPreferences.getSongRecordThresholdSeconds())
     }
@@ -283,6 +288,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
         strictProgressBarState = strictProgressBar,
         preloadSongMetadataCountState = preloadSongMetadataCount,
+        preloadLyricsCountState = preloadLyricsCount,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
         flowCloudSpeedState = flowCloudSpeed,
@@ -330,6 +336,7 @@ internal data class FlowtoneAppScaffoldState(
     val allowFullscreenFromCollapsed: Boolean,
     val openExpandedMiniPlayerOnMediaClick: Boolean,
     val preloadSongMetadataCount: Int,
+    val preloadLyricsCount: Int,
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
     val flowCloudSpeed: Float,
@@ -408,6 +415,7 @@ internal fun flowtoneAppScaffoldState(
         allowFullscreenFromCollapsed = appState.allowFullscreenFromCollapsed,
         openExpandedMiniPlayerOnMediaClick = appState.openExpandedMiniPlayerOnMediaClick,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
+        preloadLyricsCount = appState.preloadLyricsCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
         flowCloudSpeed = appState.flowCloudSpeed,

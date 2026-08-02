@@ -251,6 +251,8 @@ internal fun FlowtoneScaffoldContent(
                     preloadSongMetadataCount = state.preloadSongMetadataCount,
                     onPreloadSongMetadataCountChange =
                         callbacks.onPreloadSongMetadataCountChange,
+                    preloadLyricsCount = state.preloadLyricsCount,
+                    onPreloadLyricsCountChange = callbacks.onPreloadLyricsCountChange,
                     songRecordThresholdSeconds = state.songRecordThresholdSeconds,
                     onOpenSongRecordThresholdDialog = callbacks.onOpenSongRecordThresholdDialog,
                     flowCloudSpeed = state.flowCloudSpeed,

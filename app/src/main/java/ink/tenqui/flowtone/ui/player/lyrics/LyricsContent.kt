@@ -35,7 +35,7 @@ internal fun LyricsContent(
         .fillMaxSize()
 
     when (state) {
-        LyricsState.Idle,
+        LyricsState.Idle -> Unit
         LyricsState.Loading -> LyricsMessage("正在读取歌词", visibleModifier)
         LyricsState.DirectoryNotSelected -> LyricsMessage(
             primary = "暂无歌词",

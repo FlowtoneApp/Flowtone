@@ -102,6 +102,8 @@ internal fun SettingsScreen(
     onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
+    preloadLyricsCount: Int,
+    onPreloadLyricsCountChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
     onOpenSongRecordThresholdDialog: () -> Unit,
     flowCloudSpeed: Float,
@@ -189,6 +191,8 @@ internal fun SettingsScreen(
             SettingsSection.Advanced -> AdvancedSettingsPage(
                 preloadSongMetadataCount = preloadSongMetadataCount,
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
+                preloadLyricsCount = preloadLyricsCount,
+                onPreloadLyricsCountChange = onPreloadLyricsCountChange,
                 elementModifier = ::viewElementModifier
             )
 

@@ -129,6 +129,22 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getLyricsPreloadCount(): Int {
+        val savedValue = prefs.getInt(LYRICS_PRELOAD_COUNT_KEY, DEFAULT_PRELOAD_COUNT)
+        return PRELOAD_COUNT_OPTIONS.minBy { option ->
+            kotlin.math.abs(option - savedValue)
+        }
+    }
+
+    fun setLyricsPreloadCount(count: Int) {
+        val value = PRELOAD_COUNT_OPTIONS.minBy { option ->
+            kotlin.math.abs(option - count)
+        }
+        prefs.edit()
+            .putInt(LYRICS_PRELOAD_COUNT_KEY, value)
+            .apply()
+    }
+
     fun getSongRecordThresholdSeconds(): Int {
         return prefs.getInt(
             SONG_RECORD_THRESHOLD_SECONDS_KEY,
@@ -214,6 +230,7 @@ class AppPreferences(context: Context) {
         const val OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY =
             "open_expanded_mini_player_on_media_click"
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
+        const val LYRICS_PRELOAD_COUNT_KEY = "lyrics_preload_count"
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
