@@ -75,6 +75,9 @@ internal fun LyricsPlaceholderSongInfo(
     titleColor: Color,
     artistColor: Color,
     playerWidth: Dp,
+    addToPlaylistProgress: Float = 0f,
+    addToPlaylistTextStart: Dp = 24.dp,
+    addToPlaylistTextWidth: Dp = (playerWidth - 48.dp).coerceAtLeast(0.dp),
     artistClickable: Boolean = false,
     onArtistClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -86,11 +89,18 @@ internal fun LyricsPlaceholderSongInfo(
         WindowInsets.statusBars.getTop(this).toDp()
     }
     val contentProgress = visibilityProgress.coerceIn(0f, 1f)
+    val addProgress = addToPlaylistProgress.coerceIn(0f, 1f)
+    val metadataX = lerpDp(24.dp, addToPlaylistTextStart, addProgress)
+    val metadataWidth = lerpDp(
+        (playerWidth - 48.dp).coerceAtLeast(0.dp),
+        addToPlaylistTextWidth,
+        addProgress
+    )
 
     Column(
         modifier = modifier
-            .offset(x = 24.dp, y = safeTopPadding + 56.dp)
-            .width((playerWidth - 48.dp).coerceAtLeast(0.dp))
+            .offset(x = metadataX, y = safeTopPadding + 56.dp)
+            .width(metadataWidth)
             .height(56.dp)
             .graphicsLayer {
                 alpha = contentProgress

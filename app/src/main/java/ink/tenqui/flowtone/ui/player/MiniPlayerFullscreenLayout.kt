@@ -74,6 +74,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     collapsedMetadataSwitchDirection: Int,
     artistClickEnabled: Boolean,
     fullscreenContentMode: FullscreenContentMode,
+    addToPlaylistEnteredFromLyrics: Boolean,
     libraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     newlyCreatedPlaylistId: String?,
@@ -148,6 +149,14 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             playbackContentOffsetY =
                 32.dp * layoutMetrics.fullscreenContentExitSharedProgress
         )
+        val safeTopPadding = with(LocalDensity.current) {
+            WindowInsets.statusBars.getTop(this).toDp()
+        }
+        val lyricsAddToPlaylistProgress = if (addToPlaylistEnteredFromLyrics) {
+            metrics.addToPlaylistSharedProgress
+        } else {
+            0f
+        }
 
         MorphArtworkLayer(
         imageRequest = imageRequest,
@@ -169,7 +178,11 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
         playbackScale = artworkPlaybackScale,
         playbackRotationDegrees = artworkPlaybackRotationDegrees,
-        layerAlpha = (1f - metrics.artistExitProgress) * artworkVisibilityProgress,
+        layerAlpha = if (addToPlaylistEnteredFromLyrics) {
+            0f
+        } else {
+            (1f - metrics.artistExitProgress) * artworkVisibilityProgress
+        },
         layerTranslationY =
             16.dp *
                 (1f - minimizedProgress) *
@@ -178,6 +191,36 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 24.dp * (1f - artworkVisibilityProgress),
         modifier = modifier.align(Alignment.TopStart)
     )
+        if (lyricsAddToPlaylistProgress > 0.001f) {
+            MorphArtworkLayer(
+                imageRequest = imageRequest,
+                waitForArtworkLoad = waitForArtworkLoad,
+                progress = 1f,
+                scaleProgress = 1f,
+                currentHeight = designCurrentHeight,
+                viewportHeight = designCurrentHeight,
+                collapsedHeight = designCollapsedHeight,
+                playerWidth = designPlayerWidth,
+                expandedArtworkSize = designExpandedArtworkSize,
+                expandedArtworkTop = designExpandedArtworkTop,
+                fullscreenProgress = 1f,
+                fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
+                fullscreenArtworkCenterY = designFullscreenCoverCenterY,
+                contentExitProgress = 1f,
+                addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
+                addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
+                addToPlaylistArtworkTop = safeTopPadding + 56.dp,
+                playbackScale = 1f,
+                playbackRotationDegrees = 0f,
+                layerAlpha = lyricsAddToPlaylistProgress,
+                modifier = modifier
+                    .align(Alignment.TopStart)
+                    .graphicsLayer {
+                        translationX =
+                            ((-48).dp * (1f - lyricsAddToPlaylistProgress)).toPx()
+                    }
+            )
+        }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -200,31 +243,35 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             fullscreenX = metrics.fullscreenArtworkX,
             fullscreenTop = metrics.fullscreenMetadataTop,
             lyricsMetadataProgress = lyricsMetadataProgress,
-            contentExitProgress = metrics.fullscreenContentExitSharedProgress,
+            contentExitProgress = if (addToPlaylistEnteredFromLyrics) {
+                1f
+            } else {
+                metrics.fullscreenContentExitSharedProgress
+            },
             switchDirection = collapsedMetadataSwitchDirection,
             artistClickEnabled = artistClickEnabled,
             onArtistClick = onArtistClick,
             modifier = Modifier
                 .align(Alignment.TopStart)
         )
-        AddToPlaylistItemSongInfo(
-            title = title,
-            artist = artist,
-            progress = metrics.addToPlaylistSharedProgress,
-            titleColor = titleColor,
-            artistColor = artistColor,
-            width = metrics.addToPlaylistTextWidth,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(
-                    x = metrics.addToPlaylistTextStart,
-                    y = metrics.addToPlaylistArtworkTop
-                )
-        )
+        if (!addToPlaylistEnteredFromLyrics) {
+            AddToPlaylistItemSongInfo(
+                title = title,
+                artist = artist,
+                progress = metrics.addToPlaylistSharedProgress,
+                titleColor = titleColor,
+                artistColor = artistColor,
+                width = metrics.addToPlaylistTextWidth,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(
+                        x = metrics.addToPlaylistTextStart,
+                        y = metrics.addToPlaylistArtworkTop
+                    )
+            )
+        }
         // Keep the scrollable lyrics between the metadata block and the fullscreen action row.
-        val lyricsTop = with(LocalDensity.current) {
-            WindowInsets.statusBars.getTop(this).toDp()
-        } + 56.dp + 60.dp + 12.dp
+        val lyricsTop = safeTopPadding + 56.dp + 60.dp + 12.dp
         val lyricsBottom = (
             designExpandedProgressTop +
                 designFullscreenStationaryControlsOffsetY -
@@ -235,10 +282,17 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         LyricsPlaceholderSongInfo(
             title = title,
             artist = artist,
-            visibilityProgress = lyricsMetadataProgress,
+            visibilityProgress = if (addToPlaylistEnteredFromLyrics) {
+                1f
+            } else {
+                lyricsMetadataProgress
+            },
             titleColor = titleColor,
             artistColor = artistColor,
             playerWidth = designPlayerWidth,
+            addToPlaylistProgress = lyricsAddToPlaylistProgress,
+            addToPlaylistTextStart = metrics.addToPlaylistTextStart,
+            addToPlaylistTextWidth = metrics.addToPlaylistTextWidth,
             artistClickable = artistClickEnabled && isSelectableArtist(artist),
             onArtistClick = { onArtistClick(artist) },
             modifier = Modifier
@@ -274,6 +328,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         Box(
             modifier = Modifier
                 .matchParentSize()
+                .zIndex(if (expandedMoreMenu) 6f else 0f)
                 .graphicsLayer {
                     alpha = metrics.playbackContentAlpha
                     translationY =

@@ -274,7 +274,8 @@ fun MiniPlayer(
             durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = MiniPlayerEasing
         ),
-        label = "AddToPlaylistProgress"
+        label = "AddToPlaylistProgress",
+        finishedListener = transitions::finishAddToPlaylistProgress
     )
     val songInfoProgress by animateFloatAsState(
         targetValue = if (
@@ -816,6 +817,8 @@ fun MiniPlayer(
                             state.collapsedMetadataSwitchDirection,
                         artistClickEnabled = artistClickEnabled,
                         fullscreenContentMode = state.fullscreenContentMode,
+                        addToPlaylistEnteredFromLyrics =
+                            state.addToPlaylistEnteredFromLyrics,
                         libraryPlaylists = libraryPlaylists,
                         playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,

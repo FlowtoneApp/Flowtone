@@ -27,7 +27,15 @@ internal class MiniPlayerTransitions(
     fun enterAddToPlaylistMode() {
         state.artistPlaceholderArtists = emptyList()
         state.expandedMoreMenu = false
+        state.addToPlaylistEnteredFromLyrics =
+            state.fullscreenPlaybackContentMode == FullscreenPlaybackContentMode.Lyrics
         state.fullscreenContentMode = FullscreenContentMode.AddToPlaylist
+    }
+
+    fun finishAddToPlaylistProgress(finalValue: Float) {
+        if (finalValue == 0f && state.fullscreenContentMode != FullscreenContentMode.AddToPlaylist) {
+            state.addToPlaylistEnteredFromLyrics = false
+        }
     }
 
     fun enterSongInfoMode(
