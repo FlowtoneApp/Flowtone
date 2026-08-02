@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.text.normalizeMetadataText
+import ink.tenqui.flowtone.core.text.titleWithFilenameFallback
 import ink.tenqui.flowtone.core.model.SourceType
 
 class AudioScanner(
@@ -51,8 +53,18 @@ class AudioScanner(
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
-                val title = cursor.getString(titleColumn).orEmpty().ifBlank { "\u672a\u77e5\u6b4c\u66f2" }
-                val artist = cursor.getString(artistColumn).orEmpty().ifBlank { "\u672a\u77e5\u827a\u672f\u5bb6" }
+                val artist = normalizeMetadataText(cursor.getString(artistColumn).orEmpty())
+                    .ifBlank { "\u672a\u77e5\u827a\u672f\u5bb6" }
+                val rawFilePath = if (dataColumn >= 0 && !cursor.isNull(dataColumn)) {
+                    cursor.getString(dataColumn).orEmpty().ifBlank { null }
+                } else {
+                    null
+                }
+                val title = titleWithFilenameFallback(
+                    metadataTitle = normalizeMetadataText(cursor.getString(titleColumn).orEmpty()),
+                    filePath = rawFilePath,
+                    artist = artist
+                ).ifBlank { "\u672a\u77e5\u6b4c\u66f2" }
                 val durationMs = cursor.getLong(durationColumn)
                 val dateAddedSeconds = cursor.getLong(dateAddedColumn).coerceAtLeast(0L)
                 val dateModifiedSeconds = cursor.getLong(dateModifiedColumn).coerceAtLeast(0L)
@@ -65,11 +77,7 @@ class AudioScanner(
                 val artworkUri = albumId?.let {
                     ContentUris.withAppendedId(ALBUM_ART_BASE_URI, it)
                 }
-                val filePath = if (dataColumn >= 0 && !cursor.isNull(dataColumn)) {
-                    cursor.getString(dataColumn).orEmpty().ifBlank { null }
-                } else {
-                    null
-                }
+                val filePath = rawFilePath
 
                 songs.add(
                     Song(

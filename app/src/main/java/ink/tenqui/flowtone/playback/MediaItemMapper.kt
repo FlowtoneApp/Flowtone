@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.text.normalizeMetadataText
 import ink.tenqui.flowtone.core.model.SourceType
 
 object MediaItemMapper {
@@ -66,8 +67,10 @@ object MediaItemMapper {
             ?: return null
         val artworkUri = mediaItem.mediaMetadata.artworkUri
             ?: extras?.getString(EXTRA_ARTWORK_URI)?.let { runCatching { Uri.parse(it) }.getOrNull() }
-        val title = mediaItem.mediaMetadata.title?.toString().orEmpty().ifBlank { "\u672a\u77e5\u6b4c\u66f2" }
-        val artist = mediaItem.mediaMetadata.artist?.toString().orEmpty().ifBlank { "\u672a\u77e5\u827a\u672f\u5bb6" }
+        val title = normalizeMetadataText(mediaItem.mediaMetadata.title?.toString().orEmpty())
+            .ifBlank { "\u672a\u77e5\u6b4c\u66f2" }
+        val artist = normalizeMetadataText(mediaItem.mediaMetadata.artist?.toString().orEmpty())
+            .ifBlank { "\u672a\u77e5\u827a\u672f\u5bb6" }
         val durationMs = extras?.getLong(EXTRA_DURATION_MS)?.takeIf { it > 0L } ?: 0L
         val filePath = extras?.getString(EXTRA_FILE_PATH)?.ifBlank { null }
         val dateAddedSeconds = extras?.getLong(EXTRA_DATE_ADDED_SECONDS)
