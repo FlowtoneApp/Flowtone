@@ -175,6 +175,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     )
     MiniPlayer(
         playerUiState = state.playerUiState,
+        lyricsState = state.lyricsState,
         expanded = state.miniPlayerExpanded,
         onExpandedChange = callbacks.onExpandedChange,
         fullscreen = state.miniPlayerFullscreen,

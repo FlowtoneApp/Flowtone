@@ -15,9 +15,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -25,12 +28,14 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.lyrics.LyricsState
 
 @Composable
 internal fun BoxScope.MiniPlayerFullscreenLayout(
     imageRequest: ImageRequest?,
     waitForArtworkLoad: Boolean,
     playerUiState: PlayerUiState,
+    lyricsState: LyricsState,
     title: String,
     artist: String,
     hasCurrentSong: Boolean,
@@ -103,6 +108,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onArtistHostBack: () -> Unit,
     onArtistHostArtistClick: (String) -> Unit,
     onCollapseClick: () -> Unit,
+    onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val actualDensity = LocalDensity.current
@@ -215,6 +221,17 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     y = metrics.addToPlaylistArtworkTop
                 )
         )
+        // Keep the scrollable lyrics between the metadata block and the fullscreen action row.
+        val lyricsTop = with(LocalDensity.current) {
+            WindowInsets.statusBars.getTop(this).toDp()
+        } + 56.dp + 60.dp + 12.dp
+        val lyricsBottom = (
+            designExpandedProgressTop +
+                designFullscreenStationaryControlsOffsetY -
+                designFullscreenControlsLiftY -
+                56.dp
+            ).coerceAtLeast(lyricsTop)
+        val lyricsHeight = (lyricsBottom - lyricsTop).coerceAtLeast(0.dp)
         LyricsPlaceholderSongInfo(
             title = title,
             artist = artist,
@@ -324,17 +341,18 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
             )
         }
-        // Keep the placeholder in the same coordinate space as the artwork, not the controls.
+        // The host is deliberately constrained to the same middle band used for artwork.
         MiniPlayerLyricsHost(
             currentSong = playerUiState.currentSong,
-            positionMs = playerUiState.positionMs,
-            playbackProgress = animationProgress,
-            fullscreenProgress = fullscreenProgress,
-                fullscreen = fullscreen && expanded && hasCurrentSong,
-                visibilityProgress = lyricsVisibilityProgress,
-                onLyricSeekRequested = callbacks.onSeekTo,
+            lyricsState = lyricsState,
+            visibilityProgress = lyricsVisibilityProgress,
+            onChooseLyricsDirectory = onChooseLyricsDirectory,
             modifier = Modifier
-                .matchParentSize()
+                .align(Alignment.TopCenter)
+                .offset(y = lyricsTop)
+                .fillMaxWidth()
+                .height(lyricsHeight)
+                .clipToBounds()
                 .zIndex(4f)
         )
         MiniPlayerArtistHost(

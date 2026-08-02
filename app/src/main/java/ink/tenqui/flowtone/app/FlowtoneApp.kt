@@ -52,6 +52,7 @@ import ink.tenqui.flowtone.permissions.shouldOpenAudioPermissionSettings
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.PlayerUiState
+import ink.tenqui.flowtone.lyrics.LyricsState
 import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
@@ -78,6 +79,7 @@ fun FlowtoneApp(
     val density = LocalDensity.current
     val uiState by musicViewModel.uiState.collectAsState()
     val playbackState by musicViewModel.playbackState.collectAsState()
+    val lyricsState by musicViewModel.lyricsState.collectAsState()
     val searchUiState by musicViewModel.searchUiState.collectAsState()
     val playerUiState = PlayerUiState.from(playbackState)
     val appPreferences = remember(context) {
@@ -666,6 +668,7 @@ fun FlowtoneApp(
             appState = appState,
             uiState = uiState,
             playerUiState = playerUiState,
+            lyricsState = lyricsState,
             appPreferences = appPreferences,
             themeMode = themeMode,
             pagerState = pagerState,

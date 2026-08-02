@@ -1,9 +1,14 @@
 package ink.tenqui.flowtone.viewmodel
 
 import android.app.Application
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.local.AudioScanner
+import ink.tenqui.flowtone.lyrics.LocalLyricsRepository
+import ink.tenqui.flowtone.lyrics.LyricsLoadResult
+import ink.tenqui.flowtone.lyrics.LyricsState
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
 import ink.tenqui.flowtone.data.local.SongMetadataPreloader
@@ -21,9 +26,14 @@ import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.playback.toPlaybackSource
 import ink.tenqui.flowtone.playback.toSongOrNull
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,6 +61,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)
+    private val localLyricsRepository = LocalLyricsRepository(application)
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
     private val searchRepository = SearchRepository()
     private val playbackController = PlaybackController(
@@ -64,6 +75,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         MusicUiState(listeningStats = listeningStatsRepository.getStats())
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
+    private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
+    private val lyricsReloadVersion = MutableStateFlow(0)
     private var sourceQueue: List<Song> = emptyList()
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
@@ -76,11 +89,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
+    val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
 
     init {
         startProgressTicker()
         observeControllerConnection()
         observeListeningStats()
+        observeLyrics()
     }
 
     fun setPermissionStatus(hasPermission: Boolean) {
@@ -304,6 +319,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setLyricsDirectory(treeUri: Uri) {
+        localLyricsRepository.saveLyricsDirectory(treeUri)
+        lyricsReloadVersion.update { it + 1 }
+    }
+
     fun handleLocalSongsDeleted(deletedSongs: List<Song>) {
         if (deletedSongs.isEmpty()) {
             return
@@ -473,6 +493,42 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             listeningStatsRepository.stats.collect { snapshot ->
                 publishListeningStats(snapshot)
             }
+        }
+    }
+
+    private fun observeLyrics() {
+        viewModelScope.launch {
+            combine(
+                playbackState.map { it.currentSong }.distinctUntilChanged(),
+                lyricsReloadVersion
+            ) { song, version -> song to version }
+                .collectLatest { song ->
+                    val currentSong = song.first
+                    if (currentSong == null) {
+                        _lyricsState.value = LyricsState.Idle
+                        return@collectLatest
+                    }
+
+                    _lyricsState.value = LyricsState.Loading
+                    val result = try {
+                        withContext(Dispatchers.IO) {
+                            localLyricsRepository.load(currentSong)
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        LyricsLoadResult.Failed(error)
+                    }
+
+                    _lyricsState.value = when (result) {
+                        is LyricsLoadResult.Found -> LyricsState.Available(result.lines)
+                        LyricsLoadResult.NotFound -> LyricsState.NotFound
+                        is LyricsLoadResult.Failed -> {
+                            Log.d("Lyrics", "failed=${result.throwable::class.simpleName}")
+                            LyricsState.Error(result.throwable.message)
+                        }
+                    }
+                }
         }
     }
 

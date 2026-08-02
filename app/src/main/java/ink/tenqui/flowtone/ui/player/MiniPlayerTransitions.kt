@@ -13,7 +13,7 @@ internal class MiniPlayerTransitions(
             return
         }
         state.expandedMoreMenu = false
-        state.fullscreenPlaybackContentMode = FullscreenPlaybackContentMode.LyricsPlaceholder
+        state.fullscreenPlaybackContentMode = FullscreenPlaybackContentMode.Lyrics
     }
 
     fun exitLyricsMode() {

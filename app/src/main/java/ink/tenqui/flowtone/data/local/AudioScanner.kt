@@ -28,7 +28,9 @@ class AudioScanner(
             MediaStore.Audio.Media.IS_MUSIC,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.DATE_MODIFIED,
-            MediaStore.Audio.Media.DATA
+            MediaStore.Audio.Media.DATA,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.RELATIVE_PATH
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > ?"
         val selectionArgs = arrayOf(MIN_MUSIC_DURATION_MS.toString())
@@ -50,6 +52,8 @@ class AudioScanner(
             val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             val dateModifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
             val dataColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+            val displayNameColumn = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+            val relativePathColumn = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
@@ -78,6 +82,12 @@ class AudioScanner(
                     ContentUris.withAppendedId(ALBUM_ART_BASE_URI, it)
                 }
                 val filePath = rawFilePath
+                val displayName = displayNameColumn.takeIf { it >= 0 }
+                    ?.let(cursor::getString)
+                    ?.ifBlank { null }
+                val relativePath = relativePathColumn.takeIf { it >= 0 }
+                    ?.let(cursor::getString)
+                    ?.ifBlank { null }
 
                 songs.add(
                     Song(
@@ -90,6 +100,13 @@ class AudioScanner(
                         albumId = albumId,
                         artworkUri = artworkUri,
                         filePath = filePath,
+                        displayName = displayName,
+                        relativePath = relativePath,
+                        volumeName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            MediaStore.VOLUME_EXTERNAL
+                        } else {
+                            null
+                        },
                         dateAddedSeconds = dateAddedSeconds,
                         dateModifiedSeconds = dateModifiedSeconds
                     )

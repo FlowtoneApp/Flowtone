@@ -1,6 +1,10 @@
 package ink.tenqui.flowtone.ui.player
 
+import android.content.Intent
+import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -33,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
@@ -42,10 +47,13 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 import ink.tenqui.flowtone.ui.player.lyrics.isLyricsPlaybackContentActive
+import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
+    lyricsState: LyricsState = LyricsState.Idle,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     fullscreen: Boolean,
@@ -110,6 +118,23 @@ fun MiniPlayer(
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
+    val lyricsViewModel: MusicViewModel = viewModel()
+    val lyricsDirectoryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            Log.d("Lyrics", "directory selected=$treeUri")
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }.onFailure { error ->
+                Log.d("Lyrics", "directory permission persistence failed=${error::class.simpleName}")
+            }
+            lyricsViewModel.setLyricsDirectory(treeUri)
+        }
+    }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val fallbackSeedColor = MaterialTheme.colorScheme.primary.toArgb()
     val state = rememberMiniPlayerState(
@@ -681,13 +706,25 @@ fun MiniPlayer(
                         expanded &&
                         hasCurrentSong &&
                         state.fullscreenContentMode == FullscreenContentMode.Playback
-                    val fullscreenContentTapTop = 0.dp
-                    val fullscreenContentTapHeight = (
+                    val lyricsTapTop = with(density) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + 56.dp + 60.dp + 12.dp
+                    val lyricsTapBottom = (
                         expandedProgressTop +
                             fullscreenStationaryControlsOffsetY -
                             fullscreenControlsLiftY -
                             56.dp
-                        ).coerceAtLeast(0.dp)
+                        ).coerceAtLeast(lyricsTapTop)
+                    // The mode switch band starts below the collapse arrow and ends above
+                    // the side action row. It is intentionally wider than the lyric list.
+                    val fullscreenContentTapTop = with(density) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + 48.dp
+                    val fullscreenContentTapBottom = lyricsTapBottom
+                    val fullscreenContentTapHeight =
+                        (fullscreenContentTapBottom - fullscreenContentTapTop).coerceAtLeast(0.dp)
+                    val showingLyrics = state.fullscreenPlaybackContentMode ==
+                        FullscreenPlaybackContentMode.Lyrics
                     val lyricsMetadataProgress = 1f - artworkVisibilityProgress
 
                     Box(
@@ -728,6 +765,7 @@ fun MiniPlayer(
                         imageRequest = state.coverImageRequest,
                         waitForArtworkLoad = useLocalArtworkLoading,
                         playerUiState = playerUiState,
+                        lyricsState = lyricsState,
                         title = title,
                         artist = artist,
                         hasCurrentSong = hasCurrentSong,
@@ -806,14 +844,14 @@ fun MiniPlayer(
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
                             fullscreenInteractionHandlers.onArtistHostArtistClick,
-                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick
+                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick,
+                        onChooseLyricsDirectory = { lyricsDirectoryLauncher.launch(null) }
                     )
                     FullscreenContentTapAreaSemantics(
                         enabled = fullscreenContentTapEnabled,
                         contentTop = fullscreenContentTapTop,
                         contentHeight = fullscreenContentTapHeight,
-                        showingLyrics = state.fullscreenPlaybackContentMode ==
-                            FullscreenPlaybackContentMode.LyricsPlaceholder,
+                        showingLyrics = showingLyrics,
                         onClick = {
                             if (
                                 state.fullscreenPlaybackContentMode ==
