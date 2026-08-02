@@ -119,7 +119,8 @@ private sealed interface SecondaryScrollCommand {
 internal data class SelectablePlaylistSong(
     val selectionKey: String,
     val song: Song,
-    val playlistEntryId: String? = null
+    val playlistEntryId: String? = null,
+    val playlistAddedAtSeconds: Long? = null
 )
 
 internal data class PlaylistBatchActions(

@@ -608,7 +608,8 @@ internal fun PlaylistDetailScreen(
                         SelectablePlaylistSong(
                             selectionKey = entry.id,
                             song = song,
-                            playlistEntryId = entry.id
+                            playlistEntryId = entry.id,
+                            playlistAddedAtSeconds = entry.addedAt
                         )
                     }
                 }

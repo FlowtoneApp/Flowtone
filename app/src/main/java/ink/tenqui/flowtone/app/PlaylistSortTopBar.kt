@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -74,6 +75,7 @@ internal fun PlaylistSortTopBar(
         characterSectionProgress
     val height = FlowtoneTopBarContentHeight + panelHeight * clampedProgress
     val contentEnabled = visible && clampedProgress >= 0.98f
+    val panelInteractionSource = remember { MutableInteractionSource() }
 
     BackHandler(enabled = visible) { onVisibleChange(false) }
 
@@ -121,6 +123,12 @@ internal fun PlaylistSortTopBar(
                 .fillMaxWidth()
                 .height(panelHeight)
                 .offset(y = FlowtoneTopBarContentHeight)
+                .clickable(
+                    enabled = contentEnabled,
+                    interactionSource = panelInteractionSource,
+                    indication = null,
+                    onClick = {}
+                )
         )
 
         Column(

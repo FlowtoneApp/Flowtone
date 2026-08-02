@@ -65,7 +65,9 @@ private fun compareUsingCriterion(
             titleCollator = titleCollator
         )
         PlaylistSongSortCriterion.DateAdded ->
-            first.song.dateAddedSeconds.compareTo(second.song.dateAddedSeconds)
+            (first.playlistAddedAtSeconds ?: first.song.dateAddedSeconds).compareTo(
+                second.playlistAddedAtSeconds ?: second.song.dateAddedSeconds
+            )
         PlaylistSongSortCriterion.FileTime ->
             first.song.dateModifiedSeconds.compareTo(second.song.dateModifiedSeconds)
         PlaylistSongSortCriterion.Duration ->

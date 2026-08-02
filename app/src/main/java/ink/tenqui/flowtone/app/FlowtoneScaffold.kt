@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -67,6 +68,9 @@ internal fun FlowtoneScaffold(
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
+    val playlistSortListDismissInteractionSource = remember {
+        MutableInteractionSource()
+    }
     val playlistSortProgress by animateFloatAsState(
         targetValue = if (playlistSortPanelOpen) 1f else 0f,
         animationSpec = tween(
@@ -302,6 +306,11 @@ internal fun FlowtoneScaffold(
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .clickable(
+                        interactionSource = playlistSortListDismissInteractionSource,
+                        indication = null,
+                        onClick = { playlistSortPanelOpen = false }
+                    )
                     .rightSwipeBackGesture { playlistSortPanelOpen = false }
             )
         }
