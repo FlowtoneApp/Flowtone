@@ -25,6 +25,14 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
     waitForArtworkLoad: Boolean,
     lyricsBlurredArtworkProgress: Float
 ) {
+    val standardScrimAlpha = lerpFloat(0.24f, 0.36f, animationProgress)
+    val lyricsBlurredArtworkScrimAlpha = lerpFloat(0.04f, 0.08f, animationProgress)
+    val scrimAlpha = lerpFloat(
+        standardScrimAlpha,
+        lyricsBlurredArtworkScrimAlpha,
+        lyricsBlurredArtworkProgress
+    )
+
     Box(
         modifier = Modifier
             .matchParentSize()
@@ -58,7 +66,7 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
     Box(
         modifier = Modifier
             .matchParentSize()
-            .background(Color.Black.copy(alpha = lerpFloat(0.24f, 0.36f, animationProgress)))
+            .background(Color.Black.copy(alpha = scrimAlpha))
     )
 }
 

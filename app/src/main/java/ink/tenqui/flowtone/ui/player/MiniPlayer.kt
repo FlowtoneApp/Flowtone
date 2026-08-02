@@ -7,6 +7,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,6 +40,7 @@ import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
+import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 import ink.tenqui.flowtone.ui.player.lyrics.isLyricsPlaybackContentActive
 
 @Composable
@@ -602,11 +605,6 @@ fun MiniPlayer(
         artistPlaceholderProgress = artistPlaceholderProgress,
         showQueueSheet = state.showQueueSheet
     )
-    val lyricsHostCanAttach = canAttachMiniPlayerLyricsHost(
-        scene = miniPlayerScene,
-        fullscreenContentExitProgress = fullscreenContentExitProgress,
-        artistPlaceholderProgress = artistPlaceholderProgress
-    )
     MiniPlayerVisualSurface(
         hostHeight = hostHeight,
         miniPlayerSlideOffsetY = miniPlayerSlideOffsetY,
@@ -667,6 +665,44 @@ fun MiniPlayer(
                     .then(addToPlaylistPullDownBackModifier)
                 ) {
                     val playerWidth = maxWidth
+                    val addToPlaylistStatusBarsTop = with(density) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    }
+                    val fullscreenLayoutMetrics = miniPlayerFullscreenLayoutMetrics(
+                        playerWidth = playerWidth,
+                        visualPanelHeight = visualPanelHeight,
+                        fullscreenCoverCenterY = fullscreenCoverCenterY,
+                        addToPlaylistStatusBarsTop = addToPlaylistStatusBarsTop,
+                        fullscreenContentExitProgress = fullscreenContentExitProgress,
+                        artistPlaceholderProgress = artistPlaceholderProgress,
+                        addToPlaylistProgress = addToPlaylistProgress
+                    )
+                    val fullscreenContentTapEnabled = fullscreen &&
+                        expanded &&
+                        hasCurrentSong &&
+                        state.fullscreenContentMode == FullscreenContentMode.Playback
+                    val fullscreenContentTop = fullscreenCoverCenterY -
+                        fullscreenLayoutMetrics.fullscreenProgressTrackWidth / 2f
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fullscreenContentTapGesture(
+                                enabled = fullscreenContentTapEnabled,
+                                contentTop = fullscreenContentTop,
+                                contentHeight = fullscreenLayoutMetrics.fullscreenProgressTrackWidth,
+                                onTap = {
+                                    if (
+                                        state.fullscreenPlaybackContentMode ==
+                                            FullscreenPlaybackContentMode.Artwork
+                                    ) {
+                                        transitions.enterLyricsMode()
+                                    } else {
+                                        transitions.exitLyricsMode()
+                                    }
+                                }
+                            )
+                    ) {
                     MiniPlayerBackgroundLayers(
                         gestureModifier = gestureModifier,
                         songSwipeModifier = songSwipeModifier,
@@ -681,18 +717,6 @@ fun MiniPlayer(
                         flowCloudSpeed = flowCloudSpeed,
                         waitForArtworkLoad = useLocalArtworkLoading,
                         lyricsBlurredArtworkProgress = lyricsBlurredArtworkProgress
-                    )
-                    val addToPlaylistStatusBarsTop = with(density) {
-                        WindowInsets.statusBars.getTop(this).toDp()
-                    }
-                    val fullscreenLayoutMetrics = miniPlayerFullscreenLayoutMetrics(
-                        playerWidth = playerWidth,
-                        visualPanelHeight = visualPanelHeight,
-                        fullscreenCoverCenterY = fullscreenCoverCenterY,
-                        addToPlaylistStatusBarsTop = addToPlaylistStatusBarsTop,
-                        fullscreenContentExitProgress = fullscreenContentExitProgress,
-                        artistPlaceholderProgress = artistPlaceholderProgress,
-                        addToPlaylistProgress = addToPlaylistProgress
                     )
                     MiniPlayerFullscreenLayout(
                         imageRequest = state.coverImageRequest,
@@ -736,14 +760,12 @@ fun MiniPlayer(
                             state.collapsedMetadataSwitchDirection,
                         artistClickEnabled = artistClickEnabled,
                         fullscreenContentMode = state.fullscreenContentMode,
-                        fullscreenPlaybackContentMode = state.fullscreenPlaybackContentMode,
                         libraryPlaylists = libraryPlaylists,
                         playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,
                         addToPlaylistListState = state.addToPlaylistListState,
                         isCurrentSongLiked = isCurrentSongLiked,
                         expandedMoreMenu = state.expandedMoreMenu,
-                        lyricsHostCanAttach = lyricsHostCanAttach,
                         fullscreen = fullscreen,
                         expanded = expanded,
                         artistPlaceholderArtists = state.artistPlaceholderArtists,
@@ -777,10 +799,26 @@ fun MiniPlayer(
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
                             fullscreenInteractionHandlers.onArtistHostArtistClick,
-                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick,
-                        onArtworkClick = transitions::enterLyricsMode,
-                        onLyricsClick = transitions::exitLyricsMode
+                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick
                     )
+                    FullscreenContentTapAreaSemantics(
+                        enabled = fullscreenContentTapEnabled,
+                        contentTop = fullscreenContentTop,
+                        contentHeight = fullscreenLayoutMetrics.fullscreenProgressTrackWidth,
+                        showingLyrics = state.fullscreenPlaybackContentMode ==
+                            FullscreenPlaybackContentMode.LyricsPlaceholder,
+                        onClick = {
+                            if (
+                                state.fullscreenPlaybackContentMode ==
+                                    FullscreenPlaybackContentMode.Artwork
+                            ) {
+                                transitions.enterLyricsMode()
+                            } else {
+                                transitions.exitLyricsMode()
+                            }
+                        }
+                    )
+                    }
             }
         },
         overlayContent = {

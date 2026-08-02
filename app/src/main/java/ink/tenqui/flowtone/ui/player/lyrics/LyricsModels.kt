@@ -4,7 +4,7 @@ import ink.tenqui.flowtone.ui.player.FullscreenContentMode
 
 internal enum class FullscreenPlaybackContentMode {
     Artwork,
-    Lyrics
+    LyricsPlaceholder
 }
 
 enum class LyricsBackgroundStyle {
@@ -19,7 +19,7 @@ internal fun isLyricsPlaybackContentActive(
     expanded: Boolean,
     hasCurrentSong: Boolean
 ): Boolean =
-    playbackContentMode == FullscreenPlaybackContentMode.Lyrics &&
+    playbackContentMode == FullscreenPlaybackContentMode.LyricsPlaceholder &&
         fullscreenContentMode == FullscreenContentMode.Playback &&
         fullscreen &&
         expanded &&

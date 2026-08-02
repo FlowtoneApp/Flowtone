@@ -1,7 +1,6 @@
 package ink.tenqui.flowtone.ui.player
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +25,6 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 
 @Composable
 internal fun BoxScope.MiniPlayerFullscreenLayout(
@@ -70,14 +68,12 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     collapsedMetadataSwitchDirection: Int,
     artistClickEnabled: Boolean,
     fullscreenContentMode: FullscreenContentMode,
-    fullscreenPlaybackContentMode: FullscreenPlaybackContentMode,
     libraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     newlyCreatedPlaylistId: String?,
     addToPlaylistListState: LazyListState,
     isCurrentSongLiked: Boolean,
     expandedMoreMenu: Boolean,
-    lyricsHostCanAttach: Boolean,
     fullscreen: Boolean,
     expanded: Boolean,
     artistPlaceholderArtists: List<String>,
@@ -106,8 +102,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onArtistHostBack: () -> Unit,
     onArtistHostArtistClick: (String) -> Unit,
     onCollapseClick: () -> Unit,
-    onArtworkClick: () -> Unit,
-    onLyricsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val actualDensity = LocalDensity.current
@@ -119,8 +113,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     )
 
     CompositionLocalProvider(LocalDensity provides fullscreenDensity) {
-        val lyricsInteractionSource = remember { MutableInteractionSource() }
-        val artworkInteractionSource = remember { MutableInteractionSource() }
         val designPlayerWidth = playerWidth / effectiveLayoutScale
         val designCurrentHeight = currentHeight / effectiveLayoutScale
         val designVisualPanelHeight = visualPanelHeight / effectiveLayoutScale
@@ -177,25 +169,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 (1f - fullscreenProgress) -
                 24.dp * metrics.artistExitProgress,
         modifier = modifier.align(Alignment.TopStart)
-    )
-    Box(
-        modifier = Modifier
-            .offset(
-                x = metrics.fullscreenArtworkX,
-                y = designFullscreenCoverCenterY - metrics.fullscreenProgressTrackWidth / 2f
-            )
-            .size(metrics.fullscreenProgressTrackWidth)
-            .zIndex(3f)
-            .clickable(
-                enabled = fullscreen &&
-                    expanded &&
-                    fullscreenProgress > 0.98f &&
-                    fullscreenContentMode == FullscreenContentMode.Playback &&
-                    fullscreenPlaybackContentMode == FullscreenPlaybackContentMode.Artwork,
-                interactionSource = artworkInteractionSource,
-                indication = null,
-                onClick = onArtworkClick
-            )
     )
     Box(
         modifier = Modifier
@@ -336,27 +309,24 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     .zIndex(2f),
                 onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
             )
-            MiniPlayerLyricsHost(
-                currentSong = playerUiState.currentSong,
-                positionMs = playerUiState.positionMs,
-                playbackProgress = animationProgress,
-                fullscreenProgress = fullscreenProgress,
-                fullscreen = fullscreen && expanded && hasCurrentSong,
-                interactionsEnabled = lyricsHostCanAttach &&
-                    fullscreenPlaybackContentMode == FullscreenPlaybackContentMode.Lyrics,
-                visibilityProgress = lyricsVisibilityProgress,
-                contentLeft = metrics.fullscreenArtworkX,
-                contentTop = designFullscreenCoverCenterY -
-                    metrics.fullscreenProgressTrackWidth / 2f,
-                contentSize = metrics.fullscreenProgressTrackWidth,
-                interactionSource = lyricsInteractionSource,
-                onLyricsClick = onLyricsClick,
-                onLyricSeekRequested = callbacks.onSeekTo,
-                modifier = Modifier
-                    .matchParentSize()
-                    .zIndex(4f)
-            )
         }
+        // Keep the placeholder in the same coordinate space as the artwork, not the controls.
+        MiniPlayerLyricsHost(
+            currentSong = playerUiState.currentSong,
+            positionMs = playerUiState.positionMs,
+            playbackProgress = animationProgress,
+            fullscreenProgress = fullscreenProgress,
+            fullscreen = fullscreen && expanded && hasCurrentSong,
+            visibilityProgress = lyricsVisibilityProgress,
+            contentLeft = metrics.fullscreenArtworkX,
+            contentTop = designFullscreenCoverCenterY -
+                metrics.fullscreenProgressTrackWidth / 2f,
+            contentSize = metrics.fullscreenProgressTrackWidth,
+            onLyricSeekRequested = callbacks.onSeekTo,
+            modifier = Modifier
+                .matchParentSize()
+                .zIndex(4f)
+        )
         MiniPlayerArtistHost(
             fullscreenContentMode = fullscreenContentMode,
             artistPlaceholderArtists = artistPlaceholderArtists,

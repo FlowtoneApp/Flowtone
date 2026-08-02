@@ -1,7 +1,5 @@
 package ink.tenqui.flowtone.ui.player.lyrics
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,9 +19,6 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun LyricsPlaceholderContent(
     visibilityProgress: Float,
-    clickEnabled: Boolean,
-    interactionSource: MutableInteractionSource,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -32,12 +27,6 @@ internal fun LyricsPlaceholderContent(
                 alpha = visibilityProgress.coerceIn(0f, 1f)
                 translationY = 10.dp.toPx() * (1f - visibilityProgress)
             }
-            .clickable(
-                enabled = clickEnabled,
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(
