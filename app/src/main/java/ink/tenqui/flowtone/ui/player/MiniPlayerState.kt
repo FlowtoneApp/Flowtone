@@ -28,6 +28,7 @@ internal class MiniPlayerState internal constructor(
     fullscreenPlaybackContentModeState: MutableState<FullscreenPlaybackContentMode>,
     addToPlaylistEnteredFromLyricsState: MutableState<Boolean>,
     songInfoEnteredFromLyricsState: MutableState<Boolean>,
+    artistEnteredFromLyricsState: MutableState<Boolean>,
     artistPlaceholderArtistsState: MutableState<List<String>>,
     collapsedMetadataSwitchDirectionState: MutableState<Int>,
     isFullscreenPlayerState: MutableState<Boolean>,
@@ -57,6 +58,7 @@ internal class MiniPlayerState internal constructor(
     var fullscreenPlaybackContentMode by fullscreenPlaybackContentModeState
     var addToPlaylistEnteredFromLyrics by addToPlaylistEnteredFromLyricsState
     var songInfoEnteredFromLyrics by songInfoEnteredFromLyricsState
+    var artistEnteredFromLyrics by artistEnteredFromLyricsState
     var artistPlaceholderArtists by artistPlaceholderArtistsState
     var collapsedMetadataSwitchDirection by collapsedMetadataSwitchDirectionState
     var isFullscreenPlayer by isFullscreenPlayerState
@@ -149,6 +151,7 @@ internal fun rememberMiniPlayerState(
     }
     val addToPlaylistEnteredFromLyricsState = remember { mutableStateOf(false) }
     val songInfoEnteredFromLyricsState = remember { mutableStateOf(false) }
+    val artistEnteredFromLyricsState = remember { mutableStateOf(false) }
     val artistPlaceholderArtistsState = rememberSaveable {
         mutableStateOf(emptyList<String>())
     }
@@ -189,6 +192,7 @@ internal fun rememberMiniPlayerState(
         fullscreenPlaybackContentModeState = fullscreenPlaybackContentModeState,
         addToPlaylistEnteredFromLyricsState = addToPlaylistEnteredFromLyricsState,
         songInfoEnteredFromLyricsState = songInfoEnteredFromLyricsState,
+        artistEnteredFromLyricsState = artistEnteredFromLyricsState,
         artistPlaceholderArtistsState = artistPlaceholderArtistsState,
         collapsedMetadataSwitchDirectionState = collapsedMetadataSwitchDirectionState,
         isFullscreenPlayerState = isFullscreenPlayerState,

@@ -87,6 +87,8 @@ internal class MiniPlayerTransitions(
 
         state.expandedMoreMenu = false
         state.artistPlaceholderArtists = artists
+        state.artistEnteredFromLyrics =
+            state.fullscreenPlaybackContentMode == FullscreenPlaybackContentMode.Lyrics
         state.fullscreenContentMode = FullscreenContentMode.ArtistPlaceholder
     }
 
@@ -124,6 +126,7 @@ internal class MiniPlayerTransitions(
             state.fullscreenContentMode != FullscreenContentMode.ArtistPlaceholder
         ) {
             state.artistPlaceholderArtists = emptyList()
+            state.artistEnteredFromLyrics = false
         }
     }
 

@@ -821,6 +821,7 @@ fun MiniPlayer(
                         addToPlaylistEnteredFromLyrics =
                             state.addToPlaylistEnteredFromLyrics,
                         songInfoEnteredFromLyrics = state.songInfoEnteredFromLyrics,
+                        artistEnteredFromLyrics = state.artistEnteredFromLyrics,
                         libraryPlaylists = libraryPlaylists,
                         playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,

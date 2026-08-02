@@ -76,6 +76,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     fullscreenContentMode: FullscreenContentMode,
     addToPlaylistEnteredFromLyrics: Boolean,
     songInfoEnteredFromLyrics: Boolean,
+    artistEnteredFromLyrics: Boolean,
     libraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     newlyCreatedPlaylistId: String?,
@@ -159,7 +160,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             0f
         }
         val hidePlaybackSharedArtwork =
-            addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
+            addToPlaylistEnteredFromLyrics ||
+                songInfoEnteredFromLyrics ||
+                artistEnteredFromLyrics
 
         MorphArtworkLayer(
         imageRequest = imageRequest,
@@ -272,7 +275,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             fullscreenTop = metrics.fullscreenMetadataTop,
             lyricsMetadataProgress = lyricsMetadataProgress,
             contentExitProgress = if (
-                addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
+                addToPlaylistEnteredFromLyrics ||
+                songInfoEnteredFromLyrics ||
+                artistEnteredFromLyrics
             ) {
                 1f
             } else {
