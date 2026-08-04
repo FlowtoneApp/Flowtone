@@ -1,8 +1,10 @@
 package ink.tenqui.flowtone.ui.player.lyrics
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.lazy.LazyLayoutScrollScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.snapshotFlow
 import ink.tenqui.flowtone.lyrics.LyricLine
@@ -30,8 +32,9 @@ internal fun activeLyricAnchorIndex(
     lines: List<LyricLine>,
     playbackPositionMs: Long
 ): Int? {
+    if (lines.isEmpty()) return null
     val activeTimestampMs = activeLyricTimestampMs(lines, playbackPositionMs)
-        ?: return null
+        ?: return 0
     val firstIndex = lines.indexOfFirst { it.timestampMs == activeTimestampMs }
     val lastIndex = lines.indexOfLast { it.timestampMs == activeTimestampMs }
     return if (firstIndex >= 0 && lastIndex >= 0) {
@@ -75,7 +78,7 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
             viewportStartOffset = layoutInfo.viewportStartOffset,
             targetItemSizePx = targetItemSizePx
         )
-        animateScrollToItem(
+        animateScrollToItemWithLyricsTransition(
             index = index,
             scrollOffset = initialScrollOffset
         )
@@ -99,6 +102,39 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
                 easing = LyricsLineTransitionEasing
             )
         )
+    }
+}
+
+private suspend fun LazyListState.animateScrollToItemWithLyricsTransition(
+    index: Int,
+    scrollOffset: Int
+) {
+    scroll {
+        val lazyScrollScope = LazyLayoutScrollScope(
+            state = this@animateScrollToItemWithLyricsTransition,
+            scrollScope = this
+        )
+        var previousProgress = 0f
+
+        animate(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = LyricsLineTransitionDurationMs,
+                easing = LyricsLineTransitionEasing
+            )
+        ) { progress, _ ->
+            val remainingProgress = 1f - previousProgress
+            if (remainingProgress > 0f) {
+                val progressStep = (progress - previousProgress) / remainingProgress
+                val remainingDistance = lazyScrollScope.calculateDistanceTo(
+                    targetIndex = index,
+                    targetOffset = scrollOffset
+                )
+                lazyScrollScope.scrollBy(remainingDistance * progressStep)
+            }
+            previousProgress = progress
+        }
     }
 }
 

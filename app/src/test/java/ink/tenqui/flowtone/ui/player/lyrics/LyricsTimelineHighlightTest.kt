@@ -19,6 +19,17 @@ class LyricsTimelineHighlightTest {
     }
 
     @Test
+    fun firstLineIsTheAnchorButNotActiveBeforeLyricsStart() {
+        assertEquals(0, activeLyricAnchorIndex(lines, playbackPositionMs = 999L))
+        assertNull(activeLyricTimestampMs(lines, playbackPositionMs = 999L))
+    }
+
+    @Test
+    fun emptyLyricsHaveNoDefaultAnchor() {
+        assertNull(activeLyricAnchorIndex(emptyList(), playbackPositionMs = 0L))
+    }
+
+    @Test
     fun currentTimestampRemainsActiveUntilNextTimestamp() {
         assertEquals(1_000L, activeLyricTimestampMs(lines, playbackPositionMs = 2_499L))
         assertEquals(2_500L, activeLyricTimestampMs(lines, playbackPositionMs = 3_999L))
