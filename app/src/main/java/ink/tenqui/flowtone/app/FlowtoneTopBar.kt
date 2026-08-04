@@ -157,6 +157,7 @@ internal fun FlowtoneTopBar(
     val searchAvailable = secondaryPage == null || searchActive
     val titleEndPadding = if (searchAvailable) 84.dp else 24.dp
     val titleExitDistancePx = with(density) { 12.dp.toPx() }
+    val actionButtonMotionDistancePx = with(density) { 16.dp.roundToPx() }
     val searchReentryLayerProgress = searchReentryProgress.coerceIn(0f, 1f)
     val searchReentryTranslationY = with(density) {
         -FlowtoneTopBarContentHeight.toPx() * (1f - searchReentryLayerProgress)
@@ -313,23 +314,54 @@ internal fun FlowtoneTopBar(
                 }
             }
         }
-        if (searchAvailable && searchActive) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        alpha = searchReentryLayerProgress
-                        translationY = searchReentryTranslationY
-                    }
-                    .background(
-                        MaterialTheme.colorScheme.surfaceContainer.copy(
-                            alpha = topBarBackgroundAlpha
+        AnimatedVisibility(
+            visible = searchAvailable,
+            enter = fadeIn(tween(180, easing = FlowtonePageEasing)) +
+                slideInHorizontally(tween(260, easing = FlowtonePageEasing)) {
+                    actionButtonMotionDistancePx.coerceAtMost(it)
+                },
+            exit = fadeOut(tween(140, easing = FlowtonePageEasing)) +
+                slideOutHorizontally(tween(260, easing = FlowtonePageEasing)) {
+                    actionButtonMotionDistancePx.coerceAtMost(it)
+                },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            if (searchActive) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = searchReentryLayerProgress
+                            translationY = searchReentryTranslationY
+                        }
+                        .background(
+                            MaterialTheme.colorScheme.surfaceContainer.copy(
+                                alpha = topBarBackgroundAlpha
+                            )
                         )
+                ) {
+                    GlobalSearchTopBarControl(
+                        progress = searchProgress,
+                        active = true,
+                        query = searchQuery,
+                        colors = searchColors,
+                        focusRequest = searchFocusRequest,
+                        keyboardDismissRequest = searchKeyboardDismissRequest,
+                        onSearchClick = onSearchClick,
+                        onQueryChange = onSearchQueryChange,
+                        onExitSearch = onExitSearch,
+                        onClearSearch = onClearSearch,
+                        onFocusRequestConsumed = onSearchFocusRequestConsumed,
+                        onKeyboardDismissRequestConsumed = onSearchKeyboardDismissRequestConsumed,
+                        onInputFocusChange = onSearchInputFocusChange,
+                        onImeAction = onSearchImeAction,
+                        modifier = Modifier.fillMaxSize()
                     )
-            ) {
+                }
+            } else {
                 GlobalSearchTopBarControl(
                     progress = searchProgress,
-                    active = true,
+                    active = false,
                     query = searchQuery,
                     colors = searchColors,
                     focusRequest = searchFocusRequest,
@@ -345,24 +377,6 @@ internal fun FlowtoneTopBar(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-        } else if (searchAvailable) {
-            GlobalSearchTopBarControl(
-                progress = searchProgress,
-                active = false,
-                query = searchQuery,
-                colors = searchColors,
-                focusRequest = searchFocusRequest,
-                keyboardDismissRequest = searchKeyboardDismissRequest,
-                onSearchClick = onSearchClick,
-                onQueryChange = onSearchQueryChange,
-                onExitSearch = onExitSearch,
-                onClearSearch = onClearSearch,
-                onFocusRequestConsumed = onSearchFocusRequestConsumed,
-                onKeyboardDismissRequestConsumed = onSearchKeyboardDismissRequestConsumed,
-                onInputFocusChange = onSearchInputFocusChange,
-                onImeAction = onSearchImeAction,
-                modifier = Modifier.fillMaxSize()
-            )
         }
     }
 }

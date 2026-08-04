@@ -1,5 +1,10 @@
 package ink.tenqui.flowtone.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
@@ -52,6 +58,7 @@ internal fun FlowtoneScaffold(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val playlistActionMotionDistancePx = with(LocalDensity.current) { 16.dp.roundToPx() }
     val coroutineScope = rememberCoroutineScope()
     val homeScrollState = rememberScrollState()
     val libraryPlaylistController = rememberLibraryPlaylistController()
@@ -314,7 +321,19 @@ internal fun FlowtoneScaffold(
                     .rightSwipeBackGesture { playlistSortPanelOpen = false }
             )
         }
-        if (playlistSortAvailable || playlistSortPanelOpen || playlistSortProgress > 0f) {
+        AnimatedVisibility(
+            visible = playlistSortAvailable || playlistSortPanelOpen || playlistSortProgress > 0f,
+            enter = fadeIn(
+                tween(durationMillis = 180, easing = FlowtoneMotion.Easing)
+            ) + slideInHorizontally(
+                animationSpec = tween(durationMillis = 260, easing = FlowtoneMotion.Easing)
+            ) { playlistActionMotionDistancePx.coerceAtMost(it) },
+            exit = fadeOut(
+                tween(durationMillis = 140, easing = FlowtoneMotion.Easing)
+            ) + slideOutHorizontally(
+                animationSpec = tween(durationMillis = 260, easing = FlowtoneMotion.Easing)
+            ) { playlistActionMotionDistancePx.coerceAtMost(it) }
+        ) {
             PlaylistSortTopBar(
                 visible = playlistSortPanelOpen,
                 progress = playlistSortProgress,
