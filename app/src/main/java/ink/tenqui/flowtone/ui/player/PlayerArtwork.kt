@@ -59,6 +59,7 @@ internal fun CrossfadeArtworkImage(
     contentScale: ContentScale = ContentScale.Crop,
     alpha: Float = 1f,
     waitForImageLoad: Boolean = false,
+    crossfadeImage: Boolean = true,
     fallbackContent: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -82,14 +83,18 @@ internal fun CrossfadeArtworkImage(
         displayedPainter = nextPainter
         displayedImageRequest = imageRequest
 
-        crossfadeProgress.snapTo(0f)
-        crossfadeProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = 320,
-                easing = FastOutSlowInEasing
+        if (crossfadeImage) {
+            crossfadeProgress.snapTo(0f)
+            crossfadeProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 320,
+                    easing = FastOutSlowInEasing
+                )
             )
-        )
+        } else {
+            crossfadeProgress.snapTo(1f)
+        }
 
         previousPainter = null
     }
@@ -150,6 +155,7 @@ internal fun MorphArtworkLayer(
     playbackRotationDegrees: Float = 0f,
     layerAlpha: Float = 1f,
     layerTranslationY: Dp = 0.dp,
+    crossfadeArtworkImage: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val baseArtworkSize = expandedArtworkSize
@@ -257,6 +263,7 @@ internal fun MorphArtworkLayer(
                     contentDescription = "\u4e13\u8f91\u5c01\u9762",
                     contentScale = ContentScale.Crop,
                     waitForImageLoad = waitForArtworkLoad,
+                    crossfadeImage = crossfadeArtworkImage,
                     modifier = Modifier.matchParentSize(),
                     fallbackContent = {
                         MissingArtworkPlaceholder(

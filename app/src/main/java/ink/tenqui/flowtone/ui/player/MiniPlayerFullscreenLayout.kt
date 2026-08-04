@@ -219,6 +219,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 playbackScale = 1f,
                 playbackRotationDegrees = 0f,
                 layerAlpha = lyricsAddToPlaylistProgress,
+                // 这个层在歌词页进入歌单时才创建；仅保留容器的位移和透明度动画，
+                // 避免封面图片再次执行独立渐入。
+                crossfadeArtworkImage = false,
                 modifier = modifier
                     .align(Alignment.TopStart)
                     .graphicsLayer {
