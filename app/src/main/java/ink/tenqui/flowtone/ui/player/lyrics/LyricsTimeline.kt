@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.ui.player.lyrics
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.snapshotFlow
@@ -9,6 +11,13 @@ import kotlin.math.abs
 
 internal const val LyricsReturnToCurrentLineDelayMs = 3_000L
 internal const val LyricsActiveLineScreenYFraction = 0.312f
+internal const val LyricsLineTransitionDurationMs = 700
+internal val LyricsLineTransitionEasing = CubicBezierEasing(
+    a = 0.2f,
+    b = 0f,
+    c = 0f,
+    d = 1f
+)
 
 internal fun activeLyricTimestampMs(
     lines: List<LyricLine>,
@@ -83,7 +92,13 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
     // LazyListItemInfo.offset 与 viewportStartOffset 使用同一列表坐标系。
     val distanceToTarget = targetCenter - safeTargetYPx
     if (abs(distanceToTarget) > LyricsAnchorTolerancePx) {
-        animateScrollBy(distanceToTarget.toFloat())
+        animateScrollBy(
+            value = distanceToTarget.toFloat(),
+            animationSpec = tween(
+                durationMillis = LyricsLineTransitionDurationMs,
+                easing = LyricsLineTransitionEasing
+            )
+        )
     }
 }
 

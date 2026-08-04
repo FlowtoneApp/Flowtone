@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.ui.player.lyrics
 
 import android.util.Log
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -253,17 +255,29 @@ private fun LyricsList(
                         } else {
                             Color.White.copy(alpha = 0.48f)
                         },
+                        animationSpec = tween(
+                            durationMillis = LyricsLineTransitionDurationMs,
+                            easing = LyricsLineTransitionEasing
+                        ),
                         label = "LyricHighlightColor"
+                    )
+                    val lyricWeight by animateIntAsState(
+                        targetValue = if (isActive) {
+                            FontWeight.SemiBold.weight
+                        } else {
+                            FontWeight.Normal.weight
+                        },
+                        animationSpec = tween(
+                            durationMillis = LyricsLineTransitionDurationMs,
+                            easing = LyricsLineTransitionEasing
+                        ),
+                        label = "LyricHighlightWeight"
                     )
                     Text(
                         text = line.text,
                         style = MaterialTheme.typography.headlineSmall,
                         color = lyricColor,
-                        fontWeight = if (isActive) {
-                            FontWeight.SemiBold
-                        } else {
-                            FontWeight.Normal
-                        },
+                        fontWeight = FontWeight(lyricWeight),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
