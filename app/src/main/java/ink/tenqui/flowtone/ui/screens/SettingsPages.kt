@@ -73,6 +73,7 @@ import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.LyricsBackgroundStyleSelector
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
+import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -186,6 +187,8 @@ internal fun AdvancedSettingsPage(
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     preloadLyricsCount: Int,
     onPreloadLyricsCountChange: (Int) -> Unit,
+    lyricsFolders: List<LyricsFolder>,
+    onOpenLyricsFolders: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -202,6 +205,15 @@ internal fun AdvancedSettingsPage(
             LyricsPreloadStrengthRow(
                 selectedCount = preloadLyricsCount,
                 onSelectedCountChange = onPreloadLyricsCountChange
+            )
+        }
+        OptionGroup(
+            title = "歌词",
+            modifier = elementModifier(1).padding(top = 24.dp)
+        ) {
+            LyricsFoldersSettingRow(
+                folders = lyricsFolders,
+                onClick = onOpenLyricsFolders
             )
         }
     }

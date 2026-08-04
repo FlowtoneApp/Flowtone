@@ -1,5 +1,14 @@
 package ink.tenqui.flowtone.lyrics
 
+import android.net.Uri
+
+data class LyricsFolder(
+    val uri: Uri,
+    val displayName: String,
+    val location: String?,
+    val isAccessible: Boolean
+)
+
 data class LyricLine(
     val timestampMs: Long,
     val text: String

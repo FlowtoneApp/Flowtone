@@ -127,7 +127,7 @@ fun MiniPlayer(
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
                     treeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }.onFailure { error ->
                 Log.d("Lyrics", "directory permission persistence failed=${error::class.simpleName}")

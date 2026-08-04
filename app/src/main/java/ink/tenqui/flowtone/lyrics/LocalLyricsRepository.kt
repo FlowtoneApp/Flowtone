@@ -4,7 +4,6 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.Log
 import ink.tenqui.flowtone.core.model.Song
@@ -110,21 +109,11 @@ class LocalLyricsRepository(
         requestDeferred: Deferred<LyricsLoadResult>
     ): LyricsLoadResult {
         Log.d(TAG, "loading for song=${song.id}")
-        val search = findCandidates(song)
+        val candidates = findCandidates(song)
         coroutineContext.ensureActive()
-        val candidates = search.candidates
         if (candidates.isEmpty()) {
             Log.d(TAG, "not found")
-            return when (search.treeResult) {
-                TreeCandidateResult.DirectoryNotSelected ->
-                    LyricsLoadResult.DirectoryNotSelected
-                TreeCandidateResult.DirectoryPermissionLost ->
-                    LyricsLoadResult.DirectoryPermissionLost
-                TreeCandidateResult.OutsideSelectedDirectory ->
-                    LyricsLoadResult.OutsideSelectedDirectory
-                TreeCandidateResult.NotFound,
-                is TreeCandidateResult.Found -> LyricsLoadResult.NotFound
-            }
+            return LyricsLoadResult.NotFound
         }
         var lastError: Throwable? = null
         for (candidate in candidates) {
@@ -163,8 +152,28 @@ class LocalLyricsRepository(
         return LyricsLoadResult.Failed(lastError ?: IllegalStateException("Unable to read lyrics file"))
     }
 
-    fun saveLyricsDirectory(treeUri: Uri) {
-        directoryStore.saveTreeUri(treeUri)
+    fun getLyricsFolders(): List<LyricsFolder> {
+        return directoryStore.getTreeUris().map(::readLyricsFolder)
+    }
+
+    fun addLyricsDirectory(treeUri: Uri): Boolean {
+        val currentUris = directoryStore.getTreeUris()
+        if (currentUris.any { it.normalizeScheme() == treeUri.normalizeScheme() }) {
+            return false
+        }
+        directoryStore.saveTreeUris(currentUris + treeUri)
+        invalidateLyricsCache()
+        return true
+    }
+
+    fun removeLyricsDirectory(treeUri: Uri) {
+        directoryStore.saveTreeUris(
+            directoryStore.getTreeUris().filterNot { it.normalizeScheme() == treeUri.normalizeScheme() }
+        )
+        invalidateLyricsCache()
+    }
+
+    private fun invalidateLyricsCache() {
         val requestsToCancel = synchronized(requestLock) {
             directoryGeneration += 1
             preloadGeneration += 1
@@ -202,18 +211,20 @@ class LocalLyricsRepository(
         }
     }
 
-    private fun findCandidates(song: Song): CandidateSearch {
-        val treeResult = findTreeCandidate(song)
+    private fun findCandidates(song: Song): List<Uri> {
+        val expectedName = expectedLyricsName(song)
         val candidates = buildList {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             findMediaStoreCandidate(song)?.let(::add)
         }
-            if (treeResult is TreeCandidateResult.Found) {
-                add(treeResult.uri)
+            findLegacyFileCandidate(song)?.let(::add)
+            if (expectedName != null) {
+                directoryStore.getTreeUris().forEach { treeUri ->
+                    findConfiguredFolderCandidate(treeUri, expectedName)?.let(::add)
+                }
             }
-        findLegacyFileCandidate(song)?.let(::add)
         }.distinct()
-        return CandidateSearch(candidates = candidates, treeResult = treeResult)
+        return candidates
     }
 
     suspend fun preload(song: Song) {
@@ -252,72 +263,51 @@ class LocalLyricsRepository(
         }.onFailure { Log.d(TAG, "MediaStore lookup failed=${it::class.simpleName}") }.getOrNull()
     }
 
-    private fun findTreeCandidate(song: Song): TreeCandidateResult {
-        val treeUri = directoryStore.getTreeUri()
-            ?: return TreeCandidateResult.DirectoryNotSelected
+    private fun findConfiguredFolderCandidate(treeUri: Uri, expectedName: String): Uri? {
         val permissionPersisted = contentResolver.persistedUriPermissions.any { permission ->
             permission.uri == treeUri && permission.isReadPermission
         }
         if (!permissionPersisted) {
-            return TreeCandidateResult.DirectoryPermissionLost
+            return null
         }
-        val expectedName = expectedLyricsName(song) ?: return TreeCandidateResult.NotFound
-        val relativeSegments = relativeSegmentsWithinTree(treeUri, song.relativePath)
-            ?: return TreeCandidateResult.OutsideSelectedDirectory
         return try {
-            var directoryUri = DocumentsContract.buildDocumentUriUsingTree(
-                treeUri,
-                DocumentsContract.getTreeDocumentId(treeUri)
+            val treeDocumentId = android.provider.DocumentsContract.getTreeDocumentId(treeUri)
+            val directoryUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId)
+            val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+                directoryUri,
+                treeDocumentId
             )
-            for (segment in relativeSegments) {
-                val child = findChild(directoryUri, segment, requireDirectory = true)
-                    ?: return TreeCandidateResult.NotFound
-                directoryUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, child)
-            }
-            val childDocumentId = findChild(directoryUri, expectedName, requireDirectory = false)
-                ?: return TreeCandidateResult.NotFound
-            TreeCandidateResult.Found(
-                DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocumentId)
+            val projection = arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
             )
-        } catch (_: SecurityException) {
-            TreeCandidateResult.DirectoryPermissionLost
-        }
-    }
-
-    private fun relativeSegmentsWithinTree(treeUri: Uri, songRelativePath: String?): List<String>? {
-        val songPath = songRelativePath?.trim('/') ?: return emptyList()
-        val treePath = DocumentsContract.getTreeDocumentId(treeUri)
-            .substringAfter(':', missingDelimiterValue = "")
-            .trim('/')
-        val relativePath = when {
-            treePath.isEmpty() -> songPath
-            songPath == treePath -> ""
-            songPath.startsWith("$treePath/") -> songPath.removePrefix("$treePath/")
-            else -> return null
-        }
-        return relativePath.split('/').filter(String::isNotBlank)
-    }
-
-    private fun findChild(directoryUri: Uri, expectedName: String, requireDirectory: Boolean): String? {
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            directoryUri,
-            DocumentsContract.getDocumentId(directoryUri)
-        )
-        val projection = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE
-        )
-        return contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val typeColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-            while (cursor.moveToNext()) {
-                val isDirectory = cursor.getString(typeColumn) == DocumentsContract.Document.MIME_TYPE_DIR
-                if (isDirectory == requireDirectory && cursor.getString(nameColumn).equals(expectedName, true)) {
-                    return@use cursor.getString(idColumn)
+            contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(
+                    android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID
+                )
+                val nameColumn = cursor.getColumnIndexOrThrow(
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                )
+                val typeColumn = cursor.getColumnIndexOrThrow(
+                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
+                )
+                while (cursor.moveToNext()) {
+                    val isDirectory = cursor.getString(typeColumn) ==
+                        android.provider.DocumentsContract.Document.MIME_TYPE_DIR
+                    if (!isDirectory && cursor.getString(nameColumn).equals(expectedName, ignoreCase = true)) {
+                        return@use android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                            treeUri,
+                            cursor.getString(idColumn)
+                        )
+                    }
                 }
+                null
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.d(TAG, "configured folder lookup failed=${error::class.simpleName}")
             null
         }
     }
@@ -332,11 +322,48 @@ class LocalLyricsRepository(
         return Uri.fromFile(candidate)
     }
 
+    private fun readLyricsFolder(treeUri: Uri): LyricsFolder {
+        val fallbackName = treeUri.lastPathSegment
+            ?.substringAfterLast('%')
+            ?.ifBlank { null }
+            ?: "歌词文件夹"
+        val hasPermission = contentResolver.persistedUriPermissions.any { permission ->
+            permission.uri == treeUri && permission.isReadPermission
+        }
+        if (!hasPermission) {
+            return LyricsFolder(treeUri, fallbackName, treeUri.shortDescription(), false)
+        }
+        return try {
+            val documentId = android.provider.DocumentsContract.getTreeDocumentId(treeUri)
+            val documentUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
+            val name = contentResolver.query(
+                documentUri,
+                arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+            LyricsFolder(
+                uri = treeUri,
+                displayName = name?.ifBlank { null } ?: fallbackName,
+                location = treeUri.shortDescription(),
+                isAccessible = true
+            )
+        } catch (_: Throwable) {
+            LyricsFolder(treeUri, fallbackName, treeUri.shortDescription(), false)
+        }
+    }
+
     private companion object {
         const val TAG = "Lyrics"
         const val CACHE_SIZE = 24
     }
 }
+
+private fun Uri.shortDescription(): String =
+    lastPathSegment?.takeLast(24)?.let { "…$it" } ?: "已选目录"
 
 sealed interface LyricsLoadResult {
     data object DirectoryNotSelected : LyricsLoadResult
@@ -368,16 +395,3 @@ private data class InFlightLyricsRequest(
     var hasForegroundRequester: Boolean,
     var preloadGeneration: Long?
 )
-
-private data class CandidateSearch(
-    val candidates: List<Uri>,
-    val treeResult: TreeCandidateResult
-)
-
-private sealed interface TreeCandidateResult {
-    data object DirectoryNotSelected : TreeCandidateResult
-    data object DirectoryPermissionLost : TreeCandidateResult
-    data object OutsideSelectedDirectory : TreeCandidateResult
-    data object NotFound : TreeCandidateResult
-    data class Found(val uri: Uri) : TreeCandidateResult
-}

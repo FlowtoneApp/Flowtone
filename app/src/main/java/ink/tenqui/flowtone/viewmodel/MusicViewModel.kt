@@ -11,6 +11,7 @@ import ink.tenqui.flowtone.lyrics.LyricsLoadResult
 import ink.tenqui.flowtone.lyrics.LyricsLoadSource
 import ink.tenqui.flowtone.lyrics.LyricsPreloadScheduler
 import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
 import ink.tenqui.flowtone.data.local.SongMetadataPreloader
@@ -78,6 +79,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
+    private val _lyricsFolders = MutableStateFlow(localLyricsRepository.getLyricsFolders())
     private val lyricsReloadVersion = MutableStateFlow(0)
     private var sourceQueue: List<Song> = emptyList()
     private var playbackQueue: List<Song> = emptyList()
@@ -97,6 +99,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
+    val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
 
     init {
         startProgressTicker()
@@ -338,10 +341,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setLyricsDirectory(treeUri: Uri) {
+        addLyricsFolder(treeUri)
+    }
+
+    fun addLyricsFolder(treeUri: Uri): Boolean {
+        val added = localLyricsRepository.addLyricsDirectory(treeUri)
+        if (!added) {
+            return false
+        }
         lyricsPreloadScheduler.clear()
-        localLyricsRepository.saveLyricsDirectory(treeUri)
+        _lyricsFolders.value = localLyricsRepository.getLyricsFolders()
         lyricsReloadVersion.update { it + 1 }
         scheduleNextSongsPreload()
+        return true
+    }
+
+    fun removeLyricsFolder(treeUri: Uri) {
+        lyricsPreloadScheduler.clear()
+        localLyricsRepository.removeLyricsDirectory(treeUri)
+        _lyricsFolders.value = localLyricsRepository.getLyricsFolders()
+        lyricsReloadVersion.update { it + 1 }
+        scheduleNextSongsPreload()
+    }
+
+    fun refreshLyricsFolders() {
+        _lyricsFolders.value = localLyricsRepository.getLyricsFolders()
     }
 
     fun handleLocalSongsDeleted(deletedSongs: List<Song>) {

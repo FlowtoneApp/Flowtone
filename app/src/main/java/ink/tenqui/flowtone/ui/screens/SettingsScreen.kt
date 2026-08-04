@@ -1,5 +1,9 @@
 package ink.tenqui.flowtone.ui.screens
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -48,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -59,6 +64,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,6 +80,8 @@ import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
+import ink.tenqui.flowtone.viewmodel.MusicViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -116,15 +124,41 @@ internal fun SettingsScreen(
     var selectedSection by rememberSaveable {
         mutableStateOf<SettingsSection?>(null)
     }
+    var managingLyricsFolders by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val musicViewModel: MusicViewModel = viewModel()
+    val lyricsFolders by musicViewModel.lyricsFolders.collectAsState()
+    val lyricsFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri == null) return@rememberLauncherForActivityResult
+        val saved = runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                treeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+            musicViewModel.addLyricsFolder(treeUri)
+        }.getOrElse { false }
+        Toast.makeText(
+            context,
+            if (saved) "已添加歌词文件夹" else "该文件夹已添加或无法授权",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
     var selectedStartPage by rememberSaveable {
         mutableStateOf(appPreferences.getDefaultStartPage())
     }
     val currentOnBack by rememberUpdatedState(onBack)
     val currentOnBackActionChange by rememberUpdatedState(onBackActionChange)
     val currentOnPathSegmentsChange by rememberUpdatedState(onPathSegmentsChange)
-    val handleBack = remember(selectedSection) {
+    LaunchedEffect(managingLyricsFolders) {
+        if (managingLyricsFolders) musicViewModel.refreshLyricsFolders()
+    }
+    val handleBack = remember(selectedSection, managingLyricsFolders) {
         {
-            if (selectedSection == null) {
+            if (managingLyricsFolders) {
+                managingLyricsFolders = false
+            } else if (selectedSection == null) {
                 currentOnBack()
             } else {
                 selectedSection = null
@@ -137,7 +171,15 @@ internal fun SettingsScreen(
         onDispose { currentOnBackActionChange(null) }
     }
     SideEffect {
-        currentOnPathSegmentsChange(selectedSection?.let { listOf(it.title) } ?: emptyList())
+        currentOnPathSegmentsChange(
+            selectedSection?.let { section ->
+                listOf(section.title) + if (managingLyricsFolders) {
+                    listOf("\u6b4c\u8bcd\u6587\u4ef6\u5939")
+                } else {
+                    emptyList()
+                }
+            } ?: emptyList()
+        )
     }
     DisposableEffect(Unit) {
         onDispose { currentOnPathSegmentsChange(emptyList()) }
@@ -145,13 +187,13 @@ internal fun SettingsScreen(
     BackHandler(onBack = handleBack)
 
     AnimatedContent(
-        targetState = selectedSection,
+        targetState = selectedSection to managingLyricsFolders,
         transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
         label = "SettingsContent",
         modifier = modifier
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
-    ) { section ->
+    ) { (section, showingLyricsFolders) ->
         fun viewElementModifier(index: Int): Modifier {
             return elementModifier(index).then(staggeredPageElementModifier(index))
         }
@@ -188,13 +230,26 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
             )
 
-            SettingsSection.Advanced -> AdvancedSettingsPage(
-                preloadSongMetadataCount = preloadSongMetadataCount,
-                onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
-                preloadLyricsCount = preloadLyricsCount,
-                onPreloadLyricsCountChange = onPreloadLyricsCountChange,
-                elementModifier = ::viewElementModifier
-            )
+            SettingsSection.Advanced -> {
+                if (showingLyricsFolders) {
+                    LyricsFolderSettingsPage(
+                        folders = lyricsFolders,
+                        onAddFolder = { lyricsFolderLauncher.launch(null) },
+                        onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
+                        elementModifier = ::viewElementModifier
+                    )
+                } else {
+                    AdvancedSettingsPage(
+                        preloadSongMetadataCount = preloadSongMetadataCount,
+                        onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
+                        preloadLyricsCount = preloadLyricsCount,
+                        onPreloadLyricsCountChange = onPreloadLyricsCountChange,
+                        lyricsFolders = lyricsFolders,
+                        onOpenLyricsFolders = { managingLyricsFolders = true },
+                        elementModifier = ::viewElementModifier
+                    )
+                }
+            }
 
             SettingsSection.General -> GeneralSettingsPage(
                 selectedStartPage = selectedStartPage,
