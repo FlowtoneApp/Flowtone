@@ -48,7 +48,7 @@ import ink.tenqui.flowtone.lyrics.LyricsState
 @Composable
 internal fun LyricsContent(
     state: LyricsState,
-    confirmedPlaybackPositionMs: Long,
+    confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
     visibilityProgress: Float,
     onChooseLyricsDirectory: () -> Unit,
@@ -109,22 +109,26 @@ internal fun LyricsContent(
 @Composable
 private fun LyricsList(
     lines: List<LyricLine>,
-    confirmedPlaybackPositionMs: Long,
+    confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
     val activeTimestampMs = remember(lines, confirmedPlaybackPositionMs) {
-        activeLyricTimestampMs(
-            lines = lines,
-            playbackPositionMs = confirmedPlaybackPositionMs
-        )
+        confirmedPlaybackPositionMs?.let { positionMs ->
+            activeLyricTimestampMs(
+                lines = lines,
+                playbackPositionMs = positionMs
+            )
+        }
     }
     val activeLineIndex = remember(lines, confirmedPlaybackPositionMs) {
-        activeLyricAnchorIndex(
-            lines = lines,
-            playbackPositionMs = confirmedPlaybackPositionMs
-        )
+        confirmedPlaybackPositionMs?.let { positionMs ->
+            activeLyricAnchorIndex(
+                lines = lines,
+                playbackPositionMs = positionMs
+            )
+        } ?: lines.indices.firstOrNull()
     }
     var isFollowingCurrentLine by remember(lines) { mutableStateOf(true) }
     var isPointerDown by remember { mutableStateOf(false) }

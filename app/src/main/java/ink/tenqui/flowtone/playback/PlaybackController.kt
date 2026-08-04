@@ -251,6 +251,15 @@ class PlaybackController(
         return position.coerceAtLeast(0L)
     }
 
+    fun getCurrentPositionSnapshot(): PlaybackPositionSnapshot {
+        val controller = currentControllerOrNull()
+            ?: return PlaybackPositionSnapshot()
+        return PlaybackPositionSnapshot(
+            mediaId = controller.currentMediaItem?.mediaId,
+            positionMs = controller.currentPosition.coerceAtLeast(0L)
+        )
+    }
+
     fun getDurationMs(): Long {
         val duration = currentControllerOrNull()?.duration ?: 0L
         return safeDuration(duration)

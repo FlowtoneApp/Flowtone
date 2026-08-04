@@ -25,6 +25,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.playback.toPlaybackSource
 import ink.tenqui.flowtone.playback.toSongOrNull
@@ -80,7 +81,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
     // 歌词只使用 MediaController 确认的位置，不读取进度条的动画或拖动状态。
-    private val _confirmedPlaybackPositionMs = MutableStateFlow(0L)
+    private val _confirmedPlaybackPosition = MutableStateFlow(PlaybackPositionSnapshot())
     private val _lyricsFolders = MutableStateFlow(localLyricsRepository.getLyricsFolders())
     private val lyricsReloadVersion = MutableStateFlow(0)
     private var sourceQueue: List<Song> = emptyList()
@@ -101,8 +102,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
-    val confirmedPlaybackPositionMs: StateFlow<Long> =
-        _confirmedPlaybackPositionMs.asStateFlow()
+    val confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot> =
+        _confirmedPlaybackPosition.asStateFlow()
     val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
 
     init {
@@ -858,8 +859,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private fun startConfirmedPlaybackPositionTicker() {
         viewModelScope.launch {
             while (isActive) {
-                _confirmedPlaybackPositionMs.value =
-                    playbackController.getCurrentPositionMs()
+                _confirmedPlaybackPosition.value =
+                    playbackController.getCurrentPositionSnapshot()
                 delay(100)
             }
         }

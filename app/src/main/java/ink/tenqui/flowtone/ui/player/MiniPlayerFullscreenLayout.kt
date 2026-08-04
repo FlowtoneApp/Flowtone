@@ -29,6 +29,7 @@ import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsActiveLineScreenYFraction
 import kotlinx.coroutines.flow.StateFlow
 
@@ -38,7 +39,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     waitForArtworkLoad: Boolean,
     playerUiState: PlayerUiState,
     lyricsState: LyricsState,
-    confirmedPlaybackPositionMs: StateFlow<Long>,
+    confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
     title: String,
     artist: String,
     hasCurrentSong: Boolean,
@@ -446,7 +447,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         MiniPlayerLyricsHost(
             currentSong = playerUiState.currentSong,
             lyricsState = lyricsState,
-            confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
+            confirmedPlaybackPosition = confirmedPlaybackPosition,
             activeLineTargetY = lyricsActiveLineTargetY,
             visibilityProgress = lyricsVisibilityProgress,
             onChooseLyricsDirectory = onChooseLyricsDirectory,

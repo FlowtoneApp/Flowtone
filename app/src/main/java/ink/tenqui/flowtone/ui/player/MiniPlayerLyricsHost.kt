@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsContent
 import kotlinx.coroutines.flow.StateFlow
 
@@ -17,7 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal fun MiniPlayerLyricsHost(
     currentSong: Song?,
     lyricsState: LyricsState,
-    confirmedPlaybackPositionMs: StateFlow<Long>,
+    confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
     activeLineTargetY: Dp,
     visibilityProgress: Float,
     onChooseLyricsDirectory: () -> Unit,
@@ -26,7 +27,11 @@ internal fun MiniPlayerLyricsHost(
     if (currentSong == null || visibilityProgress <= 0.001f) {
         return
     }
-    val playbackPositionMs by confirmedPlaybackPositionMs.collectAsState()
+    val playbackPosition by confirmedPlaybackPosition.collectAsState()
+    val playbackPositionMs = playbackPositionForSong(
+        songId = currentSong.id,
+        playbackPosition = playbackPosition
+    )
 
     Box(modifier = modifier.clipToBounds()) {
         LyricsContent(
@@ -38,4 +43,11 @@ internal fun MiniPlayerLyricsHost(
             modifier = Modifier.fillMaxSize()
         )
     }
+}
+
+internal fun playbackPositionForSong(
+    songId: Long,
+    playbackPosition: PlaybackPositionSnapshot
+): Long? = playbackPosition.positionMs.takeIf {
+    playbackPosition.mediaId == songId.toString()
 }

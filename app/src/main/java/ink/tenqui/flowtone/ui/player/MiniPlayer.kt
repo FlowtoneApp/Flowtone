@@ -779,8 +779,8 @@ fun MiniPlayer(
                         waitForArtworkLoad = useLocalArtworkLoading,
                         playerUiState = playerUiState,
                         lyricsState = lyricsState,
-                        confirmedPlaybackPositionMs =
-                            lyricsViewModel.confirmedPlaybackPositionMs,
+                        confirmedPlaybackPosition =
+                            lyricsViewModel.confirmedPlaybackPosition,
                         title = title,
                         artist = artist,
                         hasCurrentSong = hasCurrentSong,
