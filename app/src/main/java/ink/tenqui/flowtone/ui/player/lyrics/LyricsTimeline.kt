@@ -38,9 +38,16 @@ internal fun lazyListItemCenterInViewport(
     viewportStartOffset: Int
 ): Int = itemOffset + itemSize / 2 - viewportStartOffset
 
+internal fun lazyListInitialScrollOffsetForTarget(
+    targetYPx: Int,
+    viewportStartOffset: Int,
+    targetItemSizePx: Int
+): Int = -(targetYPx + viewportStartOffset) + targetItemSizePx / 2
+
 internal suspend fun LazyListState.animateScrollToItemAtY(
     index: Int,
-    targetYPx: Int
+    targetYPx: Int,
+    targetItemSizePx: Int
 ) {
     snapshotFlow { layoutInfo.totalItemsCount }.first { itemCount ->
         index in 0 until itemCount
@@ -50,32 +57,34 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
     if (viewportHeight <= 0) return
     val safeTargetYPx = targetYPx.coerceIn(0, viewportHeight)
 
-    if (layoutInfo.visibleItemsInfo.none { it.index == index }) {
+    val targetWasVisible = layoutInfo.visibleItemsInfo.any { it.index == index }
+    if (!targetWasVisible) {
+        // 提前使用目标歌词的真实排版高度计算中心点。远距离 seek 只执行这一次滚动，
+        // 不再先定位顶部、再按半行高进行第二次校正。
+        val initialScrollOffset = lazyListInitialScrollOffsetForTarget(
+            targetYPx = safeTargetYPx,
+            viewportStartOffset = layoutInfo.viewportStartOffset,
+            targetItemSizePx = targetItemSizePx
+        )
         animateScrollToItem(
             index = index,
-            scrollOffset = -safeTargetYPx
+            scrollOffset = initialScrollOffset
         )
+        return
     }
 
-    repeat(LyricsAnchorCorrectionPasses) {
-        val targetItem = snapshotFlow {
-            layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-        }.first { item -> item != null } ?: return
-        val targetCenter = lazyListItemCenterInViewport(
-            itemOffset = targetItem.offset,
-            itemSize = targetItem.size,
-            viewportStartOffset = layoutInfo.viewportStartOffset
-        )
-        // LazyListItemInfo.offset 与 viewportStartOffset 使用同一列表坐标系。
-        // 顶部 contentPadding 会让 viewportStartOffset 为负值，因此屏幕内可见坐标是
-        // itemCenter - viewportStartOffset，不能直接拿 itemCenter 与目标 Y 比较。
-        val distanceToTarget = targetCenter - safeTargetYPx
-        if (abs(distanceToTarget) <= LyricsAnchorTolerancePx) {
-            return
-        }
+    val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+        ?: return
+    val targetCenter = lazyListItemCenterInViewport(
+        itemOffset = targetItem.offset,
+        itemSize = targetItem.size,
+        viewportStartOffset = layoutInfo.viewportStartOffset
+    )
+    // LazyListItemInfo.offset 与 viewportStartOffset 使用同一列表坐标系。
+    val distanceToTarget = targetCenter - safeTargetYPx
+    if (abs(distanceToTarget) > LyricsAnchorTolerancePx) {
         animateScrollBy(distanceToTarget.toFloat())
     }
 }
 
-private const val LyricsAnchorCorrectionPasses = 3
 private const val LyricsAnchorTolerancePx = 1

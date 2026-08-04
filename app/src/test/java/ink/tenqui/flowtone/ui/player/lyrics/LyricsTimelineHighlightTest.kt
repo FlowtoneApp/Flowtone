@@ -64,4 +64,16 @@ class LyricsTimelineHighlightTest {
         )
     }
 
+    @Test
+    fun farSeekInitialOffsetIncludesHalfOfTheMeasuredLineHeight() {
+        assertEquals(
+            45,
+            lazyListInitialScrollOffsetForTarget(
+                targetYPx = 401,
+                viewportStartOffset = -401,
+                targetItemSizePx = 90
+            )
+        )
+    }
+
 }

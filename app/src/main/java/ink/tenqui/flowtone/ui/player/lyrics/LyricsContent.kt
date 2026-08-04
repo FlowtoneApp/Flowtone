@@ -33,7 +33,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -129,6 +131,10 @@ private fun LyricsList(
     val activeLineTargetYPx = with(density) {
         activeLineTargetY.roundToPx()
     }
+    val activeLyricTextStyle = MaterialTheme.typography.headlineSmall.copy(
+        fontWeight = FontWeight.SemiBold
+    )
+    val textMeasurer = rememberTextMeasurer()
 
     fun markUserInteraction() {
         isFollowingCurrentLine = false
@@ -152,41 +158,61 @@ private fun LyricsList(
         }
     }
 
-    LaunchedEffect(
-        activeLineIndex,
-        activeLineTargetYPx,
-        isFollowingCurrentLine
-    ) {
-        if (
-            isFollowingCurrentLine &&
-            activeLineIndex != null
-        ) {
-            listState.animateScrollToItemAtY(
-                index = activeLineIndex,
-                targetYPx = activeLineTargetYPx
-            )
-            val finalItem = listState.layoutInfo.visibleItemsInfo
-                .firstOrNull { it.index == activeLineIndex }
-            val finalVisibleY = finalItem?.let { item ->
-                lazyListItemCenterInViewport(
-                    itemOffset = item.offset,
-                    itemSize = item.size,
-                    viewportStartOffset = listState.layoutInfo.viewportStartOffset
-                )
-            }
-            Log.d(
-                "LyricsAnchor",
-                "index=$activeLineIndex targetY=$activeLineTargetYPx " +
-                    "finalY=$finalVisibleY " +
-                    "viewportStart=${listState.layoutInfo.viewportStartOffset} " +
-                    "viewport=${listState.layoutInfo.viewportSize.height}"
-            )
-        }
-    }
-
     BoxWithConstraints(modifier = modifier) {
         val targetY = activeLineTargetY.coerceIn(0.dp, maxHeight)
         val bottomPadding = (maxHeight - targetY).coerceAtLeast(0.dp)
+        val horizontalPaddingPx = with(density) { 56.dp.roundToPx() }
+        val lyricTextWidthPx = (constraints.maxWidth - horizontalPaddingPx)
+            .coerceAtLeast(0)
+        val activeLineSizePx = remember(
+            activeLineIndex,
+            lines,
+            lyricTextWidthPx,
+            activeLyricTextStyle
+        ) {
+            val activeLine = activeLineIndex?.let(lines::getOrNull)
+            if (activeLine == null || activeLine.text.isBlank()) {
+                with(density) { 1.dp.roundToPx() }
+            } else {
+                textMeasurer.measure(
+                    text = activeLine.text,
+                    style = activeLyricTextStyle,
+                    constraints = Constraints(maxWidth = lyricTextWidthPx)
+                ).size.height
+            }
+        }
+
+        LaunchedEffect(
+            activeLineIndex,
+            activeLineTargetYPx,
+            activeLineSizePx,
+            isFollowingCurrentLine
+        ) {
+            if (isFollowingCurrentLine && activeLineIndex != null) {
+                listState.animateScrollToItemAtY(
+                    index = activeLineIndex,
+                    targetYPx = activeLineTargetYPx,
+                    targetItemSizePx = activeLineSizePx
+                )
+                val finalItem = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index == activeLineIndex }
+                val finalVisibleY = finalItem?.let { item ->
+                    lazyListItemCenterInViewport(
+                        itemOffset = item.offset,
+                        itemSize = item.size,
+                        viewportStartOffset = listState.layoutInfo.viewportStartOffset
+                    )
+                }
+                Log.d(
+                    "LyricsAnchor",
+                    "index=$activeLineIndex targetY=$activeLineTargetYPx " +
+                        "measuredHeight=$activeLineSizePx finalY=$finalVisibleY " +
+                        "viewportStart=${listState.layoutInfo.viewportStartOffset} " +
+                        "viewport=${listState.layoutInfo.viewportSize.height}"
+                )
+            }
+        }
+
         LazyColumn(
             state = listState,
             modifier = Modifier
