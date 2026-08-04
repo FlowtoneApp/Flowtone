@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -48,6 +49,7 @@ import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 import ink.tenqui.flowtone.ui.library.PlaylistSongSortCriterion
 import ink.tenqui.flowtone.ui.library.rememberLibraryPlaylistController
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
+import ink.tenqui.flowtone.ui.player.LocalDarkFlowCloudOverlayEnabled
 import kotlinx.coroutines.launch
 
 @Composable
@@ -259,7 +261,10 @@ internal fun FlowtoneScaffold(
         }
     )
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    CompositionLocalProvider(
+        LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled
+    ) {
+        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
@@ -367,6 +372,7 @@ internal fun FlowtoneScaffold(
                 refreshLibraryPlaylistsFromRepository(createdPlaylistId)
             }
         )
+        }
     }
 }
 

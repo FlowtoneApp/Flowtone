@@ -195,6 +195,13 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun shouldUseDarkFlowCloudOverlay(): Boolean =
+        prefs.getBoolean(DARK_FLOW_CLOUD_OVERLAY_KEY, true)
+
+    fun setDarkFlowCloudOverlay(enabled: Boolean) {
+        prefs.edit().putBoolean(DARK_FLOW_CLOUD_OVERLAY_KEY, enabled).apply()
+    }
+
     fun getLyricsBackgroundStyle(): LyricsBackgroundStyle {
         val savedValue = prefs.getString(LYRICS_BACKGROUND_STYLE_KEY, null)
             ?: return LyricsBackgroundStyle.BlurredArtwork
@@ -234,6 +241,7 @@ class AppPreferences(context: Context) {
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
+        const val DARK_FLOW_CLOUD_OVERLAY_KEY = "dark_flow_cloud_overlay"
         const val LYRICS_BACKGROUND_STYLE_KEY = "lyrics_background_style"
         const val AUDIO_PERMISSION_REQUESTED_KEY = "audio_permission_requested"
         const val DEFAULT_PRELOAD_COUNT = 5

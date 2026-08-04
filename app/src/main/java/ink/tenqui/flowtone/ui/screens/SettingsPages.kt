@@ -93,6 +93,8 @@ internal fun AppearanceSettingsPage(
     onStrictProgressBarChange: (Boolean) -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
+    darkFlowCloudOverlayEnabled: Boolean,
+    onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     elementModifier: (Int) -> Modifier,
@@ -122,6 +124,13 @@ internal fun AppearanceSettingsPage(
             FlowCloudSpeedRow(
                 speed = flowCloudSpeed,
                 onOpenDialog = onOpenFlowCloudSpeedDialog
+            )
+            SettingSwitchRow(
+                title = "\u6697\u8272\u6a21\u5f0f\u6d41\u4e91\u906e\u7f69",
+                subtitle = "\u5728\u6697\u8272\u6a21\u5f0f\u4e0b\u4e3a\u5e38\u89c4\u6d41\u4e91\u6dfb\u52a0\u6697\u8272\u906e\u7f69",
+                checked = darkFlowCloudOverlayEnabled,
+                onCheckedChange = onDarkFlowCloudOverlayChange,
+                modifier = Modifier.padding(top = 12.dp)
             )
             SettingSwitchRow(
                 title = "\u4e25\u683c\u8fdb\u5ea6\u6761",

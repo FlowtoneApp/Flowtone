@@ -24,6 +24,7 @@ internal data class FlowtoneAppCallbacks(
     val onCloseSongRecordThresholdDialog: () -> Unit,
     val onSongRecordThresholdDialogClosed: () -> Unit,
     val onFlowCloudSpeedChange: (Float) -> Unit,
+    val onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     val onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     val onOpenFlowCloudSpeedDialog: () -> Unit,
     val onCloseFlowCloudSpeedDialog: () -> Unit,
@@ -158,6 +159,10 @@ internal fun flowtoneAppCallbacks(
             val safeSpeed = speed.coerceFlowCloudSpeed()
             appState.flowCloudSpeed = safeSpeed
             appPreferences.setFlowCloudSpeed(safeSpeed)
+        },
+        onDarkFlowCloudOverlayChange = { enabled ->
+            appState.darkFlowCloudOverlayEnabled = enabled
+            appPreferences.setDarkFlowCloudOverlay(enabled)
         },
         onLyricsBackgroundStyleChange = { style ->
             appState.lyricsBackgroundStyle = style

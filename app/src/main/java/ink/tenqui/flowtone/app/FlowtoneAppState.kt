@@ -63,6 +63,7 @@ internal class FlowtoneAppState(
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
     flowCloudSpeedState: MutableState<Float>,
+    darkFlowCloudOverlayEnabledState: MutableState<Boolean>,
     lyricsBackgroundStyleState: MutableState<LyricsBackgroundStyle>,
     flowCloudSpeedDialogStateState: MutableState<FlowCloudSpeedDialogState>,
     playbackQueueDisplayOrderState: MutableState<QueueDisplayOrder>,
@@ -109,6 +110,7 @@ internal class FlowtoneAppState(
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
     var flowCloudSpeed by flowCloudSpeedState
+    var darkFlowCloudOverlayEnabled by darkFlowCloudOverlayEnabledState
     var lyricsBackgroundStyle by lyricsBackgroundStyleState
     var flowCloudSpeedDialogState by flowCloudSpeedDialogStateState
     var playbackQueueDisplayOrder by playbackQueueDisplayOrderState
@@ -213,6 +215,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val flowCloudSpeed = rememberSaveable {
         mutableStateOf(appPreferences.getFlowCloudSpeed())
     }
+    val darkFlowCloudOverlayEnabled = rememberSaveable {
+        mutableStateOf(appPreferences.shouldUseDarkFlowCloudOverlay())
+    }
     val lyricsBackgroundStyle = rememberSaveable {
         mutableStateOf(appPreferences.getLyricsBackgroundStyle())
     }
@@ -292,6 +297,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
         flowCloudSpeedState = flowCloudSpeed,
+        darkFlowCloudOverlayEnabledState = darkFlowCloudOverlayEnabled,
         lyricsBackgroundStyleState = lyricsBackgroundStyle,
         flowCloudSpeedDialogStateState = flowCloudSpeedDialogState,
         playbackQueueDisplayOrderState = playbackQueueDisplayOrder,
@@ -340,6 +346,7 @@ internal data class FlowtoneAppScaffoldState(
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
     val flowCloudSpeed: Float,
+    val darkFlowCloudOverlayEnabled: Boolean,
     val lyricsBackgroundStyle: LyricsBackgroundStyle,
     val flowCloudSpeedDialogState: FlowCloudSpeedDialogState,
     val playbackQueueDisplayOrder: QueueDisplayOrder,
@@ -419,6 +426,7 @@ internal fun flowtoneAppScaffoldState(
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
         flowCloudSpeed = appState.flowCloudSpeed,
+        darkFlowCloudOverlayEnabled = appState.darkFlowCloudOverlayEnabled,
         lyricsBackgroundStyle = appState.lyricsBackgroundStyle,
         flowCloudSpeedDialogState = appState.flowCloudSpeedDialogState,
         playbackQueueDisplayOrder = appState.playbackQueueDisplayOrder,

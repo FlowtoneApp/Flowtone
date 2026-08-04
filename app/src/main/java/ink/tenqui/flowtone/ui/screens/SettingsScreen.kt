@@ -116,6 +116,8 @@ internal fun SettingsScreen(
     onOpenSongRecordThresholdDialog: () -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
+    darkFlowCloudOverlayEnabled: Boolean,
+    onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     elementModifier: (Int) -> Modifier,
@@ -213,6 +215,8 @@ internal fun SettingsScreen(
                 onStrictProgressBarChange = onStrictProgressBarChange,
                 flowCloudSpeed = flowCloudSpeed,
                 onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
+                darkFlowCloudOverlayEnabled = darkFlowCloudOverlayEnabled,
+                onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 elementModifier = ::viewElementModifier

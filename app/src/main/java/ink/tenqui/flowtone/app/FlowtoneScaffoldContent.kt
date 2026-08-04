@@ -257,6 +257,8 @@ internal fun FlowtoneScaffoldContent(
                     onOpenSongRecordThresholdDialog = callbacks.onOpenSongRecordThresholdDialog,
                     flowCloudSpeed = state.flowCloudSpeed,
                     onOpenFlowCloudSpeedDialog = callbacks.onOpenFlowCloudSpeedDialog,
+                    darkFlowCloudOverlayEnabled = state.darkFlowCloudOverlayEnabled,
+                    onDarkFlowCloudOverlayChange = callbacks.onDarkFlowCloudOverlayChange,
                     lyricsBackgroundStyle = state.lyricsBackgroundStyle,
                     onLyricsBackgroundStyleChange = callbacks.onLyricsBackgroundStyleChange,
                     uiState = state.uiState,
