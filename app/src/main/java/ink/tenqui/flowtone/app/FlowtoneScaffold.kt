@@ -343,6 +343,8 @@ internal fun FlowtoneScaffold(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()
+                    // 排序入口位于 Scaffold 外的独立覆盖层，需要显式继承页面的模糊效果。
+                    .blur(scaffoldBlurRadius)
                     .rightSwipeBackGesture { playlistSortPanelOpen = false }
             )
         }
