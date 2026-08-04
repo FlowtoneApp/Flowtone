@@ -79,6 +79,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
+    // 歌词只使用 MediaController 确认的位置，不读取进度条的动画或拖动状态。
+    private val _confirmedPlaybackPositionMs = MutableStateFlow(0L)
     private val _lyricsFolders = MutableStateFlow(localLyricsRepository.getLyricsFolders())
     private val lyricsReloadVersion = MutableStateFlow(0)
     private var sourceQueue: List<Song> = emptyList()
@@ -99,10 +101,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
+    val confirmedPlaybackPositionMs: StateFlow<Long> =
+        _confirmedPlaybackPositionMs.asStateFlow()
     val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
 
     init {
         startProgressTicker()
+        startConfirmedPlaybackPositionTicker()
         observeControllerConnection()
         observeListeningStats()
         observeLyrics()
@@ -846,6 +851,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             while (isActive) {
                 updateProgressFromController()
                 delay(500)
+            }
+        }
+    }
+
+    private fun startConfirmedPlaybackPositionTicker() {
+        viewModelScope.launch {
+            while (isActive) {
+                _confirmedPlaybackPositionMs.value =
+                    playbackController.getCurrentPositionMs()
+                delay(100)
             }
         }
     }

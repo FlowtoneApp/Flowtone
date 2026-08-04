@@ -1,28 +1,51 @@
 package ink.tenqui.flowtone.ui.player.lyrics
 
+import android.util.Log
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.delay
+import ink.tenqui.flowtone.lyrics.LyricLine
 import ink.tenqui.flowtone.lyrics.LyricsState
 
 @Composable
 internal fun LyricsContent(
     state: LyricsState,
+    confirmedPlaybackPositionMs: Long,
+    activeLineTargetY: Dp,
     visibilityProgress: Float,
     onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
@@ -68,19 +91,155 @@ internal fun LyricsContent(
             if (state.lines.isEmpty()) {
                 LyricsMessage("未识别到有效歌词", visibleModifier)
             } else {
-                LazyColumn(
-                    modifier = visibleModifier.padding(horizontal = 28.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    itemsIndexed(state.lines, key = { index, line -> "${line.timestampMs}:$index" }) { _, line ->
-                        Text(
-                            text = line.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                LyricsList(
+                    lines = state.lines,
+                    confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
+                    activeLineTargetY = activeLineTargetY,
+                    modifier = visibleModifier
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricsList(
+    lines: List<LyricLine>,
+    confirmedPlaybackPositionMs: Long,
+    activeLineTargetY: Dp,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+    val activeTimestampMs = remember(lines, confirmedPlaybackPositionMs) {
+        activeLyricTimestampMs(
+            lines = lines,
+            playbackPositionMs = confirmedPlaybackPositionMs
+        )
+    }
+    val activeLineIndex = remember(lines, confirmedPlaybackPositionMs) {
+        activeLyricAnchorIndex(
+            lines = lines,
+            playbackPositionMs = confirmedPlaybackPositionMs
+        )
+    }
+    var isFollowingCurrentLine by remember(lines) { mutableStateOf(true) }
+    var isPointerDown by remember { mutableStateOf(false) }
+    var userInteractionVersion by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val activeLineTargetYPx = with(density) {
+        activeLineTargetY.roundToPx()
+    }
+
+    fun markUserInteraction() {
+        isFollowingCurrentLine = false
+        userInteractionVersion += 1
+    }
+
+    val userScrollInProgress = listState.isScrollInProgress
+    LaunchedEffect(
+        userInteractionVersion,
+        isPointerDown,
+        userScrollInProgress,
+        isFollowingCurrentLine
+    ) {
+        if (
+            !isFollowingCurrentLine &&
+            !isPointerDown &&
+            !userScrollInProgress
+        ) {
+            delay(LyricsReturnToCurrentLineDelayMs)
+            isFollowingCurrentLine = true
+        }
+    }
+
+    LaunchedEffect(
+        activeLineIndex,
+        activeLineTargetYPx,
+        isFollowingCurrentLine
+    ) {
+        if (
+            isFollowingCurrentLine &&
+            activeLineIndex != null
+        ) {
+            listState.animateScrollToItemAtY(
+                index = activeLineIndex,
+                targetYPx = activeLineTargetYPx
+            )
+            val finalItem = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == activeLineIndex }
+            val finalVisibleY = finalItem?.let { item ->
+                lazyListItemCenterInViewport(
+                    itemOffset = item.offset,
+                    itemSize = item.size,
+                    viewportStartOffset = listState.layoutInfo.viewportStartOffset
+                )
+            }
+            Log.d(
+                "LyricsAnchor",
+                "index=$activeLineIndex targetY=$activeLineTargetYPx " +
+                    "finalY=$finalVisibleY " +
+                    "viewportStart=${listState.layoutInfo.viewportStartOffset} " +
+                    "viewport=${listState.layoutInfo.viewportSize.height}"
+            )
+        }
+    }
+
+    BoxWithConstraints(modifier = modifier) {
+        val targetY = activeLineTargetY.coerceIn(0.dp, maxHeight)
+        val bottomPadding = (maxHeight - targetY).coerceAtLeast(0.dp)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 28.dp)
+                .pointerInput(lines) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        isPointerDown = true
+                        markUserInteraction()
+                        waitForUpOrCancellation()
+                        isPointerDown = false
+                        markUserInteraction()
                     }
+                },
+            contentPadding = PaddingValues(
+                top = targetY,
+                bottom = bottomPadding
+            ),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            itemsIndexed(
+                items = lines,
+                key = { index, line -> "${line.timestampMs}:$index" }
+            ) { _, line ->
+                if (line.text.isBlank()) {
+                    // 保留一个不可见锚点，空行播放时中心会落在上下两句的间隙。
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                    )
+                } else {
+                    val isActive = line.timestampMs == activeTimestampMs
+                    val lyricColor by animateColorAsState(
+                        targetValue = if (isActive) {
+                            Color.White
+                        } else {
+                            Color.White.copy(alpha = 0.48f)
+                        },
+                        label = "LyricHighlightColor"
+                    )
+                    Text(
+                        text = line.text,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = lyricColor,
+                        fontWeight = if (isActive) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
