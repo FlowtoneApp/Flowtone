@@ -441,6 +441,15 @@ fun MiniPlayer(
     ) {
         transitions.exitFullscreenContentMode()
     }
+    BackHandler(
+        enabled = shouldReturnFromLyricsToArtwork(
+            fullscreenContentMode = state.fullscreenContentMode,
+            fullscreenPlaybackContentMode = state.fullscreenPlaybackContentMode,
+            fullscreenInteractionActive = fullscreenInteractionActive
+        )
+    ) {
+        transitions.exitLyricsMode()
+    }
     MiniPlayerFullscreenContentEffects(
         fullscreen = fullscreen,
         expanded = expanded,

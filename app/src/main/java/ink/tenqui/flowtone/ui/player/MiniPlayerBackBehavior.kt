@@ -1,5 +1,16 @@
 package ink.tenqui.flowtone.ui.player
 
+import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
+
+internal fun shouldReturnFromLyricsToArtwork(
+    fullscreenContentMode: FullscreenContentMode,
+    fullscreenPlaybackContentMode: FullscreenPlaybackContentMode,
+    fullscreenInteractionActive: Boolean
+): Boolean =
+    fullscreenInteractionActive &&
+        fullscreenContentMode == FullscreenContentMode.Playback &&
+        fullscreenPlaybackContentMode == FullscreenPlaybackContentMode.Lyrics
+
 internal fun isPlaybackGestureContent(
     fullscreenContentMode: FullscreenContentMode
 ): Boolean = fullscreenContentMode == FullscreenContentMode.Playback
