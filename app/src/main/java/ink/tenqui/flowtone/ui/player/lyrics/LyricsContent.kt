@@ -113,19 +113,62 @@ internal fun LyricsContent(
         )
         is LyricsState.Error -> LyricsMessage("歌词读取失败", visibleModifier)
         is LyricsState.Available -> {
-            if (state.lines.isEmpty()) {
-                LyricsMessage("未识别到有效歌词", visibleModifier)
-            } else {
-                LyricsList(
-                    lines = state.lines,
-                    confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
-                    activeLineTargetY = activeLineTargetY,
-                    onLyricPress = onLyricPress,
-                    onLyricClick = onLyricClick,
-                    modifier = visibleModifier
-                )
+            when {
+                state.lines.isEmpty() -> {
+                    LyricsMessage("未识别到有效歌词", visibleModifier)
+                }
+
+                isPureMusicNotice(state.lines) -> {
+                    PureMusicNotice(modifier = visibleModifier)
+                }
+
+                else -> {
+                    LyricsList(
+                        lines = state.lines,
+                        confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
+                        activeLineTargetY = activeLineTargetY,
+                        onLyricPress = onLyricPress,
+                        onLyricClick = onLyricClick,
+                        modifier = visibleModifier
+                    )
+                }
             }
         }
+    }
+}
+
+internal fun isPureMusicNotice(lines: List<LyricLine>): Boolean {
+    val contentLines = lines
+        .asSequence()
+        .map { line -> line.text.trim() }
+        .filter(String::isNotEmpty)
+        .toList()
+    return contentLines.size == 1 && contentLines.single() == PureMusicNoticeText
+}
+
+@Composable
+private fun PureMusicNotice(modifier: Modifier = Modifier) {
+    val glowBlurRadiusPx = with(LocalDensity.current) {
+        LyricGlowRadius.toPx()
+    }
+    Box(
+        modifier = modifier.padding(horizontal = 24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = PureMusicNoticeText,
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontSize = 24.sp,
+                lineHeight = 32.sp,
+                fontWeight = FontWeight.SemiBold,
+                shadow = Shadow(
+                    color = Color.White.copy(alpha = LyricGlowAlphaMultiplier),
+                    offset = Offset.Zero,
+                    blurRadius = glowBlurRadiusPx
+                )
+            ),
+            color = Color.White
+        )
     }
 }
 
@@ -536,6 +579,7 @@ private fun Modifier.verticalFadingEdges(fadeHeight: Dp): Modifier =
     }
 
 private const val LyricsEdgeFadeSteps = 10
+private const val PureMusicNoticeText = "纯音乐，请欣赏"
 
 private fun inactiveLyricAlpha(
     lineIndex: Int,
