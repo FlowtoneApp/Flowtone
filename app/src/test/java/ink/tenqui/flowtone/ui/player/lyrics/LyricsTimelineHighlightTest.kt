@@ -121,4 +121,39 @@ class LyricsTimelineHighlightTest {
         assertEquals(false, shouldInstantlyTrackLyric(300))
     }
 
+    @Test
+    fun shortBlankPlaceholderKeepsNormalTrackingDuration() {
+        val linesWithShortBlank = listOf(
+            LyricLine(timestampMs = 1_000L, text = "上一句"),
+            LyricLine(timestampMs = 2_000L, text = ""),
+            LyricLine(timestampMs = 2_010L, text = "下一句")
+        )
+
+        assertEquals(
+            LyricsLineTransitionDurationMs,
+            lyricTrackingTransitionDurationMs(linesWithShortBlank, lineIndex = 1)
+        )
+    }
+
+    @Test
+    fun realShortLyricStillUsesInstantTrackingDuration() {
+        val extremeLines = listOf(
+            LyricLine(timestampMs = 1_000L, text = "短句"),
+            LyricLine(timestampMs = 1_010L, text = "下一句")
+        )
+
+        assertEquals(10, lyricTrackingTransitionDurationMs(extremeLines, lineIndex = 0))
+    }
+
+    @Test
+    fun timestampGroupWithTextIsNotMistakenForBlankPlaceholder() {
+        val groupedLines = listOf(
+            LyricLine(timestampMs = 1_000L, text = ""),
+            LyricLine(timestampMs = 1_000L, text = "实际歌词"),
+            LyricLine(timestampMs = 1_120L, text = "下一句")
+        )
+
+        assertEquals(120, lyricTrackingTransitionDurationMs(groupedLines, lineIndex = 0))
+    }
+
 }

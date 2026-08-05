@@ -244,7 +244,7 @@ private fun LyricsList(
         }
         val activeLineTransitionDurationMs = remember(lines, activeLineIndex) {
             activeLineIndex?.let { lineIndex ->
-                lyricVisualTransitionDurationMs(
+                lyricTrackingTransitionDurationMs(
                     lines = lines,
                     lineIndex = lineIndex
                 )

@@ -69,6 +69,24 @@ internal fun lyricVisualTransitionDurationMs(
         .toInt()
 }
 
+/**
+ * 纯空行只是歌词间的占位，不应因为它与下一句相隔很短而触发瞬时定位。
+ * 同一时间戳只要存在一行实际文本，就仍按极短歌词处理。
+ */
+internal fun lyricTrackingTransitionDurationMs(
+    lines: List<LyricLine>,
+    lineIndex: Int
+): Int {
+    val timestampMs = lines.getOrNull(lineIndex)?.timestampMs
+        ?: return LyricsLineTransitionDurationMs
+    val timestampHasLyricText = lines.any { line ->
+        line.timestampMs == timestampMs && line.text.isNotBlank()
+    }
+    if (!timestampHasLyricText) return LyricsLineTransitionDurationMs
+
+    return lyricVisualTransitionDurationMs(lines, lineIndex)
+}
+
 internal fun lazyListItemCenterInViewport(
     itemOffset: Int,
     itemSize: Int,
