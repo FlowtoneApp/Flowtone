@@ -27,7 +27,7 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.lyrics.SongLyricsState
 import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsActiveLineScreenYFraction
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal fun BoxScope.MiniPlayerFullscreenLayout(
     imageRequest: ImageRequest?,
     playerUiState: PlayerUiState,
-    lyricsState: LyricsState,
+    songLyricsState: SongLyricsState,
     confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
     title: String,
     artist: String,
@@ -470,7 +470,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         // The host is deliberately constrained to the same middle band used for artwork.
         MiniPlayerLyricsHost(
             currentSong = playerUiState.currentSong,
-            lyricsState = lyricsState,
+            songLyricsState = songLyricsState,
+            switchDirection = collapsedMetadataSwitchDirection,
             confirmedPlaybackPosition = confirmedPlaybackPosition,
             activeLineTargetY = lyricsActiveLineTargetY,
             visibilityProgress = lyricsVisibilityProgress,

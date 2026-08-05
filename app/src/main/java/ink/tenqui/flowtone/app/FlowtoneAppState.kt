@@ -20,7 +20,7 @@ import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
-import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.lyrics.SongLyricsState
 
 internal enum class SongRecordThresholdDialogState {
     Idle,
@@ -321,7 +321,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
 internal data class FlowtoneAppScaffoldState(
     val uiState: MusicUiState,
     val playerUiState: PlayerUiState,
-    val lyricsState: LyricsState,
+    val songLyricsState: SongLyricsState,
     val appPreferences: AppPreferences,
     val themeMode: AppThemeMode,
     val disablePausedArtworkTilt: Boolean,
@@ -380,7 +380,7 @@ internal fun flowtoneAppScaffoldState(
     appState: FlowtoneAppState,
     uiState: MusicUiState,
     playerUiState: PlayerUiState,
-    lyricsState: LyricsState,
+    songLyricsState: SongLyricsState,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
     pagerState: PagerState,
@@ -401,7 +401,7 @@ internal fun flowtoneAppScaffoldState(
     return FlowtoneAppScaffoldState(
         uiState = uiState,
         playerUiState = playerUiState,
-        lyricsState = lyricsState,
+        songLyricsState = songLyricsState,
         appPreferences = appPreferences,
         themeMode = themeMode,
         disablePausedArtworkTilt = appState.disablePausedArtworkTilt,

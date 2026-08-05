@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.ui.player.lyrics
 import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,10 +61,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ink.tenqui.flowtone.lyrics.LyricLine
 import ink.tenqui.flowtone.lyrics.LyricsState
+import kotlin.math.roundToInt
+
+internal enum class LyricsTrackSwitchPhase {
+    Static,
+    Entering,
+    Exiting
+}
 
 @Composable
 internal fun LyricsContent(
@@ -70,6 +80,8 @@ internal fun LyricsContent(
     confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
     visibilityProgress: Float,
+    trackSwitchPhase: LyricsTrackSwitchPhase = LyricsTrackSwitchPhase.Static,
+    trackSwitchDirection: Int = 1,
     onLyricPress: () -> Unit,
     onLyricClick: (Long) -> Unit,
     onChooseLyricsDirectory: () -> Unit,
@@ -127,6 +139,8 @@ internal fun LyricsContent(
                         lines = state.lines,
                         confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
                         activeLineTargetY = activeLineTargetY,
+                        trackSwitchPhase = trackSwitchPhase,
+                        trackSwitchDirection = trackSwitchDirection,
                         onLyricPress = onLyricPress,
                         onLyricClick = onLyricClick,
                         modifier = visibleModifier
@@ -177,22 +191,42 @@ private fun LyricsList(
     lines: List<LyricLine>,
     confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
+    trackSwitchPhase: LyricsTrackSwitchPhase,
+    trackSwitchDirection: Int,
     onLyricPress: () -> Unit,
     onLyricClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
     val gestureCoroutineScope = rememberCoroutineScope()
-    val activeTimestampMs = remember(lines, confirmedPlaybackPositionMs) {
-        confirmedPlaybackPositionMs?.let { positionMs ->
+    val lastConfirmedPlaybackPosition = remember(lines) {
+        PlaybackPositionHolder(confirmedPlaybackPositionMs)
+    }
+    SideEffect {
+        if (
+            trackSwitchPhase != LyricsTrackSwitchPhase.Exiting &&
+            confirmedPlaybackPositionMs != null
+        ) {
+            lastConfirmedPlaybackPosition.value = confirmedPlaybackPositionMs
+        }
+    }
+    val effectivePlaybackPositionMs = if (
+        trackSwitchPhase == LyricsTrackSwitchPhase.Exiting
+    ) {
+        lastConfirmedPlaybackPosition.value
+    } else {
+        confirmedPlaybackPositionMs
+    }
+    val activeTimestampMs = remember(lines, effectivePlaybackPositionMs) {
+        effectivePlaybackPositionMs?.let { positionMs ->
             activeLyricTimestampMs(
                 lines = lines,
                 playbackPositionMs = positionMs
             )
         }
     }
-    val activeLineIndex = remember(lines, confirmedPlaybackPositionMs) {
-        confirmedPlaybackPositionMs?.let { positionMs ->
+    val activeLineIndex = remember(lines, effectivePlaybackPositionMs) {
+        effectivePlaybackPositionMs?.let { positionMs ->
             activeLyricAnchorIndex(
                 lines = lines,
                 playbackPositionMs = positionMs
@@ -221,6 +255,67 @@ private fun LyricsList(
     }
     val blankLyricLineHeightPx = with(density) {
         BlankLyricLineHeight.roundToPx()
+    }
+    val trackSwitchDistancePx = with(density) {
+        LyricsTrackSwitchDistance.toPx()
+    }
+    val trackSwitchEntranceTimeline = remember(lines) {
+        Animatable(
+            if (trackSwitchPhase == LyricsTrackSwitchPhase.Entering) 0f else 1f
+        )
+    }
+    val trackSwitchExitTimeline = remember(lines) { Animatable(0f) }
+    val trackSwitchEntranceDirection = remember(lines) { trackSwitchDirection }
+    LaunchedEffect(trackSwitchPhase) {
+        when (trackSwitchPhase) {
+            LyricsTrackSwitchPhase.Static -> {
+                trackSwitchEntranceTimeline.snapTo(1f)
+                trackSwitchExitTimeline.snapTo(0f)
+            }
+            LyricsTrackSwitchPhase.Entering -> {
+                coroutineScope {
+                    launch {
+                        val remainingDurationMillis = (
+                            LyricsTrackSwitchEntranceTotalDurationMillis *
+                                (1f - trackSwitchEntranceTimeline.value)
+                            ).roundToInt().coerceAtLeast(1)
+                        trackSwitchEntranceTimeline.animateTo(
+                            targetValue = 1f,
+                            animationSpec = tween(
+                                durationMillis = remainingDurationMillis,
+                                easing = LinearEasing
+                            )
+                        )
+                    }
+                    launch {
+                        val remainingDurationMillis = (
+                            LyricsTrackSwitchExitTotalDurationMillis *
+                                trackSwitchExitTimeline.value
+                            ).roundToInt().coerceAtLeast(1)
+                        trackSwitchExitTimeline.animateTo(
+                            targetValue = 0f,
+                            animationSpec = tween(
+                                durationMillis = remainingDurationMillis,
+                                easing = LinearEasing
+                            )
+                        )
+                    }
+                }
+            }
+            LyricsTrackSwitchPhase.Exiting -> {
+                val remainingDurationMillis = (
+                    LyricsTrackSwitchExitTotalDurationMillis *
+                        (1f - trackSwitchExitTimeline.value)
+                    ).roundToInt().coerceAtLeast(1)
+                trackSwitchExitTimeline.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = remainingDurationMillis,
+                        easing = LinearEasing
+                    )
+                )
+            }
+        }
     }
     val textMeasurer = rememberTextMeasurer()
 
@@ -299,9 +394,14 @@ private fun LyricsList(
             activeLineTargetYPx,
             activeLineSizePx,
             activeLineTransitionDurationMs,
-            isFollowingCurrentLine
+            isFollowingCurrentLine,
+            trackSwitchPhase
         ) {
-            if (isFollowingCurrentLine && activeLineIndex != null) {
+            if (
+                trackSwitchPhase != LyricsTrackSwitchPhase.Exiting &&
+                isFollowingCurrentLine &&
+                activeLineIndex != null
+            ) {
                 listState.animateScrollToItemAtY(
                     index = activeLineIndex,
                     targetYPx = activeLineTargetYPx,
@@ -369,6 +469,9 @@ private fun LyricsList(
                     )
                 } else {
                     val isActive = line.timestampMs == activeTimestampMs
+                    val staggerOrder = (
+                        index - listState.firstVisibleItemIndex
+                        ).coerceIn(0, LyricsTrackSwitchMaxStaggeredLines - 1)
                     val lyricInteractionSource = remember(line.timestampMs, index) {
                         MutableInteractionSource()
                     }
@@ -460,6 +563,46 @@ private fun LyricsList(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .graphicsLayer {
+                                val entranceElapsedMillis =
+                                    trackSwitchEntranceTimeline.value *
+                                        LyricsTrackSwitchEntranceTotalDurationMillis
+                                val entranceLineDelayMillis =
+                                    staggerOrder * LyricsTrackSwitchStaggerMillis
+                                val linearEntranceProgress = (
+                                    (entranceElapsedMillis - entranceLineDelayMillis) /
+                                        LyricsTrackSwitchLineDurationMillis
+                                    ).coerceIn(0f, 1f)
+                                val entranceVisibility = if (
+                                    trackSwitchPhase == LyricsTrackSwitchPhase.Static
+                                ) {
+                                    1f
+                                } else {
+                                    LyricsLineTransitionEasing.transform(
+                                        linearEntranceProgress
+                                    )
+                                }
+                                val exitElapsedMillis =
+                                    trackSwitchExitTimeline.value *
+                                        LyricsTrackSwitchExitTotalDurationMillis
+                                val exitLineDelayMillis =
+                                    staggerOrder * LyricsTrackSwitchExitStaggerMillis
+                                val linearExitProgress = (
+                                    (exitElapsedMillis - exitLineDelayMillis) /
+                                        LyricsTrackSwitchExitLineDurationMillis
+                                    ).coerceIn(0f, 1f)
+                                val exitProgress = LyricsLineTransitionEasing.transform(
+                                    linearExitProgress
+                                )
+                                alpha = entranceVisibility * (1f - exitProgress)
+                                translationX =
+                                    trackSwitchDistancePx *
+                                        trackSwitchEntranceDirection *
+                                        (1f - entranceVisibility) -
+                                        trackSwitchDistancePx *
+                                        trackSwitchDirection *
+                                        exitProgress
+                            }
                             .zIndex(if (isActive) 1f else 0f)
                             .padding(vertical = LyricItemOuterVerticalPadding)
                     ) {
@@ -524,6 +667,20 @@ private val LyricsEndPadding = 48.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp
 private val LyricsEdgeFadeHeight = 64.dp
+private val LyricsTrackSwitchDistance = 20.dp
+private const val LyricsTrackSwitchLineDurationMillis = 260
+private const val LyricsTrackSwitchStaggerMillis = 22
+private const val LyricsTrackSwitchExitLineDurationMillis = 200
+private const val LyricsTrackSwitchExitStaggerMillis = 14
+private const val LyricsTrackSwitchMaxStaggeredLines = 9
+private const val LyricsTrackSwitchEntranceTotalDurationMillis =
+    LyricsTrackSwitchLineDurationMillis +
+        LyricsTrackSwitchStaggerMillis * (LyricsTrackSwitchMaxStaggeredLines - 1)
+private const val LyricsTrackSwitchExitTotalDurationMillis =
+    LyricsTrackSwitchExitLineDurationMillis +
+        LyricsTrackSwitchExitStaggerMillis * (LyricsTrackSwitchMaxStaggeredLines - 1)
+
+private class PlaybackPositionHolder(var value: Long?)
 private const val ActiveLyricScale = 1.04f
 private const val InactiveLyricScale = 0.98f
 private const val LyricGlowAlphaMultiplier = 0.18f

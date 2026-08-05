@@ -30,3 +30,8 @@ sealed interface LyricsState {
         val message: String? = null
     ) : LyricsState
 }
+
+data class SongLyricsState(
+    val songId: Long? = null,
+    val state: LyricsState = LyricsState.Idle
+)

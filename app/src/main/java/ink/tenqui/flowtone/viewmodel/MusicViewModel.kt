@@ -11,6 +11,7 @@ import ink.tenqui.flowtone.lyrics.LyricsLoadResult
 import ink.tenqui.flowtone.lyrics.LyricsLoadSource
 import ink.tenqui.flowtone.lyrics.LyricsPreloadScheduler
 import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.lyrics.SongLyricsState
 import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
@@ -80,6 +81,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
+    private val _songLyricsState = MutableStateFlow(SongLyricsState())
     // 歌词只使用 MediaController 确认的位置，不读取进度条的动画或拖动状态。
     private val _confirmedPlaybackPosition = MutableStateFlow(PlaybackPositionSnapshot())
     private val _lyricsFolders = MutableStateFlow(localLyricsRepository.getLyricsFolders())
@@ -102,6 +104,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
+    val songLyricsState: StateFlow<SongLyricsState> = _songLyricsState.asStateFlow()
     val confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot> =
         _confirmedPlaybackPosition.asStateFlow()
     val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
@@ -555,7 +558,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 .collectLatest { song ->
                     val currentSong = song.first
                     if (currentSong == null) {
-                        _lyricsState.value = LyricsState.Idle
+                        publishLyricsState(songId = null, state = LyricsState.Idle)
                         return@collectLatest
                     }
 
@@ -564,11 +567,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         "Lyrics",
                         "foreground request song=${currentSong.id} source=${request.source}"
                     )
-                    _lyricsState.value = if (request.source == LyricsLoadSource.NewRead) {
-                        LyricsState.Loading
-                    } else {
-                        LyricsState.Idle
-                    }
+                    publishLyricsState(
+                        songId = currentSong.id,
+                        state = if (request.source == LyricsLoadSource.NewRead) {
+                            LyricsState.Loading
+                        } else {
+                            LyricsState.Idle
+                        }
+                    )
                     val result = try {
                         request.deferred.await()
                     } catch (error: CancellationException) {
@@ -577,22 +583,33 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         LyricsLoadResult.Failed(error)
                     }
 
-                    _lyricsState.value = when (result) {
-                        is LyricsLoadResult.Found -> LyricsState.Available(result.lines)
-                        LyricsLoadResult.DirectoryNotSelected ->
-                            LyricsState.DirectoryNotSelected
-                        LyricsLoadResult.DirectoryPermissionLost ->
-                            LyricsState.DirectoryPermissionLost
-                        LyricsLoadResult.OutsideSelectedDirectory ->
-                            LyricsState.OutsideSelectedDirectory
-                        LyricsLoadResult.NotFound -> LyricsState.NotFound
-                        is LyricsLoadResult.Failed -> {
-                            Log.d("Lyrics", "failed=${result.throwable::class.simpleName}")
-                            LyricsState.Error(result.throwable.message)
+                    publishLyricsState(
+                        songId = currentSong.id,
+                        state = when (result) {
+                            is LyricsLoadResult.Found -> LyricsState.Available(result.lines)
+                            LyricsLoadResult.DirectoryNotSelected ->
+                                LyricsState.DirectoryNotSelected
+                            LyricsLoadResult.DirectoryPermissionLost ->
+                                LyricsState.DirectoryPermissionLost
+                            LyricsLoadResult.OutsideSelectedDirectory ->
+                                LyricsState.OutsideSelectedDirectory
+                            LyricsLoadResult.NotFound -> LyricsState.NotFound
+                            is LyricsLoadResult.Failed -> {
+                                Log.d(
+                                    "Lyrics",
+                                    "failed=${result.throwable::class.simpleName}"
+                                )
+                                LyricsState.Error(result.throwable.message)
+                            }
                         }
-                    }
+                    )
                 }
         }
+    }
+
+    private fun publishLyricsState(songId: Long?, state: LyricsState) {
+        _songLyricsState.value = SongLyricsState(songId = songId, state = state)
+        _lyricsState.value = state
     }
 
     private fun restoreFromControllerIfPossible() {

@@ -50,13 +50,13 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 import ink.tenqui.flowtone.ui.player.lyrics.isLyricsPlaybackContentActive
-import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.lyrics.SongLyricsState
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
-    lyricsState: LyricsState = LyricsState.Idle,
+    songLyricsState: SongLyricsState = SongLyricsState(),
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     fullscreen: Boolean,
@@ -792,7 +792,7 @@ fun MiniPlayer(
                     MiniPlayerFullscreenLayout(
                         imageRequest = state.coverImageRequest,
                         playerUiState = playerUiState,
-                        lyricsState = lyricsState,
+                        songLyricsState = songLyricsState,
                         confirmedPlaybackPosition =
                             lyricsViewModel.confirmedPlaybackPosition,
                         title = title,
