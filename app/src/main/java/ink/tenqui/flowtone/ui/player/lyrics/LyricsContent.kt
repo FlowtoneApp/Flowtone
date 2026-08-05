@@ -493,11 +493,11 @@ private const val LyricClickBackgroundMaxAlpha = 0.20f
 private const val LyricClickBackgroundFadeInMillis = 110
 private const val LyricClickBackgroundHoldMillis = 70L
 private const val LyricClickBackgroundFadeOutMillis = 420
-private val LyricClickBackgroundHorizontalPadding = 10.dp
-private val LyricClickBackgroundVerticalPadding = 5.dp
+private val LyricClickBackgroundHorizontalPadding = 5.dp
+private val LyricClickBackgroundVerticalPadding = 2.dp
 private val LyricItemOuterVerticalPadding =
     (LyricsLineSpacing - LyricClickBackgroundVerticalPadding * 2f) / 2f
-private val LyricClickBackgroundCornerRadius = 14.dp
+private val LyricClickBackgroundCornerRadius = 9.dp
 
 private fun Modifier.verticalFadingEdges(fadeHeight: Dp): Modifier =
     graphicsLayer {
