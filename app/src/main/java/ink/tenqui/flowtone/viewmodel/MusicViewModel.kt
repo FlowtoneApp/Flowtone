@@ -62,7 +62,7 @@ data class MusicUiState(
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val musicRepository = MusicRepository(
         localMusicRepository = LocalMusicRepository(
-            audioScanner = AudioScanner(application.contentResolver)
+            audioScanner = AudioScanner(application)
         )
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)

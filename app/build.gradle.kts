@@ -181,6 +181,7 @@ dependencies {
     implementation(libs.androidx.palette.ktx)
     implementation(libs.coil.compose)
     implementation(libs.google.material)
+    implementation(libs.taglib)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
