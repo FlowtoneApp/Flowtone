@@ -1,0 +1,162 @@
+package ink.tenqui.flowtone.ui.player
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import coil3.compose.asPainter
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import kotlinx.coroutines.CancellationException
+import kotlin.math.roundToInt
+
+internal data class PlayerSongPresentation(
+    val key: Long?,
+    val title: String,
+    val artist: String,
+    val imageRequest: ImageRequest?,
+    val artworkPainter: Painter?
+)
+
+internal data class PlayerSongPresentationTransition(
+    val previous: PlayerSongPresentation?,
+    val current: PlayerSongPresentation,
+    val progress: Float
+)
+
+private data class DesiredPlayerSongPresentation(
+    val key: Long?,
+    val title: String,
+    val artist: String,
+    val imageRequest: ImageRequest?
+)
+
+@Composable
+internal fun rememberPlayerSongPresentationTransition(
+    songKey: Long?,
+    title: String,
+    artist: String,
+    imageRequest: ImageRequest?
+): PlayerSongPresentationTransition {
+    val context = LocalContext.current
+    val desired = DesiredPlayerSongPresentation(
+        key = songKey,
+        title = title,
+        artist = artist,
+        imageRequest = imageRequest
+    )
+    var current by remember {
+        mutableStateOf(
+            PlayerSongPresentation(
+                key = songKey,
+                title = title,
+                artist = artist,
+                imageRequest = imageRequest,
+                artworkPainter = null
+            )
+        )
+    }
+    var previous by remember { mutableStateOf<PlayerSongPresentation?>(null) }
+    val switchProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(desired) {
+        val painter = try {
+            desired.imageRequest?.let { request ->
+                (context.imageLoader.execute(request) as? SuccessResult)
+                    ?.image
+                    ?.asPainter(context)
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+        val prepared = PlayerSongPresentation(
+            key = desired.key,
+            title = desired.title,
+            artist = desired.artist,
+            imageRequest = desired.imageRequest,
+            artworkPainter = painter
+        )
+
+        if (prepared.key == current.key) {
+            // 同一首歌的封面完成加载时原位补全，不触发一次伪切歌。
+            current = prepared
+            return@LaunchedEffect
+        }
+
+        previous = current
+        current = prepared
+        switchProgress.snapTo(0f)
+        switchProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = PlayerSongSwitchDurationMillis,
+                easing = TrackSwitchProgressEasing
+            )
+        )
+        previous = null
+    }
+
+    return PlayerSongPresentationTransition(
+        previous = previous,
+        current = current,
+        progress = switchProgress.value.coerceIn(0f, 1f)
+    )
+}
+
+@Composable
+internal fun PlayerSongPresentationTransitionContent(
+    transition: PlayerSongPresentationTransition,
+    switchDirection: Int,
+    switchDistancePx: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable (PlayerSongPresentation, Float) -> Unit
+) {
+    val progress = transition.progress
+    val direction = if (switchDirection < 0) -1 else 1
+    val items = transition.previous?.let { oldPresentation ->
+        listOf(oldPresentation to true, transition.current to false)
+    } ?: listOf(transition.current to false)
+
+    Box(modifier = modifier, contentAlignment = Alignment.CenterStart) {
+        items.forEach { (presentation, isPrevious) ->
+            val stableKey = presentation.key
+                ?: presentation.imageRequest?.data
+                ?: presentation.title
+            key(stableKey) {
+                val itemAlpha = if (isPrevious) 1f - progress else 1f.takeIf {
+                    transition.previous == null
+                } ?: progress
+                val offsetX = if (isPrevious) {
+                    -switchDistancePx * direction * progress
+                } else {
+                    switchDistancePx * direction * (1f - progress)
+                }
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .offset { IntOffset(offsetX.roundToInt(), 0) },
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    content(presentation, itemAlpha)
+                }
+            }
+        }
+    }
+}
+
+private const val PlayerSongSwitchDurationMillis = 320

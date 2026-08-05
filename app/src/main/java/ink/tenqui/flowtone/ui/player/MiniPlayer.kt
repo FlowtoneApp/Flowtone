@@ -390,10 +390,6 @@ fun MiniPlayer(
         ),
         label = "MiniPlayerSlideOffsetY"
     )
-    MiniPlayerCoverImageEffects(
-        coverImageRequest = state.coverImageRequest,
-        context = context
-    )
     MiniPlayerBackdropEffects(
         currentSong = currentSong,
         title = title,
@@ -795,7 +791,6 @@ fun MiniPlayer(
                     )
                     MiniPlayerFullscreenLayout(
                         imageRequest = state.coverImageRequest,
-                        waitForArtworkLoad = useLocalArtworkLoading,
                         playerUiState = playerUiState,
                         lyricsState = lyricsState,
                         confirmedPlaybackPosition =

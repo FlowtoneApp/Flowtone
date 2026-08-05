@@ -135,7 +135,7 @@ internal fun CrossfadeArtworkImage(
 @Composable
 internal fun MorphArtworkLayer(
     imageRequest: ImageRequest?,
-    waitForArtworkLoad: Boolean,
+    artworkPainter: Painter?,
     progress: Float,
     scaleProgress: Float,
     currentHeight: Dp,
@@ -155,7 +155,6 @@ internal fun MorphArtworkLayer(
     playbackRotationDegrees: Float = 0f,
     layerAlpha: Float = 1f,
     layerTranslationY: Dp = 0.dp,
-    crossfadeArtworkImage: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val baseArtworkSize = expandedArtworkSize
@@ -258,19 +257,19 @@ internal fun MorphArtworkLayer(
                     .then(blurModifier),
                 contentAlignment = Alignment.Center
             ) {
-                CrossfadeArtworkImage(
-                    imageRequest = imageRequest,
-                    contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                    contentScale = ContentScale.Crop,
-                    waitForImageLoad = waitForArtworkLoad,
-                    crossfadeImage = crossfadeArtworkImage,
-                    modifier = Modifier.matchParentSize(),
-                    fallbackContent = {
-                        MissingArtworkPlaceholder(
-                            iconModifier = Modifier.size(42.dp)
-                        )
-                    }
-                )
+                if (artworkPainter != null) {
+                    Image(
+                        painter = artworkPainter,
+                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else {
+                    MissingArtworkPlaceholder(
+                        modifier = Modifier.matchParentSize(),
+                        iconModifier = Modifier.size(42.dp)
+                    )
+                }
                 if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
                     Box(
                         modifier = Modifier

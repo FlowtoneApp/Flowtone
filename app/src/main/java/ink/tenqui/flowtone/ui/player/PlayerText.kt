@@ -1,18 +1,11 @@
 package ink.tenqui.flowtone.ui.player
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -22,15 +15,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 
 @Composable
 internal fun SharedSongInfo(
-    title: String,
-    artist: String,
-    currentSongKey: Long?,
+    songPresentationTransition: PlayerSongPresentationTransition,
     progress: Float,
     titleColor: Color,
     artistColor: Color,
@@ -100,11 +89,6 @@ internal fun SharedSongInfo(
         fullscreenProgress
     )
     val metadataTextAlign = TextAlign.Start
-    val metadataState = SongMetadataState(
-        key = currentSongKey,
-        title = title,
-        artist = artist
-    )
     val metadataSwitchDistance = 20.dp
     val metadataSwitchDistancePx = with(density) { metadataSwitchDistance.roundToPx() }
     Box(
@@ -120,18 +104,18 @@ internal fun SharedSongInfo(
             }
             .clipToBounds()
     ) {
-        AnimatedSongMetadata(
-            state = metadataState,
+        PlayerSongPresentationTransitionContent(
+            transition = songPresentationTransition,
             switchDirection = switchDirection,
             switchDistancePx = metadataSwitchDistancePx,
             modifier = Modifier
                 .offset(x = metadataSwitchDistance)
                 .width(viewportWidth)
                 .height(metadataGroupHeight)
-        ) { state, alpha ->
+        ) { presentation, alpha ->
             PlayerTextLayout(
-                title = state.title,
-                artist = state.artist,
+                title = presentation.title,
+                artist = presentation.artist,
                 contentAlpha = alpha,
                 titleColor = titleColor,
                 artistColor = artistColor,
@@ -156,88 +140,10 @@ internal fun SharedSongInfo(
                 textAlign = metadataTextAlign,
                 canClickArtist = artistClickEnabled &&
                     onArtistClick != null &&
-                    isSelectableArtist(state.artist),
+                    isSelectableArtist(presentation.artist),
                 onArtistClick = onArtistClick
             )
         }
     }
 }
-
-@Composable
-internal fun AnimatedSongMetadata(
-    state: SongMetadataState,
-    switchDirection: Int,
-    switchDistancePx: Int,
-    modifier: Modifier = Modifier,
-    content: @Composable (SongMetadataState, Float) -> Unit
-) {
-    var displayedState by remember { mutableStateOf(state) }
-    var previousState by remember { mutableStateOf<SongMetadataState?>(null) }
-    val switchProgress = remember { Animatable(1f) }
-
-    LaunchedEffect(state) {
-        if (state == displayedState) {
-            return@LaunchedEffect
-        }
-
-        previousState = displayedState
-        displayedState = state
-        switchProgress.snapTo(0f)
-        switchProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = 320,
-                easing = TrackSwitchProgressEasing
-            )
-        )
-        previousState = null
-    }
-
-    val progress = switchProgress.value.coerceIn(0f, 1f)
-    val direction = if (switchDirection < 0) {
-        -1
-    } else {
-        1
-    }
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.CenterStart
-    ) {
-        previousState?.let { oldState ->
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .offset {
-                        IntOffset(
-                            x = (-switchDistancePx * direction * progress).roundToInt(),
-                            y = 0
-                        )
-                    },
-                contentAlignment = Alignment.CenterStart
-            ) {
-                content(oldState, 1f - progress)
-            }
-        }
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .offset {
-                    IntOffset(
-                        x = (switchDistancePx * direction * (1f - progress)).roundToInt(),
-                        y = 0
-                    )
-                },
-            contentAlignment = Alignment.CenterStart
-        ) {
-            content(displayedState, progress)
-        }
-    }
-}
-
-internal data class SongMetadataState(
-    val key: Long?,
-    val title: String,
-    val artist: String
-)
 

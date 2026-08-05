@@ -21,18 +21,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun MiniPlayerCoverImageEffects(
-    coverImageRequest: ImageRequest?,
-    context: Context
-) {
-    LaunchedEffect(coverImageRequest) {
-        coverImageRequest?.let { request ->
-            context.imageLoader.enqueue(request)
-        }
-    }
-}
-
-@Composable
 internal fun MiniPlayerBackdropEffects(
     currentSong: Song?,
     title: String,
