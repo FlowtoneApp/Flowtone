@@ -97,6 +97,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     fullscreenSwipeThresholdPx: Float,
     songInfoProgress: Float,
     callbacks: MiniPlayerCallbacks,
+    onLyricPress: () -> Unit,
+    onLyricSeek: (Long) -> Unit,
     collapseInteractionSource: MutableInteractionSource,
     onArtistClick: (String) -> Unit,
     onNewPlaylistCreateAnimationFinished: (String) -> Unit,
@@ -442,6 +444,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             confirmedPlaybackPosition = confirmedPlaybackPosition,
             activeLineTargetY = lyricsActiveLineTargetY,
             visibilityProgress = lyricsVisibilityProgress,
+            onLyricPress = onLyricPress,
+            onSeekTo = onLyricSeek,
             onChooseLyricsDirectory = onChooseLyricsDirectory,
             modifier = Modifier
                 .align(Alignment.TopCenter)

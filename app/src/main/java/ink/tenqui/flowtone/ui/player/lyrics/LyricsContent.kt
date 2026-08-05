@@ -2,12 +2,17 @@ package ink.tenqui.flowtone.ui.player.lyrics
 
 import android.util.Log
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,9 +21,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -27,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -42,6 +50,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
@@ -51,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import ink.tenqui.flowtone.lyrics.LyricLine
 import ink.tenqui.flowtone.lyrics.LyricsState
 
@@ -60,6 +70,8 @@ internal fun LyricsContent(
     confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
     visibilityProgress: Float,
+    onLyricPress: () -> Unit,
+    onLyricClick: (Long) -> Unit,
     onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -108,6 +120,8 @@ internal fun LyricsContent(
                     lines = state.lines,
                     confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
                     activeLineTargetY = activeLineTargetY,
+                    onLyricPress = onLyricPress,
+                    onLyricClick = onLyricClick,
                     modifier = visibleModifier
                 )
             }
@@ -120,9 +134,12 @@ private fun LyricsList(
     lines: List<LyricLine>,
     confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
+    onLyricPress: () -> Unit,
+    onLyricClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
+    val gestureCoroutineScope = rememberCoroutineScope()
     val activeTimestampMs = remember(lines, confirmedPlaybackPositionMs) {
         confirmedPlaybackPositionMs?.let { positionMs ->
             activeLyricTimestampMs(
@@ -142,13 +159,14 @@ private fun LyricsList(
     var isFollowingCurrentLine by remember(lines) { mutableStateOf(true) }
     var isPointerDown by remember { mutableStateOf(false) }
     var userInteractionVersion by remember { mutableIntStateOf(0) }
+    var lyricSeekVersion by remember(lines) { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val activeLineTargetYPx = with(density) {
         activeLineTargetY.roundToPx()
     }
     val lyricTextStyle = MaterialTheme.typography.headlineSmall.copy(
-        fontSize = 28.sp,
-        lineHeight = 36.sp,
+        fontSize = 32.sp,
+        lineHeight = 42.sp,
         fontWeight = FontWeight.SemiBold
     )
     val activeLyricTextStyle = lyricTextStyle
@@ -184,15 +202,27 @@ private fun LyricsList(
             isFollowingCurrentLine = true
         }
     }
+    LaunchedEffect(lyricSeekVersion) {
+        if (lyricSeekVersion > 0) {
+            isFollowingCurrentLine = true
+        }
+    }
 
     BoxWithConstraints(modifier = modifier) {
         val targetY = activeLineTargetY.coerceIn(0.dp, maxHeight)
         val bottomPadding = (maxHeight - targetY).coerceAtLeast(0.dp)
         val horizontalPaddingPx = with(density) {
-            (LyricsStartPadding + LyricsEndPadding).roundToPx()
+            (
+                LyricsStartPadding +
+                    LyricsEndPadding +
+                    LyricClickBackgroundHorizontalPadding * 2f
+                ).roundToPx()
         }
         val lyricTextWidthPx = (constraints.maxWidth - horizontalPaddingPx)
             .coerceAtLeast(0)
+        val lyricRowWidth = (
+            maxWidth - LyricsStartPadding - LyricsEndPadding
+            ).coerceAtLeast(0.dp)
         val activeLineSizePx = remember(
             activeLineIndex,
             lines,
@@ -258,6 +288,11 @@ private fun LyricsList(
                         awaitFirstDown(requireUnconsumed = false)
                         isPointerDown = true
                         markUserInteraction()
+                        // 高亮切换时歌词列表仍可能处于自动滚动中。先停住列表，
+                        // 避免歌词在按下与抬起之间移动，导致点击被判定为取消。
+                        gestureCoroutineScope.launch {
+                            listState.stopScroll()
+                        }
                         waitForUpOrCancellation()
                         isPointerDown = false
                         markUserInteraction()
@@ -281,6 +316,54 @@ private fun LyricsList(
                     )
                 } else {
                     val isActive = line.timestampMs == activeTimestampMs
+                    val lyricInteractionSource = remember(line.timestampMs, index) {
+                        MutableInteractionSource()
+                    }
+                    val lyricTextLayout = remember(
+                        line.text,
+                        lyricTextWidthPx,
+                        lyricTextStyle
+                    ) {
+                        textMeasurer.measure(
+                            text = line.text,
+                            style = lyricTextStyle,
+                            constraints = Constraints(maxWidth = lyricTextWidthPx)
+                        )
+                    }
+                    val lyricBackgroundWidth = if (lyricTextLayout.lineCount > 1) {
+                        lyricRowWidth
+                    } else {
+                        (
+                            with(density) { lyricTextLayout.size.width.toDp() } +
+                                LyricClickBackgroundHorizontalPadding * 2f
+                            ).coerceAtMost(lyricRowWidth)
+                    }
+                    var clickFeedbackVersion by remember(line.timestampMs, index) {
+                        mutableIntStateOf(0)
+                    }
+                    val clickFeedbackAlpha = remember(line.timestampMs, index) {
+                        Animatable(0f)
+                    }
+                    LaunchedEffect(clickFeedbackVersion) {
+                        if (clickFeedbackVersion > 0) {
+                            clickFeedbackAlpha.snapTo(0f)
+                            clickFeedbackAlpha.animateTo(
+                                targetValue = LyricClickBackgroundMaxAlpha,
+                                animationSpec = tween(
+                                    durationMillis = LyricClickBackgroundFadeInMillis,
+                                    easing = LyricsLineTransitionEasing
+                                )
+                            )
+                            delay(LyricClickBackgroundHoldMillis)
+                            clickFeedbackAlpha.animateTo(
+                                targetValue = 0f,
+                                animationSpec = tween(
+                                    durationMillis = LyricClickBackgroundFadeOutMillis,
+                                    easing = LyricsLineTransitionEasing
+                                )
+                            )
+                        }
+                    }
                     val targetLyricAlpha = if (isActive) {
                         1f
                     } else {
@@ -317,34 +400,70 @@ private fun LyricsList(
                         ),
                         label = "LyricGlowAlpha"
                     )
-                    Text(
-                        text = line.text,
-                        style = lyricTextStyle.copy(
-                            shadow = Shadow(
-                                color = Color.White.copy(alpha = lyricGlowAlpha),
-                                offset = Offset.Zero,
-                                blurRadius = lyricGlowBlurRadiusPx
-                            )
-                        ),
-                        color = lyricColor,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(if (isActive) 1f else 0f)
-                            .padding(vertical = LyricsLineSpacing / 2f)
-                            .graphicsLayer {
-                                scaleX = lyricScale
-                                scaleY = lyricScale
-                                transformOrigin = TransformOrigin(0f, 0.5f)
-                            }
-                    )
+                            .padding(vertical = LyricItemOuterVerticalPadding)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(lyricBackgroundWidth)
+                                // 缩放层包住手势节点，让高亮动画中的视觉范围与点击范围一致。
+                                .graphicsLayer {
+                                    scaleX = lyricScale
+                                    scaleY = lyricScale
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                }
+                                .pointerInput(line.timestampMs, index) {
+                                    awaitEachGesture {
+                                        awaitFirstDown(requireUnconsumed = false)
+                                        onLyricPress()
+                                    }
+                                }
+                                .clickable(
+                                    interactionSource = lyricInteractionSource,
+                                    indication = null,
+                                    role = Role.Button,
+                                    onClickLabel = "跳转到此歌词"
+                                ) {
+                                    clickFeedbackVersion += 1
+                                    onLyricClick(line.timestampMs)
+                                    lyricSeekVersion += 1
+                                }
+                                .background(
+                                    color = Color(0xFF8A8A8A).copy(
+                                        alpha = clickFeedbackAlpha.value
+                                    ),
+                                    shape = RoundedCornerShape(LyricClickBackgroundCornerRadius)
+                                )
+                                .padding(
+                                    horizontal = LyricClickBackgroundHorizontalPadding,
+                                    vertical = LyricClickBackgroundVerticalPadding
+                                )
+                        ) {
+                            Text(
+                                text = line.text,
+                                style = lyricTextStyle.copy(
+                                    shadow = Shadow(
+                                        color = Color.White.copy(alpha = lyricGlowAlpha),
+                                        offset = Offset.Zero,
+                                        blurRadius = lyricGlowBlurRadiusPx
+                                    )
+                                ),
+                                color = lyricColor,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-private val LyricsStartPadding = 36.dp
-private val LyricsEndPadding = 56.dp
+private val LyricsStartPadding = 20.dp
+private val LyricsEndPadding = 48.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp
 private val LyricsEdgeFadeHeight = 64.dp
@@ -356,6 +475,15 @@ private const val NearestInactiveLyricAlpha = 0.56f
 private const val InactiveLyricAlphaStep = 0.10f
 private const val FarthestInactiveLyricAlpha = 0.16f
 private const val DefaultInactiveLyricAlpha = 0.42f
+private const val LyricClickBackgroundMaxAlpha = 0.20f
+private const val LyricClickBackgroundFadeInMillis = 110
+private const val LyricClickBackgroundHoldMillis = 70L
+private const val LyricClickBackgroundFadeOutMillis = 420
+private val LyricClickBackgroundHorizontalPadding = 10.dp
+private val LyricClickBackgroundVerticalPadding = 5.dp
+private val LyricItemOuterVerticalPadding =
+    (LyricsLineSpacing - LyricClickBackgroundVerticalPadding * 2f) / 2f
+private val LyricClickBackgroundCornerRadius = 14.dp
 
 private fun Modifier.verticalFadingEdges(fadeHeight: Dp): Modifier =
     graphicsLayer {

@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.ui.player
 
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,7 +24,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -151,6 +154,9 @@ fun MiniPlayer(
         context = context,
         allSongs = allSongs
     )
+    var lastLyricInteractionUptimeMs by remember {
+        mutableLongStateOf(Long.MIN_VALUE)
+    }
     val transitions = MiniPlayerTransitions(state)
     val collapsedHeight = MiniPlayerCollapsedHeight
     val minimizedHeight = MiniPlayerMinimizedHeight
@@ -754,13 +760,20 @@ fun MiniPlayer(
                                 contentHeight = fullscreenContentTapHeight,
                                 ignoredStartYRangePx = lyricsMetadataTapRangePx,
                                 onTap = {
-                                    if (
-                                        state.fullscreenPlaybackContentMode ==
-                                            FullscreenPlaybackContentMode.Artwork
-                                    ) {
-                                        transitions.enterLyricsMode()
-                                    } else {
-                                        transitions.exitLyricsMode()
+                                    val now = SystemClock.uptimeMillis()
+                                    val lyricTapWasHandled =
+                                        lastLyricInteractionUptimeMs != Long.MIN_VALUE &&
+                                            now - lastLyricInteractionUptimeMs <=
+                                            LyricsTapSuppressionWindowMs
+                                    if (!lyricTapWasHandled) {
+                                        if (
+                                            state.fullscreenPlaybackContentMode ==
+                                                FullscreenPlaybackContentMode.Artwork
+                                        ) {
+                                            transitions.enterLyricsMode()
+                                        } else {
+                                            transitions.exitLyricsMode()
+                                        }
                                     }
                                 }
                             )
@@ -847,6 +860,13 @@ fun MiniPlayer(
                         fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
                         songInfoProgress = songInfoProgress,
                         callbacks = callbacks,
+                        onLyricPress = {
+                            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+                        },
+                        onLyricSeek = { positionMs ->
+                            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+                            callbacks.onSeekTo(positionMs)
+                        },
                         collapseInteractionSource = state.noRippleInteractionSource,
                         onArtistClick = fullscreenInteractionHandlers.onArtistClick,
                         onNewPlaylistCreateAnimationFinished =
@@ -917,3 +937,4 @@ fun MiniPlayer(
 }
 
 private val LyricsControlsDownOffset = 48.dp
+private const val LyricsTapSuppressionWindowMs = 750L

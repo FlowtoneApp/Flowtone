@@ -21,6 +21,8 @@ internal fun MiniPlayerLyricsHost(
     confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
     activeLineTargetY: Dp,
     visibilityProgress: Float,
+    onLyricPress: () -> Unit,
+    onSeekTo: (Long) -> Unit,
     onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -39,6 +41,8 @@ internal fun MiniPlayerLyricsHost(
             confirmedPlaybackPositionMs = playbackPositionMs,
             activeLineTargetY = activeLineTargetY,
             visibilityProgress = visibilityProgress,
+            onLyricPress = onLyricPress,
+            onLyricClick = onSeekTo,
             onChooseLyricsDirectory = onChooseLyricsDirectory,
             modifier = Modifier.fillMaxSize()
         )
