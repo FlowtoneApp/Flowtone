@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Settings
@@ -95,8 +96,7 @@ internal fun AppearanceSettingsPage(
     onOpenFlowCloudSpeedDialog: () -> Unit,
     darkFlowCloudOverlayEnabled: Boolean,
     onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
-    lyricsBackgroundStyle: LyricsBackgroundStyle,
-    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
+    onOpenLyricsSettings: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -139,9 +139,11 @@ internal fun AppearanceSettingsPage(
                 onCheckedChange = onStrictProgressBarChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
-            LyricsBackgroundStyleSelector(
-                selectedStyle = lyricsBackgroundStyle,
-                onStyleSelected = onLyricsBackgroundStyleChange,
+            SettingsSectionRow(
+                title = "歌词",
+                subtitle = "歌词页背景与歌词文件夹",
+                icon = Icons.Rounded.Lyrics,
+                onClick = onOpenLyricsSettings,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
@@ -196,8 +198,6 @@ internal fun AdvancedSettingsPage(
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     preloadLyricsCount: Int,
     onPreloadLyricsCountChange: (Int) -> Unit,
-    lyricsFolders: List<LyricsFolder>,
-    onOpenLyricsFolders: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -216,13 +216,31 @@ internal fun AdvancedSettingsPage(
                 onSelectedCountChange = onPreloadLyricsCountChange
             )
         }
+    }
+}
+
+@Composable
+internal fun LyricsSettingsPage(
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
+    lyricsFolders: List<LyricsFolder>,
+    onOpenLyricsFolders: () -> Unit,
+    elementModifier: (Int) -> Modifier,
+    modifier: Modifier = Modifier
+) {
+    SettingsPageColumn(modifier = modifier) {
         OptionGroup(
             title = "歌词",
-            modifier = elementModifier(1).padding(top = 24.dp)
+            modifier = elementModifier(0)
         ) {
+            LyricsBackgroundStyleSelector(
+                selectedStyle = lyricsBackgroundStyle,
+                onStyleSelected = onLyricsBackgroundStyleChange
+            )
             LyricsFoldersSettingRow(
                 folders = lyricsFolders,
-                onClick = onOpenLyricsFolders
+                onClick = onOpenLyricsFolders,
+                modifier = Modifier.padding(top = 12.dp)
             )
         }
     }

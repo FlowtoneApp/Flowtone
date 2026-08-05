@@ -126,6 +126,7 @@ internal fun SettingsScreen(
     var selectedSection by rememberSaveable {
         mutableStateOf<SettingsSection?>(null)
     }
+    var showingLyricsSettings by rememberSaveable { mutableStateOf(false) }
     var managingLyricsFolders by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val musicViewModel: MusicViewModel = viewModel()
@@ -156,10 +157,12 @@ internal fun SettingsScreen(
     LaunchedEffect(managingLyricsFolders) {
         if (managingLyricsFolders) musicViewModel.refreshLyricsFolders()
     }
-    val handleBack = remember(selectedSection, managingLyricsFolders) {
+    val handleBack = remember(selectedSection, showingLyricsSettings, managingLyricsFolders) {
         {
             if (managingLyricsFolders) {
                 managingLyricsFolders = false
+            } else if (showingLyricsSettings) {
+                showingLyricsSettings = false
             } else if (selectedSection == null) {
                 currentOnBack()
             } else {
@@ -175,10 +178,17 @@ internal fun SettingsScreen(
     SideEffect {
         currentOnPathSegmentsChange(
             selectedSection?.let { section ->
-                listOf(section.title) + if (managingLyricsFolders) {
-                    listOf("\u6b4c\u8bcd\u6587\u4ef6\u5939")
-                } else {
-                    emptyList()
+                buildList {
+                    add(section.title)
+                    if (
+                        section == SettingsSection.Appearance &&
+                        (showingLyricsSettings || managingLyricsFolders)
+                    ) {
+                        add("歌词")
+                    }
+                    if (managingLyricsFolders) {
+                        add("歌词文件夹")
+                    }
                 }
             } ?: emptyList()
         )
@@ -189,38 +199,62 @@ internal fun SettingsScreen(
     BackHandler(onBack = handleBack)
 
     AnimatedContent(
-        targetState = selectedSection to managingLyricsFolders,
+        targetState = Triple(
+            selectedSection,
+            showingLyricsSettings,
+            managingLyricsFolders
+        ),
         transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
         label = "SettingsContent",
         modifier = modifier
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
-    ) { (section, showingLyricsFolders) ->
+    ) { (section, showingLyricsPage, showingLyricsFolders) ->
         fun viewElementModifier(index: Int): Modifier {
             return elementModifier(index).then(staggeredPageElementModifier(index))
         }
 
         when (section) {
             null -> SettingsSectionList(
-                onSectionClick = { selectedSection = it },
+                onSectionClick = { sectionToOpen ->
+                    selectedSection = sectionToOpen
+                    showingLyricsSettings = false
+                    managingLyricsFolders = false
+                },
                 elementModifier = ::viewElementModifier
             )
 
-            SettingsSection.Appearance -> AppearanceSettingsPage(
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
-                disablePausedArtworkTilt = disablePausedArtworkTilt,
-                onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
-                strictProgressBar = strictProgressBar,
-                onStrictProgressBarChange = onStrictProgressBarChange,
-                flowCloudSpeed = flowCloudSpeed,
-                onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
-                darkFlowCloudOverlayEnabled = darkFlowCloudOverlayEnabled,
-                onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
-                lyricsBackgroundStyle = lyricsBackgroundStyle,
-                onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
-                elementModifier = ::viewElementModifier
-            )
+            SettingsSection.Appearance -> when {
+                showingLyricsFolders -> LyricsFolderSettingsPage(
+                    folders = lyricsFolders,
+                    onAddFolder = { lyricsFolderLauncher.launch(null) },
+                    onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
+                    elementModifier = ::viewElementModifier
+                )
+
+                showingLyricsPage -> LyricsSettingsPage(
+                    lyricsBackgroundStyle = lyricsBackgroundStyle,
+                    onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
+                    lyricsFolders = lyricsFolders,
+                    onOpenLyricsFolders = { managingLyricsFolders = true },
+                    elementModifier = ::viewElementModifier
+                )
+
+                else -> AppearanceSettingsPage(
+                    themeMode = themeMode,
+                    onThemeModeChange = onThemeModeChange,
+                    disablePausedArtworkTilt = disablePausedArtworkTilt,
+                    onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
+                    strictProgressBar = strictProgressBar,
+                    onStrictProgressBarChange = onStrictProgressBarChange,
+                    flowCloudSpeed = flowCloudSpeed,
+                    onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
+                    darkFlowCloudOverlayEnabled = darkFlowCloudOverlayEnabled,
+                    onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
+                    onOpenLyricsSettings = { showingLyricsSettings = true },
+                    elementModifier = ::viewElementModifier
+                )
+            }
 
             SettingsSection.Playback -> PlaybackSettingsPage(
                 resumePlaybackAfterCall = resumePlaybackAfterCall,
@@ -234,26 +268,13 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
             )
 
-            SettingsSection.Advanced -> {
-                if (showingLyricsFolders) {
-                    LyricsFolderSettingsPage(
-                        folders = lyricsFolders,
-                        onAddFolder = { lyricsFolderLauncher.launch(null) },
-                        onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
-                        elementModifier = ::viewElementModifier
-                    )
-                } else {
-                    AdvancedSettingsPage(
-                        preloadSongMetadataCount = preloadSongMetadataCount,
-                        onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
-                        preloadLyricsCount = preloadLyricsCount,
-                        onPreloadLyricsCountChange = onPreloadLyricsCountChange,
-                        lyricsFolders = lyricsFolders,
-                        onOpenLyricsFolders = { managingLyricsFolders = true },
-                        elementModifier = ::viewElementModifier
-                    )
-                }
-            }
+            SettingsSection.Advanced -> AdvancedSettingsPage(
+                preloadSongMetadataCount = preloadSongMetadataCount,
+                onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
+                preloadLyricsCount = preloadLyricsCount,
+                onPreloadLyricsCountChange = onPreloadLyricsCountChange,
+                elementModifier = ::viewElementModifier
+            )
 
             SettingsSection.General -> GeneralSettingsPage(
                 selectedStartPage = selectedStartPage,
