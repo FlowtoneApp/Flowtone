@@ -298,7 +298,11 @@ private fun LyricsList(
                         label = "LyricHighlightColor"
                     )
                     val lyricScale by animateFloatAsState(
-                        targetValue = if (isActive) ActiveLyricScale else 1f,
+                        targetValue = if (isActive) {
+                            ActiveLyricScale
+                        } else {
+                            InactiveLyricScale
+                        },
                         animationSpec = tween(
                             durationMillis = LyricsLineTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
@@ -344,13 +348,14 @@ private val LyricsEndPadding = 56.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp
 private val LyricsEdgeFadeHeight = 64.dp
-private const val ActiveLyricScale = 1.08f
+private const val ActiveLyricScale = 1.04f
+private const val InactiveLyricScale = 0.98f
 private const val LyricGlowAlphaMultiplier = 0.18f
 private val LyricGlowRadius = 18.dp
-private const val NearestInactiveLyricAlpha = 0.64f
-private const val InactiveLyricAlphaStep = 0.11f
-private const val FarthestInactiveLyricAlpha = 0.20f
-private const val DefaultInactiveLyricAlpha = 0.48f
+private const val NearestInactiveLyricAlpha = 0.56f
+private const val InactiveLyricAlphaStep = 0.10f
+private const val FarthestInactiveLyricAlpha = 0.16f
+private const val DefaultInactiveLyricAlpha = 0.42f
 
 private fun Modifier.verticalFadingEdges(fadeHeight: Dp): Modifier =
     graphicsLayer {
