@@ -337,6 +337,8 @@ fun MiniPlayer(
         },
         label = "FullscreenLyricsVisibilityProgress"
     )
+    val lyricsControlsOffsetY =
+        LyricsControlsDownOffset * (1f - artworkVisibilityProgress)
     val lyricsBlurredArtworkProgress by animateFloatAsState(
         targetValue = if (
             lyricsModeActive && lyricsBackgroundStyle == LyricsBackgroundStyle.BlurredArtwork
@@ -576,7 +578,10 @@ fun MiniPlayer(
         Modifier
     }
     val progressGestureStartY =
-        expandedProgressTop + fullscreenStationaryControlsOffsetY - fullscreenControlsLiftY
+        expandedProgressTop +
+            fullscreenStationaryControlsOffsetY -
+            fullscreenControlsLiftY +
+            lyricsControlsOffsetY
     val progressGestureEndY = progressGestureStartY + 64.dp
     val progressGestureIgnoreRangePx = with(density) {
         progressGestureStartY.toPx()..progressGestureEndY.toPx()
@@ -716,7 +721,8 @@ fun MiniPlayer(
                         expandedProgressTop +
                             fullscreenStationaryControlsOffsetY -
                             fullscreenControlsLiftY -
-                            56.dp
+                            56.dp +
+                            lyricsControlsOffsetY
                         ).coerceAtLeast(lyricsTapTop)
                     // The mode switch band starts below the collapse arrow and ends above
                     // the side action row. It is intentionally wider than the lyric list.
@@ -810,6 +816,7 @@ fun MiniPlayer(
                         artworkPlaybackRotationDegrees = artworkPlaybackRotationDegrees,
                         artworkVisibilityProgress = artworkVisibilityProgress,
                         lyricsVisibilityProgress = lyricsVisibilityProgress,
+                        lyricsControlsOffsetY = lyricsControlsOffsetY,
                         lyricsMetadataProgress = lyricsMetadataProgress,
                         titleColor = titleColor,
                         artistColor = artistColor,
@@ -908,3 +915,5 @@ fun MiniPlayer(
         }
     )
 }
+
+private val LyricsControlsDownOffset = 48.dp

@@ -69,6 +69,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     artworkPlaybackRotationDegrees: Float,
     artworkVisibilityProgress: Float,
     lyricsVisibilityProgress: Float,
+    lyricsControlsOffsetY: Dp,
     lyricsMetadataProgress: Float,
     titleColor: Color,
     artistColor: Color,
@@ -143,6 +144,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         val designFullscreenStationaryControlsOffsetY =
             fullscreenStationaryControlsOffsetY / effectiveLayoutScale
         val designFullscreenControlsLiftY = fullscreenControlsLiftY
+        val designLyricsControlsOffsetY = lyricsControlsOffsetY / effectiveLayoutScale
         val designFullscreenProgressTrackWidth = designPlayerWidth * 0.76f
         val metrics = layoutMetrics.copy(
             fullscreenProgressTrackWidth = designFullscreenProgressTrackWidth,
@@ -305,7 +307,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             designExpandedProgressTop +
                 designFullscreenStationaryControlsOffsetY -
                 designFullscreenControlsLiftY -
-                56.dp
+                56.dp +
+                designLyricsControlsOffsetY
             ).coerceAtLeast(lyricsTop)
         val lyricsHeight = (lyricsBottom - lyricsTop).coerceAtLeast(0.dp)
         val lyricsActiveLineTargetY = (
@@ -367,6 +370,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     translationY =
                         (designFullscreenStationaryControlsOffsetY -
                             designFullscreenControlsLiftY +
+                            designLyricsControlsOffsetY +
                             metrics.playbackContentOffsetY).toPx()
                 }
         ) {
