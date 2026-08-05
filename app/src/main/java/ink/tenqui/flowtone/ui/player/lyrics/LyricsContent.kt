@@ -189,7 +189,7 @@ private fun LyricsList(
         val targetY = activeLineTargetY.coerceIn(0.dp, maxHeight)
         val bottomPadding = (maxHeight - targetY).coerceAtLeast(0.dp)
         val horizontalPaddingPx = with(density) {
-            (LyricsHorizontalPadding * 2).roundToPx()
+            (LyricsStartPadding + LyricsEndPadding).roundToPx()
         }
         val lyricTextWidthPx = (constraints.maxWidth - horizontalPaddingPx)
             .coerceAtLeast(0)
@@ -248,7 +248,11 @@ private fun LyricsList(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = LyricsHorizontalPadding)
+                .verticalFadingEdges(LyricsEdgeFadeHeight)
+                .padding(
+                    start = LyricsStartPadding,
+                    end = LyricsEndPadding
+                )
                 .pointerInput(lines) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
@@ -258,8 +262,7 @@ private fun LyricsList(
                         isPointerDown = false
                         markUserInteraction()
                     }
-                }
-                .verticalFadingEdges(LyricsEdgeFadeHeight),
+                },
             contentPadding = PaddingValues(
                 top = targetY,
                 bottom = bottomPadding
@@ -336,11 +339,12 @@ private fun LyricsList(
     }
 }
 
-private val LyricsHorizontalPadding = 36.dp
+private val LyricsStartPadding = 36.dp
+private val LyricsEndPadding = 56.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp
 private val LyricsEdgeFadeHeight = 64.dp
-private const val ActiveLyricScale = 1.12f
+private const val ActiveLyricScale = 1.08f
 private const val LyricGlowAlphaMultiplier = 0.18f
 private val LyricGlowRadius = 18.dp
 private const val NearestInactiveLyricAlpha = 0.64f
