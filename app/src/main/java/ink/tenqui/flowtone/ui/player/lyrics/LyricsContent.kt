@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.delay
 import ink.tenqui.flowtone.lyrics.LyricLine
@@ -137,7 +138,11 @@ private fun LyricsList(
     val activeLineTargetYPx = with(density) {
         activeLineTargetY.roundToPx()
     }
-    val activeLyricTextStyle = MaterialTheme.typography.headlineSmall.copy(
+    val lyricTextStyle = MaterialTheme.typography.headlineSmall.copy(
+        fontSize = 26.sp,
+        lineHeight = 34.sp
+    )
+    val activeLyricTextStyle = lyricTextStyle.copy(
         fontWeight = FontWeight.SemiBold
     )
     val textMeasurer = rememberTextMeasurer()
@@ -167,7 +172,9 @@ private fun LyricsList(
     BoxWithConstraints(modifier = modifier) {
         val targetY = activeLineTargetY.coerceIn(0.dp, maxHeight)
         val bottomPadding = (maxHeight - targetY).coerceAtLeast(0.dp)
-        val horizontalPaddingPx = with(density) { 56.dp.roundToPx() }
+        val horizontalPaddingPx = with(density) {
+            (LyricsHorizontalPadding * 2).roundToPx()
+        }
         val lyricTextWidthPx = (constraints.maxWidth - horizontalPaddingPx)
             .coerceAtLeast(0)
         val activeLineSizePx = remember(
@@ -223,7 +230,7 @@ private fun LyricsList(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp)
+                .padding(horizontal = LyricsHorizontalPadding)
                 .pointerInput(lines) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
@@ -238,7 +245,7 @@ private fun LyricsList(
                 top = targetY,
                 bottom = bottomPadding
             ),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(LyricsLineSpacing)
         ) {
             itemsIndexed(
                 items = lines,
@@ -279,7 +286,7 @@ private fun LyricsList(
                     )
                     Text(
                         text = line.text,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = lyricTextStyle,
                         color = lyricColor,
                         fontWeight = FontWeight(lyricWeight),
                         modifier = Modifier.fillMaxWidth()
@@ -289,6 +296,9 @@ private fun LyricsList(
         }
     }
 }
+
+private val LyricsHorizontalPadding = 36.dp
+private val LyricsLineSpacing = 24.dp
 
 @Composable
 private fun LyricsMessage(
