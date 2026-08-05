@@ -75,6 +75,7 @@ internal fun LyricsPlaceholderSongInfo(
     titleColor: Color,
     artistColor: Color,
     playerWidth: Dp,
+    lyricsContentStart: Dp,
     addToPlaylistProgress: Float = 0f,
     addToPlaylistTextStart: Dp = 24.dp,
     addToPlaylistTextWidth: Dp = (playerWidth - 48.dp).coerceAtLeast(0.dp),
@@ -90,9 +91,13 @@ internal fun LyricsPlaceholderSongInfo(
     }
     val contentProgress = visibilityProgress.coerceIn(0f, 1f)
     val addProgress = addToPlaylistProgress.coerceIn(0f, 1f)
-    val metadataX = lerpDp(24.dp, addToPlaylistTextStart, addProgress)
+    val lyricsTextStart = lyricsContentStart + 56.dp + 12.dp
+    val lyricsTextWidth = (
+        playerWidth - lyricsTextStart - lyricsContentStart
+        ).coerceAtLeast(80.dp)
+    val metadataX = lerpDp(lyricsTextStart, addToPlaylistTextStart, addProgress)
     val metadataWidth = lerpDp(
-        (playerWidth - 48.dp).coerceAtLeast(0.dp),
+        lyricsTextWidth,
         addToPlaylistTextWidth,
         addProgress
     )

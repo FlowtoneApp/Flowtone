@@ -201,7 +201,19 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 24.dp * (1f - artworkVisibilityProgress),
         modifier = modifier.align(Alignment.TopStart)
     )
-        if (lyricsAddToPlaylistProgress > 0.001f) {
+        val lyricsHeaderArtworkAlpha = if (
+            addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
+        ) {
+            1f
+        } else {
+            lyricsMetadataProgress
+        }
+        val lyricsHeaderArtworkTop = lerpDp(
+            safeTopPadding + 56.dp,
+            metrics.addToPlaylistArtworkTop,
+            if (songInfoEnteredFromLyrics) songInfoProgress else 0f
+        )
+        if (lyricsHeaderArtworkAlpha > 0.001f) {
             MorphArtworkLayer(
                 imageRequest = imageRequest,
                 waitForArtworkLoad = waitForArtworkLoad,
@@ -219,10 +231,10 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 contentExitProgress = 1f,
                 addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
                 addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
-                addToPlaylistArtworkTop = safeTopPadding + 56.dp,
+                addToPlaylistArtworkTop = lyricsHeaderArtworkTop,
                 playbackScale = 1f,
                 playbackRotationDegrees = 0f,
-                layerAlpha = lyricsAddToPlaylistProgress,
+                layerAlpha = lyricsHeaderArtworkAlpha,
                 // 这个层在歌词页进入歌单时才创建；仅保留容器的位移和透明度动画，
                 // 避免封面图片再次执行独立渐入。
                 crossfadeArtworkImage = false,
@@ -230,33 +242,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     .align(Alignment.TopStart)
                     .graphicsLayer {
                         translationX =
-                            ((-48).dp * (1f - lyricsAddToPlaylistProgress)).toPx()
+                            ((-48).dp * (1f - lyricsHeaderArtworkAlpha)).toPx()
                     }
-            )
-        }
-        if (songInfoEnteredFromLyrics && songInfoProgress > 0.001f) {
-            MorphArtworkLayer(
-                imageRequest = imageRequest,
-                waitForArtworkLoad = waitForArtworkLoad,
-                progress = 1f,
-                scaleProgress = 1f,
-                currentHeight = designCurrentHeight,
-                viewportHeight = designCurrentHeight,
-                collapsedHeight = designCollapsedHeight,
-                playerWidth = designPlayerWidth,
-                expandedArtworkSize = designExpandedArtworkSize,
-                expandedArtworkTop = designExpandedArtworkTop,
-                fullscreenProgress = 1f,
-                fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
-                fullscreenArtworkCenterY = designFullscreenCoverCenterY,
-                contentExitProgress = 1f,
-                addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
-                addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
-                addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
-                playbackScale = 1f,
-                playbackRotationDegrees = 0f,
-                layerAlpha = songInfoProgress,
-                modifier = modifier.align(Alignment.TopStart)
             )
         }
     Box(
@@ -335,6 +322,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             titleColor = titleColor,
             artistColor = artistColor,
             playerWidth = designPlayerWidth,
+            lyricsContentStart = metrics.addToPlaylistArtworkLeft,
             addToPlaylistProgress = lyricsAddToPlaylistProgress,
             addToPlaylistTextStart = metrics.addToPlaylistTextStart,
             addToPlaylistTextWidth = metrics.addToPlaylistTextWidth,
