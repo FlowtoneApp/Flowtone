@@ -42,6 +42,24 @@ class LrcParserTest {
     }
 
     @Test
+    fun removesLeadingWhitespaceAndInvisibleCharacters() {
+        assertEquals(
+            listOf(
+                LyricLine(1_000L, "First  line"),
+                LyricLine(2_000L, "Second line"),
+                LyricLine(3_000L, "Third line"),
+                LyricLine(4_000L, "")
+            ),
+            LrcParser.parse(
+                "[00:01.00]   First  line\n" +
+                    "[00:02.00]\u3000Second line\n" +
+                    "[00:03.00]\uFEFF\u200BThird line\n" +
+                    "[00:04.00]   "
+            )
+        )
+    }
+
+    @Test
     fun ignoresMetadataAndInvalidText() {
         assertEquals(
             listOf(LyricLine(60_000L, "Lyric")),

@@ -2,7 +2,7 @@ package ink.tenqui.flowtone.ui.player.lyrics
 
 import android.util.Log
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -31,7 +31,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -41,6 +48,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.delay
 import ink.tenqui.flowtone.lyrics.LyricLine
@@ -139,12 +147,20 @@ private fun LyricsList(
         activeLineTargetY.roundToPx()
     }
     val lyricTextStyle = MaterialTheme.typography.headlineSmall.copy(
-        fontSize = 26.sp,
-        lineHeight = 34.sp
-    )
-    val activeLyricTextStyle = lyricTextStyle.copy(
+        fontSize = 28.sp,
+        lineHeight = 36.sp,
         fontWeight = FontWeight.SemiBold
     )
+    val activeLyricTextStyle = lyricTextStyle
+    val lyricGlowBlurRadiusPx = with(density) {
+        LyricGlowRadius.toPx()
+    }
+    val lyricLineSpacingPx = with(density) {
+        LyricsLineSpacing.roundToPx()
+    }
+    val blankLyricLineHeightPx = with(density) {
+        BlankLyricLineHeight.roundToPx()
+    }
     val textMeasurer = rememberTextMeasurer()
 
     fun markUserInteraction() {
@@ -181,17 +197,19 @@ private fun LyricsList(
             activeLineIndex,
             lines,
             lyricTextWidthPx,
-            activeLyricTextStyle
+            activeLyricTextStyle,
+            lyricLineSpacingPx,
+            blankLyricLineHeightPx
         ) {
             val activeLine = activeLineIndex?.let(lines::getOrNull)
             if (activeLine == null || activeLine.text.isBlank()) {
-                with(density) { 1.dp.roundToPx() }
+                blankLyricLineHeightPx
             } else {
                 textMeasurer.measure(
                     text = activeLine.text,
                     style = activeLyricTextStyle,
                     constraints = Constraints(maxWidth = lyricTextWidthPx)
-                ).size.height
+                ).size.height + lyricLineSpacingPx
             }
         }
 
@@ -240,56 +258,77 @@ private fun LyricsList(
                         isPointerDown = false
                         markUserInteraction()
                     }
-                },
+                }
+                .verticalFadingEdges(LyricsEdgeFadeHeight),
             contentPadding = PaddingValues(
                 top = targetY,
                 bottom = bottomPadding
-            ),
-            verticalArrangement = Arrangement.spacedBy(LyricsLineSpacing)
+            )
         ) {
             itemsIndexed(
                 items = lines,
                 key = { index, line -> "${line.timestampMs}:$index" }
-            ) { _, line ->
+            ) { index, line ->
                 if (line.text.isBlank()) {
                     // 保留一个不可见锚点，空行播放时中心会落在上下两句的间隙。
                     Spacer(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(1.dp)
+                            .height(BlankLyricLineHeight)
                     )
                 } else {
                     val isActive = line.timestampMs == activeTimestampMs
+                    val targetLyricAlpha = if (isActive) {
+                        1f
+                    } else {
+                        inactiveLyricAlpha(
+                            lineIndex = index,
+                            activeLineIndex = activeLineIndex
+                        )
+                    }
                     val lyricColor by animateColorAsState(
-                        targetValue = if (isActive) {
-                            Color.White
-                        } else {
-                            Color.White.copy(alpha = 0.48f)
-                        },
+                        targetValue = Color.White.copy(alpha = targetLyricAlpha),
                         animationSpec = tween(
                             durationMillis = LyricsLineTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
                         ),
                         label = "LyricHighlightColor"
                     )
-                    val lyricWeight by animateIntAsState(
-                        targetValue = if (isActive) {
-                            FontWeight.SemiBold.weight
-                        } else {
-                            FontWeight.Normal.weight
-                        },
+                    val lyricScale by animateFloatAsState(
+                        targetValue = if (isActive) ActiveLyricScale else 1f,
                         animationSpec = tween(
                             durationMillis = LyricsLineTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
                         ),
-                        label = "LyricHighlightWeight"
+                        label = "LyricHighlightScale"
+                    )
+                    val lyricGlowAlpha by animateFloatAsState(
+                        targetValue = targetLyricAlpha * LyricGlowAlphaMultiplier,
+                        animationSpec = tween(
+                            durationMillis = LyricsLineTransitionDurationMs,
+                            easing = LyricsLineTransitionEasing
+                        ),
+                        label = "LyricGlowAlpha"
                     )
                     Text(
                         text = line.text,
-                        style = lyricTextStyle,
+                        style = lyricTextStyle.copy(
+                            shadow = Shadow(
+                                color = Color.White.copy(alpha = lyricGlowAlpha),
+                                offset = Offset.Zero,
+                                blurRadius = lyricGlowBlurRadiusPx
+                            )
+                        ),
                         color = lyricColor,
-                        fontWeight = FontWeight(lyricWeight),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .zIndex(if (isActive) 1f else 0f)
+                            .padding(vertical = LyricsLineSpacing / 2f)
+                            .graphicsLayer {
+                                scaleX = lyricScale
+                                scaleY = lyricScale
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                            }
                     )
                 }
             }
@@ -298,7 +337,67 @@ private fun LyricsList(
 }
 
 private val LyricsHorizontalPadding = 36.dp
-private val LyricsLineSpacing = 24.dp
+private val LyricsLineSpacing = 38.dp
+private val BlankLyricLineHeight = 12.dp
+private val LyricsEdgeFadeHeight = 64.dp
+private const val ActiveLyricScale = 1.12f
+private const val LyricGlowAlphaMultiplier = 0.18f
+private val LyricGlowRadius = 18.dp
+private const val NearestInactiveLyricAlpha = 0.64f
+private const val InactiveLyricAlphaStep = 0.11f
+private const val FarthestInactiveLyricAlpha = 0.20f
+private const val DefaultInactiveLyricAlpha = 0.48f
+
+private fun Modifier.verticalFadingEdges(fadeHeight: Dp): Modifier =
+    graphicsLayer {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }.drawWithCache {
+        val fadeFraction = if (size.height > 0f) {
+            (fadeHeight.toPx() / size.height).coerceIn(0f, 0.5f)
+        } else {
+            0f
+        }
+        val maskStops = buildList {
+            for (index in 0..LyricsEdgeFadeSteps) {
+                val progress = index.toFloat() / LyricsEdgeFadeSteps
+                val smoothAlpha = progress * progress * (3f - 2f * progress)
+                add(fadeFraction * progress to Color.Black.copy(alpha = smoothAlpha))
+            }
+            for (index in 0..LyricsEdgeFadeSteps) {
+                val progress = index.toFloat() / LyricsEdgeFadeSteps
+                val inverseProgress = 1f - progress
+                val smoothAlpha =
+                    inverseProgress * inverseProgress * (3f - 2f * inverseProgress)
+                add(
+                    1f - fadeFraction + fadeFraction * progress to
+                        Color.Black.copy(alpha = smoothAlpha)
+                )
+            }
+        }
+        val mask = Brush.verticalGradient(*maskStops.toTypedArray())
+        onDrawWithContent {
+            drawContent()
+            drawRect(
+                brush = mask,
+                blendMode = BlendMode.DstIn
+            )
+        }
+    }
+
+private const val LyricsEdgeFadeSteps = 10
+
+private fun inactiveLyricAlpha(
+    lineIndex: Int,
+    activeLineIndex: Int?
+): Float {
+    if (activeLineIndex == null) {
+        return DefaultInactiveLyricAlpha
+    }
+    val distance = kotlin.math.abs(lineIndex - activeLineIndex)
+    val fadeSteps = (distance - 1).coerceAtLeast(0)
+    return (NearestInactiveLyricAlpha - fadeSteps * InactiveLyricAlphaStep)
+        .coerceAtLeast(FarthestInactiveLyricAlpha)
+}
 
 @Composable
 private fun LyricsMessage(

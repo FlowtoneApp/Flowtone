@@ -9,7 +9,9 @@ object LrcParser {
                 val matches = timestampTag.findAll(sourceLine).toList()
                 if (matches.isEmpty()) return@forEach
 
-                val text = sourceLine.substring(matches.last().range.last + 1)
+                val text = normalizeLyricText(
+                    sourceLine.substring(matches.last().range.last + 1)
+                )
                 matches.forEach { match ->
                     parseTimestamp(match)?.let { timestampMs ->
                         add(LyricLine(timestampMs = timestampMs, text = text))
@@ -32,4 +34,11 @@ object LrcParser {
         }
         return minutes * 60_000L + seconds * 1_000L + fractionMs
     }
+
+    private fun normalizeLyricText(text: String): String =
+        text.trimStart { character ->
+            character.isWhitespace() ||
+                character == '\uFEFF' ||
+                character == '\u200B'
+        }
 }
