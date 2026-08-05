@@ -242,18 +242,28 @@ private fun LyricsList(
                 ).size.height + lyricLineSpacingPx
             }
         }
+        val activeLineTransitionDurationMs = remember(lines, activeLineIndex) {
+            activeLineIndex?.let { lineIndex ->
+                lyricVisualTransitionDurationMs(
+                    lines = lines,
+                    lineIndex = lineIndex
+                )
+            } ?: LyricsLineTransitionDurationMs
+        }
 
         LaunchedEffect(
             activeLineIndex,
             activeLineTargetYPx,
             activeLineSizePx,
+            activeLineTransitionDurationMs,
             isFollowingCurrentLine
         ) {
             if (isFollowingCurrentLine && activeLineIndex != null) {
                 listState.animateScrollToItemAtY(
                     index = activeLineIndex,
                     targetYPx = activeLineTargetYPx,
-                    targetItemSizePx = activeLineSizePx
+                    targetItemSizePx = activeLineSizePx,
+                    transitionDurationMs = activeLineTransitionDurationMs
                 )
                 val finalItem = listState.layoutInfo.visibleItemsInfo
                     .firstOrNull { it.index == activeLineIndex }
@@ -372,10 +382,14 @@ private fun LyricsList(
                             activeLineIndex = activeLineIndex
                         )
                     }
+                    val lyricTransitionDurationMs = lyricVisualTransitionDurationMs(
+                        lines = lines,
+                        lineIndex = index
+                    )
                     val lyricColor by animateColorAsState(
                         targetValue = Color.White.copy(alpha = targetLyricAlpha),
                         animationSpec = tween(
-                            durationMillis = LyricsLineTransitionDurationMs,
+                            durationMillis = lyricTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
                         ),
                         label = "LyricHighlightColor"
@@ -387,7 +401,7 @@ private fun LyricsList(
                             InactiveLyricScale
                         },
                         animationSpec = tween(
-                            durationMillis = LyricsLineTransitionDurationMs,
+                            durationMillis = lyricTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
                         ),
                         label = "LyricHighlightScale"
@@ -395,7 +409,7 @@ private fun LyricsList(
                     val lyricGlowAlpha by animateFloatAsState(
                         targetValue = targetLyricAlpha * LyricGlowAlphaMultiplier,
                         animationSpec = tween(
-                            durationMillis = LyricsLineTransitionDurationMs,
+                            durationMillis = lyricTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
                         ),
                         label = "LyricGlowAlpha"
@@ -462,7 +476,7 @@ private fun LyricsList(
     }
 }
 
-private val LyricsStartPadding = 20.dp
+private val LyricsStartPadding = 16.dp
 private val LyricsEndPadding = 48.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp

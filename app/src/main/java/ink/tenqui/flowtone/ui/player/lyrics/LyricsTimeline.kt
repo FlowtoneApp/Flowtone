@@ -4,6 +4,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyLayoutScrollScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.snapshotFlow
@@ -14,6 +15,7 @@ import kotlin.math.abs
 internal const val LyricsReturnToCurrentLineDelayMs = 3_000L
 internal const val LyricsActiveLineScreenYFraction = 0.312f
 internal const val LyricsLineTransitionDurationMs = 700
+internal const val LyricsInstantTrackingThresholdMs = 300
 internal val LyricsLineTransitionEasing = CubicBezierEasing(
     a = 0.2f,
     b = 0f,
@@ -44,6 +46,29 @@ internal fun activeLyricAnchorIndex(
     }
 }
 
+/**
+ * 短促歌词应在下一句开始前完成视觉过渡；普通歌词继续使用默认动画时长。
+ * 相同时间戳的多行歌词属于同一组，因此查找下一条不同的时间戳。
+ */
+internal fun lyricVisualTransitionDurationMs(
+    lines: List<LyricLine>,
+    lineIndex: Int
+): Int {
+    val currentTimestampMs = lines.getOrNull(lineIndex)?.timestampMs
+        ?: return LyricsLineTransitionDurationMs
+    val nextTimestampMs = lines
+        .asSequence()
+        .drop(lineIndex + 1)
+        .map(LyricLine::timestampMs)
+        .firstOrNull { timestampMs -> timestampMs > currentTimestampMs }
+        ?: return LyricsLineTransitionDurationMs
+    val timeUntilNextLineMs = nextTimestampMs - currentTimestampMs
+
+    return timeUntilNextLineMs
+        .coerceAtMost(LyricsLineTransitionDurationMs.toLong())
+        .toInt()
+}
+
 internal fun lazyListItemCenterInViewport(
     itemOffset: Int,
     itemSize: Int,
@@ -56,10 +81,14 @@ internal fun lazyListInitialScrollOffsetForTarget(
     targetItemSizePx: Int
 ): Int = -(targetYPx + viewportStartOffset) + targetItemSizePx / 2
 
+internal fun shouldInstantlyTrackLyric(transitionDurationMs: Int): Boolean =
+    transitionDurationMs < LyricsInstantTrackingThresholdMs
+
 internal suspend fun LazyListState.animateScrollToItemAtY(
     index: Int,
     targetYPx: Int,
-    targetItemSizePx: Int
+    targetItemSizePx: Int,
+    transitionDurationMs: Int = LyricsLineTransitionDurationMs
 ) {
     snapshotFlow { layoutInfo.totalItemsCount }.first { itemCount ->
         index in 0 until itemCount
@@ -78,10 +107,15 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
             viewportStartOffset = layoutInfo.viewportStartOffset,
             targetItemSizePx = targetItemSizePx
         )
-        animateScrollToItemWithLyricsTransition(
-            index = index,
-            scrollOffset = initialScrollOffset
-        )
+        if (shouldInstantlyTrackLyric(transitionDurationMs)) {
+            scrollToItem(index = index, scrollOffset = initialScrollOffset)
+        } else {
+            animateScrollToItemWithLyricsTransition(
+                index = index,
+                scrollOffset = initialScrollOffset,
+                transitionDurationMs = transitionDurationMs
+            )
+        }
         return
     }
 
@@ -95,19 +129,24 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
     // LazyListItemInfo.offset 与 viewportStartOffset 使用同一列表坐标系。
     val distanceToTarget = targetCenter - safeTargetYPx
     if (abs(distanceToTarget) > LyricsAnchorTolerancePx) {
-        animateScrollBy(
-            value = distanceToTarget.toFloat(),
-            animationSpec = tween(
-                durationMillis = LyricsLineTransitionDurationMs,
-                easing = LyricsLineTransitionEasing
+        if (shouldInstantlyTrackLyric(transitionDurationMs)) {
+            scrollBy(distanceToTarget.toFloat())
+        } else {
+            animateScrollBy(
+                value = distanceToTarget.toFloat(),
+                animationSpec = tween(
+                    durationMillis = transitionDurationMs,
+                    easing = LyricsLineTransitionEasing
+                )
             )
-        )
+        }
     }
 }
 
 private suspend fun LazyListState.animateScrollToItemWithLyricsTransition(
     index: Int,
-    scrollOffset: Int
+    scrollOffset: Int,
+    transitionDurationMs: Int
 ) {
     scroll {
         val lazyScrollScope = LazyLayoutScrollScope(
@@ -120,7 +159,7 @@ private suspend fun LazyListState.animateScrollToItemWithLyricsTransition(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = tween(
-                durationMillis = LyricsLineTransitionDurationMs,
+                durationMillis = transitionDurationMs,
                 easing = LyricsLineTransitionEasing
             )
         ) { progress, _ ->

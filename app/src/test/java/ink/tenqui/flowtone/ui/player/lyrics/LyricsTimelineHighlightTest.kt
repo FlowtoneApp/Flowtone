@@ -87,4 +87,38 @@ class LyricsTimelineHighlightTest {
         )
     }
 
+    @Test
+    fun shortLyricUsesTimeUntilNextLineAsVisualTransitionDuration() {
+        val shortLines = listOf(
+            LyricLine(timestampMs = 1_000L, text = "短促歌词"),
+            LyricLine(timestampMs = 1_010L, text = "下一句")
+        )
+
+        assertEquals(10, lyricVisualTransitionDurationMs(shortLines, lineIndex = 0))
+    }
+
+    @Test
+    fun duplicateTimestampsShareDurationToNextDistinctTimestamp() {
+        val translatedLines = listOf(
+            LyricLine(timestampMs = 1_000L, text = "歌词"),
+            LyricLine(timestampMs = 1_000L, text = "翻译"),
+            LyricLine(timestampMs = 1_180L, text = "下一句")
+        )
+
+        assertEquals(180, lyricVisualTransitionDurationMs(translatedLines, lineIndex = 0))
+        assertEquals(180, lyricVisualTransitionDurationMs(translatedLines, lineIndex = 1))
+    }
+
+    @Test
+    fun normalAndFinalLyricsKeepDefaultVisualTransitionDuration() {
+        assertEquals(LyricsLineTransitionDurationMs, lyricVisualTransitionDurationMs(lines, 0))
+        assertEquals(LyricsLineTransitionDurationMs, lyricVisualTransitionDurationMs(lines, 3))
+    }
+
+    @Test
+    fun trackingSnapsOnlyBelowThreeHundredMilliseconds() {
+        assertEquals(true, shouldInstantlyTrackLyric(299))
+        assertEquals(false, shouldInstantlyTrackLyric(300))
+    }
+
 }
