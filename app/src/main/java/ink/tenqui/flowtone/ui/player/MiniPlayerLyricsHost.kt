@@ -32,6 +32,12 @@ private data class LyricsPageState(
     val state: LyricsState
 )
 
+private enum class LyricsPageContentKind {
+    TimedLyrics,
+    PureMusicNotice,
+    NoEffectiveLyrics
+}
+
 @Composable
 internal fun MiniPlayerLyricsHost(
     currentSong: Song?,
@@ -90,12 +96,14 @@ internal fun MiniPlayerLyricsHost(
     }
     val songChangedThisFrame = observedSongId != targetPageState.songId
     val staggeredEntranceActive =
-        songChangedThisFrame ||
+        (songChangedThisFrame && targetPageState.state.hasLyricsLines()) ||
             activeStaggeredEntranceSongId == targetPageState.songId
     LaunchedEffect(targetPageState.songId) {
         if (observedSongId != targetPageState.songId) {
             observedSongId = targetPageState.songId
-            activeStaggeredEntranceSongId = targetPageState.songId
+            activeStaggeredEntranceSongId = targetPageState.songId.takeIf {
+                targetPageState.state.hasLyricsLines()
+            }
             trackEnterReadySongId = null
         }
     }
@@ -133,7 +141,12 @@ internal fun MiniPlayerLyricsHost(
                 }
                 enter togetherWith exit
             },
-            contentKey = { state -> state.songId to state.state::class },
+            contentKey = { state ->
+                lyricsTrackSwitchContentKey(
+                    songId = state.songId,
+                    state = state.state
+                )
+            },
             label = "LyricsTrackSwitch",
             modifier = Modifier.fillMaxSize()
         ) { displayedPage ->
@@ -193,6 +206,15 @@ internal fun playbackPositionForSong(
     playbackPosition.mediaId == songId.toString()
 }
 
+internal fun lyricsTrackSwitchContentKey(
+    songId: Long,
+    state: LyricsState
+): Any = when (state.contentKind()) {
+    LyricsPageContentKind.TimedLyrics -> songId to LyricsPageContentKind.TimedLyrics
+    LyricsPageContentKind.PureMusicNotice -> LyricsPageContentKind.PureMusicNotice
+    LyricsPageContentKind.NoEffectiveLyrics -> LyricsPageContentKind.NoEffectiveLyrics
+}
+
 private const val LyricsStateEnterDurationMillis = 220
 private const val LyricsStateExitDurationMillis = 160
 private const val LyricsStaggeredExitLifetimeMillis =
@@ -200,3 +222,10 @@ private const val LyricsStaggeredExitLifetimeMillis =
 
 private fun LyricsState.hasLyricsLines(): Boolean =
     this is LyricsState.Available && lines.isNotEmpty() && !isPureMusicNotice(lines)
+
+private fun LyricsState.contentKind(): LyricsPageContentKind = when {
+    this is LyricsState.Available && isPureMusicNotice(lines) ->
+        LyricsPageContentKind.PureMusicNotice
+    hasLyricsLines() -> LyricsPageContentKind.TimedLyrics
+    else -> LyricsPageContentKind.NoEffectiveLyrics
+}

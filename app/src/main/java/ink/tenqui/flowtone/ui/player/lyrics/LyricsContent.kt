@@ -177,9 +177,6 @@ internal fun isPureMusicNotice(lines: List<LyricLine>): Boolean {
 
 @Composable
 private fun PureMusicNotice(modifier: Modifier = Modifier) {
-    val glowBlurRadiusPx = with(LocalDensity.current) {
-        LyricGlowRadius.toPx()
-    }
     Box(
         modifier = modifier.padding(horizontal = 24.dp),
         contentAlignment = Alignment.Center
@@ -189,12 +186,7 @@ private fun PureMusicNotice(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.headlineSmall.copy(
                 fontSize = 24.sp,
                 lineHeight = 32.sp,
-                fontWeight = FontWeight.SemiBold,
-                shadow = Shadow(
-                    color = Color.White.copy(alpha = LyricGlowAlphaMultiplier),
-                    offset = Offset.Zero,
-                    blurRadius = glowBlurRadiusPx
-                )
+                fontWeight = FontWeight.SemiBold
             ),
             color = Color.White
         )
