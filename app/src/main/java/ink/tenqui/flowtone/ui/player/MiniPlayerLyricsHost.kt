@@ -25,7 +25,6 @@ import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsContent
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsTrackSwitchPhase
 import ink.tenqui.flowtone.ui.player.lyrics.isPureMusicNotice
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 
 private data class LyricsPageState(
@@ -36,6 +35,7 @@ private data class LyricsPageState(
 @Composable
 internal fun MiniPlayerLyricsHost(
     currentSong: Song?,
+    presentedSongId: Long?,
     songLyricsState: SongLyricsState,
     confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
     activeLineTargetY: Dp,
@@ -67,39 +67,42 @@ internal fun MiniPlayerLyricsHost(
             resolvedLyricsState
         }
     )
+    var presentedPageState by remember { mutableStateOf(pageState) }
+    val targetPageState = if (pageState.songId == presentedSongId) {
+        pageState
+    } else {
+        presentedPageState
+    }
+    LaunchedEffect(targetPageState, presentedSongId) {
+        if (targetPageState.songId == presentedSongId) {
+            presentedPageState = targetPageState
+        }
+    }
     val normalizedSwitchDirection = if (switchDirection < 0) -1 else 1
     var observedSongId by remember {
-        mutableLongStateOf(currentSong.id)
+        mutableLongStateOf(targetPageState.songId)
     }
     var activeStaggeredEntranceSongId by remember {
         mutableStateOf<Long?>(null)
     }
-    val songChangedThisFrame = observedSongId != currentSong.id
-    val staggeredEntranceActive =
-        songChangedThisFrame || activeStaggeredEntranceSongId == currentSong.id
-    val currentPageHasLyricsLines = pageState.state.hasLyricsLines()
-    LaunchedEffect(currentSong.id) {
-        if (observedSongId != currentSong.id) {
-            observedSongId = currentSong.id
-            activeStaggeredEntranceSongId = currentSong.id
-        }
+    var trackEnterReadySongId by remember {
+        mutableStateOf<Long?>(null)
     }
-    LaunchedEffect(
-        currentSong.id,
-        staggeredEntranceActive,
-        currentPageHasLyricsLines
-    ) {
-        if (staggeredEntranceActive && currentPageHasLyricsLines) {
-            delay(LyricsStaggeredEntranceLifetimeMillis.toLong())
-            if (activeStaggeredEntranceSongId == currentSong.id) {
-                activeStaggeredEntranceSongId = null
-            }
+    val songChangedThisFrame = observedSongId != targetPageState.songId
+    val staggeredEntranceActive =
+        songChangedThisFrame ||
+            activeStaggeredEntranceSongId == targetPageState.songId
+    LaunchedEffect(targetPageState.songId) {
+        if (observedSongId != targetPageState.songId) {
+            observedSongId = targetPageState.songId
+            activeStaggeredEntranceSongId = targetPageState.songId
+            trackEnterReadySongId = null
         }
     }
 
     Box(modifier = modifier.clipToBounds()) {
         AnimatedContent(
-            targetState = pageState,
+            targetState = targetPageState,
             transitionSpec = {
                 val enteringLyricsLines = targetState.state.hasLyricsLines()
                 val exitingLyricsLines = initialState.state.hasLyricsLines()
@@ -134,11 +137,17 @@ internal fun MiniPlayerLyricsHost(
             label = "LyricsTrackSwitch",
             modifier = Modifier.fillMaxSize()
         ) { displayedPage ->
-            val isCurrentPage = displayedPage == pageState
+            val isCurrentPage =
+                displayedPage == targetPageState &&
+                    displayedPage.songId == currentSong.id
             val trackSwitchPhase = when {
                 !displayedPage.state.hasLyricsLines() -> LyricsTrackSwitchPhase.Static
-                displayedPage.songId != currentSong.id -> LyricsTrackSwitchPhase.Exiting
-                staggeredEntranceActive -> LyricsTrackSwitchPhase.Entering
+                displayedPage.songId != targetPageState.songId ->
+                    LyricsTrackSwitchPhase.Exiting
+                staggeredEntranceActive &&
+                    trackEnterReadySongId == displayedPage.songId ->
+                    LyricsTrackSwitchPhase.Entering
+                staggeredEntranceActive -> LyricsTrackSwitchPhase.WaitingToEnter
                 else -> LyricsTrackSwitchPhase.Static
             }
             LyricsContent(
@@ -150,6 +159,20 @@ internal fun MiniPlayerLyricsHost(
                 visibilityProgress = visibilityProgress,
                 trackSwitchPhase = trackSwitchPhase,
                 trackSwitchDirection = normalizedSwitchDirection,
+                onTrackEnterReady = if (isCurrentPage) {
+                    { trackEnterReadySongId = displayedPage.songId }
+                } else {
+                    { }
+                },
+                onTrackEnterFinished = if (isCurrentPage) {
+                    {
+                        if (activeStaggeredEntranceSongId == displayedPage.songId) {
+                            activeStaggeredEntranceSongId = null
+                        }
+                    }
+                } else {
+                    { }
+                },
                 onLyricPress = if (isCurrentPage) onLyricPress else ({ }),
                 onLyricClick = if (isCurrentPage) onSeekTo else ({ _ -> }),
                 onChooseLyricsDirectory = if (isCurrentPage) {
@@ -172,8 +195,8 @@ internal fun playbackPositionForSong(
 
 private const val LyricsStateEnterDurationMillis = 220
 private const val LyricsStateExitDurationMillis = 160
-private const val LyricsStaggeredEntranceLifetimeMillis = 460
-private const val LyricsStaggeredExitLifetimeMillis = 340
+private const val LyricsStaggeredExitLifetimeMillis =
+    PlayerSongSwitchDurationMillis
 
 private fun LyricsState.hasLyricsLines(): Boolean =
     this is LyricsState.Available && lines.isNotEmpty() && !isPureMusicNotice(lines)

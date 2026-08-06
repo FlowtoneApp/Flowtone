@@ -470,6 +470,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         // The host is deliberately constrained to the same middle band used for artwork.
         MiniPlayerLyricsHost(
             currentSong = playerUiState.currentSong,
+            presentedSongId = songPresentationTransition.current.key,
             songLyricsState = songLyricsState,
             switchDirection = collapsedMetadataSwitchDirection,
             confirmedPlaybackPosition = confirmedPlaybackPosition,

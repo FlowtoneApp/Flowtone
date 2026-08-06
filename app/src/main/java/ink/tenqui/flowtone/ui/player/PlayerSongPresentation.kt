@@ -159,4 +159,4 @@ internal fun PlayerSongPresentationTransitionContent(
     }
 }
 
-private const val PlayerSongSwitchDurationMillis = 320
+internal const val PlayerSongSwitchDurationMillis = 320

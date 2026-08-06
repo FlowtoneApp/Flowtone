@@ -33,6 +33,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,12 +66,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import ink.tenqui.flowtone.lyrics.LyricLine
 import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.ui.player.PlayerSongSwitchDurationMillis
+import ink.tenqui.flowtone.ui.player.TrackSwitchProgressEasing
 import kotlin.math.roundToInt
 
 internal enum class LyricsTrackSwitchPhase {
     Static,
+    WaitingToEnter,
     Entering,
     Exiting
 }
@@ -82,6 +88,8 @@ internal fun LyricsContent(
     visibilityProgress: Float,
     trackSwitchPhase: LyricsTrackSwitchPhase = LyricsTrackSwitchPhase.Static,
     trackSwitchDirection: Int = 1,
+    onTrackEnterReady: () -> Unit = {},
+    onTrackEnterFinished: () -> Unit = {},
     onLyricPress: () -> Unit,
     onLyricClick: (Long) -> Unit,
     onChooseLyricsDirectory: () -> Unit,
@@ -141,6 +149,8 @@ internal fun LyricsContent(
                         activeLineTargetY = activeLineTargetY,
                         trackSwitchPhase = trackSwitchPhase,
                         trackSwitchDirection = trackSwitchDirection,
+                        onTrackEnterReady = onTrackEnterReady,
+                        onTrackEnterFinished = onTrackEnterFinished,
                         onLyricPress = onLyricPress,
                         onLyricClick = onLyricClick,
                         modifier = visibleModifier
@@ -193,6 +203,8 @@ private fun LyricsList(
     activeLineTargetY: Dp,
     trackSwitchPhase: LyricsTrackSwitchPhase,
     trackSwitchDirection: Int,
+    onTrackEnterReady: () -> Unit,
+    onTrackEnterFinished: () -> Unit,
     onLyricPress: () -> Unit,
     onLyricClick: (Long) -> Unit,
     modifier: Modifier = Modifier
@@ -211,7 +223,8 @@ private fun LyricsList(
         }
     }
     val effectivePlaybackPositionMs = if (
-        trackSwitchPhase == LyricsTrackSwitchPhase.Exiting
+        trackSwitchPhase == LyricsTrackSwitchPhase.Exiting ||
+        confirmedPlaybackPositionMs == null
     ) {
         lastConfirmedPlaybackPosition.value
     } else {
@@ -261,16 +274,37 @@ private fun LyricsList(
     }
     val trackSwitchEntranceTimeline = remember(lines) {
         Animatable(
-            if (trackSwitchPhase == LyricsTrackSwitchPhase.Entering) 0f else 1f
+            if (
+                trackSwitchPhase == LyricsTrackSwitchPhase.WaitingToEnter ||
+                trackSwitchPhase == LyricsTrackSwitchPhase.Entering
+            ) {
+                0f
+            } else {
+                1f
+            }
         )
     }
     val trackSwitchExitTimeline = remember(lines) { Animatable(0f) }
     val trackSwitchEntranceDirection = remember(lines) { trackSwitchDirection }
+    val trackSwitchStaggerAnchorIndex = remember(lines, trackSwitchPhase) {
+        listState.firstVisibleItemIndex
+    }
     LaunchedEffect(trackSwitchPhase) {
         when (trackSwitchPhase) {
             LyricsTrackSwitchPhase.Static -> {
                 trackSwitchEntranceTimeline.snapTo(1f)
                 trackSwitchExitTimeline.snapTo(0f)
+            }
+            LyricsTrackSwitchPhase.WaitingToEnter -> {
+                trackSwitchEntranceTimeline.snapTo(0f)
+                snapshotFlow {
+                    val layoutInfo = listState.layoutInfo
+                    layoutInfo.viewportEndOffset > layoutInfo.viewportStartOffset &&
+                        layoutInfo.visibleItemsInfo.isNotEmpty()
+                }.first { it }
+                withFrameNanos { }
+                withFrameNanos { }
+                onTrackEnterReady()
             }
             LyricsTrackSwitchPhase.Entering -> {
                 coroutineScope {
@@ -286,6 +320,7 @@ private fun LyricsList(
                                 easing = LinearEasing
                             )
                         )
+                        onTrackEnterFinished()
                     }
                     launch {
                         val remainingDurationMillis = (
@@ -470,7 +505,7 @@ private fun LyricsList(
                 } else {
                     val isActive = line.timestampMs == activeTimestampMs
                     val staggerOrder = (
-                        index - listState.firstVisibleItemIndex
+                        index - trackSwitchStaggerAnchorIndex
                         ).coerceIn(0, LyricsTrackSwitchMaxStaggeredLines - 1)
                     val lyricInteractionSource = remember(line.timestampMs, index) {
                         MutableInteractionSource()
@@ -564,6 +599,7 @@ private fun LyricsList(
                         modifier = Modifier
                             .fillMaxWidth()
                             .graphicsLayer {
+                                compositingStrategy = CompositingStrategy.ModulateAlpha
                                 val entranceElapsedMillis =
                                     trackSwitchEntranceTimeline.value *
                                         LyricsTrackSwitchEntranceTotalDurationMillis
@@ -578,7 +614,7 @@ private fun LyricsList(
                                 ) {
                                     1f
                                 } else {
-                                    LyricsLineTransitionEasing.transform(
+                                    TrackSwitchProgressEasing.transform(
                                         linearEntranceProgress
                                     )
                                 }
@@ -591,7 +627,7 @@ private fun LyricsList(
                                     (exitElapsedMillis - exitLineDelayMillis) /
                                         LyricsTrackSwitchExitLineDurationMillis
                                     ).coerceIn(0f, 1f)
-                                val exitProgress = LyricsLineTransitionEasing.transform(
+                                val exitProgress = TrackSwitchProgressEasing.transform(
                                     linearExitProgress
                                 )
                                 alpha = entranceVisibility * (1f - exitProgress)
@@ -667,18 +703,20 @@ private val LyricsEndPadding = 48.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp
 private val LyricsEdgeFadeHeight = 64.dp
-private val LyricsTrackSwitchDistance = 20.dp
-private const val LyricsTrackSwitchLineDurationMillis = 260
-private const val LyricsTrackSwitchStaggerMillis = 22
-private const val LyricsTrackSwitchExitLineDurationMillis = 200
-private const val LyricsTrackSwitchExitStaggerMillis = 14
+private val LyricsTrackSwitchDistance = 16.dp
+private const val LyricsTrackSwitchStaggerMillis = 8
+private const val LyricsTrackSwitchExitStaggerMillis =
+    LyricsTrackSwitchStaggerMillis
 private const val LyricsTrackSwitchMaxStaggeredLines = 9
-private const val LyricsTrackSwitchEntranceTotalDurationMillis =
-    LyricsTrackSwitchLineDurationMillis +
+private const val LyricsTrackSwitchLineDurationMillis =
+    PlayerSongSwitchDurationMillis -
         LyricsTrackSwitchStaggerMillis * (LyricsTrackSwitchMaxStaggeredLines - 1)
+private const val LyricsTrackSwitchExitLineDurationMillis =
+    LyricsTrackSwitchLineDurationMillis
+private const val LyricsTrackSwitchEntranceTotalDurationMillis =
+    PlayerSongSwitchDurationMillis
 private const val LyricsTrackSwitchExitTotalDurationMillis =
-    LyricsTrackSwitchExitLineDurationMillis +
-        LyricsTrackSwitchExitStaggerMillis * (LyricsTrackSwitchMaxStaggeredLines - 1)
+    PlayerSongSwitchDurationMillis
 
 private class PlaybackPositionHolder(var value: Long?)
 private const val ActiveLyricScale = 1.04f
