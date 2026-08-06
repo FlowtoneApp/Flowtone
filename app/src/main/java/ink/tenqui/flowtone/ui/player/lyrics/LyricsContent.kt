@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -76,6 +77,7 @@ import ink.tenqui.flowtone.lyrics.LyricLine
 import ink.tenqui.flowtone.lyrics.LyricsState
 import ink.tenqui.flowtone.ui.player.PlayerSongSwitchDurationMillis
 import ink.tenqui.flowtone.ui.player.TrackSwitchProgressEasing
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -466,8 +468,7 @@ private fun LyricsList(
                 if (line.text.isBlank() && line.translation.isNullOrBlank()) {
                     LyricLineLayoutMetrics(
                         itemHeightPx = blankLyricLineHeightPx,
-                        contentWidthPx = 0,
-                        hasWrappedText = false
+                        contentWidthPx = 0
                     )
                 } else {
                     val lyricLayout = textMeasurer.measure(
@@ -495,12 +496,9 @@ private fun LyricsList(
                                 }) +
                                 lyricItemVerticalPaddingPx,
                         contentWidthPx = max(
-                            lyricLayout.size.width,
-                            translationLayout?.size?.width ?: 0
-                        ),
-                        hasWrappedText =
-                            lyricLayout.lineCount > 1 ||
-                                (translationLayout?.lineCount ?: 0) > 1
+                            lyricLayout.maxVisibleLineWidthPx(),
+                            translationLayout?.maxVisibleLineWidthPx() ?: 0
+                        )
                     )
                 }
             }
@@ -644,16 +642,12 @@ private fun LyricsList(
                         MutableInteractionSource()
                     }
                     val lineLayout = lineLayoutMetrics[index]
-                    val lyricBackgroundWidth = if (lineLayout.hasWrappedText) {
-                        lyricRowWidth
-                    } else {
-                        (
-                            with(density) {
-                                lineLayout.contentWidthPx.toDp()
-                            } +
-                                LyricClickBackgroundHorizontalPadding * 2f
-                            ).coerceAtMost(lyricRowWidth)
-                    }
+                    val lyricBackgroundWidth = (
+                        with(density) {
+                            lineLayout.contentWidthPx.toDp()
+                        } +
+                            LyricClickBackgroundHorizontalPadding * 2f
+                        ).coerceAtMost(lyricRowWidth)
                     var clickFeedbackVersion by remember(line.timestampMs, index) {
                         mutableIntStateOf(0)
                     }
@@ -971,9 +965,19 @@ private data class PendingLyricSeek(
 )
 private data class LyricLineLayoutMetrics(
     val itemHeightPx: Int,
-    val contentWidthPx: Int,
-    val hasWrappedText: Boolean
+    val contentWidthPx: Int
 )
+
+private fun TextLayoutResult.maxVisibleLineWidthPx(): Int {
+    var maxLineWidthPx = 0f
+    repeat(lineCount) { lineIndex ->
+        val lineWidthPx = kotlin.math.abs(
+            getLineRight(lineIndex) - getLineLeft(lineIndex)
+        )
+        maxLineWidthPx = max(maxLineWidthPx, lineWidthPx)
+    }
+    return ceil(maxLineWidthPx).toInt()
+}
 private const val ActiveLyricScale = 1.04f
 private const val InactiveLyricScale = 0.98f
 private const val LyricGlowAlphaMultiplier = 0.18f
