@@ -6,6 +6,28 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LyricsTimelineHighlightTest {
+
+    @Test
+    fun subpixelCompensationFollowsIdealPositionBetweenRoundedListSteps() {
+        assertEquals(
+            -0.4f,
+            lyricTrackingSubpixelOffsetPx(
+                initialAbsolutePositionPx = 100f,
+                actualAbsolutePositionPx = 100f,
+                idealScrollPositionPx = 0.4f
+            ),
+            0.001f
+        )
+        assertEquals(
+            0.4f,
+            lyricTrackingSubpixelOffsetPx(
+                initialAbsolutePositionPx = 100f,
+                actualAbsolutePositionPx = 101f,
+                idealScrollPositionPx = 0.6f
+            ),
+            0.001f
+        )
+    }
     private val lines = listOf(
         LyricLine(timestampMs = 1_000L, text = "第一句"),
         LyricLine(timestampMs = 2_500L, text = "第二句"),
@@ -83,6 +105,53 @@ class LyricsTimelineHighlightTest {
                 targetYPx = 401,
                 viewportStartOffset = -401,
                 targetItemSizePx = 90
+            )
+        )
+    }
+
+    @Test
+    fun fixedForwardSeekUsesMeasuredHeightsOnlyOnce() {
+        assertEquals(
+            900f,
+            fixedScrollDistanceToItem(
+                itemHeightsPx = intArrayOf(100, 200, 300, 400),
+                anchorIndex = 1,
+                anchorOffset = 500,
+                anchorSize = 200,
+                targetIndex = 3,
+                targetYPx = 400,
+                viewportStartOffset = -100
+            )
+        )
+    }
+
+    @Test
+    fun fixedBackwardSeekUsesMeasuredHeightsOnlyOnce() {
+        assertEquals(
+            -300f,
+            fixedScrollDistanceToItem(
+                itemHeightsPx = intArrayOf(100, 200, 300, 400),
+                anchorIndex = 2,
+                anchorOffset = 200,
+                anchorSize = 300,
+                targetIndex = 0,
+                targetYPx = 300,
+                viewportStartOffset = -50
+            )
+        )
+    }
+
+    @Test
+    fun fixedSeekRejectsAnInvalidTargetIndex() {
+        assertNull(
+            fixedScrollDistanceToItem(
+                itemHeightsPx = intArrayOf(100, 200),
+                anchorIndex = 0,
+                anchorOffset = 0,
+                anchorSize = 100,
+                targetIndex = 2,
+                targetYPx = 100,
+                viewportStartOffset = 0
             )
         )
     }

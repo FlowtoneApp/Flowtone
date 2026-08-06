@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -104,17 +105,29 @@ fun MiniPlayer(
     val miniPlayerVisible = hasCurrentSong && !forceHidden
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
-    val callbacks = MiniPlayerCallbacks(
-        onTogglePlayPause = onTogglePlayPause,
-        onPlayPrevious = onPlayPrevious,
-        onPlayNext = onPlayNext,
-        onSeekTo = onSeekTo,
-        onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
-        onPlayQueueSong = onPlayQueueSong,
-        onPlayArtistSongQueue = onPlayArtistSongQueue,
-        onToggleSongLiked = onToggleSongLiked,
-        onOpenArtistRootPage = onOpenArtistRootPage
-    )
+    val callbacks = remember(
+        onTogglePlayPause,
+        onPlayPrevious,
+        onPlayNext,
+        onSeekTo,
+        onTogglePlaybackOrderMode,
+        onPlayQueueSong,
+        onPlayArtistSongQueue,
+        onToggleSongLiked,
+        onOpenArtistRootPage
+    ) {
+        MiniPlayerCallbacks(
+            onTogglePlayPause = onTogglePlayPause,
+            onPlayPrevious = onPlayPrevious,
+            onPlayNext = onPlayNext,
+            onSeekTo = onSeekTo,
+            onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
+            onPlayQueueSong = onPlayQueueSong,
+            onPlayArtistSongQueue = onPlayArtistSongQueue,
+            onToggleSongLiked = onToggleSongLiked,
+            onOpenArtistRootPage = onOpenArtistRootPage
+        )
+    }
     val artworkUri = playerUiState.artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
     val durationMs = playerUiState.durationMs
@@ -157,7 +170,21 @@ fun MiniPlayer(
     var lastLyricInteractionUptimeMs by remember {
         mutableLongStateOf(Long.MIN_VALUE)
     }
-    val transitions = MiniPlayerTransitions(state)
+    val transitions = remember(state) { MiniPlayerTransitions(state) }
+    val currentIsPlayingForLyricSeek by rememberUpdatedState(playerUiState.isPlaying)
+    val onLyricPressCallback = remember {
+        {
+            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+        }
+    }
+    val onLyricSeekCallback = remember(callbacks, transitions) {
+        { positionMs: Long ->
+            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+            // seek 引发的短暂 BUFFERING 不应启动暂停态的封面、背景和控件动画。
+            transitions.lockPlayPauseVisual(currentIsPlayingForLyricSeek)
+            callbacks.onSeekTo(positionMs)
+        }
+    }
     val collapsedHeight = MiniPlayerCollapsedHeight
     val minimizedHeight = MiniPlayerMinimizedHeight
     val dragHotZoneHeight = MiniPlayerDragHotZoneHeight
@@ -793,7 +820,7 @@ fun MiniPlayer(
                             state.lastStableBackdrop.backgroundImageRequest,
                         cloudColors = state.lastStableBackdrop.colors,
                         animationProgress = animationProgress,
-                        isPlaying = playerUiState.isPlaying,
+                        isPlaying = visualIsPlaying,
                         flowCloudSpeed = flowCloudSpeed,
                         waitForArtworkLoad = useLocalArtworkLoading,
                         lyricsBlurredArtworkProgress = lyricsBlurredArtworkProgress
@@ -864,13 +891,8 @@ fun MiniPlayer(
                         fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
                         songInfoProgress = songInfoProgress,
                         callbacks = callbacks,
-                        onLyricPress = {
-                            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
-                        },
-                        onLyricSeek = { positionMs ->
-                            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
-                            callbacks.onSeekTo(positionMs)
-                        },
+                        onLyricPress = onLyricPressCallback,
+                        onLyricSeek = onLyricSeekCallback,
                         collapseInteractionSource = state.noRippleInteractionSource,
                         onArtistClick = fullscreenInteractionHandlers.onArtistClick,
                         onNewPlaylistCreateAnimationFinished =

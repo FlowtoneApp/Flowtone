@@ -1,7 +1,7 @@
 package ink.tenqui.flowtone.ui.player.lyrics
 
+import android.os.Build
 import android.util.Log
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -37,6 +37,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,6 +45,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -56,6 +59,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -215,12 +219,25 @@ private fun LyricsList(
     val lastConfirmedPlaybackPosition = remember(lines) {
         PlaybackPositionHolder(confirmedPlaybackPositionMs)
     }
+    var pendingLyricSeek by remember(lines) {
+        mutableStateOf<PendingLyricSeek?>(null)
+    }
     SideEffect {
         if (
             trackSwitchPhase != LyricsTrackSwitchPhase.Exiting &&
             confirmedPlaybackPositionMs != null
         ) {
             lastConfirmedPlaybackPosition.value = confirmedPlaybackPositionMs
+            pendingLyricSeek?.let { pendingSeek ->
+                val reachedPendingTarget = if (pendingSeek.direction >= 0) {
+                    confirmedPlaybackPositionMs >= pendingSeek.timestampMs
+                } else {
+                    confirmedPlaybackPositionMs <= pendingSeek.timestampMs
+                }
+                if (reachedPendingTarget) {
+                    pendingLyricSeek = null
+                }
+            }
         }
     }
     val effectivePlaybackPositionMs = if (
@@ -231,16 +248,18 @@ private fun LyricsList(
     } else {
         confirmedPlaybackPositionMs
     }
-    val activeTimestampMs = remember(lines, effectivePlaybackPositionMs) {
-        effectivePlaybackPositionMs?.let { positionMs ->
+    val displayedPlaybackPositionMs =
+        pendingLyricSeek?.timestampMs ?: effectivePlaybackPositionMs
+    val activeTimestampMs = remember(lines, displayedPlaybackPositionMs) {
+        displayedPlaybackPositionMs?.let { positionMs ->
             activeLyricTimestampMs(
                 lines = lines,
                 playbackPositionMs = positionMs
             )
         }
     }
-    val activeLineIndex = remember(lines, effectivePlaybackPositionMs) {
-        effectivePlaybackPositionMs?.let { positionMs ->
+    val activeLineIndex = remember(lines, displayedPlaybackPositionMs) {
+        displayedPlaybackPositionMs?.let { positionMs ->
             activeLyricAnchorIndex(
                 lines = lines,
                 playbackPositionMs = positionMs
@@ -251,6 +270,7 @@ private fun LyricsList(
     var isPointerDown by remember { mutableStateOf(false) }
     var userInteractionVersion by remember { mutableIntStateOf(0) }
     var lyricSeekVersion by remember(lines) { mutableIntStateOf(0) }
+    var trackingSubpixelOffsetY by remember(lines) { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
     val activeLineTargetYPx = with(density) {
         activeLineTargetY.roundToPx()
@@ -265,15 +285,15 @@ private fun LyricsList(
         lineHeight = 29.sp,
         fontWeight = FontWeight.Medium
     )
-    val activeLyricTextStyle = lyricTextStyle
-    val lyricGlowBlurRadiusPx = with(density) {
-        LyricGlowRadius.toPx()
-    }
-    val lyricLineSpacingPx = with(density) {
-        LyricsLineSpacing.roundToPx()
-    }
     val blankLyricLineHeightPx = with(density) {
         BlankLyricLineHeight.roundToPx()
+    }
+    val lyricItemVerticalPaddingPx = with(density) {
+        LyricItemOuterVerticalPadding.roundToPx() * 2 +
+            LyricClickBackgroundVerticalPadding.roundToPx() * 2
+    }
+    val lyricsTranslationTopSpacingPx = with(density) {
+        LyricsTranslationTopSpacing.roundToPx()
     }
     val trackSwitchDistancePx = with(density) {
         LyricsTrackSwitchDistance.toPx()
@@ -383,10 +403,10 @@ private fun LyricsList(
     }
     LaunchedEffect(lyricSeekVersion) {
         if (lyricSeekVersion > 0) {
+            // 父级列表会在抬手时暂时停止跟随；在点击手势结算后重新启用。
             isFollowingCurrentLine = true
         }
     }
-
     BoxWithConstraints(modifier = modifier) {
         val targetY = activeLineTargetY.coerceIn(0.dp, maxHeight)
         val bottomPadding = (maxHeight - targetY).coerceAtLeast(0.dp)
@@ -402,41 +422,75 @@ private fun LyricsList(
         val lyricRowWidth = (
             maxWidth - LyricsStartPadding - LyricsEndPadding
             ).coerceAtLeast(0.dp)
-        val activeLineSizePx = remember(
-            activeLineIndex,
+        val lineLayoutMetrics = remember(
             lines,
             lyricTextWidthPx,
-            activeLyricTextStyle,
+            lyricTextStyle,
             lyricTranslationTextStyle,
-            lyricLineSpacingPx,
+            lyricItemVerticalPaddingPx,
+            lyricsTranslationTopSpacingPx,
             blankLyricLineHeightPx
         ) {
-            val activeLine = activeLineIndex?.let(lines::getOrNull)
-            if (
-                activeLine == null ||
-                    (activeLine.text.isBlank() && activeLine.translation.isNullOrBlank())
-            ) {
-                blankLyricLineHeightPx
-            } else {
-                val originalHeightPx = textMeasurer.measure(
-                    text = activeLine.text,
-                    style = activeLyricTextStyle,
-                    constraints = Constraints(maxWidth = lyricTextWidthPx)
-                ).size.height
-                val translationHeightPx = activeLine.translation
-                    ?.takeIf(String::isNotBlank)
-                    ?.let { translation ->
-                        with(density) { LyricsTranslationTopSpacing.roundToPx() } +
+            lines.map { line ->
+                if (line.text.isBlank() && line.translation.isNullOrBlank()) {
+                    LyricLineLayoutMetrics(
+                        itemHeightPx = blankLyricLineHeightPx,
+                        contentWidthPx = 0,
+                        hasWrappedText = false
+                    )
+                } else {
+                    val lyricLayout = textMeasurer.measure(
+                        text = line.text,
+                        style = lyricTextStyle,
+                        constraints = Constraints(maxWidth = lyricTextWidthPx)
+                    )
+                    val translationLayout = line.translation
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { translation ->
                             textMeasurer.measure(
                                 text = translation,
                                 style = lyricTranslationTextStyle,
                                 constraints = Constraints(maxWidth = lyricTextWidthPx)
-                            ).size.height
-                    }
-                    ?: 0
-                originalHeightPx + translationHeightPx + lyricLineSpacingPx
+                            )
+                        }
+                    LyricLineLayoutMetrics(
+                        itemHeightPx =
+                            lyricLayout.size.height +
+                                (translationLayout?.size?.height ?: 0) +
+                                (if (translationLayout != null) {
+                                    lyricsTranslationTopSpacingPx
+                                } else {
+                                    0
+                                }) +
+                                lyricItemVerticalPaddingPx,
+                        contentWidthPx = max(
+                            lyricLayout.size.width,
+                            translationLayout?.size?.width ?: 0
+                        ),
+                        hasWrappedText =
+                            lyricLayout.lineCount > 1 ||
+                                (translationLayout?.lineCount ?: 0) > 1
+                    )
+                }
             }
         }
+        val lyricItemHeightsPx = remember(lineLayoutMetrics) {
+            IntArray(lineLayoutMetrics.size) { index ->
+                lineLayoutMetrics[index].itemHeightPx
+            }
+        }
+        val lyricItemStartOffsetsPx = remember(lyricItemHeightsPx) {
+            var nextOffsetPx = 0
+            IntArray(lyricItemHeightsPx.size) { index ->
+                nextOffsetPx.also {
+                    nextOffsetPx += lyricItemHeightsPx[index]
+                }
+            }
+        }
+        val activeLineSizePx = activeLineIndex
+            ?.let(lineLayoutMetrics::getOrNull)
+            ?.itemHeightPx
+            ?: blankLyricLineHeightPx
         val activeLineTransitionDurationMs = remember(lines, activeLineIndex) {
             activeLineIndex?.let { lineIndex ->
                 lyricTrackingTransitionDurationMs(
@@ -463,6 +517,11 @@ private fun LyricsList(
                     index = activeLineIndex,
                     targetYPx = activeLineTargetYPx,
                     targetItemSizePx = activeLineSizePx,
+                    itemHeightsPx = lyricItemHeightsPx,
+                    itemStartOffsetsPx = lyricItemStartOffsetsPx,
+                    onSubpixelOffsetChanged = { offsetPx ->
+                        trackingSubpixelOffsetY = offsetPx
+                    },
                     transitionDurationMs = activeLineTransitionDurationMs
                 )
                 val finalItem = listState.layoutInfo.visibleItemsInfo
@@ -489,6 +548,9 @@ private fun LyricsList(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalFadingEdges(LyricsEdgeFadeHeight)
+                .graphicsLayer {
+                    translationY = trackingSubpixelOffsetY
+                }
                 .padding(
                     start = LyricsStartPadding,
                     end = LyricsEndPadding
@@ -532,44 +594,13 @@ private fun LyricsList(
                     val lyricInteractionSource = remember(line.timestampMs, index) {
                         MutableInteractionSource()
                     }
-                    val lyricTextLayout = remember(
-                        line.text,
-                        lyricTextWidthPx,
-                        lyricTextStyle
-                    ) {
-                        textMeasurer.measure(
-                            text = line.text,
-                            style = lyricTextStyle,
-                            constraints = Constraints(maxWidth = lyricTextWidthPx)
-                        )
-                    }
-                    val translationTextLayout = line.translation
-                        ?.takeIf(String::isNotBlank)
-                        ?.let { translation ->
-                            remember(
-                                translation,
-                                lyricTextWidthPx,
-                                lyricTranslationTextStyle
-                            ) {
-                                textMeasurer.measure(
-                                    text = translation,
-                                    style = lyricTranslationTextStyle,
-                                    constraints = Constraints(maxWidth = lyricTextWidthPx)
-                                )
-                            }
-                        }
-                    val lyricBackgroundWidth = if (
-                        lyricTextLayout.lineCount > 1 ||
-                            (translationTextLayout?.lineCount ?: 0) > 1
-                    ) {
+                    val lineLayout = lineLayoutMetrics[index]
+                    val lyricBackgroundWidth = if (lineLayout.hasWrappedText) {
                         lyricRowWidth
                     } else {
                         (
                             with(density) {
-                                max(
-                                    lyricTextLayout.size.width,
-                                    translationTextLayout?.size?.width ?: 0
-                                ).toDp()
+                                lineLayout.contentWidthPx.toDp()
                             } +
                                 LyricClickBackgroundHorizontalPadding * 2f
                             ).coerceAtMost(lyricRowWidth)
@@ -612,13 +643,13 @@ private fun LyricsList(
                         lines = lines,
                         lineIndex = index
                     )
-                    val lyricColor by animateColorAsState(
-                        targetValue = Color.White.copy(alpha = targetLyricAlpha),
+                    val lyricAlpha by animateFloatAsState(
+                        targetValue = targetLyricAlpha,
                         animationSpec = tween(
                             durationMillis = lyricTransitionDurationMs,
                             easing = LyricsLineTransitionEasing
                         ),
-                        label = "LyricHighlightColor"
+                        label = "LyricHighlightAlpha"
                     )
                     val lyricScale by animateFloatAsState(
                         targetValue = if (isActive) {
@@ -631,14 +662,6 @@ private fun LyricsList(
                             easing = LyricsLineTransitionEasing
                         ),
                         label = "LyricHighlightScale"
-                    )
-                    val lyricGlowAlpha by animateFloatAsState(
-                        targetValue = targetLyricAlpha * LyricGlowAlphaMultiplier,
-                        animationSpec = tween(
-                            durationMillis = lyricTransitionDurationMs,
-                            easing = LyricsLineTransitionEasing
-                        ),
-                        label = "LyricGlowAlpha"
                     )
                     Box(
                         modifier = Modifier
@@ -709,52 +732,68 @@ private fun LyricsList(
                                     onClickLabel = "跳转到此歌词"
                                 ) {
                                     clickFeedbackVersion += 1
+                                    pendingLyricSeek = PendingLyricSeek(
+                                        timestampMs = line.timestampMs,
+                                        direction = if (
+                                            line.timestampMs >=
+                                                (effectivePlaybackPositionMs ?: line.timestampMs)
+                                        ) {
+                                            1
+                                        } else {
+                                            -1
+                                        }
+                                    )
                                     onLyricClick(line.timestampMs)
                                     lyricSeekVersion += 1
                                 }
-                                .background(
-                                    color = Color(0xFF8A8A8A).copy(
-                                        alpha = clickFeedbackAlpha.value
-                                    ),
-                                    shape = RoundedCornerShape(LyricClickBackgroundCornerRadius)
-                                )
-                                .padding(
-                                    horizontal = LyricClickBackgroundHorizontalPadding,
-                                    vertical = LyricClickBackgroundVerticalPadding
-                                )
                         ) {
-                            Column {
-                                Text(
-                                    text = line.text,
-                                    style = lyricTextStyle.copy(
-                                        shadow = Shadow(
-                                            color = Color.White.copy(alpha = lyricGlowAlpha),
-                                            offset = Offset.Zero,
-                                            blurRadius = lyricGlowBlurRadiusPx
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .graphicsLayer {
+                                        // 点击反馈每帧只更新图层透明度，不重组歌词内容。
+                                        alpha = clickFeedbackAlpha.value
+                                    }
+                                    .background(
+                                        color = Color(0xFF8A8A8A),
+                                        shape = RoundedCornerShape(
+                                            LyricClickBackgroundCornerRadius
                                         )
+                                    )
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .padding(
+                                        horizontal = LyricClickBackgroundHorizontalPadding,
+                                        vertical = LyricClickBackgroundVerticalPadding
+                                    )
+                                    .graphicsLayer {
+                                        compositingStrategy =
+                                            CompositingStrategy.ModulateAlpha
+                                        alpha = lyricAlpha
+                                    }
+                            ) {
+                                SoftGlowText(
+                                    text = line.text,
+                                    style = lyricTextStyle,
+                                    color = Color.White,
+                                    glowColor = Color.White.copy(
+                                        alpha = LyricGlowAlphaMultiplier
                                     ),
-                                    color = lyricColor,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 line.translation
                                     ?.takeIf(String::isNotBlank)
                                     ?.let { translation ->
-                                        Text(
+                                        SoftGlowText(
                                             text = translation,
-                                            style = lyricTranslationTextStyle.copy(
-                                                shadow = Shadow(
-                                                    color = Color.White.copy(
-                                                        alpha =
-                                                            lyricGlowAlpha *
-                                                                LyricsTranslationAlphaMultiplier
-                                                    ),
-                                                    offset = Offset.Zero,
-                                                    blurRadius = lyricGlowBlurRadiusPx
-                                                )
+                                            style = lyricTranslationTextStyle,
+                                            color = Color.White.copy(
+                                                alpha = LyricsTranslationAlphaMultiplier
                                             ),
-                                            color = lyricColor.copy(
+                                            glowColor = Color.White.copy(
                                                 alpha =
-                                                    lyricColor.alpha *
+                                                    LyricGlowAlphaMultiplier *
                                                         LyricsTranslationAlphaMultiplier
                                             ),
                                             modifier = Modifier
@@ -768,6 +807,58 @@ private fun LyricsList(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SoftGlowText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    glowColor: Color,
+    modifier: Modifier = Modifier
+) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Box(modifier = modifier) {
+            Text(
+                text = text,
+                style = style,
+                color = glowColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .blur(
+                        radius = LyricGlowRadius,
+                        edgeTreatment = BlurredEdgeTreatment.Unbounded
+                    )
+                    // 模糊层负责效果，内层离屏层只缓存稳定的文字源。
+                    // 列表滚动、外层 alpha 与缩放变化时无需重新栅格化整行文字。
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
+            )
+            Text(
+                text = text,
+                style = style,
+                color = color,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    } else {
+        val glowBlurRadiusPx = with(LocalDensity.current) {
+            LyricGlowRadius.toPx()
+        }
+        Text(
+            text = text,
+            style = style.copy(
+                shadow = Shadow(
+                    color = glowColor,
+                    offset = Offset.Zero,
+                    blurRadius = glowBlurRadiusPx
+                )
+            ),
+            color = color,
+            modifier = modifier
+        )
     }
 }
 
@@ -792,6 +883,15 @@ private const val LyricsTrackSwitchExitTotalDurationMillis =
     PlayerSongSwitchDurationMillis
 
 private class PlaybackPositionHolder(var value: Long?)
+private data class PendingLyricSeek(
+    val timestampMs: Long,
+    val direction: Int
+)
+private data class LyricLineLayoutMetrics(
+    val itemHeightPx: Int,
+    val contentWidthPx: Int,
+    val hasWrappedText: Boolean
+)
 private const val ActiveLyricScale = 1.04f
 private const val InactiveLyricScale = 0.98f
 private const val LyricGlowAlphaMultiplier = 0.18f
