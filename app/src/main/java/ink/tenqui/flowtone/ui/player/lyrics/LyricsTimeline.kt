@@ -69,8 +69,8 @@ internal fun lyricVisualTransitionDurationMs(
 }
 
 /**
- * 纯空行只是歌词间的占位，不应因为它与下一句相隔很短而触发瞬时定位。
- * 同一时间戳只要存在一行实际文本，就仍按极短歌词处理。
+ * 纯空行只是歌词间的占位，空行本身以及空行后的第一句都不应触发瞬时定位。
+ * 同一时间戳只要存在一行实际文本，就不视为空行组。
  */
 internal fun lyricTrackingTransitionDurationMs(
     lines: List<LyricLine>,
@@ -82,6 +82,16 @@ internal fun lyricTrackingTransitionDurationMs(
         line.timestampMs == timestampMs && line.text.isNotBlank()
     }
     if (!timestampHasLyricText) return LyricsLineTransitionDurationMs
+
+    val previousTimestampMs = lines
+        .asSequence()
+        .map(LyricLine::timestampMs)
+        .filter { candidateTimestampMs -> candidateTimestampMs < timestampMs }
+        .maxOrNull()
+    val followsBlankTimestamp = previousTimestampMs != null && lines.none { line ->
+        line.timestampMs == previousTimestampMs && line.text.isNotBlank()
+    }
+    if (followsBlankTimestamp) return LyricsLineTransitionDurationMs
 
     return lyricVisualTransitionDurationMs(lines, lineIndex)
 }

@@ -243,6 +243,23 @@ class LyricsTimelineHighlightTest {
     }
 
     @Test
+    fun shortLyricFollowingBlankPlaceholderKeepsTrackingAnimation() {
+        val linesWithBlankBeforeShortLyric = listOf(
+            LyricLine(timestampMs = 75_890L, text = ""),
+            LyricLine(timestampMs = 78_940L, text = "哈"),
+            LyricLine(timestampMs = 79_230L, text = "")
+        )
+
+        val trackingDurationMs = lyricTrackingTransitionDurationMs(
+            lines = linesWithBlankBeforeShortLyric,
+            lineIndex = 1
+        )
+
+        assertEquals(LyricsLineTransitionDurationMs, trackingDurationMs)
+        assertEquals(false, shouldInstantlyTrackLyric(trackingDurationMs))
+    }
+
+    @Test
     fun realShortLyricStillUsesInstantTrackingDuration() {
         val extremeLines = listOf(
             LyricLine(timestampMs = 1_000L, text = "短句"),
