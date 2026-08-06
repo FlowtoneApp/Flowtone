@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -170,8 +171,13 @@ fun MiniPlayer(
     var lastLyricInteractionUptimeMs by remember {
         mutableLongStateOf(Long.MIN_VALUE)
     }
+    var lyricProgressSeekSequence by remember { mutableLongStateOf(0L) }
+    var lyricProgressSeekAnimation by remember {
+        mutableStateOf<PlaybackProgressSeekAnimation?>(null)
+    }
     val transitions = remember(state) { MiniPlayerTransitions(state) }
     val currentIsPlayingForLyricSeek by rememberUpdatedState(playerUiState.isPlaying)
+    val currentSongIdForLyricSeek by rememberUpdatedState(currentSong?.id)
     val onLyricPressCallback = remember {
         {
             lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
@@ -180,6 +186,14 @@ fun MiniPlayer(
     val onLyricSeekCallback = remember(callbacks, transitions) {
         { positionMs: Long ->
             lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+            currentSongIdForLyricSeek?.let { songId ->
+                lyricProgressSeekSequence += 1L
+                lyricProgressSeekAnimation = PlaybackProgressSeekAnimation(
+                    sequence = lyricProgressSeekSequence,
+                    songId = songId,
+                    targetPositionMs = positionMs
+                )
+            }
             // seek 引发的短暂 BUFFERING 不应启动暂停态的封面、背景和控件动画。
             transitions.lockPlayPauseVisual(currentIsPlayingForLyricSeek)
             callbacks.onSeekTo(positionMs)
@@ -836,6 +850,7 @@ fun MiniPlayer(
                         hasCurrentSong = hasCurrentSong,
                         visualIsPlaying = visualIsPlaying,
                         strictProgressBar = strictProgressBar,
+                        lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                         currentHeight = currentHeight,
                         visualPanelHeight = visualPanelHeight,
                         collapsedHeight = collapsedHeight,
