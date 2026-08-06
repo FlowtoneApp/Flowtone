@@ -487,7 +487,13 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 .fillMaxWidth()
                 .height(lyricsHeight)
                 .clipToBounds()
-                .zIndex(4f)
+                .zIndex(
+                    if (lyricsVisibilityProgress > LyricsHostVisibleThreshold) {
+                        LyricsHostVisibleZIndex
+                    } else {
+                        LyricsHostHiddenZIndex
+                    }
+                )
         )
         MiniPlayerArtistHost(
             fullscreenContentMode = fullscreenContentMode,
@@ -517,3 +523,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
 }
 
 private val LyricsHeaderTrackSwitchDistance = 20.dp
+private const val LyricsHostVisibleThreshold = 0.001f
+private const val LyricsHostVisibleZIndex = 4f
+private const val LyricsHostHiddenZIndex = -1f

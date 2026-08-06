@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -91,6 +92,7 @@ internal fun LyricsContent(
     confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
     visibilityProgress: Float,
+    contentVisible: Boolean = true,
     trackSwitchPhase: LyricsTrackSwitchPhase = LyricsTrackSwitchPhase.Static,
     trackSwitchDirection: Int = 1,
     onTrackEnterReady: () -> Unit = {},
@@ -115,6 +117,7 @@ internal fun LyricsContent(
             secondary = "声流需要外部文件夹读取权限才能读取歌词",
             actionLabel = "选择歌词目录",
             onAction = onChooseLyricsDirectory,
+            interactionEnabled = contentVisible,
             modifier = visibleModifier
         )
         LyricsState.DirectoryPermissionLost -> LyricsMessage(
@@ -122,6 +125,7 @@ internal fun LyricsContent(
             secondary = "请重新选择歌词目录以恢复读取权限",
             actionLabel = "重新选择歌词目录",
             onAction = onChooseLyricsDirectory,
+            interactionEnabled = contentVisible,
             modifier = visibleModifier
         )
         LyricsState.OutsideSelectedDirectory -> LyricsMessage(
@@ -129,6 +133,7 @@ internal fun LyricsContent(
             secondary = "当前歌曲不在已授权的歌词目录中",
             actionLabel = "重新选择歌词目录",
             onAction = onChooseLyricsDirectory,
+            interactionEnabled = contentVisible,
             modifier = visibleModifier
         )
         LyricsState.NotFound -> LyricsMessage(
@@ -152,6 +157,7 @@ internal fun LyricsContent(
                         lines = state.lines,
                         confirmedPlaybackPositionMs = confirmedPlaybackPositionMs,
                         activeLineTargetY = activeLineTargetY,
+                        contentVisible = contentVisible,
                         trackSwitchPhase = trackSwitchPhase,
                         trackSwitchDirection = trackSwitchDirection,
                         onTrackEnterReady = onTrackEnterReady,
@@ -198,6 +204,7 @@ private fun LyricsList(
     lines: List<LyricLine>,
     confirmedPlaybackPositionMs: Long?,
     activeLineTargetY: Dp,
+    contentVisible: Boolean,
     trackSwitchPhase: LyricsTrackSwitchPhase,
     trackSwitchDirection: Int,
     onTrackEnterReady: () -> Unit,
@@ -302,10 +309,16 @@ private fun LyricsList(
             }
         )
     }
+    val pageEntranceTimeline = remember(lines) {
+        Animatable(if (contentVisible) 1f else 0f)
+    }
     val trackSwitchExitTimeline = remember(lines) { Animatable(0f) }
     val trackSwitchEntranceDirection = remember(lines) { trackSwitchDirection }
     val trackSwitchStaggerAnchorIndex = remember(lines, trackSwitchPhase) {
         listState.firstVisibleItemIndex
+    }
+    var pageEntranceStaggerAnchorIndex by remember(lines) {
+        mutableIntStateOf(listState.firstVisibleItemIndex)
     }
     LaunchedEffect(trackSwitchPhase) {
         when (trackSwitchPhase) {
@@ -370,6 +383,24 @@ private fun LyricsList(
             }
         }
     }
+    LaunchedEffect(contentVisible) {
+        if (contentVisible) {
+            pageEntranceStaggerAnchorIndex = listState.firstVisibleItemIndex
+            val remainingDurationMillis = (
+                LyricsTrackSwitchEntranceTotalDurationMillis *
+                    (1f - pageEntranceTimeline.value)
+                ).roundToInt().coerceAtLeast(1)
+            pageEntranceTimeline.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = remainingDurationMillis,
+                    easing = LinearEasing
+                )
+            )
+        } else {
+            pageEntranceTimeline.snapTo(0f)
+        }
+    }
     val textMeasurer = rememberTextMeasurer()
 
     fun markUserInteraction() {
@@ -398,6 +429,12 @@ private fun LyricsList(
             // 先让 seek 引发的进度与 BUFFERING 状态更新完成，避免它们和首批滚动帧
             // 同时占用主线程。高亮与点击反馈仍会在点击时立即更新。
             delay(LyricsSeekTrackingSettleDelayMs)
+            isFollowingCurrentLine = true
+        }
+    }
+    LaunchedEffect(contentVisible) {
+        if (!contentVisible) {
+            isPointerDown = false
             isFollowingCurrentLine = true
         }
     }
@@ -499,6 +536,7 @@ private fun LyricsList(
             activeLineTargetYPx,
             activeLineSizePx,
             activeLineTransitionDurationMs,
+            contentVisible,
             isFollowingCurrentLine,
             trackSwitchPhase
         ) {
@@ -517,29 +555,36 @@ private fun LyricsList(
                     onSubpixelOffsetChanged = { offsetPx ->
                         trackingSubpixelOffsetY = offsetPx
                     },
-                    transitionDurationMs = activeLineTransitionDurationMs
+                    transitionDurationMs = if (contentVisible) {
+                        activeLineTransitionDurationMs
+                    } else {
+                        0
+                    }
                 )
-                val finalItem = listState.layoutInfo.visibleItemsInfo
-                    .firstOrNull { it.index == activeLineIndex }
-                val finalVisibleY = finalItem?.let { item ->
-                    lazyListItemCenterInViewport(
-                        itemOffset = item.offset,
-                        itemSize = item.size,
-                        viewportStartOffset = listState.layoutInfo.viewportStartOffset
+                if (contentVisible) {
+                    val finalItem = listState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.index == activeLineIndex }
+                    val finalVisibleY = finalItem?.let { item ->
+                        lazyListItemCenterInViewport(
+                            itemOffset = item.offset,
+                            itemSize = item.size,
+                            viewportStartOffset = listState.layoutInfo.viewportStartOffset
+                        )
+                    }
+                    Log.d(
+                        "LyricsAnchor",
+                        "index=$activeLineIndex targetY=$activeLineTargetYPx " +
+                            "measuredHeight=$activeLineSizePx finalY=$finalVisibleY " +
+                            "viewportStart=${listState.layoutInfo.viewportStartOffset} " +
+                            "viewport=${listState.layoutInfo.viewportSize.height}"
                     )
                 }
-                Log.d(
-                    "LyricsAnchor",
-                    "index=$activeLineIndex targetY=$activeLineTargetYPx " +
-                        "measuredHeight=$activeLineSizePx finalY=$finalVisibleY " +
-                        "viewportStart=${listState.layoutInfo.viewportStartOffset} " +
-                        "viewport=${listState.layoutInfo.viewportSize.height}"
-                )
             }
         }
 
         LazyColumn(
             state = listState,
+            userScrollEnabled = contentVisible,
             modifier = Modifier
                 .fillMaxSize()
                 .verticalFadingEdges(LyricsEdgeFadeHeight)
@@ -550,21 +595,27 @@ private fun LyricsList(
                     start = LyricsStartPadding,
                     end = LyricsEndPadding
                 )
-                .pointerInput(lines) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
-                        isPointerDown = true
-                        markUserInteraction()
-                        // 高亮切换时歌词列表仍可能处于自动滚动中。先停住列表，
-                        // 避免歌词在按下与抬起之间移动，导致点击被判定为取消。
-                        gestureCoroutineScope.launch {
-                            listState.stopScroll()
+                .then(
+                    if (contentVisible) {
+                        Modifier.pointerInput(lines) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                isPointerDown = true
+                                markUserInteraction()
+                                // 高亮切换时歌词列表仍可能处于自动滚动中。先停住列表，
+                                // 避免歌词在按下与抬起之间移动，导致点击被判定为取消。
+                                gestureCoroutineScope.launch {
+                                    listState.stopScroll()
+                                }
+                                waitForUpOrCancellation()
+                                isPointerDown = false
+                                markUserInteraction()
+                            }
                         }
-                        waitForUpOrCancellation()
-                        isPointerDown = false
-                        markUserInteraction()
+                    } else {
+                        Modifier
                     }
-                },
+                ),
             contentPadding = PaddingValues(
                 top = targetY,
                 bottom = bottomPadding
@@ -583,8 +634,11 @@ private fun LyricsList(
                     )
                 } else {
                     val isActive = line.timestampMs == activeTimestampMs
-                    val staggerOrder = (
+                    val trackSwitchStaggerOrder = (
                         index - trackSwitchStaggerAnchorIndex
+                        ).coerceIn(0, LyricsTrackSwitchMaxStaggeredLines - 1)
+                    val pageEntranceStaggerOrder = (
+                        index - pageEntranceStaggerAnchorIndex
                         ).coerceIn(0, LyricsTrackSwitchMaxStaggeredLines - 1)
                     val lyricInteractionSource = remember(line.timestampMs, index) {
                         MutableInteractionSource()
@@ -640,10 +694,14 @@ private fun LyricsList(
                     )
                     val lyricAlpha by animateFloatAsState(
                         targetValue = targetLyricAlpha,
-                        animationSpec = tween(
-                            durationMillis = lyricTransitionDurationMs,
-                            easing = LyricsLineTransitionEasing
-                        ),
+                        animationSpec = if (contentVisible) {
+                            tween(
+                                durationMillis = lyricTransitionDurationMs,
+                                easing = LyricsLineTransitionEasing
+                            )
+                        } else {
+                            snap()
+                        },
                         label = "LyricHighlightAlpha"
                     )
                     val lyricScale by animateFloatAsState(
@@ -652,10 +710,14 @@ private fun LyricsList(
                         } else {
                             InactiveLyricScale
                         },
-                        animationSpec = tween(
-                            durationMillis = lyricTransitionDurationMs,
-                            easing = LyricsLineTransitionEasing
-                        ),
+                        animationSpec = if (contentVisible) {
+                            tween(
+                                durationMillis = lyricTransitionDurationMs,
+                                easing = LyricsLineTransitionEasing
+                            )
+                        } else {
+                            snap()
+                        },
                         label = "LyricHighlightScale"
                     )
                     Box(
@@ -667,7 +729,7 @@ private fun LyricsList(
                                     trackSwitchEntranceTimeline.value *
                                         LyricsTrackSwitchEntranceTotalDurationMillis
                                 val entranceLineDelayMillis =
-                                    staggerOrder * LyricsTrackSwitchStaggerMillis
+                                    trackSwitchStaggerOrder * LyricsTrackSwitchStaggerMillis
                                 val linearEntranceProgress = (
                                     (entranceElapsedMillis - entranceLineDelayMillis) /
                                         LyricsTrackSwitchLineDurationMillis
@@ -681,11 +743,24 @@ private fun LyricsList(
                                         linearEntranceProgress
                                     )
                                 }
+                                val pageEntranceElapsedMillis =
+                                    pageEntranceTimeline.value *
+                                        LyricsTrackSwitchEntranceTotalDurationMillis
+                                val pageEntranceLineDelayMillis =
+                                    pageEntranceStaggerOrder * LyricsTrackSwitchStaggerMillis
+                                val linearPageEntranceProgress = (
+                                    (pageEntranceElapsedMillis - pageEntranceLineDelayMillis) /
+                                        LyricsTrackSwitchLineDurationMillis
+                                    ).coerceIn(0f, 1f)
+                                val pageEntranceVisibility =
+                                    TrackSwitchProgressEasing.transform(
+                                        linearPageEntranceProgress
+                                    )
                                 val exitElapsedMillis =
                                     trackSwitchExitTimeline.value *
                                         LyricsTrackSwitchExitTotalDurationMillis
                                 val exitLineDelayMillis =
-                                    staggerOrder * LyricsTrackSwitchExitStaggerMillis
+                                    trackSwitchStaggerOrder * LyricsTrackSwitchExitStaggerMillis
                                 val linearExitProgress = (
                                     (exitElapsedMillis - exitLineDelayMillis) /
                                         LyricsTrackSwitchExitLineDurationMillis
@@ -693,7 +768,9 @@ private fun LyricsList(
                                 val exitProgress = TrackSwitchProgressEasing.transform(
                                     linearExitProgress
                                 )
-                                alpha = entranceVisibility * (1f - exitProgress)
+                                alpha = entranceVisibility *
+                                    pageEntranceVisibility *
+                                    (1f - exitProgress)
                                 translationX =
                                     trackSwitchDistancePx *
                                         trackSwitchEntranceDirection *
@@ -701,6 +778,9 @@ private fun LyricsList(
                                         trackSwitchDistancePx *
                                         trackSwitchDirection *
                                         exitProgress
+                                translationY =
+                                    trackSwitchDistancePx *
+                                        (1f - pageEntranceVisibility)
                             }
                             .zIndex(if (isActive) 1f else 0f)
                             .padding(vertical = LyricItemOuterVerticalPadding)
@@ -714,13 +794,20 @@ private fun LyricsList(
                                     scaleY = lyricScale
                                     transformOrigin = TransformOrigin(0f, 0.5f)
                                 }
-                                .pointerInput(line.timestampMs, index) {
-                                    awaitEachGesture {
-                                        awaitFirstDown(requireUnconsumed = false)
-                                        onLyricPress()
+                                .then(
+                                    if (contentVisible) {
+                                        Modifier.pointerInput(line.timestampMs, index) {
+                                            awaitEachGesture {
+                                                awaitFirstDown(requireUnconsumed = false)
+                                                onLyricPress()
+                                            }
+                                        }
+                                    } else {
+                                        Modifier
                                     }
-                                }
+                                )
                                 .clickable(
+                                    enabled = contentVisible,
                                     interactionSource = lyricInteractionSource,
                                     indication = null,
                                     role = Role.Button,
@@ -966,7 +1053,8 @@ private fun LyricsMessage(
     modifier: Modifier,
     secondary: String? = null,
     actionLabel: String? = null,
-    onAction: (() -> Unit)? = null
+    onAction: (() -> Unit)? = null,
+    interactionEnabled: Boolean = true
 ) {
     Column(
         modifier = modifier.padding(horizontal = 24.dp),
@@ -984,6 +1072,7 @@ private fun LyricsMessage(
         if (actionLabel != null && onAction != null) {
             Button(
                 onClick = onAction,
+                enabled = interactionEnabled,
                 shape = RoundedCornerShape(50),
             ) {
                 Text(text = actionLabel)

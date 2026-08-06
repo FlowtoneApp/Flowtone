@@ -17,6 +17,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.lyrics.LyricsState
@@ -52,9 +55,10 @@ internal fun MiniPlayerLyricsHost(
     onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (currentSong == null || visibilityProgress <= 0.001f) {
+    if (currentSong == null) {
         return
     }
+    val lyricsVisible = visibilityProgress > LyricsVisibleThreshold
     val playbackPosition by confirmedPlaybackPosition.collectAsState()
     val playbackPositionMs = playbackPositionForSong(
         songId = currentSong.id,
@@ -108,7 +112,22 @@ internal fun MiniPlayerLyricsHost(
         }
     }
 
-    Box(modifier = modifier.clipToBounds()) {
+    Box(
+        modifier = modifier
+            .clipToBounds()
+            .then(
+                if (lyricsVisible) {
+                    Modifier
+                } else {
+                    Modifier.clearAndSetSemantics { }
+                }
+            )
+            .drawWithContent {
+                if (lyricsVisible) {
+                    drawContent()
+                }
+            }
+    ) {
         AnimatedContent(
             targetState = targetPageState,
             transitionSpec = {
@@ -148,7 +167,17 @@ internal fun MiniPlayerLyricsHost(
                 )
             },
             label = "LyricsTrackSwitch",
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    layout(placeable.width, placeable.height) {
+                        placeable.place(
+                            x = if (lyricsVisible) 0 else placeable.width,
+                            y = 0
+                        )
+                    }
+                }
         ) { displayedPage ->
             val isCurrentPage =
                 displayedPage == targetPageState &&
@@ -170,6 +199,7 @@ internal fun MiniPlayerLyricsHost(
                 },
                 activeLineTargetY = activeLineTargetY,
                 visibilityProgress = visibilityProgress,
+                contentVisible = lyricsVisible,
                 trackSwitchPhase = trackSwitchPhase,
                 trackSwitchDirection = normalizedSwitchDirection,
                 onTrackEnterReady = if (isCurrentPage) {
@@ -217,6 +247,7 @@ internal fun lyricsTrackSwitchContentKey(
 
 private const val LyricsStateEnterDurationMillis = 220
 private const val LyricsStateExitDurationMillis = 160
+private const val LyricsVisibleThreshold = 0.001f
 private const val LyricsStaggeredExitLifetimeMillis =
     PlayerSongSwitchDurationMillis
 
