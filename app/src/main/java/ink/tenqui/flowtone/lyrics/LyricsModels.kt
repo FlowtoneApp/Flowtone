@@ -11,7 +11,8 @@ data class LyricsFolder(
 
 data class LyricLine(
     val timestampMs: Long,
-    val text: String
+    val text: String,
+    val translation: String? = null
 )
 
 sealed interface LyricsState {

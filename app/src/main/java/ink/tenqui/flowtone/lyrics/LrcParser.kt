@@ -4,7 +4,7 @@ object LrcParser {
     private val timestampTag = Regex("\\[(\\d+):(\\d{1,2})(?:\\.(\\d{1,3}))?]")
 
     fun parse(source: String): List<LyricLine> {
-        return buildList {
+        val parsedLines = buildList {
             source.lineSequence().forEach { sourceLine ->
                 val matches = timestampTag.findAll(sourceLine).toList()
                 if (matches.isEmpty()) return@forEach
@@ -19,6 +19,20 @@ object LrcParser {
                 }
             }
         }.sortedBy { it.timestampMs }
+
+        return parsedLines
+            .groupBy(LyricLine::timestampMs)
+            .map { (timestampMs, timestampLines) ->
+                val primaryText = timestampLines.first().text
+                LyricLine(
+                    timestampMs = timestampMs,
+                    text = primaryText,
+                    translation = timestampLines
+                        .drop(1)
+                        .firstOrNull { it.text.isNotBlank() }
+                        ?.text
+                )
+            }
     }
 
     private fun parseTimestamp(match: MatchResult): Long? {

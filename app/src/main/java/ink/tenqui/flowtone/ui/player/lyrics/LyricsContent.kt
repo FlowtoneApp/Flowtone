@@ -71,6 +71,7 @@ import ink.tenqui.flowtone.lyrics.LyricLine
 import ink.tenqui.flowtone.lyrics.LyricsState
 import ink.tenqui.flowtone.ui.player.PlayerSongSwitchDurationMillis
 import ink.tenqui.flowtone.ui.player.TrackSwitchProgressEasing
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 internal enum class LyricsTrackSwitchPhase {
@@ -259,6 +260,11 @@ private fun LyricsList(
         lineHeight = 42.sp,
         fontWeight = FontWeight.SemiBold
     )
+    val lyricTranslationTextStyle = lyricTextStyle.copy(
+        fontSize = 21.sp,
+        lineHeight = 29.sp,
+        fontWeight = FontWeight.Medium
+    )
     val activeLyricTextStyle = lyricTextStyle
     val lyricGlowBlurRadiusPx = with(density) {
         LyricGlowRadius.toPx()
@@ -401,18 +407,34 @@ private fun LyricsList(
             lines,
             lyricTextWidthPx,
             activeLyricTextStyle,
+            lyricTranslationTextStyle,
             lyricLineSpacingPx,
             blankLyricLineHeightPx
         ) {
             val activeLine = activeLineIndex?.let(lines::getOrNull)
-            if (activeLine == null || activeLine.text.isBlank()) {
+            if (
+                activeLine == null ||
+                    (activeLine.text.isBlank() && activeLine.translation.isNullOrBlank())
+            ) {
                 blankLyricLineHeightPx
             } else {
-                textMeasurer.measure(
+                val originalHeightPx = textMeasurer.measure(
                     text = activeLine.text,
                     style = activeLyricTextStyle,
                     constraints = Constraints(maxWidth = lyricTextWidthPx)
-                ).size.height + lyricLineSpacingPx
+                ).size.height
+                val translationHeightPx = activeLine.translation
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { translation ->
+                        with(density) { LyricsTranslationTopSpacing.roundToPx() } +
+                            textMeasurer.measure(
+                                text = translation,
+                                style = lyricTranslationTextStyle,
+                                constraints = Constraints(maxWidth = lyricTextWidthPx)
+                            ).size.height
+                    }
+                    ?: 0
+                originalHeightPx + translationHeightPx + lyricLineSpacingPx
             }
         }
         val activeLineTransitionDurationMs = remember(lines, activeLineIndex) {
@@ -495,7 +517,7 @@ private fun LyricsList(
                 items = lines,
                 key = { index, line -> "${line.timestampMs}:$index" }
             ) { index, line ->
-                if (line.text.isBlank()) {
+                if (line.text.isBlank() && line.translation.isNullOrBlank()) {
                     // 保留一个不可见锚点，空行播放时中心会落在上下两句的间隙。
                     Spacer(
                         modifier = Modifier
@@ -521,11 +543,34 @@ private fun LyricsList(
                             constraints = Constraints(maxWidth = lyricTextWidthPx)
                         )
                     }
-                    val lyricBackgroundWidth = if (lyricTextLayout.lineCount > 1) {
+                    val translationTextLayout = line.translation
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { translation ->
+                            remember(
+                                translation,
+                                lyricTextWidthPx,
+                                lyricTranslationTextStyle
+                            ) {
+                                textMeasurer.measure(
+                                    text = translation,
+                                    style = lyricTranslationTextStyle,
+                                    constraints = Constraints(maxWidth = lyricTextWidthPx)
+                                )
+                            }
+                        }
+                    val lyricBackgroundWidth = if (
+                        lyricTextLayout.lineCount > 1 ||
+                            (translationTextLayout?.lineCount ?: 0) > 1
+                    ) {
                         lyricRowWidth
                     } else {
                         (
-                            with(density) { lyricTextLayout.size.width.toDp() } +
+                            with(density) {
+                                max(
+                                    lyricTextLayout.size.width,
+                                    translationTextLayout?.size?.width ?: 0
+                                ).toDp()
+                            } +
                                 LyricClickBackgroundHorizontalPadding * 2f
                             ).coerceAtMost(lyricRowWidth)
                     }
@@ -678,18 +723,46 @@ private fun LyricsList(
                                     vertical = LyricClickBackgroundVerticalPadding
                                 )
                         ) {
-                            Text(
-                                text = line.text,
-                                style = lyricTextStyle.copy(
-                                    shadow = Shadow(
-                                        color = Color.White.copy(alpha = lyricGlowAlpha),
-                                        offset = Offset.Zero,
-                                        blurRadius = lyricGlowBlurRadiusPx
-                                    )
-                                ),
-                                color = lyricColor,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            Column {
+                                Text(
+                                    text = line.text,
+                                    style = lyricTextStyle.copy(
+                                        shadow = Shadow(
+                                            color = Color.White.copy(alpha = lyricGlowAlpha),
+                                            offset = Offset.Zero,
+                                            blurRadius = lyricGlowBlurRadiusPx
+                                        )
+                                    ),
+                                    color = lyricColor,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                line.translation
+                                    ?.takeIf(String::isNotBlank)
+                                    ?.let { translation ->
+                                        Text(
+                                            text = translation,
+                                            style = lyricTranslationTextStyle.copy(
+                                                shadow = Shadow(
+                                                    color = Color.White.copy(
+                                                        alpha =
+                                                            lyricGlowAlpha *
+                                                                LyricsTranslationAlphaMultiplier
+                                                    ),
+                                                    offset = Offset.Zero,
+                                                    blurRadius = lyricGlowBlurRadiusPx
+                                                )
+                                            ),
+                                            color = lyricColor.copy(
+                                                alpha =
+                                                    lyricColor.alpha *
+                                                        LyricsTranslationAlphaMultiplier
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = LyricsTranslationTopSpacing)
+                                        )
+                                    }
+                            }
                         }
                     }
                 }
@@ -736,6 +809,8 @@ private val LyricClickBackgroundVerticalPadding = 2.dp
 private val LyricItemOuterVerticalPadding =
     (LyricsLineSpacing - LyricClickBackgroundVerticalPadding * 2f) / 2f
 private val LyricClickBackgroundCornerRadius = 9.dp
+private val LyricsTranslationTopSpacing = 2.dp
+private const val LyricsTranslationAlphaMultiplier = 0.78f
 
 private fun Modifier.verticalFadingEdges(fadeHeight: Dp): Modifier =
     graphicsLayer {

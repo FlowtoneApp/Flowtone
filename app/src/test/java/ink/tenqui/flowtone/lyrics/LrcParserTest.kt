@@ -34,10 +34,25 @@ class LrcParserTest {
     }
 
     @Test
-    fun keepsEqualTimestampsAndEmptyText() {
+    fun combinesTheSecondLineAtTheSameTimestampAsTranslation() {
         assertEquals(
-            listOf(LyricLine(60_000L, "A"), LyricLine(60_000L, "B"), LyricLine(61_000L, "")),
+            listOf(
+                LyricLine(60_000L, "A", translation = "B"),
+                LyricLine(61_000L, "")
+            ),
             LrcParser.parse("[01:00.00]A\n[01:00.00]B\n[01:01.00]")
+        )
+    }
+
+    @Test
+    fun usesOnlyTheFirstTwoTextLinesAtTheSameTimestamp() {
+        assertEquals(
+            listOf(LyricLine(60_000L, "Original", translation = "Translated")),
+            LrcParser.parse(
+                "[01:00.00]Original\n" +
+                    "[01:00.00]Translated\n" +
+                    "[01:00.00]Extra annotation"
+            )
         )
     }
 
