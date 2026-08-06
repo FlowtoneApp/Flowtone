@@ -403,7 +403,9 @@ private fun LyricsList(
     }
     LaunchedEffect(lyricSeekVersion) {
         if (lyricSeekVersion > 0) {
-            // 父级列表会在抬手时暂时停止跟随；在点击手势结算后重新启用。
+            // 先让 seek 引发的进度与 BUFFERING 状态更新完成，避免它们和首批滚动帧
+            // 同时占用主线程。高亮与点击反馈仍会在点击时立即更新。
+            delay(LyricsSeekTrackingSettleDelayMs)
             isFollowingCurrentLine = true
         }
     }
@@ -519,6 +521,7 @@ private fun LyricsList(
                     targetItemSizePx = activeLineSizePx,
                     itemHeightsPx = lyricItemHeightsPx,
                     itemStartOffsetsPx = lyricItemStartOffsetsPx,
+                    initialSubpixelOffsetPx = trackingSubpixelOffsetY,
                     onSubpixelOffsetChanged = { offsetPx ->
                         trackingSubpixelOffsetY = offsetPx
                     },
@@ -904,6 +907,7 @@ private const val LyricClickBackgroundMaxAlpha = 0.20f
 private const val LyricClickBackgroundFadeInMillis = 110
 private const val LyricClickBackgroundHoldMillis = 70L
 private const val LyricClickBackgroundFadeOutMillis = 420
+private const val LyricsSeekTrackingSettleDelayMs = 10L
 private val LyricClickBackgroundHorizontalPadding = 5.dp
 private val LyricClickBackgroundVerticalPadding = 2.dp
 private val LyricItemOuterVerticalPadding =

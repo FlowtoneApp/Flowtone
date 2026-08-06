@@ -107,10 +107,10 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
     targetItemSizePx: Int,
     itemHeightsPx: IntArray,
     itemStartOffsetsPx: IntArray,
+    initialSubpixelOffsetPx: Float = 0f,
     onSubpixelOffsetChanged: (Float) -> Unit = {},
     transitionDurationMs: Int = LyricsLineTransitionDurationMs
 ) {
-    onSubpixelOffsetChanged(0f)
     snapshotFlow {
         val currentLayout = layoutInfo
         index in 0 until currentLayout.totalItemsCount &&
@@ -154,12 +154,15 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
                 targetItemSizePx = targetItemSizePx
             )
             scrollToItem(index = index, scrollOffset = initialScrollOffset)
+            onSubpixelOffsetChanged(0f)
         } else if (shouldInstantlyTrackLyric(transitionDurationMs)) {
             scrollBy(distanceToTarget)
+            onSubpixelOffsetChanged(0f)
         } else {
             animateScrollByWithSubpixelCompensation(
                 value = distanceToTarget,
                 itemStartOffsetsPx = itemStartOffsetsPx,
+                initialSubpixelOffsetPx = initialSubpixelOffsetPx,
                 transitionDurationMs = transitionDurationMs,
                 onSubpixelOffsetChanged = onSubpixelOffsetChanged
             )
@@ -179,20 +182,25 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
     if (abs(distanceToTarget) > LyricsAnchorTolerancePx) {
         if (shouldInstantlyTrackLyric(transitionDurationMs)) {
             scrollBy(distanceToTarget.toFloat())
+            onSubpixelOffsetChanged(0f)
         } else {
             animateScrollByWithSubpixelCompensation(
                 value = distanceToTarget.toFloat(),
                 itemStartOffsetsPx = itemStartOffsetsPx,
+                initialSubpixelOffsetPx = initialSubpixelOffsetPx,
                 transitionDurationMs = transitionDurationMs,
                 onSubpixelOffsetChanged = onSubpixelOffsetChanged
             )
         }
+    } else {
+        onSubpixelOffsetChanged(0f)
     }
 }
 
 private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
     value: Float,
     itemStartOffsetsPx: IntArray,
+    initialSubpixelOffsetPx: Float,
     transitionDurationMs: Int,
     onSubpixelOffsetChanged: (Float) -> Unit
 ) {
@@ -202,6 +210,7 @@ private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
         itemStartOffsetsPx = itemStartOffsetsPx
     )
     if (initialAbsolutePosition == null) {
+        onSubpixelOffsetChanged(0f)
         animateScrollBy(
             value = value,
             animationSpec = tween(
@@ -213,36 +222,37 @@ private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
     }
 
     var consumedValue = 0f
-    try {
-        scroll {
-            animate(
-                initialValue = 0f,
-                targetValue = value,
-                animationSpec = tween(
-                    durationMillis = transitionDurationMs,
-                    easing = LyricsLineTransitionEasing
-                )
-            ) { idealValue, _ ->
-                consumedValue += scrollBy(idealValue - consumedValue)
-                val actualAbsolutePosition = absoluteLazyListScrollPositionPx(
-                    firstVisibleItemIndex = firstVisibleItemIndex,
-                    firstVisibleItemScrollOffset = firstVisibleItemScrollOffset,
-                    itemStartOffsetsPx = itemStartOffsetsPx
-                )
-                if (actualAbsolutePosition != null) {
-                    onSubpixelOffsetChanged(
-                        lyricTrackingSubpixelOffsetPx(
-                            initialAbsolutePositionPx = initialAbsolutePosition,
-                            actualAbsolutePositionPx = actualAbsolutePosition,
-                            idealScrollPositionPx = idealValue
-                        )
+    scroll {
+        animate(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = transitionDurationMs,
+                easing = LyricsLineTransitionEasing
+            )
+        ) { animationProgress, _ ->
+            val idealValue = value * animationProgress
+            consumedValue += scrollBy(idealValue - consumedValue)
+            val actualAbsolutePosition = absoluteLazyListScrollPositionPx(
+                firstVisibleItemIndex = firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = firstVisibleItemScrollOffset,
+                itemStartOffsetsPx = itemStartOffsetsPx
+            )
+            if (actualAbsolutePosition != null) {
+                onSubpixelOffsetChanged(
+                    lyricTrackingSubpixelOffsetPx(
+                        initialAbsolutePositionPx = initialAbsolutePosition,
+                        actualAbsolutePositionPx = actualAbsolutePosition,
+                        idealScrollPositionPx = idealValue,
+                        initialSubpixelOffsetPx = initialSubpixelOffsetPx,
+                        animationProgress = animationProgress
                     )
-                }
+                )
             }
         }
-    } finally {
-        onSubpixelOffsetChanged(0f)
     }
+    // 正常结束时回到整数目标；取消时保留当前值，由下一条动画连续接管。
+    onSubpixelOffsetChanged(0f)
 }
 
 internal fun absoluteLazyListScrollPositionPx(
@@ -257,9 +267,12 @@ internal fun absoluteLazyListScrollPositionPx(
 internal fun lyricTrackingSubpixelOffsetPx(
     initialAbsolutePositionPx: Float,
     actualAbsolutePositionPx: Float,
-    idealScrollPositionPx: Float
+    idealScrollPositionPx: Float,
+    initialSubpixelOffsetPx: Float = 0f,
+    animationProgress: Float = 1f
 ): Float = (
-    actualAbsolutePositionPx - initialAbsolutePositionPx - idealScrollPositionPx
+    initialSubpixelOffsetPx * (1f - animationProgress.coerceIn(0f, 1f)) +
+        actualAbsolutePositionPx - initialAbsolutePositionPx - idealScrollPositionPx
     ).coerceIn(-LyricsMaxSubpixelCompensationPx, LyricsMaxSubpixelCompensationPx)
 
 internal fun fixedScrollDistanceToItem(

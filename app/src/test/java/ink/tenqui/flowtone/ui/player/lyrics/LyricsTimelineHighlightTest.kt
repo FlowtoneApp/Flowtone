@@ -28,6 +28,44 @@ class LyricsTimelineHighlightTest {
             0.001f
         )
     }
+
+    @Test
+    fun replacementAnimationInheritsAndThenRemovesPreviousCompensation() {
+        assertEquals(
+            0.4f,
+            lyricTrackingSubpixelOffsetPx(
+                initialAbsolutePositionPx = 100f,
+                actualAbsolutePositionPx = 100f,
+                idealScrollPositionPx = 0f,
+                initialSubpixelOffsetPx = 0.4f,
+                animationProgress = 0f
+            ),
+            0.001f
+        )
+        assertEquals(
+            0.4f,
+            lyricTrackingSubpixelOffsetPx(
+                initialAbsolutePositionPx = 100f,
+                actualAbsolutePositionPx = 101f,
+                idealScrollPositionPx = 0.8f,
+                initialSubpixelOffsetPx = 0.4f,
+                animationProgress = 0.5f
+            ),
+            0.001f
+        )
+        assertEquals(
+            0f,
+            lyricTrackingSubpixelOffsetPx(
+                initialAbsolutePositionPx = 100f,
+                actualAbsolutePositionPx = 101f,
+                idealScrollPositionPx = 1f,
+                initialSubpixelOffsetPx = 0.4f,
+                animationProgress = 1f
+            ),
+            0.001f
+        )
+    }
+
     private val lines = listOf(
         LyricLine(timestampMs = 1_000L, text = "第一句"),
         LyricLine(timestampMs = 2_500L, text = "第二句"),
