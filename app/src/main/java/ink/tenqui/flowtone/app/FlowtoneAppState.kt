@@ -58,6 +58,7 @@ internal class FlowtoneAppState(
     openExpandedMiniPlayerOnMediaClickState: MutableState<Boolean>,
     disablePausedArtworkTiltState: MutableState<Boolean>,
     strictProgressBarState: MutableState<Boolean>,
+    allowScreenOffOnLyricsPageState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
     preloadLyricsCountState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
@@ -105,6 +106,7 @@ internal class FlowtoneAppState(
     var openExpandedMiniPlayerOnMediaClick by openExpandedMiniPlayerOnMediaClickState
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
     var strictProgressBar by strictProgressBarState
+    var allowScreenOffOnLyricsPage by allowScreenOffOnLyricsPageState
     var preloadSongMetadataCount by preloadSongMetadataCountState
     var preloadLyricsCount by preloadLyricsCountState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
@@ -200,6 +202,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val strictProgressBar = rememberSaveable {
         mutableStateOf(appPreferences.shouldUseStrictProgressBar())
     }
+    val allowScreenOffOnLyricsPage = rememberSaveable {
+        mutableStateOf(appPreferences.shouldAllowScreenOffOnLyricsPage())
+    }
     val preloadSongMetadataCount = rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
     }
@@ -292,6 +297,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         openExpandedMiniPlayerOnMediaClickState = openExpandedMiniPlayerOnMediaClick,
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
         strictProgressBarState = strictProgressBar,
+        allowScreenOffOnLyricsPageState = allowScreenOffOnLyricsPage,
         preloadSongMetadataCountState = preloadSongMetadataCount,
         preloadLyricsCountState = preloadLyricsCount,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
@@ -326,6 +332,7 @@ internal data class FlowtoneAppScaffoldState(
     val themeMode: AppThemeMode,
     val disablePausedArtworkTilt: Boolean,
     val strictProgressBar: Boolean,
+    val allowScreenOffOnLyricsPage: Boolean,
     val pagerState: PagerState,
     val selectedTopLevelPage: TopLevelPage,
     val rootPage: FlowtoneRootPage,
@@ -406,6 +413,7 @@ internal fun flowtoneAppScaffoldState(
         themeMode = themeMode,
         disablePausedArtworkTilt = appState.disablePausedArtworkTilt,
         strictProgressBar = appState.strictProgressBar,
+        allowScreenOffOnLyricsPage = appState.allowScreenOffOnLyricsPage,
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
         rootPage = rootPage,

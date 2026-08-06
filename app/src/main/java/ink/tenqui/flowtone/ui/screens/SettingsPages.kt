@@ -223,6 +223,8 @@ internal fun AdvancedSettingsPage(
 internal fun LyricsSettingsPage(
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
+    allowScreenOffOnLyricsPage: Boolean,
+    onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     lyricsFolders: List<LyricsFolder>,
     onOpenLyricsFolders: () -> Unit,
     elementModifier: (Int) -> Modifier,
@@ -236,6 +238,13 @@ internal fun LyricsSettingsPage(
             LyricsBackgroundStyleSelector(
                 selectedStyle = lyricsBackgroundStyle,
                 onStyleSelected = onLyricsBackgroundStyleChange
+            )
+            SettingSwitchRow(
+                title = "允许歌词页息屏",
+                subtitle = "开启后，歌词页遵循系统的屏幕超时设置",
+                checked = allowScreenOffOnLyricsPage,
+                onCheckedChange = onAllowScreenOffOnLyricsPageChange,
+                modifier = Modifier.padding(top = 12.dp)
             )
             LyricsFoldersSettingRow(
                 folders = lyricsFolders,

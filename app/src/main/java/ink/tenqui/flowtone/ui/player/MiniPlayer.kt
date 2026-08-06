@@ -69,6 +69,7 @@ fun MiniPlayer(
     openExpandedOnMediaClick: Boolean = true,
     disablePausedArtworkTilt: Boolean = false,
     strictProgressBar: Boolean = false,
+    allowScreenOffOnLyricsPage: Boolean = false,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     lyricsBackgroundStyle: LyricsBackgroundStyle = LyricsBackgroundStyle.BlurredArtwork,
     minimized: Boolean,
@@ -365,6 +366,12 @@ fun MiniPlayer(
         fullscreen = fullscreen,
         expanded = expanded,
         hasCurrentSong = hasCurrentSong
+    )
+    MiniPlayerLyricsKeepScreenOnEffect(
+        keepScreenOn = shouldKeepScreenOnForLyricsPage(
+            lyricsModeActive = lyricsModeActive,
+            allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage
+        )
     )
     val artworkVisibilityProgress by animateFloatAsState(
         targetValue = if (lyricsModeActive) 0f else 1f,

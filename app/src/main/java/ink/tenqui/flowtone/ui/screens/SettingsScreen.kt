@@ -97,6 +97,8 @@ internal fun SettingsScreen(
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     strictProgressBar: Boolean,
     onStrictProgressBarChange: (Boolean) -> Unit,
+    allowScreenOffOnLyricsPage: Boolean,
+    onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onBackActionChange: ((() -> Unit)?) -> Unit,
     onPathSegmentsChange: (List<String>) -> Unit,
@@ -235,6 +237,9 @@ internal fun SettingsScreen(
                 showingLyricsPage -> LyricsSettingsPage(
                     lyricsBackgroundStyle = lyricsBackgroundStyle,
                     onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
+                    allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage,
+                    onAllowScreenOffOnLyricsPageChange =
+                        onAllowScreenOffOnLyricsPageChange,
                     lyricsFolders = lyricsFolders,
                     onOpenLyricsFolders = { managingLyricsFolders = true },
                     elementModifier = ::viewElementModifier

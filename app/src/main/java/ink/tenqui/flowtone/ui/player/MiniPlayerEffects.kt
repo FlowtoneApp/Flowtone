@@ -8,8 +8,10 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -19,6 +21,25 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+internal fun shouldKeepScreenOnForLyricsPage(
+    lyricsModeActive: Boolean,
+    allowScreenOffOnLyricsPage: Boolean
+): Boolean = lyricsModeActive && !allowScreenOffOnLyricsPage
+
+@Composable
+internal fun MiniPlayerLyricsKeepScreenOnEffect(keepScreenOn: Boolean) {
+    val view = LocalView.current
+    if (keepScreenOn) {
+        DisposableEffect(view) {
+            val previousKeepScreenOn = view.keepScreenOn
+            view.keepScreenOn = true
+            onDispose {
+                view.keepScreenOn = previousKeepScreenOn
+            }
+        }
+    }
+}
 
 @Composable
 internal fun MiniPlayerBackdropEffects(

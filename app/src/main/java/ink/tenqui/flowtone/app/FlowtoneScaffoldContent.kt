@@ -237,6 +237,9 @@ internal fun FlowtoneScaffoldContent(
                     onDisablePausedArtworkTiltChange = callbacks.onDisablePausedArtworkTiltChange,
                     strictProgressBar = state.strictProgressBar,
                     onStrictProgressBarChange = callbacks.onStrictProgressBarChange,
+                    allowScreenOffOnLyricsPage = state.allowScreenOffOnLyricsPage,
+                    onAllowScreenOffOnLyricsPageChange =
+                        callbacks.onAllowScreenOffOnLyricsPageChange,
                     hideSecondaryBackButton = state.hideSecondaryBackButton,
                     onHideSecondaryBackButtonChange = callbacks.onHideSecondaryBackButtonChange,
                     resumePlaybackAfterCall = state.resumePlaybackAfterCall,

@@ -51,6 +51,8 @@ internal fun SecondaryPageHost(
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     strictProgressBar: Boolean,
     onStrictProgressBarChange: (Boolean) -> Unit,
+    allowScreenOffOnLyricsPage: Boolean,
+    onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     resumePlaybackAfterCall: Boolean,
@@ -216,6 +218,9 @@ internal fun SecondaryPageHost(
                 onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
                 strictProgressBar = strictProgressBar,
                 onStrictProgressBarChange = onStrictProgressBarChange,
+                allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage,
+                onAllowScreenOffOnLyricsPageChange =
+                    onAllowScreenOffOnLyricsPageChange,
                 onBack = onCloseSecondaryPage,
                 onBackActionChange = onSettingsBackActionChange,
                 onPathSegmentsChange = onSettingsPathSegmentsChange,

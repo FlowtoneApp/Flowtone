@@ -13,6 +13,7 @@ internal data class FlowtoneAppCallbacks(
     val onThemeModeChange: (AppThemeMode) -> Unit,
     val onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     val onStrictProgressBarChange: (Boolean) -> Unit,
+    val onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     val onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     val onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     val onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
@@ -111,6 +112,10 @@ internal fun flowtoneAppCallbacks(
         onStrictProgressBarChange = { strict ->
             appState.strictProgressBar = strict
             appPreferences.setStrictProgressBar(strict)
+        },
+        onAllowScreenOffOnLyricsPageChange = { allow ->
+            appState.allowScreenOffOnLyricsPage = allow
+            appPreferences.setAllowScreenOffOnLyricsPage(allow)
         },
         onHideSecondaryBackButtonChange = { hide ->
             appState.hideSecondaryBackButton = hide

@@ -73,6 +73,16 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun shouldAllowScreenOffOnLyricsPage(): Boolean {
+        return prefs.getBoolean(ALLOW_SCREEN_OFF_ON_LYRICS_PAGE_KEY, false)
+    }
+
+    fun setAllowScreenOffOnLyricsPage(allow: Boolean) {
+        prefs.edit()
+            .putBoolean(ALLOW_SCREEN_OFF_ON_LYRICS_PAGE_KEY, allow)
+            .apply()
+    }
+
     fun shouldHideSecondaryBackButton(): Boolean {
         return prefs.getBoolean(HIDE_SECONDARY_BACK_BUTTON_KEY, false)
     }
@@ -231,6 +241,8 @@ class AppPreferences(context: Context) {
         const val THEME_MODE_KEY = "theme_mode"
         const val DISABLE_PAUSED_ARTWORK_TILT_KEY = "disable_paused_artwork_tilt"
         const val STRICT_PROGRESS_BAR_KEY = "strict_progress_bar"
+        const val ALLOW_SCREEN_OFF_ON_LYRICS_PAGE_KEY =
+            "allow_screen_off_on_lyrics_page"
         const val HIDE_SECONDARY_BACK_BUTTON_KEY = "hide_secondary_back_button"
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
