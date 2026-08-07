@@ -75,6 +75,12 @@ internal fun LyricsPlaceholderSongInfo(
     titleColor: Color,
     artistColor: Color,
     playerWidth: Dp,
+    lyricsContentStart: Dp,
+    addToPlaylistProgress: Float = 0f,
+    addToPlaylistTextStart: Dp = 24.dp,
+    addToPlaylistTextWidth: Dp = (playerWidth - 48.dp).coerceAtLeast(0.dp),
+    artistClickable: Boolean = false,
+    onArtistClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (visibilityProgress <= 0.001f) return
@@ -84,11 +90,22 @@ internal fun LyricsPlaceholderSongInfo(
         WindowInsets.statusBars.getTop(this).toDp()
     }
     val contentProgress = visibilityProgress.coerceIn(0f, 1f)
+    val addProgress = addToPlaylistProgress.coerceIn(0f, 1f)
+    val lyricsTextStart = lyricsContentStart + 56.dp + 12.dp
+    val lyricsTextWidth = (
+        playerWidth - lyricsTextStart - lyricsContentStart
+        ).coerceAtLeast(80.dp)
+    val metadataX = lerpDp(lyricsTextStart, addToPlaylistTextStart, addProgress)
+    val metadataWidth = lerpDp(
+        lyricsTextWidth,
+        addToPlaylistTextWidth,
+        addProgress
+    )
 
     Column(
         modifier = modifier
-            .offset(x = 24.dp, y = safeTopPadding + 56.dp)
-            .width((playerWidth - 48.dp).coerceAtLeast(0.dp))
+            .offset(x = metadataX, y = safeTopPadding + 56.dp)
+            .width(metadataWidth)
             .height(56.dp)
             .graphicsLayer {
                 alpha = contentProgress
@@ -110,7 +127,12 @@ internal fun LyricsPlaceholderSongInfo(
             color = artistColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .clickable(
+                    enabled = artistClickable && onArtistClick != null,
+                    onClick = { onArtistClick?.invoke() }
+                )
         )
     }
 }

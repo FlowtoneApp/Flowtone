@@ -2,7 +2,9 @@ package ink.tenqui.flowtone.ui.player
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -197,6 +199,18 @@ internal fun CrossfadeFlowCloudBackground(
     motionRangeMultiplier: Float = DefaultFlowCloudMotionRangeMultiplier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val darkOverlayAlpha by animateFloatAsState(
+        targetValue = if (isDarkTheme && LocalDarkFlowCloudOverlayEnabled.current) {
+            DarkFlowCloudOverlayAlpha
+        } else {
+            0f
+        },
+        animationSpec = tween(
+            durationMillis = 220,
+            easing = FastOutSlowInEasing
+        ),
+        label = "DarkFlowCloudOverlayAlpha"
+    )
     val targetColors = colors.toOpaqueCloudColors(isDarkTheme)
     var previousColors by remember { mutableStateOf<List<Color>?>(null) }
     var displayedColors by remember { mutableStateOf(targetColors) }
@@ -253,6 +267,13 @@ internal fun CrossfadeFlowCloudBackground(
             motionRangeMultiplier = motionRangeMultiplier,
             modifier = Modifier.matchParentSize()
         )
+        if (darkOverlayAlpha > 0.001f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = darkOverlayAlpha))
+            )
+        }
     }
 }
 

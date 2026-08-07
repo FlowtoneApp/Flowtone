@@ -38,34 +38,3 @@ private fun looksLikeMojibake(value: String): Boolean {
             character == '\u00A4' // ¤
     }
 }
-
-/** Uses the filename only when the metadata contains an unrecoverable replacement character. */
-internal fun titleWithFilenameFallback(
-    metadataTitle: String,
-    filePath: String?,
-    artist: String
-): String {
-    val fileName = filePath
-        ?.substringAfterLast('/')
-        ?.substringBeforeLast('.', missingDelimiterValue = "")
-        ?.takeIf { it.isNotBlank() }
-        ?: return metadataTitle
-    val fileTitle = listOf("$artist - ", "$artist – ", "$artist — ")
-        .firstOrNull { fileName.startsWith(it) }
-        ?.let { fileName.removePrefix(it) }
-        ?.ifBlank { fileName }
-        ?: fileName
-    val metadataAscii = metadataTitle.filter { it.code < 128 && it.isLetterOrDigit() }
-    val fileAscii = fileTitle.filter { it.code < 128 && it.isLetterOrDigit() }
-    val sharesStablePrefix = metadataAscii.length >= 4 &&
-        fileAscii.length >= 4 &&
-        metadataAscii.take(4).equals(fileAscii.take(4), ignoreCase = true)
-    return if (metadataTitle.contains('\uFFFD') ||
-        metadataTitle.any { it.code in 0x80..0x9F } ||
-        sharesStablePrefix
-    ) {
-        fileTitle
-    } else {
-        metadataTitle
-    }
-}

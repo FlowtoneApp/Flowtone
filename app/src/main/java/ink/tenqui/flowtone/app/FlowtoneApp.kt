@@ -78,6 +78,7 @@ fun FlowtoneApp(
     val density = LocalDensity.current
     val uiState by musicViewModel.uiState.collectAsState()
     val playbackState by musicViewModel.playbackState.collectAsState()
+    val songLyricsState by musicViewModel.songLyricsState.collectAsState()
     val searchUiState by musicViewModel.searchUiState.collectAsState()
     val playerUiState = PlayerUiState.from(playbackState)
     val appPreferences = remember(context) {
@@ -603,6 +604,7 @@ fun FlowtoneApp(
         songs = uiState.songs,
         likedSongsStore = likedSongsStore,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
+        preloadLyricsCount = appState.preloadLyricsCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         musicViewModel = musicViewModel,
         onContentScrollOffsetChange = { offset ->
@@ -666,6 +668,7 @@ fun FlowtoneApp(
             appState = appState,
             uiState = uiState,
             playerUiState = playerUiState,
+            songLyricsState = songLyricsState,
             appPreferences = appPreferences,
             themeMode = themeMode,
             pagerState = pagerState,

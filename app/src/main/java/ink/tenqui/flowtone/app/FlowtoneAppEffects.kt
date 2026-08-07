@@ -19,6 +19,7 @@ internal fun FlowtoneAppEffects(
     songs: List<Song>,
     likedSongsStore: LikedSongsStore,
     preloadSongMetadataCount: Int,
+    preloadLyricsCount: Int,
     songRecordThresholdSeconds: Int,
     musicViewModel: MusicViewModel,
     onContentScrollOffsetChange: (Float) -> Unit,
@@ -70,6 +71,10 @@ internal fun FlowtoneAppEffects(
 
     LaunchedEffect(preloadSongMetadataCount) {
         musicViewModel.setPreloadSongMetadataCount(preloadSongMetadataCount)
+    }
+
+    LaunchedEffect(preloadLyricsCount) {
+        musicViewModel.setPreloadLyricsCount(preloadLyricsCount)
     }
 
     LaunchedEffect(songRecordThresholdSeconds) {

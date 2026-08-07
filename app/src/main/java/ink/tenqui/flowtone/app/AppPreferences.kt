@@ -73,6 +73,16 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun shouldAllowScreenOffOnLyricsPage(): Boolean {
+        return prefs.getBoolean(ALLOW_SCREEN_OFF_ON_LYRICS_PAGE_KEY, false)
+    }
+
+    fun setAllowScreenOffOnLyricsPage(allow: Boolean) {
+        prefs.edit()
+            .putBoolean(ALLOW_SCREEN_OFF_ON_LYRICS_PAGE_KEY, allow)
+            .apply()
+    }
+
     fun shouldHideSecondaryBackButton(): Boolean {
         return prefs.getBoolean(HIDE_SECONDARY_BACK_BUTTON_KEY, false)
     }
@@ -129,6 +139,22 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getLyricsPreloadCount(): Int {
+        val savedValue = prefs.getInt(LYRICS_PRELOAD_COUNT_KEY, DEFAULT_PRELOAD_COUNT)
+        return PRELOAD_COUNT_OPTIONS.minBy { option ->
+            kotlin.math.abs(option - savedValue)
+        }
+    }
+
+    fun setLyricsPreloadCount(count: Int) {
+        val value = PRELOAD_COUNT_OPTIONS.minBy { option ->
+            kotlin.math.abs(option - count)
+        }
+        prefs.edit()
+            .putInt(LYRICS_PRELOAD_COUNT_KEY, value)
+            .apply()
+    }
+
     fun getSongRecordThresholdSeconds(): Int {
         return prefs.getInt(
             SONG_RECORD_THRESHOLD_SECONDS_KEY,
@@ -179,6 +205,13 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun shouldUseDarkFlowCloudOverlay(): Boolean =
+        prefs.getBoolean(DARK_FLOW_CLOUD_OVERLAY_KEY, true)
+
+    fun setDarkFlowCloudOverlay(enabled: Boolean) {
+        prefs.edit().putBoolean(DARK_FLOW_CLOUD_OVERLAY_KEY, enabled).apply()
+    }
+
     fun getLyricsBackgroundStyle(): LyricsBackgroundStyle {
         val savedValue = prefs.getString(LYRICS_BACKGROUND_STYLE_KEY, null)
             ?: return LyricsBackgroundStyle.BlurredArtwork
@@ -208,15 +241,19 @@ class AppPreferences(context: Context) {
         const val THEME_MODE_KEY = "theme_mode"
         const val DISABLE_PAUSED_ARTWORK_TILT_KEY = "disable_paused_artwork_tilt"
         const val STRICT_PROGRESS_BAR_KEY = "strict_progress_bar"
+        const val ALLOW_SCREEN_OFF_ON_LYRICS_PAGE_KEY =
+            "allow_screen_off_on_lyrics_page"
         const val HIDE_SECONDARY_BACK_BUTTON_KEY = "hide_secondary_back_button"
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
         const val OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY =
             "open_expanded_mini_player_on_media_click"
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
+        const val LYRICS_PRELOAD_COUNT_KEY = "lyrics_preload_count"
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
+        const val DARK_FLOW_CLOUD_OVERLAY_KEY = "dark_flow_cloud_overlay"
         const val LYRICS_BACKGROUND_STYLE_KEY = "lyrics_background_style"
         const val AUDIO_PERMISSION_REQUESTED_KEY = "audio_permission_requested"
         const val DEFAULT_PRELOAD_COUNT = 5

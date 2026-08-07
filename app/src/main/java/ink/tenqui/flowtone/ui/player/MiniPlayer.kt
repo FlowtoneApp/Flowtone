@@ -1,6 +1,11 @@
 package ink.tenqui.flowtone.ui.player
 
+import android.content.Intent
+import android.os.SystemClock
+import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -19,7 +24,11 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
@@ -42,10 +52,13 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 import ink.tenqui.flowtone.ui.player.lyrics.isLyricsPlaybackContentActive
+import ink.tenqui.flowtone.lyrics.SongLyricsState
+import ink.tenqui.flowtone.viewmodel.MusicViewModel
 
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
+    songLyricsState: SongLyricsState = SongLyricsState(),
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     fullscreen: Boolean,
@@ -56,6 +69,7 @@ fun MiniPlayer(
     openExpandedOnMediaClick: Boolean = true,
     disablePausedArtworkTilt: Boolean = false,
     strictProgressBar: Boolean = false,
+    allowScreenOffOnLyricsPage: Boolean = false,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     lyricsBackgroundStyle: LyricsBackgroundStyle = LyricsBackgroundStyle.BlurredArtwork,
     minimized: Boolean,
@@ -93,23 +107,52 @@ fun MiniPlayer(
     val miniPlayerVisible = hasCurrentSong && !forceHidden
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
-    val callbacks = MiniPlayerCallbacks(
-        onTogglePlayPause = onTogglePlayPause,
-        onPlayPrevious = onPlayPrevious,
-        onPlayNext = onPlayNext,
-        onSeekTo = onSeekTo,
-        onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
-        onPlayQueueSong = onPlayQueueSong,
-        onPlayArtistSongQueue = onPlayArtistSongQueue,
-        onToggleSongLiked = onToggleSongLiked,
-        onOpenArtistRootPage = onOpenArtistRootPage
-    )
+    val callbacks = remember(
+        onTogglePlayPause,
+        onPlayPrevious,
+        onPlayNext,
+        onSeekTo,
+        onTogglePlaybackOrderMode,
+        onPlayQueueSong,
+        onPlayArtistSongQueue,
+        onToggleSongLiked,
+        onOpenArtistRootPage
+    ) {
+        MiniPlayerCallbacks(
+            onTogglePlayPause = onTogglePlayPause,
+            onPlayPrevious = onPlayPrevious,
+            onPlayNext = onPlayNext,
+            onSeekTo = onSeekTo,
+            onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
+            onPlayQueueSong = onPlayQueueSong,
+            onPlayArtistSongQueue = onPlayArtistSongQueue,
+            onToggleSongLiked = onToggleSongLiked,
+            onOpenArtistRootPage = onOpenArtistRootPage
+        )
+    }
     val artworkUri = playerUiState.artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
     val durationMs = playerUiState.durationMs
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
+    val lyricsViewModel: MusicViewModel = viewModel()
+    val lyricsDirectoryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            Log.d("Lyrics", "directory selected=$treeUri")
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }.onFailure { error ->
+                Log.d("Lyrics", "directory permission persistence failed=${error::class.simpleName}")
+            }
+            lyricsViewModel.setLyricsDirectory(treeUri)
+        }
+    }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val fallbackSeedColor = MaterialTheme.colorScheme.primary.toArgb()
     val state = rememberMiniPlayerState(
@@ -126,7 +169,37 @@ fun MiniPlayer(
         context = context,
         allSongs = allSongs
     )
-    val transitions = MiniPlayerTransitions(state)
+    var lastLyricInteractionUptimeMs by remember {
+        mutableLongStateOf(Long.MIN_VALUE)
+    }
+    var lyricProgressSeekSequence by remember { mutableLongStateOf(0L) }
+    var lyricProgressSeekAnimation by remember {
+        mutableStateOf<PlaybackProgressSeekAnimation?>(null)
+    }
+    val transitions = remember(state) { MiniPlayerTransitions(state) }
+    val currentIsPlayingForLyricSeek by rememberUpdatedState(playerUiState.isPlaying)
+    val currentSongIdForLyricSeek by rememberUpdatedState(currentSong?.id)
+    val onLyricPressCallback = remember {
+        {
+            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+        }
+    }
+    val onLyricSeekCallback = remember(callbacks, transitions) {
+        { positionMs: Long ->
+            lastLyricInteractionUptimeMs = SystemClock.uptimeMillis()
+            currentSongIdForLyricSeek?.let { songId ->
+                lyricProgressSeekSequence += 1L
+                lyricProgressSeekAnimation = PlaybackProgressSeekAnimation(
+                    sequence = lyricProgressSeekSequence,
+                    songId = songId,
+                    targetPositionMs = positionMs
+                )
+            }
+            // seek 引发的短暂 BUFFERING 不应启动暂停态的封面、背景和控件动画。
+            transitions.lockPlayPauseVisual(currentIsPlayingForLyricSeek)
+            callbacks.onSeekTo(positionMs)
+        }
+    }
     val collapsedHeight = MiniPlayerCollapsedHeight
     val minimizedHeight = MiniPlayerMinimizedHeight
     val dragHotZoneHeight = MiniPlayerDragHotZoneHeight
@@ -249,7 +322,8 @@ fun MiniPlayer(
             durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = MiniPlayerEasing
         ),
-        label = "AddToPlaylistProgress"
+        label = "AddToPlaylistProgress",
+        finishedListener = transitions::finishAddToPlaylistProgress
     )
     val songInfoProgress by animateFloatAsState(
         targetValue = if (
@@ -268,7 +342,8 @@ fun MiniPlayer(
             durationMillis = MINI_PLAYER_ANIMATION_DURATION_MS,
             easing = MiniPlayerEasing
         ),
-        label = "FullscreenSongInfoProgress"
+        label = "FullscreenSongInfoProgress",
+        finishedListener = transitions::finishSongInfoProgress
     )
     val artistPlaceholderActive = isArtistPlaceholderActive(
         fullscreenContentMode = state.fullscreenContentMode,
@@ -292,6 +367,12 @@ fun MiniPlayer(
         expanded = expanded,
         hasCurrentSong = hasCurrentSong
     )
+    MiniPlayerLyricsKeepScreenOnEffect(
+        keepScreenOn = shouldKeepScreenOnForLyricsPage(
+            lyricsModeActive = lyricsModeActive,
+            allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage
+        )
+    )
     val artworkVisibilityProgress by animateFloatAsState(
         targetValue = if (lyricsModeActive) 0f else 1f,
         animationSpec = if (lyricsModeActive) {
@@ -310,6 +391,8 @@ fun MiniPlayer(
         },
         label = "FullscreenLyricsVisibilityProgress"
     )
+    val lyricsControlsOffsetY =
+        LyricsControlsDownOffset * (1f - artworkVisibilityProgress)
     val lyricsBlurredArtworkProgress by animateFloatAsState(
         targetValue = if (
             lyricsModeActive && lyricsBackgroundStyle == LyricsBackgroundStyle.BlurredArtwork
@@ -354,10 +437,6 @@ fun MiniPlayer(
             }
         ),
         label = "MiniPlayerSlideOffsetY"
-    )
-    MiniPlayerCoverImageEffects(
-        coverImageRequest = state.coverImageRequest,
-        context = context
     )
     MiniPlayerBackdropEffects(
         currentSong = currentSong,
@@ -409,6 +488,15 @@ fun MiniPlayer(
             fullscreenInteractionActive
     ) {
         transitions.exitFullscreenContentMode()
+    }
+    BackHandler(
+        enabled = shouldReturnFromLyricsToArtwork(
+            fullscreenContentMode = state.fullscreenContentMode,
+            fullscreenPlaybackContentMode = state.fullscreenPlaybackContentMode,
+            fullscreenInteractionActive = fullscreenInteractionActive
+        )
+    ) {
+        transitions.exitLyricsMode()
     }
     MiniPlayerFullscreenContentEffects(
         fullscreen = fullscreen,
@@ -549,7 +637,10 @@ fun MiniPlayer(
         Modifier
     }
     val progressGestureStartY =
-        expandedProgressTop + fullscreenStationaryControlsOffsetY - fullscreenControlsLiftY
+        expandedProgressTop +
+            fullscreenStationaryControlsOffsetY -
+            fullscreenControlsLiftY +
+            lyricsControlsOffsetY
     val progressGestureEndY = progressGestureStartY + 64.dp
     val progressGestureIgnoreRangePx = with(density) {
         progressGestureStartY.toPx()..progressGestureEndY.toPx()
@@ -680,38 +771,69 @@ fun MiniPlayer(
                     val fullscreenContentTapEnabled = fullscreen &&
                         expanded &&
                         hasCurrentSong &&
-                        state.fullscreenContentMode == FullscreenContentMode.Playback
-                    val fullscreenContentTapTop = 0.dp
-                    val fullscreenContentTapHeight = (
+                        state.fullscreenContentMode == FullscreenContentMode.Playback &&
+                        !state.expandedMoreMenu
+                    val lyricsTapTop = with(density) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + 56.dp + 60.dp + 12.dp
+                    val lyricsTapBottom = (
                         expandedProgressTop +
                             fullscreenStationaryControlsOffsetY -
                             fullscreenControlsLiftY -
-                            56.dp
-                        ).coerceAtLeast(0.dp)
+                            56.dp +
+                            lyricsControlsOffsetY
+                        ).coerceAtLeast(lyricsTapTop)
+                    // The mode switch band starts below the collapse arrow and ends above
+                    // the side action row. It is intentionally wider than the lyric list.
+                    val fullscreenContentTapTop = with(density) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + 48.dp
+                    val fullscreenContentTapBottom = lyricsTapBottom
+                    val fullscreenContentTapHeight =
+                        (fullscreenContentTapBottom - fullscreenContentTapTop).coerceAtLeast(0.dp)
+                    val showingLyrics = state.fullscreenPlaybackContentMode ==
+                        FullscreenPlaybackContentMode.Lyrics
+                    val lyricsMetadataTapRangePx = if (showingLyrics) {
+                        with(density) {
+                            val top = WindowInsets.statusBars.getTop(this).toDp() + 56.dp
+                            top.toPx()..(top + 56.dp).toPx()
+                        }
+                    } else {
+                        null
+                    }
                     val lyricsMetadataProgress = 1f - artworkVisibilityProgress
 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .then(songSwipeModifier)
                             .fullscreenContentTapGesture(
                                 enabled = fullscreenContentTapEnabled,
                                 contentTop = fullscreenContentTapTop,
                                 contentHeight = fullscreenContentTapHeight,
+                                ignoredStartYRangePx = lyricsMetadataTapRangePx,
                                 onTap = {
-                                    if (
-                                        state.fullscreenPlaybackContentMode ==
-                                            FullscreenPlaybackContentMode.Artwork
-                                    ) {
-                                        transitions.enterLyricsMode()
-                                    } else {
-                                        transitions.exitLyricsMode()
+                                    val now = SystemClock.uptimeMillis()
+                                    val lyricTapWasHandled =
+                                        lastLyricInteractionUptimeMs != Long.MIN_VALUE &&
+                                            now - lastLyricInteractionUptimeMs <=
+                                            LyricsTapSuppressionWindowMs
+                                    if (!lyricTapWasHandled) {
+                                        if (
+                                            state.fullscreenPlaybackContentMode ==
+                                                FullscreenPlaybackContentMode.Artwork
+                                        ) {
+                                            transitions.enterLyricsMode()
+                                        } else {
+                                            transitions.exitLyricsMode()
+                                        }
                                     }
                                 }
                             )
                     ) {
                     MiniPlayerBackgroundLayers(
                         gestureModifier = gestureModifier,
-                        songSwipeModifier = songSwipeModifier,
+                        songSwipeModifier = Modifier,
                         backgroundColor = coverTintDialogBackgroundColor(
                             state.lastStableBackdrop.colors
                         ),
@@ -719,20 +841,23 @@ fun MiniPlayer(
                             state.lastStableBackdrop.backgroundImageRequest,
                         cloudColors = state.lastStableBackdrop.colors,
                         animationProgress = animationProgress,
-                        isPlaying = playerUiState.isPlaying,
+                        isPlaying = visualIsPlaying,
                         flowCloudSpeed = flowCloudSpeed,
                         waitForArtworkLoad = useLocalArtworkLoading,
                         lyricsBlurredArtworkProgress = lyricsBlurredArtworkProgress
                     )
                     MiniPlayerFullscreenLayout(
                         imageRequest = state.coverImageRequest,
-                        waitForArtworkLoad = useLocalArtworkLoading,
                         playerUiState = playerUiState,
+                        songLyricsState = songLyricsState,
+                        confirmedPlaybackPosition =
+                            lyricsViewModel.confirmedPlaybackPosition,
                         title = title,
                         artist = artist,
                         hasCurrentSong = hasCurrentSong,
                         visualIsPlaying = visualIsPlaying,
                         strictProgressBar = strictProgressBar,
+                        lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                         currentHeight = currentHeight,
                         visualPanelHeight = visualPanelHeight,
                         collapsedHeight = collapsedHeight,
@@ -757,6 +882,7 @@ fun MiniPlayer(
                         artworkPlaybackRotationDegrees = artworkPlaybackRotationDegrees,
                         artworkVisibilityProgress = artworkVisibilityProgress,
                         lyricsVisibilityProgress = lyricsVisibilityProgress,
+                        lyricsControlsOffsetY = lyricsControlsOffsetY,
                         lyricsMetadataProgress = lyricsMetadataProgress,
                         titleColor = titleColor,
                         artistColor = artistColor,
@@ -767,6 +893,10 @@ fun MiniPlayer(
                             state.collapsedMetadataSwitchDirection,
                         artistClickEnabled = artistClickEnabled,
                         fullscreenContentMode = state.fullscreenContentMode,
+                        addToPlaylistEnteredFromLyrics =
+                            state.addToPlaylistEnteredFromLyrics,
+                        songInfoEnteredFromLyrics = state.songInfoEnteredFromLyrics,
+                        artistEnteredFromLyrics = state.artistEnteredFromLyrics,
                         libraryPlaylists = libraryPlaylists,
                         playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,
@@ -783,6 +913,8 @@ fun MiniPlayer(
                         fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
                         songInfoProgress = songInfoProgress,
                         callbacks = callbacks,
+                        onLyricPress = onLyricPressCallback,
+                        onLyricSeek = onLyricSeekCallback,
                         collapseInteractionSource = state.noRippleInteractionSource,
                         onArtistClick = fullscreenInteractionHandlers.onArtistClick,
                         onNewPlaylistCreateAnimationFinished =
@@ -806,14 +938,14 @@ fun MiniPlayer(
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
                             fullscreenInteractionHandlers.onArtistHostArtistClick,
-                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick
+                        onCollapseClick = fullscreenInteractionHandlers.onCollapseClick,
+                        onChooseLyricsDirectory = { lyricsDirectoryLauncher.launch(null) }
                     )
                     FullscreenContentTapAreaSemantics(
                         enabled = fullscreenContentTapEnabled,
                         contentTop = fullscreenContentTapTop,
                         contentHeight = fullscreenContentTapHeight,
-                        showingLyrics = state.fullscreenPlaybackContentMode ==
-                            FullscreenPlaybackContentMode.LyricsPlaceholder,
+                        showingLyrics = showingLyrics,
                         onClick = {
                             if (
                                 state.fullscreenPlaybackContentMode ==
@@ -851,3 +983,6 @@ fun MiniPlayer(
         }
     )
 }
+
+private val LyricsControlsDownOffset = 48.dp
+private const val LyricsTapSuppressionWindowMs = 750L

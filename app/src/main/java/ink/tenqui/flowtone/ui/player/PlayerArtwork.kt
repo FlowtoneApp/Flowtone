@@ -59,6 +59,7 @@ internal fun CrossfadeArtworkImage(
     contentScale: ContentScale = ContentScale.Crop,
     alpha: Float = 1f,
     waitForImageLoad: Boolean = false,
+    crossfadeImage: Boolean = true,
     fallbackContent: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -82,14 +83,18 @@ internal fun CrossfadeArtworkImage(
         displayedPainter = nextPainter
         displayedImageRequest = imageRequest
 
-        crossfadeProgress.snapTo(0f)
-        crossfadeProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = 320,
-                easing = FastOutSlowInEasing
+        if (crossfadeImage) {
+            crossfadeProgress.snapTo(0f)
+            crossfadeProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 320,
+                    easing = FastOutSlowInEasing
+                )
             )
-        )
+        } else {
+            crossfadeProgress.snapTo(1f)
+        }
 
         previousPainter = null
     }
@@ -130,7 +135,7 @@ internal fun CrossfadeArtworkImage(
 @Composable
 internal fun MorphArtworkLayer(
     imageRequest: ImageRequest?,
-    waitForArtworkLoad: Boolean,
+    artworkPainter: Painter?,
     progress: Float,
     scaleProgress: Float,
     currentHeight: Dp,
@@ -252,18 +257,19 @@ internal fun MorphArtworkLayer(
                     .then(blurModifier),
                 contentAlignment = Alignment.Center
             ) {
-                CrossfadeArtworkImage(
-                    imageRequest = imageRequest,
-                    contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                    contentScale = ContentScale.Crop,
-                    waitForImageLoad = waitForArtworkLoad,
-                    modifier = Modifier.matchParentSize(),
-                    fallbackContent = {
-                        MissingArtworkPlaceholder(
-                            iconModifier = Modifier.size(42.dp)
-                        )
-                    }
-                )
+                if (artworkPainter != null) {
+                    Image(
+                        painter = artworkPainter,
+                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else {
+                    MissingArtworkPlaceholder(
+                        modifier = Modifier.matchParentSize(),
+                        iconModifier = Modifier.size(42.dp)
+                    )
+                }
                 if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
                     Box(
                         modifier = Modifier

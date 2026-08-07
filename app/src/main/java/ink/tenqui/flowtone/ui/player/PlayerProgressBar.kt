@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +29,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+internal data class PlaybackProgressSeekAnimation(
+    val sequence: Long,
+    val songId: Long,
+    val targetPositionMs: Long
+)
+
 @Composable
 internal fun PlaybackProgressBar(
     positionMs: Long,
@@ -35,6 +42,7 @@ internal fun PlaybackProgressBar(
     isPlaying: Boolean,
     isPlayingForVisualLock: Boolean,
     strictProgressBar: Boolean,
+    lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
     currentSongKey: Long?,
     enabled: Boolean,
     trackColor: Color,
@@ -53,6 +61,7 @@ internal fun PlaybackProgressBar(
     var anchorPositionMs by remember { mutableStateOf(positionMs) }
     var anchorFrameTimeNanos by remember { mutableStateOf(0L) }
     var isTapSeeking by remember { mutableStateOf(false) }
+    var lastHandledLyricSeekSequence by remember { mutableLongStateOf(Long.MIN_VALUE) }
     var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
     val tapSeekProgress = remember { Animatable(0f) }
     val tapSeekScope = rememberCoroutineScope()
@@ -184,8 +193,12 @@ internal fun PlaybackProgressBar(
     }.coerceIn(0f, 1f)
     val currentVisibleProgress by rememberUpdatedState(visibleProgress)
     val currentIsPlayingForVisualLock by rememberUpdatedState(isPlayingForVisualLock)
+    val lyricSeekAnimationPending = lyricProgressSeekAnimation?.let { request ->
+        request.sequence != lastHandledLyricSeekSequence &&
+            request.songId == currentSongKey
+    } == true
     SideEffect {
-        if (!isScrubbing && !isTapSeeking) {
+        if (!isScrubbing && !isTapSeeking && !lyricSeekAnimationPending) {
             lastRenderedProgress = visibleProgress.coerceIn(0f, 1f)
         }
     }
@@ -221,6 +234,45 @@ internal fun PlaybackProgressBar(
         if (strictProgressBar) {
             pendingSeekPositionMs = positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
         }
+    }
+
+    LaunchedEffect(lyricProgressSeekAnimation?.sequence, currentSongKey, durationMs) {
+        val request = lyricProgressSeekAnimation ?: return@LaunchedEffect
+        if (
+            request.sequence == lastHandledLyricSeekSequence ||
+            request.songId != currentSongKey ||
+            durationMs <= 0L
+        ) {
+            return@LaunchedEffect
+        }
+
+        val targetPositionMs = request.targetPositionMs.coerceIn(0L, durationMs)
+        val targetProgress = progressFraction(
+            positionMs = targetPositionMs,
+            durationMs = durationMs
+        )
+        val startProgress = if (isTapSeeking) {
+            tapSeekProgress.value
+        } else {
+            lastRenderedProgress
+        }.coerceIn(0f, 1f)
+
+        tapSeekJob?.cancel()
+        lastHandledLyricSeekSequence = request.sequence
+        isTapSeeking = true
+        rememberPendingSeek(targetPositionMs)
+        smoothPositionMs = targetPositionMs
+        anchorPositionMs = targetPositionMs
+        anchorFrameTimeNanos = 0L
+        tapSeekProgress.snapTo(startProgress)
+        tapSeekProgress.animateTo(
+            targetValue = targetProgress,
+            animationSpec = tween(
+                durationMillis = PlaybackProgressTapSeekAnimationMillis,
+                easing = CubicBezierEasing(0.20f, 0.0f, 0.0f, 1.0f)
+            )
+        )
+        isTapSeeking = false
     }
 
     Box(modifier = modifier) {

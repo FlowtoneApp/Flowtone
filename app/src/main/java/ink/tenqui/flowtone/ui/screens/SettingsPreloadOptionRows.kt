@@ -25,6 +25,37 @@ internal fun PreloadStrengthRow(
     selectedCount: Int,
     onSelectedCountChange: (Int) -> Unit,
     modifier: Modifier = Modifier
+) = PreloadCountRow(
+    title = "预载歌曲元信息强度",
+    description = "提前加载接下来歌曲的封面与元信息，减少切歌时的封面闪烁。强度越高，占用的内存与后台加载越多。",
+    animationLabel = "PreloadStrengthExpandIconRotation",
+    selectedCount = selectedCount,
+    onSelectedCountChange = onSelectedCountChange,
+    modifier = modifier
+)
+
+@Composable
+internal fun LyricsPreloadStrengthRow(
+    selectedCount: Int,
+    onSelectedCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) = PreloadCountRow(
+    title = "预载歌词强度",
+    description = "提前读取并解析接下来歌曲的本地歌词，减少切歌后进入歌词页时的等待。强度越高，占用的内存与后台读取越多。",
+    animationLabel = "LyricsPreloadStrengthExpandIconRotation",
+    selectedCount = selectedCount,
+    onSelectedCountChange = onSelectedCountChange,
+    modifier = modifier
+)
+
+@Composable
+private fun PreloadCountRow(
+    title: String,
+    description: String,
+    animationLabel: String,
+    selectedCount: Int,
+    onSelectedCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val options = listOf(1, 3, 5, 7, 10)
     val selectedIndex = options.indexOf(selectedCount).takeIf { it != -1 } ?: 2
@@ -34,11 +65,11 @@ internal fun PreloadStrengthRow(
     val expandIconRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(280, easing = FlowtonePageEasing),
-        label = "PreloadStrengthExpandIconRotation"
+        label = animationLabel
     )
 
     SettingsExpandableOptionRow(
-        title = "预载歌曲元信息强度",
+        title = title,
         subtitle = "当前：$selectedCount 首",
         expanded = expanded,
         expandIconRotation = expandIconRotation,
@@ -51,7 +82,7 @@ internal fun PreloadStrengthRow(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)
         ) {
             Text(
-                text = "提前加载接下来歌曲的封面与元信息，减少切歌时的封面闪烁。强度越高，占用的内存与后台加载越多。",
+                text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Settings
@@ -72,6 +74,7 @@ import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.LyricsBackgroundStyleSelector
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
+import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -91,8 +94,9 @@ internal fun AppearanceSettingsPage(
     onStrictProgressBarChange: (Boolean) -> Unit,
     flowCloudSpeed: Float,
     onOpenFlowCloudSpeedDialog: () -> Unit,
-    lyricsBackgroundStyle: LyricsBackgroundStyle,
-    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
+    darkFlowCloudOverlayEnabled: Boolean,
+    onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
+    onOpenLyricsSettings: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -122,15 +126,24 @@ internal fun AppearanceSettingsPage(
                 onOpenDialog = onOpenFlowCloudSpeedDialog
             )
             SettingSwitchRow(
+                title = "\u6697\u8272\u6a21\u5f0f\u6d41\u4e91\u906e\u7f69",
+                subtitle = "\u5728\u6697\u8272\u6a21\u5f0f\u4e0b\u4e3a\u5e38\u89c4\u6d41\u4e91\u6dfb\u52a0\u6697\u8272\u906e\u7f69",
+                checked = darkFlowCloudOverlayEnabled,
+                onCheckedChange = onDarkFlowCloudOverlayChange,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            SettingSwitchRow(
                 title = "\u4e25\u683c\u8fdb\u5ea6\u6761",
                 subtitle = "\u5f00\u542f\u540e\uff0c\u64ad\u653e\u65f6\u95f4\u5c06\u7cbe\u786e\u663e\u793a\u62d6\u52a8\u6216\u8df3\u8f6c\u4f4d\u7f6e",
                 checked = strictProgressBar,
                 onCheckedChange = onStrictProgressBarChange,
                 modifier = Modifier.padding(top = 12.dp)
             )
-            LyricsBackgroundStyleSelector(
-                selectedStyle = lyricsBackgroundStyle,
-                onStyleSelected = onLyricsBackgroundStyleChange,
+            SettingsSectionRow(
+                title = "歌词",
+                subtitle = "歌词页背景与歌词文件夹",
+                icon = Icons.Rounded.Lyrics,
+                onClick = onOpenLyricsSettings,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
@@ -183,17 +196,60 @@ internal fun RecordSettingsPage(
 internal fun AdvancedSettingsPage(
     preloadSongMetadataCount: Int,
     onPreloadSongMetadataCountChange: (Int) -> Unit,
+    preloadLyricsCount: Int,
+    onPreloadLyricsCountChange: (Int) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
     SettingsPageColumn(modifier = modifier) {
         OptionGroup(
-            title = "高级",
+            title = "预载",
             modifier = elementModifier(0)
         ) {
             PreloadStrengthRow(
                 selectedCount = preloadSongMetadataCount,
                 onSelectedCountChange = onPreloadSongMetadataCountChange
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            LyricsPreloadStrengthRow(
+                selectedCount = preloadLyricsCount,
+                onSelectedCountChange = onPreloadLyricsCountChange
+            )
+        }
+    }
+}
+
+@Composable
+internal fun LyricsSettingsPage(
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
+    allowScreenOffOnLyricsPage: Boolean,
+    onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
+    lyricsFolders: List<LyricsFolder>,
+    onOpenLyricsFolders: () -> Unit,
+    elementModifier: (Int) -> Modifier,
+    modifier: Modifier = Modifier
+) {
+    SettingsPageColumn(modifier = modifier) {
+        OptionGroup(
+            title = "歌词",
+            modifier = elementModifier(0)
+        ) {
+            LyricsBackgroundStyleSelector(
+                selectedStyle = lyricsBackgroundStyle,
+                onStyleSelected = onLyricsBackgroundStyleChange
+            )
+            SettingSwitchRow(
+                title = "允许歌词页息屏",
+                subtitle = "开启后，歌词页遵循系统的屏幕超时设置",
+                checked = allowScreenOffOnLyricsPage,
+                onCheckedChange = onAllowScreenOffOnLyricsPageChange,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            LyricsFoldersSettingRow(
+                folders = lyricsFolders,
+                onClick = onOpenLyricsFolders,
+                modifier = Modifier.padding(top = 12.dp)
             )
         }
     }

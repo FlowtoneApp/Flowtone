@@ -10,3 +10,8 @@ data class PlaybackState(
     val playbackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
     val errorMessage: String? = null
 )
+
+data class PlaybackPositionSnapshot(
+    val mediaId: String? = null,
+    val positionMs: Long = 0L
+)

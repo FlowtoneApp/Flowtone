@@ -12,6 +12,9 @@ data class Song(
     val albumId: Long? = null,
     val artworkUri: Uri? = null,
     val filePath: String? = null,
+    val displayName: String? = null,
+    val relativePath: String? = null,
+    val volumeName: String? = null,
     val dateAddedSeconds: Long = 0L,
     val dateModifiedSeconds: Long = 0L
 )

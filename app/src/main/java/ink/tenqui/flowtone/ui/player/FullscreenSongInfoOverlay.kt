@@ -1,6 +1,12 @@
 package ink.tenqui.flowtone.ui.player
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -46,6 +54,7 @@ internal fun FullscreenSongInfoOverlay(
     val contentColor = Color.White
     val secondaryColor = Color.White.copy(alpha = 0.72f)
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
 
     Box(
         modifier = modifier
@@ -88,7 +97,14 @@ internal fun FullscreenSongInfoOverlay(
                     label = row.label,
                     value = row.value,
                     labelColor = secondaryColor,
-                    valueColor = contentColor
+                    valueColor = contentColor,
+                    onCopy = {
+                        copySongInfoValue(
+                            context = context,
+                            label = row.label,
+                            value = row.value
+                        )
+                    }
                 )
                 if (index != rows.lastIndex) {
                     HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
@@ -104,10 +120,17 @@ private fun SongInfoRow(
     value: String,
     labelColor: Color,
     valueColor: Color,
+    onCopy: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "复制$label",
+                onClick = onCopy
+            ),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
@@ -124,6 +147,18 @@ private fun SongInfoRow(
             maxLines = if (value.length > 48) 4 else 2,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+private fun copySongInfoValue(
+    context: Context,
+    label: String,
+    value: String
+) {
+    val clipboardManager = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboardManager.setPrimaryClip(ClipData.newPlainText(label, value))
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+        Toast.makeText(context, "已复制$label", Toast.LENGTH_SHORT).show()
     }
 }
 

@@ -20,6 +20,7 @@ import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicUiState
+import ink.tenqui.flowtone.lyrics.SongLyricsState
 
 internal enum class SongRecordThresholdDialogState {
     Idle,
@@ -57,10 +58,13 @@ internal class FlowtoneAppState(
     openExpandedMiniPlayerOnMediaClickState: MutableState<Boolean>,
     disablePausedArtworkTiltState: MutableState<Boolean>,
     strictProgressBarState: MutableState<Boolean>,
+    allowScreenOffOnLyricsPageState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
+    preloadLyricsCountState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
     flowCloudSpeedState: MutableState<Float>,
+    darkFlowCloudOverlayEnabledState: MutableState<Boolean>,
     lyricsBackgroundStyleState: MutableState<LyricsBackgroundStyle>,
     flowCloudSpeedDialogStateState: MutableState<FlowCloudSpeedDialogState>,
     playbackQueueDisplayOrderState: MutableState<QueueDisplayOrder>,
@@ -102,10 +106,13 @@ internal class FlowtoneAppState(
     var openExpandedMiniPlayerOnMediaClick by openExpandedMiniPlayerOnMediaClickState
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
     var strictProgressBar by strictProgressBarState
+    var allowScreenOffOnLyricsPage by allowScreenOffOnLyricsPageState
     var preloadSongMetadataCount by preloadSongMetadataCountState
+    var preloadLyricsCount by preloadLyricsCountState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
     var flowCloudSpeed by flowCloudSpeedState
+    var darkFlowCloudOverlayEnabled by darkFlowCloudOverlayEnabledState
     var lyricsBackgroundStyle by lyricsBackgroundStyleState
     var flowCloudSpeedDialogState by flowCloudSpeedDialogStateState
     var playbackQueueDisplayOrder by playbackQueueDisplayOrderState
@@ -195,8 +202,14 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val strictProgressBar = rememberSaveable {
         mutableStateOf(appPreferences.shouldUseStrictProgressBar())
     }
+    val allowScreenOffOnLyricsPage = rememberSaveable {
+        mutableStateOf(appPreferences.shouldAllowScreenOffOnLyricsPage())
+    }
     val preloadSongMetadataCount = rememberSaveable {
         mutableStateOf(appPreferences.getSongMetadataPreloadCount())
+    }
+    val preloadLyricsCount = rememberSaveable {
+        mutableStateOf(appPreferences.getLyricsPreloadCount())
     }
     val songRecordThresholdSeconds = rememberSaveable {
         mutableStateOf(appPreferences.getSongRecordThresholdSeconds())
@@ -206,6 +219,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     }
     val flowCloudSpeed = rememberSaveable {
         mutableStateOf(appPreferences.getFlowCloudSpeed())
+    }
+    val darkFlowCloudOverlayEnabled = rememberSaveable {
+        mutableStateOf(appPreferences.shouldUseDarkFlowCloudOverlay())
     }
     val lyricsBackgroundStyle = rememberSaveable {
         mutableStateOf(appPreferences.getLyricsBackgroundStyle())
@@ -281,10 +297,13 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         openExpandedMiniPlayerOnMediaClickState = openExpandedMiniPlayerOnMediaClick,
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
         strictProgressBarState = strictProgressBar,
+        allowScreenOffOnLyricsPageState = allowScreenOffOnLyricsPage,
         preloadSongMetadataCountState = preloadSongMetadataCount,
+        preloadLyricsCountState = preloadLyricsCount,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
         flowCloudSpeedState = flowCloudSpeed,
+        darkFlowCloudOverlayEnabledState = darkFlowCloudOverlayEnabled,
         lyricsBackgroundStyleState = lyricsBackgroundStyle,
         flowCloudSpeedDialogStateState = flowCloudSpeedDialogState,
         playbackQueueDisplayOrderState = playbackQueueDisplayOrder,
@@ -308,10 +327,12 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
 internal data class FlowtoneAppScaffoldState(
     val uiState: MusicUiState,
     val playerUiState: PlayerUiState,
+    val songLyricsState: SongLyricsState,
     val appPreferences: AppPreferences,
     val themeMode: AppThemeMode,
     val disablePausedArtworkTilt: Boolean,
     val strictProgressBar: Boolean,
+    val allowScreenOffOnLyricsPage: Boolean,
     val pagerState: PagerState,
     val selectedTopLevelPage: TopLevelPage,
     val rootPage: FlowtoneRootPage,
@@ -328,9 +349,11 @@ internal data class FlowtoneAppScaffoldState(
     val allowFullscreenFromCollapsed: Boolean,
     val openExpandedMiniPlayerOnMediaClick: Boolean,
     val preloadSongMetadataCount: Int,
+    val preloadLyricsCount: Int,
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
     val flowCloudSpeed: Float,
+    val darkFlowCloudOverlayEnabled: Boolean,
     val lyricsBackgroundStyle: LyricsBackgroundStyle,
     val flowCloudSpeedDialogState: FlowCloudSpeedDialogState,
     val playbackQueueDisplayOrder: QueueDisplayOrder,
@@ -364,6 +387,7 @@ internal fun flowtoneAppScaffoldState(
     appState: FlowtoneAppState,
     uiState: MusicUiState,
     playerUiState: PlayerUiState,
+    songLyricsState: SongLyricsState,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
     pagerState: PagerState,
@@ -384,10 +408,12 @@ internal fun flowtoneAppScaffoldState(
     return FlowtoneAppScaffoldState(
         uiState = uiState,
         playerUiState = playerUiState,
+        songLyricsState = songLyricsState,
         appPreferences = appPreferences,
         themeMode = themeMode,
         disablePausedArtworkTilt = appState.disablePausedArtworkTilt,
         strictProgressBar = appState.strictProgressBar,
+        allowScreenOffOnLyricsPage = appState.allowScreenOffOnLyricsPage,
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
         rootPage = rootPage,
@@ -404,9 +430,11 @@ internal fun flowtoneAppScaffoldState(
         allowFullscreenFromCollapsed = appState.allowFullscreenFromCollapsed,
         openExpandedMiniPlayerOnMediaClick = appState.openExpandedMiniPlayerOnMediaClick,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
+        preloadLyricsCount = appState.preloadLyricsCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
         flowCloudSpeed = appState.flowCloudSpeed,
+        darkFlowCloudOverlayEnabled = appState.darkFlowCloudOverlayEnabled,
         lyricsBackgroundStyle = appState.lyricsBackgroundStyle,
         flowCloudSpeedDialogState = appState.flowCloudSpeedDialogState,
         playbackQueueDisplayOrder = appState.playbackQueueDisplayOrder,

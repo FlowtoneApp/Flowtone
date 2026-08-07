@@ -1,9 +1,18 @@
 package ink.tenqui.flowtone.viewmodel
 
 import android.app.Application
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.local.AudioScanner
+import ink.tenqui.flowtone.lyrics.LocalLyricsRepository
+import ink.tenqui.flowtone.lyrics.LyricsLoadResult
+import ink.tenqui.flowtone.lyrics.LyricsLoadSource
+import ink.tenqui.flowtone.lyrics.LyricsPreloadScheduler
+import ink.tenqui.flowtone.lyrics.LyricsState
+import ink.tenqui.flowtone.lyrics.SongLyricsState
+import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.local.PlaybackSettingsStore
 import ink.tenqui.flowtone.data.local.SongMetadataPreloader
@@ -17,13 +26,19 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.playback.toPlaybackSource
 import ink.tenqui.flowtone.playback.toSongOrNull
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -47,10 +62,11 @@ data class MusicUiState(
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val musicRepository = MusicRepository(
         localMusicRepository = LocalMusicRepository(
-            audioScanner = AudioScanner(application.contentResolver)
+            audioScanner = AudioScanner(application)
         )
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)
+    private val localLyricsRepository = LocalLyricsRepository(application)
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
     private val searchRepository = SearchRepository()
     private val playbackController = PlaybackController(
@@ -64,11 +80,22 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         MusicUiState(listeningStats = listeningStatsRepository.getStats())
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
+    private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
+    private val _songLyricsState = MutableStateFlow(SongLyricsState())
+    // 歌词只使用 MediaController 确认的位置，不读取进度条的动画或拖动状态。
+    private val _confirmedPlaybackPosition = MutableStateFlow(PlaybackPositionSnapshot())
+    private val _lyricsFolders = MutableStateFlow(localLyricsRepository.getLyricsFolders())
+    private val lyricsReloadVersion = MutableStateFlow(0)
     private var sourceQueue: List<Song> = emptyList()
     private var playbackQueue: List<Song> = emptyList()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
+    private var preloadLyricsCount: Int = 5
     private var preloadJob: Job? = null
+    private var metadataPreloadUris: List<String> = emptyList()
+    private val lyricsPreloadScheduler by lazy {
+        LyricsPreloadScheduler(viewModelScope, localLyricsRepository)
+    }
     private var searchJob: Job? = null
     private var playbackOrderModeJob: Job? = null
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
@@ -76,11 +103,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
+    val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
+    val songLyricsState: StateFlow<SongLyricsState> = _songLyricsState.asStateFlow()
+    val confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot> =
+        _confirmedPlaybackPosition.asStateFlow()
+    val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
 
     init {
         startProgressTicker()
+        startConfirmedPlaybackPositionTicker()
         observeControllerConnection()
         observeListeningStats()
+        observeLyrics()
     }
 
     fun setPermissionStatus(hasPermission: Boolean) {
@@ -100,6 +134,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         preloadSongMetadataCount = sanitizedCount
+        scheduleNextSongsPreload()
+    }
+
+    fun setPreloadLyricsCount(count: Int) {
+        val allowedValues = listOf(1, 3, 5, 7, 10)
+        val sanitizedCount = allowedValues.minBy { kotlin.math.abs(it - count) }
+        if (preloadLyricsCount == sanitizedCount) {
+            return
+        }
+
+        preloadLyricsCount = sanitizedCount
         scheduleNextSongsPreload()
     }
 
@@ -304,6 +349,34 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setLyricsDirectory(treeUri: Uri) {
+        addLyricsFolder(treeUri)
+    }
+
+    fun addLyricsFolder(treeUri: Uri): Boolean {
+        val added = localLyricsRepository.addLyricsDirectory(treeUri)
+        if (!added) {
+            return false
+        }
+        lyricsPreloadScheduler.clear()
+        _lyricsFolders.value = localLyricsRepository.getLyricsFolders()
+        lyricsReloadVersion.update { it + 1 }
+        scheduleNextSongsPreload()
+        return true
+    }
+
+    fun removeLyricsFolder(treeUri: Uri) {
+        lyricsPreloadScheduler.clear()
+        localLyricsRepository.removeLyricsDirectory(treeUri)
+        _lyricsFolders.value = localLyricsRepository.getLyricsFolders()
+        lyricsReloadVersion.update { it + 1 }
+        scheduleNextSongsPreload()
+    }
+
+    fun refreshLyricsFolders() {
+        _lyricsFolders.value = localLyricsRepository.getLyricsFolders()
+    }
+
     fun handleLocalSongsDeleted(deletedSongs: List<Song>) {
         if (deletedSongs.isEmpty()) {
             return
@@ -476,6 +549,69 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun observeLyrics() {
+        viewModelScope.launch {
+            combine(
+                playbackState.map { it.currentSong }.distinctUntilChanged(),
+                lyricsReloadVersion
+            ) { song, version -> song to version }
+                .collectLatest { song ->
+                    val currentSong = song.first
+                    if (currentSong == null) {
+                        publishLyricsState(songId = null, state = LyricsState.Idle)
+                        return@collectLatest
+                    }
+
+                    val request = localLyricsRepository.request(currentSong)
+                    Log.d(
+                        "Lyrics",
+                        "foreground request song=${currentSong.id} source=${request.source}"
+                    )
+                    publishLyricsState(
+                        songId = currentSong.id,
+                        state = if (request.source == LyricsLoadSource.NewRead) {
+                            LyricsState.Loading
+                        } else {
+                            LyricsState.Idle
+                        }
+                    )
+                    val result = try {
+                        request.deferred.await()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        LyricsLoadResult.Failed(error)
+                    }
+
+                    publishLyricsState(
+                        songId = currentSong.id,
+                        state = when (result) {
+                            is LyricsLoadResult.Found -> LyricsState.Available(result.lines)
+                            LyricsLoadResult.DirectoryNotSelected ->
+                                LyricsState.DirectoryNotSelected
+                            LyricsLoadResult.DirectoryPermissionLost ->
+                                LyricsState.DirectoryPermissionLost
+                            LyricsLoadResult.OutsideSelectedDirectory ->
+                                LyricsState.OutsideSelectedDirectory
+                            LyricsLoadResult.NotFound -> LyricsState.NotFound
+                            is LyricsLoadResult.Failed -> {
+                                Log.d(
+                                    "Lyrics",
+                                    "failed=${result.throwable::class.simpleName}"
+                                )
+                                LyricsState.Error(result.throwable.message)
+                            }
+                        }
+                    )
+                }
+        }
+    }
+
+    private fun publishLyricsState(songId: Long?, state: LyricsState) {
+        _songLyricsState.value = SongLyricsState(songId = songId, state = state)
+        _lyricsState.value = state
+    }
+
     private fun restoreFromControllerIfPossible() {
         val snapshot = playbackController.getPlaybackSnapshot() ?: return
         val currentMediaItem = snapshot.currentMediaItem ?: return
@@ -572,25 +708,47 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun scheduleNextSongsPreload() {
-        preloadJob?.cancel()
+        val maximumPreloadCount = maxOf(preloadSongMetadataCount, preloadLyricsCount)
+        val upcomingSongs = upcomingSongsInPlaybackOrder(maximumPreloadCount)
+
+        val metadataSongs = upcomingSongs.take(preloadSongMetadataCount)
+        val nextMetadataPreloadUris = metadataSongs.map { it.uri.toString() }
+        if (nextMetadataPreloadUris != metadataPreloadUris) {
+            metadataPreloadUris = nextMetadataPreloadUris
+            preloadJob?.cancel()
+            preloadJob = viewModelScope.launch {
+                songMetadataPreloader.preload(metadataSongs)
+            }
+        }
+
+        val songsToPreload = upcomingSongs.take(preloadLyricsCount)
+        lyricsPreloadScheduler.update(
+            currentIndex = playbackController.getCurrentMediaItemIndex() ?: currentQueueIndex,
+            currentSong = playbackState.value.currentSong
+                ?: playbackQueue.getOrNull(currentQueueIndex),
+            songsInPlaybackOrder = songsToPreload
+        )
+    }
+
+    private fun upcomingSongsInPlaybackOrder(limit: Int): List<Song> {
+        if (limit <= 0 || playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
+            return emptyList()
+        }
+
+        val mediaIds = playbackController.getUpcomingMediaIdsInPlaybackOrder(limit)
+        if (mediaIds != null) {
+            return mediaIds.mapNotNull { mediaId ->
+                val songId = mediaId.toLongOrNull()
+                sourceQueue.firstOrNull { it.id == songId }
+                    ?: playbackQueue.firstOrNull { it.id == songId }
+            }
+        }
+
         val startIndex = currentQueueIndex + 1
-        if (
-            preloadSongMetadataCount <= 0 ||
-            playbackQueue.isEmpty() ||
-            startIndex !in playbackQueue.indices
-        ) {
-            return
-        }
-
-        val songsToPreload = playbackQueue
-            .drop(startIndex)
-            .take(preloadSongMetadataCount)
-        if (songsToPreload.isEmpty()) {
-            return
-        }
-
-        preloadJob = viewModelScope.launch {
-            songMetadataPreloader.preload(songsToPreload)
+        return if (startIndex in playbackQueue.indices) {
+            playbackQueue.drop(startIndex).take(limit)
+        } else {
+            emptyList()
         }
     }
 
@@ -715,6 +873,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun startConfirmedPlaybackPositionTicker() {
+        viewModelScope.launch {
+            while (isActive) {
+                _confirmedPlaybackPosition.value =
+                    playbackController.getCurrentPositionSnapshot()
+                delay(100)
+            }
+        }
+    }
+
     private fun updateProgressFromController() {
         val playbackOrderMode = playbackController.getPlaybackOrderMode()
         if (playbackState.value.playbackOrderMode != playbackOrderMode) {
@@ -764,6 +932,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         searchJob?.cancel()
         playbackOrderModeJob?.cancel()
+        lyricsPreloadScheduler.clear()
+        localLyricsRepository.close()
         playbackController.release()
         super.onCleared()
     }

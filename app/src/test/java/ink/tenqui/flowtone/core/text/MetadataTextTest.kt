@@ -16,11 +16,4 @@ class MetadataTextTest {
         assertEquals(title, normalizeMetadataText(title))
     }
 
-    @Test
-    fun `uses matching filename title when metadata has a conflicting suffix`() {
-        assertEquals(
-            "subzerØ",
-            titleWithFilenameFallback("sub/zerŘ", "/music/HYØUKA - subzerØ.mp3", "HYØUKA")
-        )
-    }
 }

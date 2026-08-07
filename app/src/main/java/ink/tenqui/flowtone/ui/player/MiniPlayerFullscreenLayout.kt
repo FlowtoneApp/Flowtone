@@ -12,12 +12,14 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -25,17 +27,23 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.lyrics.SongLyricsState
+import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
+import ink.tenqui.flowtone.ui.player.lyrics.LyricsActiveLineScreenYFraction
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 internal fun BoxScope.MiniPlayerFullscreenLayout(
     imageRequest: ImageRequest?,
-    waitForArtworkLoad: Boolean,
     playerUiState: PlayerUiState,
+    songLyricsState: SongLyricsState,
+    confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
     title: String,
     artist: String,
     hasCurrentSong: Boolean,
     visualIsPlaying: Boolean,
     strictProgressBar: Boolean,
+    lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
     currentHeight: Dp,
     visualPanelHeight: Dp,
     collapsedHeight: Dp,
@@ -60,6 +68,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     artworkPlaybackRotationDegrees: Float,
     artworkVisibilityProgress: Float,
     lyricsVisibilityProgress: Float,
+    lyricsControlsOffsetY: Dp,
     lyricsMetadataProgress: Float,
     titleColor: Color,
     artistColor: Color,
@@ -69,6 +78,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     collapsedMetadataSwitchDirection: Int,
     artistClickEnabled: Boolean,
     fullscreenContentMode: FullscreenContentMode,
+    addToPlaylistEnteredFromLyrics: Boolean,
+    songInfoEnteredFromLyrics: Boolean,
+    artistEnteredFromLyrics: Boolean,
     libraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
     newlyCreatedPlaylistId: String?,
@@ -84,6 +96,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     fullscreenSwipeThresholdPx: Float,
     songInfoProgress: Float,
     callbacks: MiniPlayerCallbacks,
+    onLyricPress: () -> Unit,
+    onLyricSeek: (Long) -> Unit,
     collapseInteractionSource: MutableInteractionSource,
     onArtistClick: (String) -> Unit,
     onNewPlaylistCreateAnimationFinished: (String) -> Unit,
@@ -103,6 +117,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onArtistHostBack: () -> Unit,
     onArtistHostArtistClick: (String) -> Unit,
     onCollapseClick: () -> Unit,
+    onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val actualDensity = LocalDensity.current
@@ -130,6 +145,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         val designFullscreenStationaryControlsOffsetY =
             fullscreenStationaryControlsOffsetY / effectiveLayoutScale
         val designFullscreenControlsLiftY = fullscreenControlsLiftY
+        val designLyricsControlsOffsetY = lyricsControlsOffsetY / effectiveLayoutScale
         val designFullscreenProgressTrackWidth = designPlayerWidth * 0.76f
         val metrics = layoutMetrics.copy(
             fullscreenProgressTrackWidth = designFullscreenProgressTrackWidth,
@@ -142,36 +158,79 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             playbackContentOffsetY =
                 32.dp * layoutMetrics.fullscreenContentExitSharedProgress
         )
-
-        MorphArtworkLayer(
-        imageRequest = imageRequest,
-        waitForArtworkLoad = waitForArtworkLoad,
-        progress = artworkAnimationProgress,
-        scaleProgress = artworkScaleProgress,
-        currentHeight = designCurrentHeight,
-        viewportHeight = designCurrentHeight,
-        collapsedHeight = designCollapsedHeight,
-        playerWidth = designPlayerWidth,
-        expandedArtworkSize = designExpandedArtworkSize,
-        expandedArtworkTop = designExpandedArtworkTop,
-        fullscreenProgress = fullscreenProgress,
-        fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
-        fullscreenArtworkCenterY = designFullscreenCoverCenterY,
-        contentExitProgress = metrics.artworkContentExitProgress,
-        addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
-        addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
-        addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
-        playbackScale = artworkPlaybackScale,
-        playbackRotationDegrees = artworkPlaybackRotationDegrees,
-        layerAlpha = (1f - metrics.artistExitProgress) * artworkVisibilityProgress,
-        layerTranslationY =
-            16.dp *
-                (1f - minimizedProgress) *
-                (1f - fullscreenProgress) -
-                24.dp * metrics.artistExitProgress -
-                24.dp * (1f - artworkVisibilityProgress),
-        modifier = modifier.align(Alignment.TopStart)
-    )
+        val safeTopPadding = with(LocalDensity.current) {
+            WindowInsets.statusBars.getTop(this).toDp()
+        }
+        val lyricsAddToPlaylistProgress = if (addToPlaylistEnteredFromLyrics) {
+            metrics.addToPlaylistSharedProgress
+        } else {
+            0f
+        }
+        val hidePlaybackSharedArtwork =
+            addToPlaylistEnteredFromLyrics ||
+                songInfoEnteredFromLyrics ||
+                artistEnteredFromLyrics
+        val songPresentationTransition = rememberPlayerSongPresentationTransition(
+            songKey = playerUiState.currentSong?.id,
+            title = title,
+            artist = artist,
+            imageRequest = imageRequest
+        )
+        val playbackArtworkAlpha = if (hidePlaybackSharedArtwork) {
+            0f
+        } else {
+            (1f - metrics.artistExitProgress) * artworkVisibilityProgress
+        }
+        PlayerSongPresentationTransitionContent(
+            transition = songPresentationTransition,
+            switchDirection = collapsedMetadataSwitchDirection,
+            switchDistancePx = 0,
+            modifier = Modifier.fillMaxSize()
+        ) { presentation, switchAlpha ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                MorphArtworkLayer(
+                    imageRequest = presentation.imageRequest,
+                    artworkPainter = presentation.artworkPainter,
+                    progress = artworkAnimationProgress,
+                    scaleProgress = artworkScaleProgress,
+                    currentHeight = designCurrentHeight,
+                    viewportHeight = designCurrentHeight,
+                    collapsedHeight = designCollapsedHeight,
+                    playerWidth = designPlayerWidth,
+                    expandedArtworkSize = designExpandedArtworkSize,
+                    expandedArtworkTop = designExpandedArtworkTop,
+                    fullscreenProgress = fullscreenProgress,
+                    fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
+                    fullscreenArtworkCenterY = designFullscreenCoverCenterY,
+                    contentExitProgress = metrics.artworkContentExitProgress,
+                    addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
+                    addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
+                    addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
+                    playbackScale = artworkPlaybackScale,
+                    playbackRotationDegrees = artworkPlaybackRotationDegrees,
+                    layerAlpha = playbackArtworkAlpha * switchAlpha,
+                    layerTranslationY =
+                        16.dp *
+                            (1f - minimizedProgress) *
+                            (1f - fullscreenProgress) -
+                            24.dp * metrics.artistExitProgress -
+                            24.dp * (1f - artworkVisibilityProgress),
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+            }
+        }
+        val lyricsHeaderArtworkAlpha = if (
+            addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
+        ) {
+            1f
+        } else {
+            lyricsMetadataProgress
+        }
+        val lyricsHeaderArtworkTop = lerpDp(
+            safeTopPadding + 56.dp,
+            metrics.addToPlaylistArtworkTop,
+            if (songInfoEnteredFromLyrics) songInfoProgress else 0f
+        )
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -179,9 +238,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             .align(Alignment.TopCenter)
     ) {
         SharedSongInfo(
-            title = title,
-            artist = artist,
-            currentSongKey = playerUiState.currentSong?.id,
+            songPresentationTransition = songPresentationTransition,
             progress = animationProgress,
             titleColor = titleColor,
             artistColor = artistColor,
@@ -194,38 +251,123 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             fullscreenX = metrics.fullscreenArtworkX,
             fullscreenTop = metrics.fullscreenMetadataTop,
             lyricsMetadataProgress = lyricsMetadataProgress,
-            contentExitProgress = metrics.fullscreenContentExitSharedProgress,
+            contentExitProgress = if (
+                addToPlaylistEnteredFromLyrics ||
+                songInfoEnteredFromLyrics ||
+                artistEnteredFromLyrics
+            ) {
+                1f
+            } else {
+                metrics.fullscreenContentExitSharedProgress
+            },
             switchDirection = collapsedMetadataSwitchDirection,
             artistClickEnabled = artistClickEnabled,
             onArtistClick = onArtistClick,
             modifier = Modifier
                 .align(Alignment.TopStart)
         )
-        AddToPlaylistItemSongInfo(
-            title = title,
-            artist = artist,
-            progress = metrics.addToPlaylistSharedProgress,
-            titleColor = titleColor,
-            artistColor = artistColor,
-            width = metrics.addToPlaylistTextWidth,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(
-                    x = metrics.addToPlaylistTextStart,
-                    y = metrics.addToPlaylistArtworkTop
-                )
-        )
-        LyricsPlaceholderSongInfo(
-            title = title,
-            artist = artist,
-            visibilityProgress = lyricsMetadataProgress,
-            titleColor = titleColor,
-            artistColor = artistColor,
-            playerWidth = designPlayerWidth,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .zIndex(5f)
-        )
+        if (!addToPlaylistEnteredFromLyrics) {
+            AddToPlaylistItemSongInfo(
+                title = title,
+                artist = artist,
+                progress = metrics.addToPlaylistSharedProgress,
+                titleColor = titleColor,
+                artistColor = artistColor,
+                width = metrics.addToPlaylistTextWidth,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(
+                        x = metrics.addToPlaylistTextStart,
+                        y = metrics.addToPlaylistArtworkTop
+                    )
+            )
+        }
+        // Keep the scrollable lyrics between the metadata block and the fullscreen action row.
+        val lyricsTop = safeTopPadding + 56.dp + 60.dp + 12.dp
+        val lyricsBottom = (
+            designExpandedProgressTop +
+                designFullscreenStationaryControlsOffsetY -
+                designFullscreenControlsLiftY -
+                56.dp +
+                designLyricsControlsOffsetY
+            ).coerceAtLeast(lyricsTop)
+        val lyricsHeight = (lyricsBottom - lyricsTop).coerceAtLeast(0.dp)
+        val lyricsActiveLineTargetY = (
+            designVisualPanelHeight * LyricsActiveLineScreenYFraction - lyricsTop
+        ).coerceIn(0.dp, lyricsHeight)
+        val lyricsHeaderTextAlpha = if (addToPlaylistEnteredFromLyrics) {
+            1f
+        } else {
+            lyricsMetadataProgress
+        }
+        if (lyricsHeaderArtworkAlpha > 0.001f || lyricsHeaderTextAlpha > 0.001f) {
+            val switchDistancePx = with(LocalDensity.current) {
+                LyricsHeaderTrackSwitchDistance.roundToPx()
+            }
+            PlayerSongPresentationTransitionContent(
+                transition = songPresentationTransition,
+                switchDirection = collapsedMetadataSwitchDirection,
+                switchDistancePx = switchDistancePx,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(5f)
+            ) { presentation, trackSwitchAlpha ->
+                // 切歌时封面与文字共用同一位移和透明度，作为一个整体切换。
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = trackSwitchAlpha }
+                ) {
+                    if (lyricsHeaderArtworkAlpha > 0.001f) {
+                        MorphArtworkLayer(
+                            imageRequest = presentation.imageRequest,
+                            artworkPainter = presentation.artworkPainter,
+                            progress = 1f,
+                            scaleProgress = 1f,
+                            currentHeight = designCurrentHeight,
+                            viewportHeight = designCurrentHeight,
+                            collapsedHeight = designCollapsedHeight,
+                            playerWidth = designPlayerWidth,
+                            expandedArtworkSize = designExpandedArtworkSize,
+                            expandedArtworkTop = designExpandedArtworkTop,
+                            fullscreenProgress = 1f,
+                            fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
+                            fullscreenArtworkCenterY = designFullscreenCoverCenterY,
+                            contentExitProgress = 1f,
+                            addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
+                            addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
+                            addToPlaylistArtworkTop = lyricsHeaderArtworkTop,
+                            playbackScale = 1f,
+                            playbackRotationDegrees = 0f,
+                            layerAlpha = lyricsHeaderArtworkAlpha,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .graphicsLayer {
+                                    translationX =
+                                        ((-48).dp * (1f - lyricsHeaderArtworkAlpha)).toPx()
+                                }
+                        )
+                    }
+                    LyricsPlaceholderSongInfo(
+                        title = presentation.title,
+                        artist = presentation.artist,
+                        visibilityProgress = lyricsHeaderTextAlpha,
+                        titleColor = titleColor,
+                        artistColor = artistColor,
+                        playerWidth = designPlayerWidth,
+                        lyricsContentStart = metrics.addToPlaylistArtworkLeft,
+                        addToPlaylistProgress = lyricsAddToPlaylistProgress,
+                        addToPlaylistTextStart = metrics.addToPlaylistTextStart,
+                        addToPlaylistTextWidth = metrics.addToPlaylistTextWidth,
+                        artistClickable = artistClickEnabled &&
+                            trackSwitchAlpha > 0.99f &&
+                            isSelectableArtist(presentation.artist),
+                        onArtistClick = { onArtistClick(presentation.artist) },
+                        modifier = Modifier.align(Alignment.TopStart)
+                    )
+                }
+            }
+        }
         if (
             shouldShowAddToPlaylistGrid(
                 fullscreenContentMode = fullscreenContentMode,
@@ -255,11 +397,13 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         Box(
             modifier = Modifier
                 .matchParentSize()
+                .zIndex(if (expandedMoreMenu) 6f else 0f)
                 .graphicsLayer {
                     alpha = metrics.playbackContentAlpha
                     translationY =
                         (designFullscreenStationaryControlsOffsetY -
                             designFullscreenControlsLiftY +
+                            designLyricsControlsOffsetY +
                             metrics.playbackContentOffsetY).toPx()
                 }
         ) {
@@ -270,6 +414,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 isPlaying = playerUiState.isPlaying,
                 isPlayingForVisualLock = visualIsPlaying,
                 strictProgressBar = strictProgressBar,
+                lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                 currentSongKey = playerUiState.currentSong?.id,
                 hasCurrentSong = hasCurrentSong,
                 progressTrackColor = progressTrackColor,
@@ -324,18 +469,31 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
             )
         }
-        // Keep the placeholder in the same coordinate space as the artwork, not the controls.
+        // The host is deliberately constrained to the same middle band used for artwork.
         MiniPlayerLyricsHost(
             currentSong = playerUiState.currentSong,
-            positionMs = playerUiState.positionMs,
-            playbackProgress = animationProgress,
-            fullscreenProgress = fullscreenProgress,
-                fullscreen = fullscreen && expanded && hasCurrentSong,
-                visibilityProgress = lyricsVisibilityProgress,
-                onLyricSeekRequested = callbacks.onSeekTo,
+            presentedSongId = songPresentationTransition.current.key,
+            songLyricsState = songLyricsState,
+            switchDirection = collapsedMetadataSwitchDirection,
+            confirmedPlaybackPosition = confirmedPlaybackPosition,
+            activeLineTargetY = lyricsActiveLineTargetY,
+            visibilityProgress = lyricsVisibilityProgress,
+            onLyricPress = onLyricPress,
+            onSeekTo = onLyricSeek,
+            onChooseLyricsDirectory = onChooseLyricsDirectory,
             modifier = Modifier
-                .matchParentSize()
-                .zIndex(4f)
+                .align(Alignment.TopCenter)
+                .offset(y = lyricsTop)
+                .fillMaxWidth()
+                .height(lyricsHeight)
+                .clipToBounds()
+                .zIndex(
+                    if (lyricsVisibilityProgress > LyricsHostVisibleThreshold) {
+                        LyricsHostVisibleZIndex
+                    } else {
+                        LyricsHostHiddenZIndex
+                    }
+                )
         )
         MiniPlayerArtistHost(
             fullscreenContentMode = fullscreenContentMode,
@@ -363,3 +521,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     )
     }
 }
+
+private val LyricsHeaderTrackSwitchDistance = 20.dp
+private const val LyricsHostVisibleThreshold = 0.001f
+private const val LyricsHostVisibleZIndex = 4f
+private const val LyricsHostHiddenZIndex = -1f

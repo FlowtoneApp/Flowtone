@@ -251,6 +251,15 @@ class PlaybackController(
         return position.coerceAtLeast(0L)
     }
 
+    fun getCurrentPositionSnapshot(): PlaybackPositionSnapshot {
+        val controller = currentControllerOrNull()
+            ?: return PlaybackPositionSnapshot()
+        return PlaybackPositionSnapshot(
+            mediaId = controller.currentMediaItem?.mediaId,
+            positionMs = controller.currentPosition.coerceAtLeast(0L)
+        )
+    }
+
     fun getDurationMs(): Long {
         val duration = currentControllerOrNull()?.duration ?: 0L
         return safeDuration(duration)
@@ -373,6 +382,36 @@ class PlaybackController(
         _playbackState.update {
             it.copy(isPlaying = false)
         }
+    }
+
+    fun getCurrentMediaItemIndex(): Int? {
+        return currentControllerOrNull()?.currentMediaItemIndex
+    }
+
+    fun getUpcomingMediaIdsInPlaybackOrder(limit: Int): List<String>? {
+        val controller = currentControllerOrNull() ?: return null
+        if (limit <= 0 || controller.currentMediaItemIndex == C.INDEX_UNSET) {
+            return emptyList()
+        }
+
+        val timeline = controller.currentTimeline
+        val mediaIds = ArrayList<String>(limit)
+        val visitedIndices = mutableSetOf(controller.currentMediaItemIndex)
+        var index = controller.currentMediaItemIndex
+        for (ignored in 0 until limit) {
+            index = timeline.getNextWindowIndex(
+                index,
+                Player.REPEAT_MODE_OFF,
+                controller.shuffleModeEnabled
+            )
+            if (index == C.INDEX_UNSET || !visitedIndices.add(index)) {
+                break
+            }
+            controller.getMediaItemAt(index).mediaId
+                .takeIf(String::isNotBlank)
+                ?.let(mediaIds::add)
+        }
+        return mediaIds
     }
 
     fun clearPlayback() {

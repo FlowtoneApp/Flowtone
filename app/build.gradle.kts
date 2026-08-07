@@ -133,6 +133,25 @@ android {
 
             matchingFallbacks += listOf("release")
         }
+
+        create("fast") {
+            // 使用 debug 的快速构建配置和依赖
+            initWith(getByName("debug"))
+
+            // 仍用 debug 签名，方便直接安装
+            signingConfig = signingConfigs.getByName("debug")
+
+            // 关键：消除 debuggable 带来的运行时性能开销
+            isDebuggable = false
+            isProfileable = false
+
+            // 不运行耗时的发布优化
+            isMinifyEnabled = false
+            isShrinkResources = false
+            isCrunchPngs = false
+
+            matchingFallbacks += listOf("debug")
+        }
     }
 
     compileOptions {
@@ -162,6 +181,7 @@ dependencies {
     implementation(libs.androidx.palette.ktx)
     implementation(libs.coil.compose)
     implementation(libs.google.material)
+    implementation(libs.taglib)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

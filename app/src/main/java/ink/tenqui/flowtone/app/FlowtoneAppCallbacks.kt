@@ -13,16 +13,19 @@ internal data class FlowtoneAppCallbacks(
     val onThemeModeChange: (AppThemeMode) -> Unit,
     val onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     val onStrictProgressBarChange: (Boolean) -> Unit,
+    val onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     val onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     val onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     val onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     val onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
     val onPreloadSongMetadataCountChange: (Int) -> Unit,
+    val onPreloadLyricsCountChange: (Int) -> Unit,
     val onSongRecordThresholdSecondsChange: (Int) -> Unit,
     val onOpenSongRecordThresholdDialog: () -> Unit,
     val onCloseSongRecordThresholdDialog: () -> Unit,
     val onSongRecordThresholdDialogClosed: () -> Unit,
     val onFlowCloudSpeedChange: (Float) -> Unit,
+    val onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     val onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     val onOpenFlowCloudSpeedDialog: () -> Unit,
     val onCloseFlowCloudSpeedDialog: () -> Unit,
@@ -110,6 +113,10 @@ internal fun flowtoneAppCallbacks(
             appState.strictProgressBar = strict
             appPreferences.setStrictProgressBar(strict)
         },
+        onAllowScreenOffOnLyricsPageChange = { allow ->
+            appState.allowScreenOffOnLyricsPage = allow
+            appPreferences.setAllowScreenOffOnLyricsPage(allow)
+        },
         onHideSecondaryBackButtonChange = { hide ->
             appState.hideSecondaryBackButton = hide
             appPreferences.setHideSecondaryBackButton(hide)
@@ -129,6 +136,10 @@ internal fun flowtoneAppCallbacks(
         onPreloadSongMetadataCountChange = { count ->
             appState.preloadSongMetadataCount = count
             appPreferences.setSongMetadataPreloadCount(count)
+        },
+        onPreloadLyricsCountChange = { count ->
+            appState.preloadLyricsCount = count
+            appPreferences.setLyricsPreloadCount(count)
         },
         onSongRecordThresholdSecondsChange = { seconds ->
             appState.songRecordThresholdSeconds = seconds
@@ -153,6 +164,10 @@ internal fun flowtoneAppCallbacks(
             val safeSpeed = speed.coerceFlowCloudSpeed()
             appState.flowCloudSpeed = safeSpeed
             appPreferences.setFlowCloudSpeed(safeSpeed)
+        },
+        onDarkFlowCloudOverlayChange = { enabled ->
+            appState.darkFlowCloudOverlayEnabled = enabled
+            appPreferences.setDarkFlowCloudOverlay(enabled)
         },
         onLyricsBackgroundStyleChange = { style ->
             appState.lyricsBackgroundStyle = style
