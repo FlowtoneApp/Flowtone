@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersionName = "0.13.0"
+val appVersionName = "0.13.8"
 
 fun versionCodeFromName(versionName: String): Int {
     val parts = versionName.split(".")
@@ -117,9 +117,13 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
 
-            optimization {
-                enable = false
-            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
 
         create("benchmark") {
@@ -128,8 +132,8 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             isDebuggable = false
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
 
             matchingFallbacks += listOf("release")
         }
