@@ -856,21 +856,17 @@ private fun LyricsList(
                                     glowColor = Color.White.copy(
                                         alpha = LyricGlowAlphaMultiplier
                                     ),
+                                    glowEnabled = isActive,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 line.translation
                                     ?.takeIf(String::isNotBlank)
                                     ?.let { translation ->
-                                        SoftGlowText(
+                                        Text(
                                             text = translation,
                                             style = lyricTranslationTextStyle,
                                             color = Color.White.copy(
                                                 alpha = LyricsTranslationAlphaMultiplier
-                                            ),
-                                            glowColor = Color.White.copy(
-                                                alpha =
-                                                    LyricGlowAlphaMultiplier *
-                                                        LyricsTranslationAlphaMultiplier
                                             ),
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -892,8 +888,18 @@ private fun SoftGlowText(
     style: TextStyle,
     color: Color,
     glowColor: Color,
+    glowEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    if (!glowEnabled) {
+        Text(
+            text = text,
+            style = style,
+            color = color,
+            modifier = modifier
+        )
+        return
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         Box(modifier = modifier) {
             Text(
