@@ -73,28 +73,21 @@ internal fun rememberPlayerSongPresentationTransition(
     val switchProgress = remember { Animatable(1f) }
 
     LaunchedEffect(desired) {
-        val painter = try {
-            desired.imageRequest?.let { request ->
-                (context.imageLoader.execute(request) as? SuccessResult)
-                    ?.image
-                    ?.asPainter(context)
-            }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Throwable) {
-            null
-        }
         val prepared = PlayerSongPresentation(
             key = desired.key,
             title = desired.title,
             artist = desired.artist,
             imageRequest = desired.imageRequest,
-            artworkPainter = painter
+            artworkPainter = null
         )
 
         if (prepared.key == current.key) {
             // 同一首歌的封面完成加载时原位补全，不触发一次伪切歌。
-            current = prepared
+            current = current.copy(
+                title = prepared.title,
+                artist = prepared.artist,
+                imageRequest = prepared.imageRequest
+            )
             return@LaunchedEffect
         }
 
@@ -109,6 +102,28 @@ internal fun rememberPlayerSongPresentationTransition(
             )
         )
         previous = null
+    }
+
+    LaunchedEffect(desired.key, desired.imageRequest) {
+        val painter = try {
+            desired.imageRequest?.let { request ->
+                (context.imageLoader.execute(request) as? SuccessResult)
+                    ?.image
+                    ?.asPainter(context)
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+
+        // 封面加载完成后只补齐当前展示项，不重新触发元信息切换。
+        if (current.key == desired.key) {
+            current = current.copy(
+                imageRequest = desired.imageRequest,
+                artworkPainter = painter
+            )
+        }
     }
 
     return PlayerSongPresentationTransition(

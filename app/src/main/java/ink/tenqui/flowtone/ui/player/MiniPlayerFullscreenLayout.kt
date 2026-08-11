@@ -122,7 +122,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
 ) {
     val actualDensity = LocalDensity.current
     val layoutScale = fullscreenPlayerLayoutScale(playerWidth)
-    val effectiveLayoutScale = lerpFloat(1f, layoutScale, fullscreenProgress)
+    // 避免全屏转场的每一帧都变更 LocalDensity。后者会使整个子树（含文本）失效并重测量，
+    // 是展开至全屏时 Recomposer 峰值的主要来源。进入或退出全屏时只切换一次设计比例。
+    val effectiveLayoutScale = if (fullscreen) layoutScale else 1f
     val fullscreenDensity = Density(
         density = actualDensity.density * effectiveLayoutScale,
         fontScale = actualDensity.fontScale
@@ -469,32 +471,38 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 onTogglePlaybackOrderMode = callbacks.onTogglePlaybackOrderMode
             )
         }
-        // The host is deliberately constrained to the same middle band used for artwork.
-        MiniPlayerLyricsHost(
-            currentSong = playerUiState.currentSong,
-            presentedSongId = songPresentationTransition.current.key,
-            songLyricsState = songLyricsState,
-            switchDirection = collapsedMetadataSwitchDirection,
-            confirmedPlaybackPosition = confirmedPlaybackPosition,
-            activeLineTargetY = lyricsActiveLineTargetY,
-            visibilityProgress = lyricsVisibilityProgress,
-            onLyricPress = onLyricPress,
-            onSeekTo = onLyricSeek,
-            onChooseLyricsDirectory = onChooseLyricsDirectory,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = lyricsTop)
-                .fillMaxWidth()
-                .height(lyricsHeight)
-                .clipToBounds()
-                .zIndex(
-                    if (lyricsVisibilityProgress > LyricsHostVisibleThreshold) {
-                        LyricsHostVisibleZIndex
-                    } else {
-                        LyricsHostHiddenZIndex
-                    }
-                )
-        )
+        // 歌词树在普通、展开和全屏转场时始终不可见；延后创建避免它持续收集进度
+        // 并参与每帧重组。切换到歌词页时仍会立即创建，不改变可见效果。
+        if (
+            fullscreenProgress >= LyricsHostCompositionThreshold ||
+                lyricsVisibilityProgress > LyricsHostVisibleThreshold
+        ) {
+            MiniPlayerLyricsHost(
+                currentSong = playerUiState.currentSong,
+                presentedSongId = songPresentationTransition.current.key,
+                songLyricsState = songLyricsState,
+                switchDirection = collapsedMetadataSwitchDirection,
+                confirmedPlaybackPosition = confirmedPlaybackPosition,
+                activeLineTargetY = lyricsActiveLineTargetY,
+                visibilityProgress = lyricsVisibilityProgress,
+                onLyricPress = onLyricPress,
+                onSeekTo = onLyricSeek,
+                onChooseLyricsDirectory = onChooseLyricsDirectory,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = lyricsTop)
+                    .fillMaxWidth()
+                    .height(lyricsHeight)
+                    .clipToBounds()
+                    .zIndex(
+                        if (lyricsVisibilityProgress > LyricsHostVisibleThreshold) {
+                            LyricsHostVisibleZIndex
+                        } else {
+                            LyricsHostHiddenZIndex
+                        }
+                    )
+            )
+        }
         MiniPlayerArtistHost(
             fullscreenContentMode = fullscreenContentMode,
             artistPlaceholderArtists = artistPlaceholderArtists,
@@ -521,6 +529,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     )
     }
 }
+
+private const val LyricsHostCompositionThreshold = 0.98f
 
 private val LyricsHeaderTrackSwitchDistance = 20.dp
 private const val LyricsHostVisibleThreshold = 0.001f
