@@ -25,7 +25,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
@@ -97,11 +96,7 @@ internal fun FlowCloudBackground(
     val blob2Motion = expandFlowCloudDrift(blob2Drift, safeMotionRangeMultiplier)
     val blob3Motion = expandFlowCloudDrift(blob3Drift, safeMotionRangeMultiplier)
     val blob4Motion = expandFlowCloudDrift(blob4Drift, safeMotionRangeMultiplier)
-    Canvas(
-        modifier = modifier.graphicsLayer {
-            compositingStrategy = CompositingStrategy.Offscreen
-        }
-    ) {
+    Canvas(modifier = modifier) {
         val alphaMultiplier = 1f + progress * 0.08f
         val base = size.maxDimension
         val baseAlpha = 0.14f * alphaMultiplier

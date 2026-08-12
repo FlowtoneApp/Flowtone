@@ -3,7 +3,6 @@ package ink.tenqui.flowtone.ui.player
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -13,15 +12,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
 import coil3.compose.asPainter
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import kotlinx.coroutines.CancellationException
-import kotlin.math.roundToInt
 
 internal data class PlayerSongPresentation(
     val key: Long?,
@@ -164,7 +162,10 @@ internal fun PlayerSongPresentationTransitionContent(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .offset { IntOffset(offsetX.roundToInt(), 0) },
+                        // 切歌位移只更新渲染图层，避免每个动画帧都触发布局，且保留子像素平滑度。
+                        .graphicsLayer {
+                            translationX = offsetX
+                        },
                     contentAlignment = Alignment.CenterStart
                 ) {
                     content(presentation, itemAlpha)

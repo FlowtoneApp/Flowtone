@@ -82,6 +82,13 @@ val hasReleaseSigningConfig = listOf(
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
 
+// Set to false after profiling to compile out fast / benchmark performance sampling.
+val isPerformanceSamplingEnabled = providers
+    .gradleProperty("flowtonePerformanceSamplingEnabled")
+    .orNull
+    ?.toBoolean()
+    ?: true
+
 android {
     namespace = "ink.tenqui.flowtone"
     compileSdk {
@@ -96,6 +103,12 @@ android {
         targetSdk = 36
         versionCode = versionCodeFromName(appVersionName)
         versionName = appVersionName
+
+        buildConfigField(
+            "boolean",
+            "PERFORMANCE_SAMPLING_ENABLED",
+            "false"
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -132,8 +145,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             isDebuggable = false
+            isProfileable = true
             isMinifyEnabled = true
             isShrinkResources = true
+            buildConfigField(
+                "boolean",
+                "PERFORMANCE_SAMPLING_ENABLED",
+                isPerformanceSamplingEnabled.toString()
+            )
 
             matchingFallbacks += listOf("release")
         }
@@ -147,12 +166,17 @@ android {
 
             // 关键：消除 debuggable 带来的运行时性能开销
             isDebuggable = false
-            isProfileable = false
+            isProfileable = true
 
             // 不运行耗时的发布优化
             isMinifyEnabled = false
             isShrinkResources = false
             isCrunchPngs = false
+            buildConfigField(
+                "boolean",
+                "PERFORMANCE_SAMPLING_ENABLED",
+                isPerformanceSamplingEnabled.toString()
+            )
 
             matchingFallbacks += listOf("debug")
         }
@@ -165,6 +189,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -182,6 +207,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.metrics.performance)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.coil.compose)
     implementation(libs.google.material)

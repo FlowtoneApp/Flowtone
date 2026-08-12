@@ -15,6 +15,7 @@ coil = "3.3.0"
 palette = "1.0.0"
 material = "1.13.0"
 taglib = "1.0.5"
+metrics = "1.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -40,6 +41,7 @@ androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", versi
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 google-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 taglib = { group = "io.github.kyant0", name = "taglib", version.ref = "taglib" }
+androidx-metrics-performance = { group = "androidx.metrics", name = "metrics-performance", version.ref = "metrics" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

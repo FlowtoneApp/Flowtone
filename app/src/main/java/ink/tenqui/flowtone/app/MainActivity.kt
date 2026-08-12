@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import ink.tenqui.flowtone.ui.theme.FlowtoneTheme
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.ui.debug.WindowJankSampler
 
 class MainActivity : ComponentActivity() {
     private var expandMiniPlayerRequest by mutableStateOf(0)
@@ -38,6 +39,17 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        WindowJankSampler.install(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        WindowJankSampler.setTrackingEnabled(true)
+    }
+
+    override fun onPause() {
+        WindowJankSampler.setTrackingEnabled(false)
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {

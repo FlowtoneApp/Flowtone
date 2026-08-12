@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.pullToDismissAtTop
+import ink.tenqui.flowtone.ui.debug.performanceSample
 
 @Composable
 internal fun PlayerQueueList(
@@ -30,6 +31,10 @@ internal fun PlayerQueueList(
         userScrollEnabled = interactionEnabled,
         modifier = modifier
             .fillMaxSize()
+            .performanceSample("PlayerQueue") {
+                "items=${displayedQueue.size} currentIndex=$currentQueueIndex " +
+                    "scrolling=${queueListState.isScrollInProgress}"
+            }
             .onSizeChanged { onViewportHeightChanged(it.height) }
             .pullToDismissAtTop(
                 listState = queueListState,

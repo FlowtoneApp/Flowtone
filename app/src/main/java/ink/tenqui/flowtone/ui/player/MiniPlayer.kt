@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -49,6 +48,7 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.debug.performanceSample
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 import ink.tenqui.flowtone.ui.player.lyrics.isLyricsPlaybackContentActive
@@ -720,7 +720,10 @@ fun MiniPlayer(
                 openExpandedOnMediaClick = openExpandedOnMediaClick
             )
         },
-        modifier = modifier,
+        modifier = modifier.performanceSample("MiniPlayer") {
+            "expanded=$expanded fullscreen=$fullscreen lyrics=$lyricsModeActive " +
+                "queue=${state.showQueueSheet} playing=$visualIsPlaying"
+        },
         panelContent = { playerShape ->
                 BoxWithConstraints(
                     modifier = Modifier
@@ -750,7 +753,6 @@ fun MiniPlayer(
                     .graphicsLayer {
                         shape = playerShape
                         clip = true
-                        compositingStrategy = CompositingStrategy.Offscreen
                     }
                     .then(addToPlaylistBackSwipeModifier)
                     .then(addToPlaylistPullDownBackModifier)
