@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.search.SearchArtist
+import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
+import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarUrl
 
 @Composable
 fun ArtistListItem(
@@ -30,6 +32,10 @@ fun ArtistListItem(
     onClick: (SearchArtist) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val avatarUrl = rememberExperimentalArtistAvatarUrl(
+        songTitle = artist.representativeSongTitle,
+        artistName = artist.name
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -51,6 +57,10 @@ fun ArtistListItem(
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(28.dp)
+            )
+            ExperimentalArtistAvatarImage(
+                imageUrl = avatarUrl,
+                modifier = Modifier.matchParentSize()
             )
         }
         Column(

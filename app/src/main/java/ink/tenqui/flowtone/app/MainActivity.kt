@@ -11,6 +11,9 @@ import androidx.compose.runtime.setValue
 import ink.tenqui.flowtone.ui.theme.FlowtoneTheme
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.debug.WindowJankSampler
+import ink.tenqui.flowtone.data.online.ExtensionManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var expandMiniPlayerRequest by mutableStateOf(0)
@@ -21,6 +24,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch { ExtensionManager.get(applicationContext).initialize() }
         themeMode = appPreferences.getThemeMode()
         enableEdgeToEdge()
         handleOpenPlayerIntent(intent)

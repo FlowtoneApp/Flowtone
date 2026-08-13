@@ -110,7 +110,8 @@ private data class LocalSearchIndex(
                                 id = stableId,
                                 name = artist.trim(),
                                 stableOrder = indexedSong.index,
-                                songCount = 1
+                                songCount = 1,
+                                representativeSongTitle = indexedSong.value.title
                             )
                         } else {
                             existing.songCount += 1
@@ -125,7 +126,8 @@ private data class LocalSearchIndex(
                         id = artist.id,
                         name = artist.name,
                         songCount = artist.songCount,
-                        stableOrder = artist.stableOrder
+                        stableOrder = artist.stableOrder,
+                        representativeSongTitle = artist.representativeSongTitle
                     )
                 }
             )
@@ -153,7 +155,8 @@ private data class MutableArtist(
     val id: String,
     val name: String,
     val stableOrder: Int,
-    var songCount: Int
+    var songCount: Int,
+    val representativeSongTitle: String
 )
 
 private data class RankedSong(

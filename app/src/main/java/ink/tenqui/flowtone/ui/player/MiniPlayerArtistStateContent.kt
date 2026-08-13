@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
+import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarUrl
 
 @Composable
 internal fun ArtistPlaceholderOverlay(
@@ -111,6 +113,7 @@ internal fun ArtistPlaceholderOverlay(
                 ) { _, artist ->
                     ArtistPlaceholderItem(
                         artist = artist,
+                        songTitle = currentSong?.title ?: artistSongs.firstOrNull()?.title.orEmpty(),
                         onArtistClick = onArtistClick
                     )
                 }
@@ -156,9 +159,10 @@ internal fun ArtistPlaceholderOverlay(
                         items = artists,
                         key = { index, artist -> "$index:$artist" }
                     ) { _, artist ->
-                        ArtistPlaceholderItem(
-                            artist = artist,
-                            onArtistClick = onArtistClick
+                    ArtistPlaceholderItem(
+                        artist = artist,
+                        songTitle = currentSong?.title ?: artistSongs.firstOrNull()?.title.orEmpty(),
+                        onArtistClick = onArtistClick
                         )
                     }
                 }
@@ -267,10 +271,15 @@ private fun LazyListState.isScrolledToTop(): Boolean {
 @Composable
 private fun ArtistPlaceholderItem(
     artist: String,
+    songTitle: String,
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val noRippleInteractionSource = remember { MutableInteractionSource() }
+    val avatarUrl = rememberExperimentalArtistAvatarUrl(
+        songTitle = songTitle,
+        artistName = artist
+    )
     Column(
         modifier = modifier.width(ArtistPlaceholderItemWidth),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -292,6 +301,10 @@ private fun ArtistPlaceholderItem(
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.88f),
                 modifier = Modifier.size(ArtistPlaceholderAvatarSize * 0.54f)
+            )
+            ExperimentalArtistAvatarImage(
+                imageUrl = avatarUrl,
+                modifier = Modifier.matchParentSize()
             )
         }
         Text(

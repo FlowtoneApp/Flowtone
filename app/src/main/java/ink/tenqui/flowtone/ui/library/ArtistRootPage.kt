@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +53,7 @@ import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
+import coil3.compose.AsyncImage
 
 private const val ArtistHeaderHeightFraction = 0.312f
 private val ArtistRootToolbarHeight = 64.dp
@@ -86,6 +90,18 @@ fun ArtistRootPage(
     val artistSongs = remember(displayArtist, allSongs) {
         localSongsForArtist(allSongs, displayArtist)
     }
+    val avatarLookupSongTitle = remember(artistSongs, currentSong) {
+        val currentArtistSong = currentSong?.takeIf { playingSong ->
+            artistSongs.any { artistSong ->
+                artistSong.id == playingSong.id || artistSong.uri == playingSong.uri
+            }
+        }
+        (currentArtistSong ?: artistSongs.firstOrNull())?.title.orEmpty()
+    }
+    val artistAvatarUrl = rememberExperimentalArtistAvatarUrl(
+        songTitle = avatarLookupSongTitle,
+        artistName = displayArtist
+    )
 
     BoxWithConstraints(
         modifier = modifier
@@ -141,6 +157,7 @@ fun ArtistRootPage(
             item(key = "artist-header") {
                 ArtistHeaderCard(
                     artistName = displayArtist,
+                    avatarUrl = artistAvatarUrl,
                     height = headerHeight,
                     topPadding = statusBarTop,
                     itemModifier = itemModifier,
@@ -194,6 +211,7 @@ fun ArtistRootPage(
 
         ArtistRootToolbar(
             artistName = displayArtist,
+            avatarUrl = artistAvatarUrl,
             showArtist = toolbarContentVisible,
             height = toolbarHeight,
             topPadding = statusBarTop,
@@ -209,6 +227,7 @@ fun ArtistRootPage(
 @Composable
 private fun ArtistHeaderCard(
     artistName: String,
+    avatarUrl: String?,
     height: Dp,
     topPadding: Dp,
     itemModifier: (Int) -> Modifier,
@@ -237,6 +256,7 @@ private fun ArtistHeaderCard(
         ) {
             ArtistAvatar(
                 size = ArtistRootAvatarSize,
+                imageUrl = avatarUrl,
                 backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                 iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = itemModifier(ArtistRootHeaderAvatarAnimationIndex)
@@ -271,6 +291,7 @@ private fun artistRootSongAnimationIndex(
 @Composable
 private fun ArtistRootToolbar(
     artistName: String,
+    avatarUrl: String?,
     showArtist: Boolean,
     height: Dp,
     topPadding: Dp,
@@ -360,6 +381,7 @@ private fun ArtistRootToolbar(
             ) {
                 ArtistAvatar(
                     size = ArtistRootSmallAvatarSize,
+                    imageUrl = avatarUrl,
                     backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                     iconColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -402,10 +424,17 @@ private fun ArtistRootToolbar(
 @Composable
 private fun ArtistAvatar(
     size: Dp,
+    imageUrl: String?,
     backgroundColor: Color,
     iconColor: Color,
     modifier: Modifier = Modifier
 ) {
+    var imageLoaded by remember(imageUrl) { mutableStateOf(false) }
+    val imageAlpha by animateFloatAsState(
+        targetValue = if (imageLoaded) 1f else 0f,
+        animationSpec = tween(durationMillis = 280),
+        label = "ArtistAvatarImageFade"
+    )
     Box(
         modifier = modifier
             .size(size)
@@ -419,5 +448,17 @@ private fun ArtistAvatar(
             tint = iconColor,
             modifier = Modifier.size(size * 0.54f)
         )
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                onSuccess = { imageLoaded = true },
+                onError = { imageLoaded = false },
+                modifier = Modifier
+                    .matchParentSize()
+                    .alpha(imageAlpha)
+            )
+        }
     }
 }

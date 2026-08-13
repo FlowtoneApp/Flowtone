@@ -74,6 +74,8 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.app.FlowtonePageEasing
 import ink.tenqui.flowtone.app.TopLevelPage
+import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
@@ -128,9 +130,33 @@ internal fun SettingsScreen(
     var selectedSection by rememberSaveable {
         mutableStateOf<SettingsSection?>(null)
     }
+    var showingOnlineSettings by rememberSaveable { mutableStateOf(false) }
     var showingLyricsSettings by rememberSaveable { mutableStateOf(false) }
     var managingLyricsFolders by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
+    val extensionScope = rememberCoroutineScope()
+    var installedExtensions by remember { mutableStateOf<List<InstalledExtension>>(emptyList()) }
+    fun refreshExtensions() {
+        installedExtensions = extensionManager.installedExtensions()
+    }
+    val extensionPackageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        extensionScope.launch {
+            val result = runCatching { extensionManager.install(uri) }
+            refreshExtensions()
+            Toast.makeText(
+                context,
+                result.fold(
+                    onSuccess = { "扩展 ${it.manifest.name} 已安装" },
+                    onFailure = { it.message ?: "扩展安装失败" }
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
     val musicViewModel: MusicViewModel = viewModel()
     val lyricsFolders by musicViewModel.lyricsFolders.collectAsState()
     val lyricsFolderLauncher = rememberLauncherForActivityResult(
@@ -159,12 +185,22 @@ internal fun SettingsScreen(
     LaunchedEffect(managingLyricsFolders) {
         if (managingLyricsFolders) musicViewModel.refreshLyricsFolders()
     }
-    val handleBack = remember(selectedSection, showingLyricsSettings, managingLyricsFolders) {
+    LaunchedEffect(showingOnlineSettings) {
+        if (showingOnlineSettings) refreshExtensions()
+    }
+    val handleBack = remember(
+        selectedSection,
+        showingOnlineSettings,
+        showingLyricsSettings,
+        managingLyricsFolders
+    ) {
         {
             if (managingLyricsFolders) {
                 managingLyricsFolders = false
             } else if (showingLyricsSettings) {
                 showingLyricsSettings = false
+            } else if (showingOnlineSettings) {
+                showingOnlineSettings = false
             } else if (selectedSection == null) {
                 currentOnBack()
             } else {
@@ -182,6 +218,9 @@ internal fun SettingsScreen(
             selectedSection?.let { section ->
                 buildList {
                     add(section.title)
+                    if (section == SettingsSection.General && showingOnlineSettings) {
+                        add("在线")
+                    }
                     if (
                         section == SettingsSection.Appearance &&
                         (showingLyricsSettings || managingLyricsFolders)
@@ -201,25 +240,27 @@ internal fun SettingsScreen(
     BackHandler(onBack = handleBack)
 
     AnimatedContent(
-        targetState = Triple(
-            selectedSection,
-            showingLyricsSettings,
-            managingLyricsFolders
+        targetState = SettingsPageState(
+            section = selectedSection,
+            showingOnlineSettings = showingOnlineSettings,
+            showingLyricsSettings = showingLyricsSettings,
+            managingLyricsFolders = managingLyricsFolders
         ),
         transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
         label = "SettingsContent",
         modifier = modifier
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
-    ) { (section, showingLyricsPage, showingLyricsFolders) ->
+    ) { state ->
         fun viewElementModifier(index: Int): Modifier {
             return elementModifier(index).then(staggeredPageElementModifier(index))
         }
 
-        when (section) {
+        when (state.section) {
             null -> SettingsSectionList(
                 onSectionClick = { sectionToOpen ->
                     selectedSection = sectionToOpen
+                    showingOnlineSettings = false
                     showingLyricsSettings = false
                     managingLyricsFolders = false
                 },
@@ -227,14 +268,14 @@ internal fun SettingsScreen(
             )
 
             SettingsSection.Appearance -> when {
-                showingLyricsFolders -> LyricsFolderSettingsPage(
+                state.managingLyricsFolders -> LyricsFolderSettingsPage(
                     folders = lyricsFolders,
                     onAddFolder = { lyricsFolderLauncher.launch(null) },
                     onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
                     elementModifier = ::viewElementModifier
                 )
 
-                showingLyricsPage -> LyricsSettingsPage(
+                state.showingLyricsSettings -> LyricsSettingsPage(
                     lyricsBackgroundStyle = lyricsBackgroundStyle,
                     onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                     allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage,
@@ -281,7 +322,24 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
             )
 
-            SettingsSection.General -> GeneralSettingsPage(
+            SettingsSection.General -> if (state.showingOnlineSettings) {
+                OnlineSettingsPage(
+                    installedExtensions = installedExtensions,
+                    onInstall = {
+                        extensionPackageLauncher.launch(
+                            arrayOf("application/zip", "application/octet-stream", "*/*")
+                        )
+                    },
+                    onUninstall = { id ->
+                        extensionScope.launch {
+                            extensionManager.uninstall(id)
+                            refreshExtensions()
+                            Toast.makeText(context, "扩展已删除", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    elementModifier = ::viewElementModifier
+                )
+            } else GeneralSettingsPage(
                 selectedStartPage = selectedStartPage,
                 onStartPageSelected = { page ->
                     selectedStartPage = page
@@ -294,9 +352,17 @@ internal fun SettingsScreen(
                 openExpandedMiniPlayerOnMediaClick = openExpandedMiniPlayerOnMediaClick,
                 onOpenExpandedMiniPlayerOnMediaClickChange =
                     onOpenExpandedMiniPlayerOnMediaClickChange,
+                onOpenOnlineSettings = { showingOnlineSettings = true },
                 elementModifier = ::viewElementModifier
             )
         }
     }
 }
+
+private data class SettingsPageState(
+    val section: SettingsSection?,
+    val showingOnlineSettings: Boolean,
+    val showingLyricsSettings: Boolean,
+    val managingLyricsFolders: Boolean
+)
 
