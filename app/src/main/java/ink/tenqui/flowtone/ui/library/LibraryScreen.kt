@@ -463,7 +463,6 @@ internal fun LibraryScreen(
         onStartPlaylistEditing = playlistController::startPlaylistEditing,
         onEditingPlaylistBoundsChanged = playlistController::updateEditingPlaylistBounds,
         onEditingPlaylistBoundsRemoved = playlistController::removePlaylistBounds,
-        onClearPlaylistEditing = playlistController::clearPlaylistEditing,
         onLibraryViewportBoundsChanged = playlistController::updateLibraryViewportBounds,
         modifier = modifier
     )

@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.screens
 
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -9,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -498,9 +500,7 @@ private fun HomeContent(
     scrollState: ScrollState,
     modifier: Modifier = Modifier
 ) {
-    val recommendedSongs = remember(songs) {
-        songs.shuffled().take(HomeRecommendationCount)
-    }
+    val recommendedSongs = remember(songs) { songs.shuffled().take(HomeRecommendationCount) }
     val frequentPlaylists = remember(listeningStats.totalSources, playlists) {
         buildFrequentPlaylistCards(
             sources = listeningStats.totalSources,
@@ -538,12 +538,10 @@ private fun HomeContent(
                 title = "随便听听",
                 songs = recommendedSongs,
                 scrollState = recommendationScrollState,
-                pagerState = pagerState,
-                pagerFlingBehavior = pagerFlingBehavior,
                 onSongClick = onSongClick
             )
         }
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         StaggeredPageElement(
             visible = visible,
             animationIndex = 8
@@ -551,8 +549,6 @@ private fun HomeContent(
             FrequentPlaylistSection(
                 playlists = frequentPlaylists,
                 scrollState = frequentPlaylistScrollState,
-                pagerState = pagerState,
-                pagerFlingBehavior = pagerFlingBehavior,
                 flowCloudSpeed = flowCloudSpeed,
                 isFlowCloudPlaying = isFlowCloudPlaying,
                 onOpenPlaylist = onOpenPlaylist
@@ -567,8 +563,6 @@ private fun HomeContent(
                 title = "最近新增",
                 songs = recentlyAddedSongs,
                 scrollState = recentlyAddedScrollState,
-                pagerState = pagerState,
-                pagerFlingBehavior = pagerFlingBehavior,
                 onSongClick = onSongClick
             )
         }
@@ -580,8 +574,6 @@ private fun HomeRecommendationSection(
     title: String,
     songs: List<Song>,
     scrollState: ScrollState,
-    pagerState: PagerState,
-    pagerFlingBehavior: FlingBehavior,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -596,27 +588,24 @@ private fun HomeRecommendationSection(
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .controlledHorizontalListGesture(
-                        scrollState,
-                        pagerState,
-                        pagerFlingBehavior
-                    )
-                    .horizontalScroll(scrollState, enabled = false)
                     .padding(
                         start = HomeHorizontalListStartPadding,
-                        end = HomeHorizontalListEndPadding,
-                        top = 12.dp
+                        top = 12.dp,
+                        end = HomeHorizontalListEndPadding
                     )
             ) {
-                songs.forEach { song ->
-                    RecommendationSongCard(
-                        song = song,
-                        onClick = { onSongClick(song) }
-                    )
+                val cardWidth = (maxWidth - HomeHorizontalListSpacing * 2) / 3
+                Row(horizontalArrangement = Arrangement.spacedBy(HomeHorizontalListSpacing)) {
+                    songs.forEach { song ->
+                        RecommendationSongCard(
+                            song = song,
+                            onClick = { onSongClick(song) },
+                            modifier = Modifier.width(cardWidth)
+                        )
+                    }
                 }
             }
         }
@@ -627,8 +616,6 @@ private fun HomeRecommendationSection(
 private fun FrequentPlaylistSection(
     playlists: List<FrequentPlaylistCard>,
     scrollState: ScrollState,
-    pagerState: PagerState,
-    pagerFlingBehavior: FlingBehavior,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
@@ -644,35 +631,29 @@ private fun FrequentPlaylistSection(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing),
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .controlledHorizontalListGesture(
-                    scrollState,
-                    pagerState,
-                    pagerFlingBehavior
-                )
-                .horizontalScroll(scrollState, enabled = false)
                 .padding(
                     start = HomeHorizontalListStartPadding,
-                    end = HomeHorizontalListEndPadding,
-                    top = 12.dp
+                    top = 12.dp,
+                    end = HomeHorizontalListEndPadding
                 )
         ) {
-            if (playlists.isEmpty()) {
-                FrequentPlaylistPlaceholderCard(
-                    modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
-                )
-            } else {
-                playlists.forEach { playlist ->
-                    FrequentPlaylistCardItem(
-                        playlist = playlist,
-                        flowCloudSpeed = flowCloudSpeed,
-                        isFlowCloudPlaying = isFlowCloudPlaying,
-                        onClick = { onOpenPlaylist(playlist.card) },
-                        modifier = Modifier.width(HomeFrequentPlaylistCardWidth)
-                    )
+            val cardWidth = (maxWidth - HomeFrequentPlaylistCardSpacing * 2) / 3
+            Row(horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing)) {
+                if (playlists.isEmpty()) {
+                    FrequentPlaylistPlaceholderCard(modifier = Modifier.width(cardWidth))
+                } else {
+                    playlists.forEach { playlist ->
+                        FrequentPlaylistCardItem(
+                            playlist = playlist,
+                            flowCloudSpeed = flowCloudSpeed,
+                            isFlowCloudPlaying = isFlowCloudPlaying,
+                            onClick = { onOpenPlaylist(playlist.card) },
+                            modifier = Modifier.width(cardWidth)
+                        )
+                    }
                 }
             }
         }
@@ -749,8 +730,6 @@ private fun RecentlyAddedSection(
     title: String,
     songs: List<Song>,
     scrollState: ScrollState,
-    pagerState: PagerState,
-    pagerFlingBehavior: FlingBehavior,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -765,35 +744,26 @@ private fun RecentlyAddedSection(
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .controlledHorizontalListGesture(
-                        scrollState,
-                        pagerState,
-                        pagerFlingBehavior
-                    )
-                    .horizontalScroll(scrollState, enabled = false)
                     .padding(
                         start = HomeHorizontalListStartPadding,
-                        end = HomeHorizontalListEndPadding,
-                        top = 12.dp
+                        top = 12.dp,
+                        end = HomeHorizontalListEndPadding
                     )
             ) {
-                songs.chunked(HomeRecentlyAddedRows).forEach { columnSongs ->
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.width(260.dp)
-                    ) {
-                        columnSongs.forEach { song ->
-                            RecentlyAddedSongItem(
-                                song = song,
-                                onClick = { onSongClick(song) }
-                            )
-                        }
-                        if (columnSongs.size == 1) {
-                            Spacer(modifier = Modifier.height(72.dp))
+                val columnWidth = (maxWidth - HomeHorizontalListSpacing) / 2
+                Row(horizontalArrangement = Arrangement.spacedBy(HomeHorizontalListSpacing)) {
+                    songs.chunked(HomeRecentlyAddedRows).forEach { columnSongs ->
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.width(columnWidth)
+                        ) {
+                            columnSongs.forEach { song ->
+                                RecentlyAddedSongItem(song = song, onClick = { onSongClick(song) })
+                            }
+                            if (columnSongs.size == 1) Spacer(modifier = Modifier.height(72.dp))
                         }
                     }
                 }
@@ -814,7 +784,7 @@ private fun RecentlyAddedSongItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RecommendationArtwork(
@@ -854,7 +824,6 @@ private fun RecommendationSongCard(
 ) {
     Column(
         modifier = modifier
-            .width(132.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(bottom = 4.dp)
@@ -908,7 +877,8 @@ private fun RecommendationArtwork(
 
     Box(
         modifier = modifier
-            .size(132.dp)
+            .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(RoundedCornerShape(8.dp))
             .background(placeholderColor),
         contentAlignment = Alignment.Center
@@ -929,12 +899,12 @@ private fun RecommendationArtwork(
     }
 }
 
-private const val HomeRecommendationCount = 8
-private const val HomeRecentlyAddedCount = 6
+private const val HomeRecommendationCount = 3
+private const val HomeRecentlyAddedCount = 4
 private const val HomeRecentlyAddedRows = 2
 private val HomeHorizontalListStartPadding = 20.dp
 private val HomeHorizontalListEndPadding = 20.dp
-private val HomeFrequentPlaylistCardWidth = 184.dp
+private val HomeHorizontalListSpacing = 12.dp
 private val HomeFrequentPlaylistCardHeight = 92.dp
 private val HomeFrequentPlaylistCardSpacing = 12.dp
 
@@ -959,7 +929,7 @@ private fun buildFrequentPlaylistCards(
             val playlist = playlistsById[sourceId] ?: return@mapNotNull null
             FrequentPlaylistCard(
                 card = playlist,
-                subtitle = "${source.effectivePlayCount} 次播放"
+                subtitle = playlist.subtitle
             )
         }
         .distinctBy { playlist -> playlist.card.id }
@@ -976,4 +946,4 @@ private fun buildFrequentPlaylistCards(
         .take(HomeFrequentPlaylistCount)
 }
 
-private const val HomeFrequentPlaylistCount = 4
+private const val HomeFrequentPlaylistCount = 3

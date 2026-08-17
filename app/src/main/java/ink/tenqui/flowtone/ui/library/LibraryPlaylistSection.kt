@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -91,112 +92,54 @@ internal fun LibraryCollectionMenu(
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
     onEditingPlaylistBoundsRemoved: (String) -> Unit,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
-    val parentColor = if (isDarkTheme) {
-        LocalLibraryDarkBackground
-    } else {
-        LocalLibraryLightBackground
-    }
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val menuShape = RoundedCornerShape(LibraryMenuCornerRadius)
-    val colorTransitionProgress by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "libraryMenuColorTransition"
-    )
-    val fillBrush = remember(parentColor, colorTransitionProgress) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to parentColor,
-                0.28f to parentColor.copy(alpha = 1f - 0.18f * colorTransitionProgress),
-                0.68f to parentColor.copy(alpha = 1f - 0.78f * colorTransitionProgress),
-                1f to parentColor.copy(alpha = 1f - 0.975f * colorTransitionProgress)
-            )
-        )
-    }
-    val outlineBrush = remember(outlineColor, colorTransitionProgress) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to Color.Transparent,
-                0.48f to Color.Transparent,
-                0.76f to outlineColor.copy(alpha = 0.16f * colorTransitionProgress),
-                1f to outlineColor.copy(alpha = 0.64f * colorTransitionProgress)
-            )
-        )
-    }
-
-    Box(
+    // 曲库主页使用常规列表，不再以大卡片包裹或折叠歌单。
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(menuShape)
-            .background(fillBrush)
-            .border(
-                border = BorderStroke(LibraryMenuOutlineWidth, outlineBrush),
-                shape = menuShape
-            )
+            .padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = LibraryMenuBottomPadding),
-            verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
-        ) {
-            LibraryHomeEntryCards(
-                songCount = songCount,
-                onOpenLocalLibrary = onOpenLocalLibrary,
-                modifier = Modifier.fillMaxWidth()
-            )
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(
-                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-                ) + fadeIn(
-                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-                ),
-                exit = shrinkVertically(
-                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-                ) + fadeOut(
-                    animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-                )
+        LibraryHomeEntryCards(
+            songCount = songCount,
+            onOpenLocalLibrary = onOpenLocalLibrary,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                LibraryPlaylistMenuItems(
-                    likedPlaylist = likedPlaylist,
-                    playlists = playlists,
-                    playlistItemHeight = playlistItemHeight,
-                    libraryCardsProgress = libraryCardsProgress,
-                    playlistItemOffsetYPx = playlistItemOffsetYPx,
-                    flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isFlowCloudPlaying,
-                    editingPlaylistId = editingPlaylistId,
-                    newlyCreatedPlaylistId = newlyCreatedPlaylistId,
-                    exitingPlaylistId = exitingPlaylistId,
-                    onCreateAnimationFinished = onCreateAnimationFinished,
-                    onDeleteAnimationFinished = onDeleteAnimationFinished,
-                    onCreatePlaylist = onCreatePlaylist,
-                    onOpenPlaylist = onOpenPlaylist,
-                    onStartPlaylistEditing = onStartPlaylistEditing,
-                    onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
-                    onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved
+                Text(
+                    text = "歌单",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
                 )
+                TextButton(onClick = onCreatePlaylist) {
+                    Text("新建")
+                }
             }
-        }
-            LibraryMenuToggleButton(
-                expanded = expanded,
-                onClick = { onExpandedChange(!expanded) },
-                lineGapColor = if (expanded) {
-                    MaterialTheme.colorScheme.background
-                } else {
-                    parentColor
-                },
-                modifier = Modifier.align(Alignment.BottomCenter)
+            LibraryPlaylistMenuItems(
+                likedPlaylist = likedPlaylist,
+                playlists = playlists,
+                playlistItemHeight = playlistItemHeight,
+                libraryCardsProgress = libraryCardsProgress,
+                playlistItemOffsetYPx = playlistItemOffsetYPx,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying,
+                editingPlaylistId = editingPlaylistId,
+                newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                exitingPlaylistId = exitingPlaylistId,
+                onCreateAnimationFinished = onCreateAnimationFinished,
+                onDeleteAnimationFinished = onDeleteAnimationFinished,
+                onOpenPlaylist = onOpenPlaylist,
+                onStartPlaylistEditing = onStartPlaylistEditing,
+                onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
+                onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved
             )
+        }
     }
 }
 
@@ -214,7 +157,6 @@ private fun LibraryPlaylistMenuItems(
     exitingPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
     onDeleteAnimationFinished: (LibraryPlaylistCard) -> Unit,
-    onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
@@ -223,16 +165,12 @@ private fun LibraryPlaylistMenuItems(
     Column(
         verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = LibraryMenuChildHorizontalPadding)
-        ) {
-            LibraryPlaylistRowMotion(
-                progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
-                itemOffsetYPx = playlistItemOffsetYPx
-            ) {
-                LibraryPlaylistListItem(
+        LibraryPlaylistRowMotion(
+            progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
+            itemOffsetYPx = playlistItemOffsetYPx
+        ) { rowModifier ->
+            LibraryPlaylistListItem(
+                    modifier = rowModifier,
                     playlist = likedPlaylist,
                     itemHeight = playlistItemHeight,
                     editable = false,
@@ -247,27 +185,22 @@ private fun LibraryPlaylistMenuItems(
                     onLongClick = {},
                     onEditingBoundsChanged = {},
                     onEditingBoundsRemoved = {}
-                )
-            }
+            )
         }
         playlists.forEachIndexed { index, playlist ->
             key(playlist.id) {
                 val editable = !playlist.isSystem
                 val isEditingTarget = editingPlaylistId == playlist.id
                 val playDeleteAnimation = exitingPlaylistId == playlist.id
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = LibraryMenuChildHorizontalPadding)
-                ) {
-                    LibraryPlaylistRowMotion(
+                LibraryPlaylistRowMotion(
                         progress = libraryPlaylistItemProgress(
                             libraryCardsProgress,
                             12 + index * 2
                         ),
                         itemOffsetYPx = playlistItemOffsetYPx
-                    ) {
-                        LibraryPlaylistListItem(
+                ) { rowModifier ->
+                    LibraryPlaylistListItem(
+                            modifier = rowModifier,
                             playlist = playlist,
                             itemHeight = playlistItemHeight,
                             editable = editable && !playDeleteAnimation,
@@ -288,29 +221,8 @@ private fun LibraryPlaylistMenuItems(
                             onEditingBoundsRemoved = {
                                 onEditingPlaylistBoundsRemoved(playlist.id)
                             }
-                        )
-                    }
+                    )
                 }
-            }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = LibraryMenuChildHorizontalPadding)
-        ) {
-            LibraryPlaylistRowMotion(
-                progress = libraryPlaylistItemProgress(
-                    libraryCardsProgress,
-                    12 + playlists.size * 2
-                ),
-                itemOffsetYPx = playlistItemOffsetYPx
-            ) {
-                LibraryCreatePlaylistListItem(
-                    itemHeight = playlistItemHeight,
-                    flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isFlowCloudPlaying,
-                    onClick = onCreatePlaylist
-                )
             }
         }
     }
@@ -371,22 +283,21 @@ private fun LibraryMenuToggleButton(
 private fun LibraryPlaylistRowMotion(
     progress: Float,
     itemOffsetYPx: Float,
-    content: @Composable () -> Unit
+    content: @Composable (Modifier) -> Unit
 ) {
-    Box(
-        modifier = Modifier.graphicsLayer {
+    content(
+        Modifier.graphicsLayer {
             val easedProgress = FlowtoneMotion.Easing.transform(progress)
             alpha = easedProgress
             translationY = itemOffsetYPx * (1f - easedProgress)
         }
-    ) {
-        content()
-    }
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LibraryPlaylistListItem(
+    modifier: Modifier,
     playlist: LibraryPlaylistCard,
     itemHeight: Dp,
     editable: Boolean,
@@ -437,7 +348,8 @@ private fun LibraryPlaylistListItem(
 
     if (isEditingTarget) {
         Box(
-            modifier = positionedModifier
+            modifier = modifier
+                .then(positionedModifier)
                 .fillMaxWidth()
                 .height(itemHeight)
                 .clip(MaterialTheme.shapes.medium)
@@ -445,7 +357,8 @@ private fun LibraryPlaylistListItem(
         )
     } else {
         Box(
-            modifier = positionedModifier
+            modifier = modifier
+                .then(positionedModifier)
                 .fillMaxWidth()
                 .height(itemHeight * visibilityProgress.value)
                 .clipToBounds()
@@ -488,6 +401,7 @@ internal fun LibraryPlaylistListVisual(
 
 @Composable
 private fun LibraryCreatePlaylistListItem(
+    modifier: Modifier,
     itemHeight: Dp,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
@@ -499,7 +413,8 @@ private fun LibraryCreatePlaylistListItem(
         appearProgress = 1f,
         clickModifier = Modifier.clickable(onClick = onClick),
         flowCloudSpeed = flowCloudSpeed,
-        isFlowCloudPlaying = isFlowCloudPlaying
+        isFlowCloudPlaying = isFlowCloudPlaying,
+        modifier = modifier
     ) { contentColors ->
         PlaylistListText("创建歌单", "添加新的歌单", contentColors)
     }
@@ -523,7 +438,7 @@ private fun PlaylistListItemSurface(
             .height(itemHeight)
             .clip(MaterialTheme.shapes.medium)
             .then(clickModifier)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(vertical = 8.dp)
             .graphicsLayer {
                 val eased = FlowtoneMotion.Easing.transform(appearProgress.coerceIn(0f, 1f))
                 alpha = eased
@@ -532,7 +447,11 @@ private fun PlaylistListItemSurface(
         verticalAlignment = Alignment.CenterVertically
     ) {
         PlaylistCardSurface(
-            visualType = visualType,
+            visualType = if (visualType == PlaylistCardVisualType.LikedMusic) {
+                PlaylistCardVisualType.LikedMusic
+            } else {
+                PlaylistCardVisualType.Default
+            },
             appearanceColorKey = appearanceColorKey,
             shape = MaterialTheme.shapes.medium,
             contentPadding = PaddingValues(0.dp),

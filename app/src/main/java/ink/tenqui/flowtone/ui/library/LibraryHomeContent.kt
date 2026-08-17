@@ -10,10 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -47,11 +43,9 @@ internal fun LibraryHomeContent(
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
     onEditingPlaylistBoundsRemoved: (String) -> Unit,
-    onClearPlaylistEditing: () -> Unit,
     onLibraryViewportBoundsChanged: (Rect) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var playlistMenuExpanded by rememberSaveable { mutableStateOf(true) }
     LazyColumn(
         state = listState,
         userScrollEnabled = editingPlaylistId == null,
@@ -96,35 +90,31 @@ internal fun LibraryHomeContent(
                 animationIndex = 4,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                LibraryCollectionMenu(
-                    songCount = songCount,
-                    likedPlaylist = likedPlaylist,
-                    playlists = playlists,
-                    playlistItemHeight = playlistItemHeight,
-                    libraryCardsProgress = libraryCardsProgress,
-                    playlistItemOffsetYPx = playlistItemOffsetYPx,
-                    flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isFlowCloudPlaying,
-                    editingPlaylistId = editingPlaylistId,
-                    newlyCreatedPlaylistId = newlyCreatedPlaylistId,
-                    exitingPlaylistId = exitingPlaylistId,
-                    onCreateAnimationFinished = onCreateAnimationFinished,
-                    onDeleteAnimationFinished = onDeleteAnimationFinished,
-                    onOpenLocalLibrary = onOpenLocalLibrary,
-                    onCreatePlaylist = onCreatePlaylist,
-                    onOpenPlaylist = onOpenPlaylist,
-                    onStartPlaylistEditing = onStartPlaylistEditing,
-                    onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
-                    onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved,
-                    expanded = playlistMenuExpanded,
-                    onExpandedChange = { expanded ->
-                        playlistMenuExpanded = expanded
-                        if (!expanded) {
-                            onClearPlaylistEditing()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    LibraryProviderHeader(modifier = Modifier.fillMaxWidth())
+                    LibraryCollectionMenu(
+                        songCount = songCount,
+                        likedPlaylist = likedPlaylist,
+                        playlists = playlists,
+                        playlistItemHeight = playlistItemHeight,
+                        libraryCardsProgress = libraryCardsProgress,
+                        playlistItemOffsetYPx = playlistItemOffsetYPx,
+                        flowCloudSpeed = flowCloudSpeed,
+                        isFlowCloudPlaying = isFlowCloudPlaying,
+                        editingPlaylistId = editingPlaylistId,
+                        newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                        exitingPlaylistId = exitingPlaylistId,
+                        onCreateAnimationFinished = onCreateAnimationFinished,
+                        onDeleteAnimationFinished = onDeleteAnimationFinished,
+                        onOpenLocalLibrary = onOpenLocalLibrary,
+                        onCreatePlaylist = onCreatePlaylist,
+                        onOpenPlaylist = onOpenPlaylist,
+                        onStartPlaylistEditing = onStartPlaylistEditing,
+                        onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
+                        onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
