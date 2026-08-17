@@ -16,11 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ExtensionManager
-import java.util.Locale
-import kotlinx.coroutines.delay
 
-private const val ExperimentalAvatarMaxAttempts = 3
-private const val ExperimentalAvatarRetryDelayMillis = 5_000L
 private const val ExperimentalAvatarLogTag = "ExperimentalArtistAvatar"
 
 @Composable
@@ -33,17 +29,7 @@ internal fun rememberExperimentalArtistAvatarImage(
     var image by remember(songTitle, artistName) { mutableStateOf<ExtensionImage?>(null) }
 
     LaunchedEffect(songTitle, artistName) {
-        val requestKey = experimentalAvatarRequestKey(songTitle, artistName)
-        if (requestKey == null || ExperimentalArtistAvatarRequestGate.isExhausted(requestKey)) return@LaunchedEffect
-        repeat(ExperimentalAvatarMaxAttempts) { attempt ->
-            val avatar = registry.findArtistAvatar(songTitle, artistName)
-            if (avatar != null) {
-                image = avatar.image
-                return@LaunchedEffect
-            }
-            if (attempt < ExperimentalAvatarMaxAttempts - 1) delay(ExperimentalAvatarRetryDelayMillis)
-        }
-        ExperimentalArtistAvatarRequestGate.markExhausted(requestKey)
+        image = registry.findArtistAvatar(songTitle, artistName)?.image
     }
     return image
 }
@@ -73,16 +59,4 @@ internal fun ExperimentalArtistAvatarImage(
             modifier = modifier.alpha(imageAlpha)
         )
     }
-}
-
-private fun experimentalAvatarRequestKey(songTitle: String, artistName: String): String? {
-    val title = songTitle.trim().lowercase(Locale.ROOT)
-    val artist = artistName.trim().lowercase(Locale.ROOT)
-    return if (title.isEmpty() || artist.isEmpty()) null else "$title\n$artist"
-}
-
-private object ExperimentalArtistAvatarRequestGate {
-    private val exhaustedKeys = mutableSetOf<String>()
-    @Synchronized fun isExhausted(key: String): Boolean = key in exhaustedKeys
-    @Synchronized fun markExhausted(key: String) { exhaustedKeys += key }
 }

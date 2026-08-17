@@ -13,6 +13,7 @@ import ink.tenqui.flowtone.data.online.image.ExtensionImageNetworkHost
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageInstaller
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
+import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
@@ -33,6 +34,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val sandboxHost = JavaScriptSandboxHost(appContext)
     private val gateway = ExtensionNetworkGateway()
     private val cache = ExtensionResultCache()
+    private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val mutex = Mutex()
     private val runtimes = mutableMapOf<String, JavaScriptArtistAvatarExtension>()
     private val networkClients = ConcurrentHashMap<String, ExtensionNetworkClient>()
@@ -71,7 +73,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     suspend fun uninstall(extensionId: String): Boolean = mutex.withLock {
-        stop(extensionId)
+        stop(extensionId, clearPrivateCache = true)
         withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
     }
 
@@ -123,7 +125,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             installed = installed,
             isolate = isolate,
             network = networkClient,
-            cache = cache
+            cache = cache,
+            privateCache = privateCache
         )
         runCatching { extension.start() }
             .onSuccess {
@@ -135,13 +138,14 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             .onFailure { extension.close() }
     }
 
-    private fun stop(id: String) {
+    private fun stop(id: String, clearPrivateCache: Boolean = false) {
         artistAvatarRegistry.uninstall(id)
         runtimes.remove(id)?.close()
         networkClients.remove(id)
         streamClients.remove(id)
         playbackResources.clear(id)
         cache.clear(id)
+        if (clearPrivateCache) privateCache.deleteForUninstall(id)
     }
 
     private fun networkClientFor(extensionId: String): ExtensionNetworkClient? = networkClients[extensionId]

@@ -30,7 +30,8 @@ class JavaScriptArtistAvatarExtension(
     private val installed: InstalledExtension,
     private val isolate: JavaScriptIsolate,
     private val network: ExtensionNetworkClient,
-    private val cache: ExtensionResultCache
+    private val cache: ExtensionResultCache,
+    private val privateCache: ExtensionPrivateCache
 ) : ArtistAvatarExtension, AutoCloseable {
     override val id: String = installed.manifest.id
     override val displayName: String = installed.manifest.name
@@ -68,6 +69,10 @@ class JavaScriptArtistAvatarExtension(
             Log.d(LogTag, "extension.rpc.received extension=$id type=${incoming.optString("type")}")
             val reply = when (incoming.optString("type")) {
                 "http.request" -> handleHttpRequest(requestId, incoming.optJSONObject("payload"))
+                "cache.get" -> handleCacheGet(requestId, incoming.optJSONObject("payload"))
+                "cache.set" -> handleCacheSet(requestId, incoming.optJSONObject("payload"))
+                "cache.remove" -> handleCacheRemove(requestId, incoming.optJSONObject("payload"))
+                "cache.clear" -> handleCacheClear(requestId)
                 "log" -> {
                     Log.d(LogTag, "extension.log extension=$id ${incoming.optJSONObject("payload")}")
                     success(requestId, JSONObject.NULL)
@@ -103,6 +108,37 @@ class JavaScriptArtistAvatarExtension(
         }
     }
 
+    private fun handleCacheGet(id: String, payload: JSONObject?): JSONObject = cacheRequest(id) {
+        val key = payload?.stringOrNull("key") ?: return@cacheRequest failure(id, "INVALID_REQUEST", "cache key 必须是字符串")
+        success(id, JSONObject().put("value", privateCache.get(this.id, key) ?: JSONObject.NULL))
+    }
+
+    private fun handleCacheSet(id: String, payload: JSONObject?): JSONObject = cacheRequest(id) {
+        val key = payload?.stringOrNull("key") ?: return@cacheRequest failure(id, "INVALID_REQUEST", "cache key 必须是字符串")
+        val value = payload.stringOrNull("value") ?: return@cacheRequest failure(id, "INVALID_REQUEST", "cache value 必须是字符串")
+        privateCache.set(this.id, key, value)
+        success(id, JSONObject.NULL)
+    }
+
+    private fun handleCacheRemove(id: String, payload: JSONObject?): JSONObject = cacheRequest(id) {
+        val key = payload?.stringOrNull("key") ?: return@cacheRequest failure(id, "INVALID_REQUEST", "cache key 必须是字符串")
+        privateCache.remove(this.id, key)
+        success(id, JSONObject.NULL)
+    }
+
+    private fun handleCacheClear(id: String): JSONObject = cacheRequest(id) {
+        privateCache.clear(this.id)
+        success(id, JSONObject.NULL)
+    }
+
+    private inline fun cacheRequest(id: String, block: () -> JSONObject): JSONObject = try {
+        block()
+    } catch (error: IllegalArgumentException) {
+        failure(id, "CACHE_LIMIT", error.message ?: "cache 请求超出限制")
+    } catch (error: Exception) {
+        failure(id, "CACHE_ERROR", error.javaClass.simpleName)
+    }
+
     private suspend fun evaluateStatements(script: String): String = evaluateWrapped("(async()=>{$script})()")
 
     private suspend fun evaluateExpression(expression: String): String =
@@ -133,6 +169,8 @@ class JavaScriptArtistAvatarExtension(
         .put("id", id).put("ok", false)
         .put("error", JSONObject().put("type", type).put("message", message))
 
+    private fun JSONObject.stringOrNull(name: String): String? = opt(name) as? String
+
     internal fun bootstrapScript(): String = """
         const __port = await android.getNamedPort('$PortName');
         const __pending = new Map();
@@ -154,6 +192,12 @@ class JavaScriptArtistAvatarExtension(
         }
         globalThis.flowtone = Object.freeze({
           http: Object.freeze({request: request => __rpc('http.request', request)}),
+          cache: Object.freeze({
+            get: async key => (await __rpc('cache.get', {key})).value,
+            set: (key, value) => __rpc('cache.set', {key, value}),
+            remove: key => __rpc('cache.remove', {key}),
+            clear: () => __rpc('cache.clear', {})
+          }),
           log: Object.freeze({
             debug: message => __rpc('log', {level:'debug', message:String(message)}),
             info: message => __rpc('log', {level:'info', message:String(message)}),

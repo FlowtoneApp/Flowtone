@@ -3,6 +3,9 @@ package ink.tenqui.flowtone.data.online
 import ink.tenqui.flowtone.core.online.ArtistAvatar
 import ink.tenqui.flowtone.core.online.ArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.network.ExtensionCoreLogger
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CompletableDeferred
 
 /** Flowtone 核心持有的歌手头像扩展注册表。没有安装扩展时会正常返回 null。 */
 class ArtistAvatarExtensionRegistry(
@@ -11,6 +14,7 @@ class ArtistAvatarExtensionRegistry(
     }
 ) {
     private val extensions = mutableListOf<ArtistAvatarExtension>()
+    private val inFlight = ConcurrentHashMap<String, CompletableDeferred<ArtistAvatar?>>()
 
     @Synchronized
     fun install(extension: ArtistAvatarExtension) {
@@ -21,6 +25,14 @@ class ArtistAvatarExtensionRegistry(
     @Synchronized
     fun uninstall(extensionId: String) {
         extensions.removeAll { it.id == extensionId }
+        inFlight.entries.removeIf { (key, future) ->
+            if (key.startsWith("$extensionId\n")) {
+                future.cancel()
+                true
+            } else {
+                false
+            }
+        }
     }
 
     @Synchronized
@@ -35,7 +47,7 @@ class ArtistAvatarExtensionRegistry(
             val startedAt = System.nanoTime()
             logger.log("extension.invoke.started", "extension=${extension.id} capability=artist_avatar")
             try {
-                val avatar = extension.findArtistAvatar(title, artist)
+                val avatar = findInFlight(extension, title, artist)
                 logger.log(
                     "extension.invoke.completed",
                     "extension=${extension.id} capability=artist_avatar result=${if (avatar == null) "not_found" else "found"} " +
@@ -55,4 +67,27 @@ class ArtistAvatarExtensionRegistry(
         logger.log("artist_avatar.lookup.completed", "result=not_found")
         return null
     }
+
+    private suspend fun findInFlight(
+        extension: ArtistAvatarExtension,
+        songTitle: String,
+        artistName: String
+    ): ArtistAvatar? {
+        val key = "${extension.id}\nartist_avatar\n${normalize(songTitle)}\n${normalize(artistName)}"
+        val ours = CompletableDeferred<ArtistAvatar?>()
+        val existing = inFlight.putIfAbsent(key, ours)
+        if (existing != null) return existing.await()
+        try {
+            val result = extension.findArtistAvatar(songTitle, artistName)
+            ours.complete(result)
+            return result
+        } catch (error: Throwable) {
+            ours.completeExceptionally(error)
+            throw error
+        } finally {
+            inFlight.remove(key, ours)
+        }
+    }
+
+    private fun normalize(value: String): String = value.trim().lowercase(Locale.ROOT)
 }
