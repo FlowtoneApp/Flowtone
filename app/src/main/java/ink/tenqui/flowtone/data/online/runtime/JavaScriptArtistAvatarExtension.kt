@@ -13,9 +13,10 @@ import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
-import java.util.UUID
+import java.net.SocketTimeoutException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -93,7 +94,12 @@ class JavaScriptArtistAvatarExtension(
                 .put("headers", JSONObject(response.headers.mapValues { it.value.joinToString(",") }))
                 .put("body", response.body.decodeToString()))
         } catch (error: Exception) {
-            failure(id, "NETWORK_ERROR", error.javaClass.simpleName)
+            val type = if (error is SocketTimeoutException || error is TimeoutException) {
+                "TIMEOUT"
+            } else {
+                "NETWORK_ERROR"
+            }
+            failure(id, type, error.javaClass.simpleName)
         }
     }
 
@@ -127,7 +133,7 @@ class JavaScriptArtistAvatarExtension(
         .put("id", id).put("ok", false)
         .put("error", JSONObject().put("type", type).put("message", message))
 
-    private fun bootstrapScript(): String = """
+    internal fun bootstrapScript(): String = """
         const __port = await android.getNamedPort('$PortName');
         const __pending = new Map();
         let __sequence = 0;
@@ -137,17 +143,12 @@ class JavaScriptArtistAvatarExtension(
           const pending = __pending.get(message.id);
           if (!pending) return;
           __pending.delete(message.id);
-          clearTimeout(pending.timer);
           message.ok ? pending.resolve(message.result) : pending.reject(new Error(message.error?.type || 'HOST_ERROR'));
         };
         function __rpc(type, payload) {
           const id = 'req-' + (++__sequence) + '-' + Date.now();
           return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-              __pending.delete(id);
-              reject(new Error('RPC_TIMEOUT'));
-            }, 15000);
-            __pending.set(id, {resolve, reject, timer});
+            __pending.set(id, {resolve, reject});
             __port.postMessage(JSON.stringify({id, type, payload}));
           });
         }

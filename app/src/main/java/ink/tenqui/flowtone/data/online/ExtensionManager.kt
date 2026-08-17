@@ -3,8 +3,10 @@ package ink.tenqui.flowtone.data.online
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.media3.common.MediaItem
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkGateway
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
+import ink.tenqui.flowtone.data.online.network.ExtensionStreamClient
 import ink.tenqui.flowtone.data.online.image.ExtensionImageFetcher
 import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
 import ink.tenqui.flowtone.data.online.image.ExtensionImageNetworkHost
@@ -13,6 +15,10 @@ import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.data.online.playback.ExtensionMediaDataSource
+import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackResourceStore
+import ink.tenqui.flowtone.data.online.playback.ExtensionStreamNetworkHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,6 +36,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val mutex = Mutex()
     private val runtimes = mutableMapOf<String, JavaScriptArtistAvatarExtension>()
     private val networkClients = ConcurrentHashMap<String, ExtensionNetworkClient>()
+    private val streamClients = ConcurrentHashMap<String, ExtensionStreamClient>()
+    private val playbackResources = ExtensionPlaybackResourceStore()
     private var initialized = false
     val artistAvatarRegistry = ArtistAvatarExtensionRegistry()
     val extensionImageLoader: ImageLoader by lazy {
@@ -67,12 +75,48 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
     }
 
+    /** 由 Flowtone Host 调用；JS 只提供资源字段，扩展身份不从 JS 参数读取。 */
+    internal fun createPlaybackMediaItem(
+        extensionId: String,
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        mimeType: String? = null,
+        mediaId: String = url
+    ): MediaItem {
+        require(streamClients.containsKey(extensionId)) { "扩展未运行：$extensionId" }
+        val resourceUri = playbackResources.register(
+            ExtensionPlaybackResource(
+                extensionId = extensionId,
+                url = url,
+                headers = headers,
+                mimeType = mimeType
+            )
+        )
+        return MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setUri(resourceUri)
+            .setMimeType(mimeType)
+            .build()
+    }
+
+    fun extensionMediaDataSourceFactory(): ExtensionMediaDataSource.Factory {
+        return ExtensionMediaDataSource.Factory(
+            resources = playbackResources,
+            host = ExtensionStreamNetworkHost(::streamClientFor)
+        )
+    }
+
     private suspend fun load(installed: InstalledExtension) {
         if (!installed.manifest.supportsArtistAvatar) return
         val isolate = sandboxHost.createIsolate() ?: return
         val networkClient = gateway.createClientFor(
             extensionId = installed.manifest.id,
             capability = "artist_avatar",
+            allowedHosts = installed.manifest.networkHosts
+        )
+        val streamClient = gateway.createStreamClientFor(
+            extensionId = installed.manifest.id,
+            capability = "media_stream",
             allowedHosts = installed.manifest.networkHosts
         )
         val extension = JavaScriptArtistAvatarExtension(
@@ -85,6 +129,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             .onSuccess {
                 runtimes[installed.manifest.id] = extension
                 networkClients[installed.manifest.id] = networkClient
+                streamClients[installed.manifest.id] = streamClient
                 artistAvatarRegistry.install(extension)
             }
             .onFailure { extension.close() }
@@ -94,10 +139,14 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         artistAvatarRegistry.uninstall(id)
         runtimes.remove(id)?.close()
         networkClients.remove(id)
+        streamClients.remove(id)
+        playbackResources.clear(id)
         cache.clear(id)
     }
 
     private fun networkClientFor(extensionId: String): ExtensionNetworkClient? = networkClients[extensionId]
+
+    private fun streamClientFor(extensionId: String): ExtensionStreamClient? = streamClients[extensionId]
 
     private fun displayName(uri: Uri): String? {
         return appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
