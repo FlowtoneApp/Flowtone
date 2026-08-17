@@ -222,7 +222,7 @@ internal fun SettingsScreen(
                         add("在线")
                     }
                     if (
-                        section == SettingsSection.Appearance &&
+                        section == SettingsSection.General &&
                         (showingLyricsSettings || managingLyricsFolders)
                     ) {
                         add("歌词")
@@ -267,26 +267,7 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
             )
 
-            SettingsSection.Appearance -> when {
-                state.managingLyricsFolders -> LyricsFolderSettingsPage(
-                    folders = lyricsFolders,
-                    onAddFolder = { lyricsFolderLauncher.launch(null) },
-                    onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
-                    elementModifier = ::viewElementModifier
-                )
-
-                state.showingLyricsSettings -> LyricsSettingsPage(
-                    lyricsBackgroundStyle = lyricsBackgroundStyle,
-                    onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
-                    allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage,
-                    onAllowScreenOffOnLyricsPageChange =
-                        onAllowScreenOffOnLyricsPageChange,
-                    lyricsFolders = lyricsFolders,
-                    onOpenLyricsFolders = { managingLyricsFolders = true },
-                    elementModifier = ::viewElementModifier
-                )
-
-                else -> AppearanceSettingsPage(
+            SettingsSection.Appearance -> AppearanceSettingsPage(
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
                     disablePausedArtworkTilt = disablePausedArtworkTilt,
@@ -297,10 +278,8 @@ internal fun SettingsScreen(
                     onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
                     darkFlowCloudOverlayEnabled = darkFlowCloudOverlayEnabled,
                     onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
-                    onOpenLyricsSettings = { showingLyricsSettings = true },
                     elementModifier = ::viewElementModifier
                 )
-            }
 
             SettingsSection.Playback -> PlaybackSettingsPage(
                 resumePlaybackAfterCall = resumePlaybackAfterCall,
@@ -322,8 +301,26 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
             )
 
-            SettingsSection.General -> if (state.showingOnlineSettings) {
-                OnlineSettingsPage(
+            SettingsSection.General -> when {
+                state.managingLyricsFolders -> LyricsFolderSettingsPage(
+                    folders = lyricsFolders,
+                    onAddFolder = { lyricsFolderLauncher.launch(null) },
+                    onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
+                    elementModifier = ::viewElementModifier
+                )
+
+                state.showingLyricsSettings -> LyricsSettingsPage(
+                    lyricsBackgroundStyle = lyricsBackgroundStyle,
+                    onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
+                    allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage,
+                    onAllowScreenOffOnLyricsPageChange =
+                        onAllowScreenOffOnLyricsPageChange,
+                    lyricsFolders = lyricsFolders,
+                    onOpenLyricsFolders = { managingLyricsFolders = true },
+                    elementModifier = ::viewElementModifier
+                )
+
+                state.showingOnlineSettings -> OnlineSettingsPage(
                     installedExtensions = installedExtensions,
                     onInstall = {
                         extensionPackageLauncher.launch(
@@ -339,7 +336,7 @@ internal fun SettingsScreen(
                     },
                     elementModifier = ::viewElementModifier
                 )
-            } else GeneralSettingsPage(
+                else -> GeneralSettingsPage(
                 selectedStartPage = selectedStartPage,
                 onStartPageSelected = { page ->
                     selectedStartPage = page
@@ -353,10 +350,12 @@ internal fun SettingsScreen(
                 onOpenExpandedMiniPlayerOnMediaClickChange =
                     onOpenExpandedMiniPlayerOnMediaClickChange,
                 onOpenOnlineSettings = { showingOnlineSettings = true },
+                onOpenLyricsSettings = { showingLyricsSettings = true },
                 elementModifier = ::viewElementModifier
-            )
+                )
         }
     }
+}
 }
 
 private data class SettingsPageState(
