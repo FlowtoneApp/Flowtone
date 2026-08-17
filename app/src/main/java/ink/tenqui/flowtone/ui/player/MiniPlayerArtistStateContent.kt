@@ -42,7 +42,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
-import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarUrl
+import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
 
 @Composable
 internal fun ArtistPlaceholderOverlay(
@@ -276,7 +276,7 @@ private fun ArtistPlaceholderItem(
     modifier: Modifier = Modifier
 ) {
     val noRippleInteractionSource = remember { MutableInteractionSource() }
-    val avatarUrl = rememberExperimentalArtistAvatarUrl(
+    val avatarImage = rememberExperimentalArtistAvatarImage(
         songTitle = songTitle,
         artistName = artist
     )
@@ -303,7 +303,7 @@ private fun ArtistPlaceholderItem(
                 modifier = Modifier.size(ArtistPlaceholderAvatarSize * 0.54f)
             )
             ExperimentalArtistAvatarImage(
-                imageUrl = avatarUrl,
+                image = avatarImage,
                 modifier = Modifier.matchParentSize()
             )
         }

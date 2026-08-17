@@ -8,6 +8,7 @@ import androidx.javascriptengine.MessagePort
 import androidx.javascriptengine.MessagePortClient
 import ink.tenqui.flowtone.core.online.ArtistAvatar
 import ink.tenqui.flowtone.core.online.ArtistAvatarExtension
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
@@ -50,7 +51,7 @@ class JavaScriptArtistAvatarExtension(
         val result = JSONObject(raw)
         return when (result.optString("type")) {
             "found" -> result.optString("imageUrl").trim().takeIf { it.startsWith("https://") }
-                ?.let(::ArtistAvatar)
+                ?.let { imageUrl -> ArtistAvatar(ExtensionImage(extensionId = id, url = imageUrl)) }
                 ?.also { cache.put(id, songTitle, artistName, it) }
             else -> null
         }

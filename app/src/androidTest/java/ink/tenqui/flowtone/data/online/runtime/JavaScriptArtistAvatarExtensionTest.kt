@@ -48,7 +48,7 @@ class JavaScriptArtistAvatarExtensionTest {
             }
         )
         extension.start()
-        assertEquals("https://example.com/a.jpg", extension.findArtistAvatar("Song", "Artist")?.imageUrl)
+        assertEquals("https://example.com/a.jpg", extension.findArtistAvatar("Song", "Artist")?.image?.url)
         extension.close()
     }
 

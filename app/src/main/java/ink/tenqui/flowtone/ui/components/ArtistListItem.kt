@@ -24,7 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.search.SearchArtist
 import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
-import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarUrl
+import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
 
 @Composable
 fun ArtistListItem(
@@ -32,7 +32,7 @@ fun ArtistListItem(
     onClick: (SearchArtist) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val avatarUrl = rememberExperimentalArtistAvatarUrl(
+    val avatarImage = rememberExperimentalArtistAvatarImage(
         songTitle = artist.representativeSongTitle,
         artistName = artist.name
     )
@@ -59,7 +59,7 @@ fun ArtistListItem(
                 modifier = Modifier.size(28.dp)
             )
             ExperimentalArtistAvatarImage(
-                imageUrl = avatarUrl,
+                image = avatarImage,
                 modifier = Modifier.matchParentSize()
             )
         }
