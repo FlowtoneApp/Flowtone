@@ -28,7 +28,9 @@ data class SearchArtist(
     val id: String,
     val name: String,
     val songCount: Int,
-    val stableOrder: Int
+    val stableOrder: Int,
+    /** 用于在线头像匹配的一首本地代表歌曲。 */
+    val representativeSongTitle: String = ""
 )
 
 data class SearchResults(

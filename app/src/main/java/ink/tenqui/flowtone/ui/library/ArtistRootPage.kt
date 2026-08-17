@@ -50,6 +50,7 @@ import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
+import ink.tenqui.flowtone.core.online.ExtensionImage
 
 private const val ArtistHeaderHeightFraction = 0.312f
 private val ArtistRootToolbarHeight = 64.dp
@@ -86,6 +87,18 @@ fun ArtistRootPage(
     val artistSongs = remember(displayArtist, allSongs) {
         localSongsForArtist(allSongs, displayArtist)
     }
+    val avatarLookupSongTitle = remember(artistSongs, currentSong) {
+        val currentArtistSong = currentSong?.takeIf { playingSong ->
+            artistSongs.any { artistSong ->
+                artistSong.id == playingSong.id || artistSong.uri == playingSong.uri
+            }
+        }
+        (currentArtistSong ?: artistSongs.firstOrNull())?.title.orEmpty()
+    }
+    val artistAvatarImage = rememberExperimentalArtistAvatarImage(
+        songTitle = avatarLookupSongTitle,
+        artistName = displayArtist
+    )
 
     BoxWithConstraints(
         modifier = modifier
@@ -141,6 +154,7 @@ fun ArtistRootPage(
             item(key = "artist-header") {
                 ArtistHeaderCard(
                     artistName = displayArtist,
+                    avatarImage = artistAvatarImage,
                     height = headerHeight,
                     topPadding = statusBarTop,
                     itemModifier = itemModifier,
@@ -194,6 +208,7 @@ fun ArtistRootPage(
 
         ArtistRootToolbar(
             artistName = displayArtist,
+            avatarImage = artistAvatarImage,
             showArtist = toolbarContentVisible,
             height = toolbarHeight,
             topPadding = statusBarTop,
@@ -209,6 +224,7 @@ fun ArtistRootPage(
 @Composable
 private fun ArtistHeaderCard(
     artistName: String,
+    avatarImage: ExtensionImage?,
     height: Dp,
     topPadding: Dp,
     itemModifier: (Int) -> Modifier,
@@ -237,6 +253,7 @@ private fun ArtistHeaderCard(
         ) {
             ArtistAvatar(
                 size = ArtistRootAvatarSize,
+                image = avatarImage,
                 backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                 iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = itemModifier(ArtistRootHeaderAvatarAnimationIndex)
@@ -271,6 +288,7 @@ private fun artistRootSongAnimationIndex(
 @Composable
 private fun ArtistRootToolbar(
     artistName: String,
+    avatarImage: ExtensionImage?,
     showArtist: Boolean,
     height: Dp,
     topPadding: Dp,
@@ -360,6 +378,7 @@ private fun ArtistRootToolbar(
             ) {
                 ArtistAvatar(
                     size = ArtistRootSmallAvatarSize,
+                    image = avatarImage,
                     backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                     iconColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -402,6 +421,7 @@ private fun ArtistRootToolbar(
 @Composable
 private fun ArtistAvatar(
     size: Dp,
+    image: ExtensionImage?,
     backgroundColor: Color,
     iconColor: Color,
     modifier: Modifier = Modifier
@@ -419,5 +439,6 @@ private fun ArtistAvatar(
             tint = iconColor,
             modifier = Modifier.size(size * 0.54f)
         )
+        ExperimentalArtistAvatarImage(image = image, modifier = Modifier.matchParentSize())
     }
 }

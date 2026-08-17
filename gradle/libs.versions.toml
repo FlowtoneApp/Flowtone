@@ -16,6 +16,8 @@ palette = "1.0.0"
 material = "1.13.0"
 taglib = "1.0.5"
 metrics = "1.0.0"
+javascriptEngine = "1.1.0"
+json = "20250517"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,9 +41,12 @@ androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplaye
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 google-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 taglib = { group = "io.github.kyant0", name = "taglib", version.ref = "taglib" }
 androidx-metrics-performance = { group = "androidx.metrics", name = "metrics-performance", version.ref = "metrics" }
+androidx-javascriptengine = { group = "androidx.javascriptengine", name = "javascriptengine", version.ref = "javascriptEngine" }
+json = { group = "org.json", name = "json", version.ref = "json" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

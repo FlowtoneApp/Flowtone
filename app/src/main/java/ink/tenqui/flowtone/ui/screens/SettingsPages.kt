@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -265,6 +266,7 @@ internal fun GeneralSettingsPage(
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
     openExpandedMiniPlayerOnMediaClick: Boolean,
     onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
+    onOpenOnlineSettings: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -276,6 +278,13 @@ internal fun GeneralSettingsPage(
             DefaultStartPageRow(
                 selectedPage = selectedStartPage,
                 onPageSelected = onStartPageSelected
+            )
+            SettingsSectionRow(
+                title = "在线",
+                subtitle = "扩展管理",
+                icon = Icons.Rounded.Language,
+                onClick = onOpenOnlineSettings,
+                modifier = Modifier.padding(top = 12.dp)
             )
         }
         OptionGroup(

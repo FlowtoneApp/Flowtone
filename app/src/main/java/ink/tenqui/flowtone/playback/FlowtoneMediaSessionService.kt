@@ -12,6 +12,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
@@ -25,6 +27,7 @@ import ink.tenqui.flowtone.app.MainActivity
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.R
 import ink.tenqui.flowtone.data.listening.ListeningStatsRepositoryProvider
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -166,7 +169,14 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
+        val extensionManager = ExtensionManager.get(applicationContext)
+        val dataSourceFactory = DefaultDataSource.Factory(
+            applicationContext,
+            extensionManager.extensionMediaDataSourceFactory()
+        )
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val servicePlayer = ExoPlayer.Builder(applicationContext)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
