@@ -24,6 +24,13 @@ class ExtensionPrivateCache(
     }
 ) {
     private val namespaces = mutableMapOf<String, Namespace>()
+    /** 仅用于 JVM 测试验证 access metadata 不会造成写放大。 */
+    internal var persistCountForTests: Int = 0
+        private set
+
+    @Synchronized
+    internal fun lastAccessForTests(extensionId: String, key: String): Long? =
+        namespace(extensionId).entries[key]?.lastAccess
 
     @Synchronized
     fun get(extensionId: String, key: String): String? {
@@ -35,7 +42,7 @@ class ExtensionPrivateCache(
             return null
         }
         entry.lastAccess = namespace.nextAccess()
-        persist(extensionId, namespace)
+        namespace.accessMetadataDirty = true
         logger.log("extension.cache.hit", "extension=$extensionId keyBytes=${utf8Size(key)}")
         return entry.value
     }
@@ -75,6 +82,14 @@ class ExtensionPrivateCache(
         logger.log("extension.cache.clear", "extension=$extensionId")
     }
 
+    /** 已有应用级 close 生命周期中的 best-effort flush；不建立后台定时任务。 */
+    @Synchronized
+    fun flushDirty() {
+        namespaces.forEach { (extensionId, namespace) ->
+            if (namespace.accessMetadataDirty) persist(extensionId, namespace)
+        }
+    }
+
     /** 明确卸载扩展时调用；正常同 ID 更新不会调用，因此会保留 cache。 */
     fun deleteForUninstall(extensionId: String) = clear(extensionId)
 
@@ -101,7 +116,8 @@ class ExtensionPrivateCache(
             }
             Namespace(entries, lastAccess)
         }.getOrElse {
-            logger.log("extension.cache.load_failed", "extension=$extensionId failure=${it.javaClass.simpleName}")
+            logger.log("extension.cache.corrupted", "extension=$extensionId failure=${it.javaClass.simpleName}")
+            file.delete()
             Namespace()
         }.also { namespace ->
             evictToQuota(extensionId, namespace)
@@ -145,6 +161,8 @@ class ExtensionPrivateCache(
         }.getOrElse {
             Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
+        namespace.accessMetadataDirty = false
+        persistCountForTests += 1
     }
 
     private fun cacheFile(extensionId: String): File = File(root, extensionId).resolve("cache").resolve("entries.json")
@@ -164,7 +182,8 @@ class ExtensionPrivateCache(
 
     private class Namespace(
         val entries: MutableMap<String, Entry> = linkedMapOf(),
-        private var accessCounter: Long = System.currentTimeMillis()
+        private var accessCounter: Long = System.currentTimeMillis(),
+        var accessMetadataDirty: Boolean = false
     ) {
         fun nextAccess(): Long = maxOf(System.currentTimeMillis(), accessCounter + 1L).also { accessCounter = it }
         fun sizeBytes(): Int = entries.entries.sumOf { (key, entry) ->
@@ -181,4 +200,3 @@ class ExtensionPrivateCache(
         val SafeExtensionId = Regex("[a-zA-Z0-9._-]+")
     }
 }
-

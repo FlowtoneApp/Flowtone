@@ -159,6 +159,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     override fun close() {
         runtimes.keys.toList().forEach(::stop)
+        privateCache.flushDirty()
         extensionImageLoader.shutdown()
         sandboxHost.close()
     }
