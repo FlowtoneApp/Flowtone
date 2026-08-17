@@ -11,6 +11,7 @@ class ExtensionStreamGatewayTest {
     fun `stream request keeps bound identity and core logs`() {
         val logs = mutableListOf<String>()
         var transported: ExtensionStreamRequest? = null
+        val limiter = GlobalExtensionNetworkLimiter(maxActiveRequests = 1, maxInFlightRequests = 2)
         val gateway = ExtensionNetworkGateway(
             streamTransport = ExtensionStreamTransport { request, authorize ->
                 authorize(request.url)
@@ -22,17 +23,23 @@ class ExtensionStreamGatewayTest {
                     resolvedUrl = request.url
                 )
             },
-            logger = ExtensionCoreLogger { event, details -> logs += "$event $details" }
+            logger = ExtensionCoreLogger { event, details -> logs += "$event $details" },
+            limiter = limiter
         )
 
-        gateway.createStreamClientFor("bound.extension", "media_stream", listOf("media.example.com"))
+        val response = gateway.createStreamClientFor("bound.extension", "media_stream", listOf("media.example.com"))
             .open(
                 ExtensionStreamRequest(
                     url = "https://media.example.com/audio?token=SECRET",
                     position = 100L,
                     length = 8L
                 )
-            ).use { response -> response.body.readBytes() }
+            )
+        assertEquals(1, limiter.snapshot().active)
+        assertEquals(1, limiter.snapshot().inFlight)
+        response.use { it.body.readBytes() }
+        assertEquals(0, limiter.snapshot().active)
+        assertEquals(0, limiter.snapshot().inFlight)
 
         assertEquals("bytes=100-107", transported?.headers?.get("Range"))
         assertTrue(logs.any { it.startsWith("extension.media.open extension=bound.extension") })

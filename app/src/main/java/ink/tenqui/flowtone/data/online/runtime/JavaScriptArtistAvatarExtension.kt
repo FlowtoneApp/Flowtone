@@ -12,6 +12,9 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
+import ink.tenqui.flowtone.data.online.network.AdmissionAwareExtensionNetworkClient
+import ink.tenqui.flowtone.data.online.network.ExtensionNetworkResourceExhaustedException
+import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import java.net.SocketTimeoutException
 import java.util.concurrent.Executors
@@ -59,13 +62,25 @@ class JavaScriptArtistAvatarExtension(
     private fun onMessage(message: Message) {
         if (message.type != Message.TYPE_STRING) return
         val raw = runCatching { message.string }.getOrNull() ?: return
+        val incoming = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        val requestId = incoming.optString("id")
+        if (requestId.isEmpty()) return
+        val type = incoming.optString("type")
+        val admission = if (type == "http.request") {
+            val client = network as? AdmissionAwareExtensionNetworkClient
+            val accepted = client?.tryAcquireAdmission()
+            if (client != null && accepted == null) {
+                port.postMessage(Message.createStringMessage(failure(requestId, "RESOURCE_EXHAUSTED", "Flowtone Host 网络资源已满").toString()))
+                return
+            }
+            accepted
+        } else {
+            null
+        }
         scope.launch {
-            val incoming = runCatching { JSONObject(raw) }.getOrNull() ?: return@launch
-            val requestId = incoming.optString("id")
-            if (requestId.isEmpty()) return@launch
             Log.d(LogTag, "extension.rpc.received extension=$id type=${incoming.optString("type")}")
             val reply = when (incoming.optString("type")) {
-                "http.request" -> handleHttpRequest(requestId, incoming.optJSONObject("payload"))
+                "http.request" -> handleHttpRequest(requestId, incoming.optJSONObject("payload"), admission)
                 "cache.get" -> handleCacheGet(requestId, incoming.optJSONObject("payload"))
                 "cache.set" -> handleCacheSet(requestId, incoming.optJSONObject("payload"))
                 "cache.remove" -> handleCacheRemove(requestId, incoming.optJSONObject("payload"))
@@ -80,28 +95,39 @@ class JavaScriptArtistAvatarExtension(
         }
     }
 
-    private suspend fun handleHttpRequest(id: String, payload: JSONObject?): JSONObject {
-        if (payload == null) return failure(id, "INVALID_REQUEST", "缺少请求参数")
+    private suspend fun handleHttpRequest(
+        id: String,
+        payload: JSONObject?,
+        admission: GlobalExtensionNetworkLimiter.Admission?
+    ): JSONObject {
+        var delegatedAdmission = false
         return try {
+            if (payload == null) return failure(id, "INVALID_REQUEST", "缺少请求参数")
             val method = payload.optString("method", "GET")
             if (method != "GET") return failure(id, "METHOD_NOT_ALLOWED", "当前只允许 GET")
             val headers = payload.optJSONObject("headers")?.let { json ->
                 json.keys().asSequence().associateWith { json.getString(it) }
             }.orEmpty()
-            val response = network.execute(
-                ExtensionHttpRequest(ExtensionHttpMethod.Get, payload.getString("url"), headers)
-            )
+            val request = ExtensionHttpRequest(ExtensionHttpMethod.Get, payload.getString("url"), headers)
+            val response = if (admission != null && network is AdmissionAwareExtensionNetworkClient) {
+                delegatedAdmission = true
+                network.executeAdmitted(request, admission)
+            } else {
+                network.execute(request)
+            }
             success(id, JSONObject()
                 .put("status", response.statusCode)
                 .put("headers", JSONObject(response.headers.mapValues { it.value.joinToString(",") }))
                 .put("body", response.body.decodeToString()))
         } catch (error: Exception) {
-            val type = if (error is SocketTimeoutException || error is TimeoutException) {
-                "TIMEOUT"
-            } else {
-                "NETWORK_ERROR"
+            val type = when (error) {
+                is ExtensionNetworkResourceExhaustedException -> "RESOURCE_EXHAUSTED"
+                is SocketTimeoutException, is TimeoutException -> "TIMEOUT"
+                else -> "NETWORK_ERROR"
             }
             failure(id, type, error.javaClass.simpleName)
+        } finally {
+            if (!delegatedAdmission) admission?.close()
         }
     }
 

@@ -18,7 +18,8 @@ import androidx.media3.common.C
 class ExtensionNetworkGateway(
     private val transport: ExtensionHttpTransport = HttpUrlConnectionTransport(),
     private val streamTransport: ExtensionStreamTransport = HttpUrlConnectionStreamTransport(),
-    private val logger: ExtensionCoreLogger = AndroidExtensionCoreLogger
+    private val logger: ExtensionCoreLogger = AndroidExtensionCoreLogger,
+    private val limiter: GlobalExtensionNetworkLimiter = GlobalExtensionNetworkLimiter()
 ) {
     fun createClientFor(
         extensionId: String,
@@ -30,7 +31,8 @@ class ExtensionNetworkGateway(
             capability,
             ExtensionHostPolicy(allowedHosts),
             transport,
-            logger
+            logger,
+            limiter
         )
     }
 
@@ -44,7 +46,8 @@ class ExtensionNetworkGateway(
             capability = capability,
             hostPolicy = ExtensionHostPolicy(allowedHosts),
             transport = streamTransport,
-            logger = logger
+            logger = logger,
+            limiter = limiter
         )
     }
 }
@@ -78,15 +81,38 @@ private class BoundExtensionNetworkClient(
     private val capability: String,
     private val hostPolicy: ExtensionHostPolicy,
     private val transport: ExtensionHttpTransport,
-    private val logger: ExtensionCoreLogger
-) : ExtensionNetworkClient {
+    private val logger: ExtensionCoreLogger,
+    private val limiter: GlobalExtensionNetworkLimiter
+) : AdmissionAwareExtensionNetworkClient {
     override suspend fun execute(request: ExtensionHttpRequest): ExtensionHttpResponse {
-        hostPolicy.requireAllowed(request.url)
+        val admission = tryAcquireAdmission() ?: throw ExtensionNetworkResourceExhaustedException()
+        return executeAdmitted(request, admission)
+    }
+
+    override fun tryAcquireAdmission(): GlobalExtensionNetworkLimiter.Admission? {
+        val admission = limiter.tryAcquireInFlight()
+        if (admission == null) {
+            logger.log(
+                "extension.network.limit.rejected",
+                identityDetails() + " active=${limiter.snapshot().active} inFlight=${limiter.snapshot().inFlight} " +
+                    "maxActive=${limiter.maxActiveRequests} maxInFlight=${limiter.maxInFlightRequests}"
+            )
+        }
+        return admission
+    }
+
+    override suspend fun executeAdmitted(
+        request: ExtensionHttpRequest,
+        admission: GlobalExtensionNetworkLimiter.Admission
+    ): ExtensionHttpResponse {
         val requestDetails = requestLogDetails(request)
-        logger.log("extension.http.prepared", identityDetails() + " $requestDetails")
         val startedAt = System.nanoTime()
-        logger.log("extension.http.started", identityDetails() + " $requestDetails")
         return try {
+            hostPolicy.requireAllowed(request.url)
+            logger.log("extension.http.prepared", identityDetails() + " $requestDetails")
+            val queued = admission.acquireActive()
+            if (queued) logQueued()
+            logger.log("extension.http.started", identityDetails() + " $requestDetails")
             val response = transport.execute(request, hostPolicy::requireAllowed)
             val durationMs = elapsedMillis(startedAt)
             logger.log(
@@ -101,10 +127,21 @@ private class BoundExtensionNetworkClient(
                 identityDetails() + " failure=${error.javaClass.simpleName} durationMs=${elapsedMillis(startedAt)}"
             )
             throw error
+        } finally {
+            admission.close()
         }
     }
 
     private fun identityDetails(): String = "extension=$extensionId capability=$capability"
+
+    private fun logQueued() {
+        val snapshot = limiter.snapshot()
+        logger.log(
+            "extension.network.limit.queued",
+            identityDetails() + " active=${snapshot.active} inFlight=${snapshot.inFlight} " +
+                "maxActive=${limiter.maxActiveRequests} maxInFlight=${limiter.maxInFlightRequests}"
+        )
+    }
 }
 
 private class BoundExtensionStreamClient(
@@ -112,7 +149,8 @@ private class BoundExtensionStreamClient(
     private val capability: String,
     private val hostPolicy: ExtensionHostPolicy,
     private val transport: ExtensionStreamTransport,
-    private val logger: ExtensionCoreLogger
+    private val logger: ExtensionCoreLogger,
+    private val limiter: GlobalExtensionNetworkLimiter
 ) : ExtensionStreamClient {
     override fun open(request: ExtensionStreamRequest): ExtensionStreamResponse {
         require(request.position >= 0L) { "流起始位置不能为负数" }
@@ -121,6 +159,16 @@ private class BoundExtensionStreamClient(
         }
         val identity = "extension=$extensionId capability=$capability"
         val startedAt = System.nanoTime()
+        val admission = limiter.tryAcquireInFlight()
+            ?: run {
+                val snapshot = limiter.snapshot()
+                logger.log(
+                    "extension.network.limit.rejected",
+                    "$identity active=${snapshot.active} inFlight=${snapshot.inFlight} " +
+                        "maxActive=${limiter.maxActiveRequests} maxInFlight=${limiter.maxInFlightRequests}"
+                )
+                throw ExtensionNetworkResourceExhaustedException()
+            }
         logger.log(
             "extension.media.open",
             "$identity ${safeUrlDetails(request.url)} position=${request.position} " +
@@ -131,6 +179,15 @@ private class BoundExtensionStreamClient(
             val managedRequest = request.copy(headers = managedStreamHeaders(request))
             val details = streamRequestLogDetails(managedRequest)
             logger.log("extension.http.prepared", "$identity $details")
+            val queued = admission.acquireActive()
+            if (queued) {
+                val snapshot = limiter.snapshot()
+                logger.log(
+                    "extension.network.limit.queued",
+                    "$identity active=${snapshot.active} inFlight=${snapshot.inFlight} " +
+                        "maxActive=${limiter.maxActiveRequests} maxInFlight=${limiter.maxInFlightRequests}"
+                )
+            }
             logger.log("extension.http.started", "$identity $details")
             val response = transport.open(managedRequest, hostPolicy::requireAllowed)
             val durationToHeadersMs = elapsedMillis(startedAt)
@@ -162,6 +219,7 @@ private class BoundExtensionStreamClient(
                 resolvedUrl = response.resolvedUrl,
                 closeAction = {
                     response.close()
+                    admission.close()
                     logger.log(
                         "extension.media.close",
                         "$identity bytesRead=${countingBody.bytesRead} durationMs=${elapsedMillis(startedAt)}"
@@ -169,6 +227,7 @@ private class BoundExtensionStreamClient(
                 }
             )
         } catch (error: Exception) {
+            admission.close()
             logger.log(
                 "extension.http.failed",
                 "$identity failure=${error.javaClass.simpleName} durationMs=${elapsedMillis(startedAt)}"

@@ -6,6 +6,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
+import ink.tenqui.flowtone.data.online.network.ExtensionNetworkGateway
+import ink.tenqui.flowtone.data.online.network.ExtensionHttpTransport
+import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
+import ink.tenqui.flowtone.data.online.network.AdmissionAwareExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifest
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import java.nio.file.Files
@@ -113,6 +117,41 @@ class JavaScriptArtistAvatarExtensionTest {
         assertEquals("https://example.com/retry.jpg", extension.findArtistAvatar("Song", "Artist")?.image?.url)
         assertEquals(2, requests.get())
         extension.close()
+    }
+
+    @Test fun resourceExhaustionRejectsMessagePortRequestBeforeNetworkExecution() = runBlocking {
+        val limiter = GlobalExtensionNetworkLimiter(maxActiveRequests = 1, maxInFlightRequests = 1)
+        val gateway = ExtensionNetworkGateway(
+            limiter = limiter,
+            transport = ExtensionHttpTransport { _, _ -> error("transport must not run") }
+        )
+        val network = gateway.createClientFor("example.avatar", "artist_avatar", listOf("example.com"))
+        val held = requireNotNull((network as AdmissionAwareExtensionNetworkClient).tryAcquireAdmission())
+        val extension = extension(
+            """
+            globalThis.flowtoneExtension = {
+              async findArtistAvatar() {
+                try {
+                  await flowtone.http.request({method:'GET',url:'https://example.com/avatar'});
+                  return {type:'not_found'};
+                } catch (error) {
+                  return error.message === 'RESOURCE_EXHAUSTED'
+                    ? {type:'found', imageUrl:'https://example.com/exhausted.jpg'}
+                    : {type:'not_found'};
+                }
+              }
+            };
+            """.trimIndent(),
+            network
+        )
+        try {
+            extension.start()
+            assertEquals("https://example.com/exhausted.jpg", extension.findArtistAvatar("Song", "Artist")?.image?.url)
+            assertEquals(1, limiter.snapshot().inFlight)
+        } finally {
+            extension.close()
+            held.close()
+        }
     }
 
     @Test fun messagePortCacheIsPersistentAndOnlyExposesCacheApi() = runBlocking {
