@@ -30,7 +30,6 @@ class JavaScriptArtistAvatarExtension(
     private val installed: InstalledExtension,
     private val isolate: JavaScriptIsolate,
     private val network: ExtensionNetworkClient,
-    private val cache: ExtensionResultCache,
     private val privateCache: ExtensionPrivateCache
 ) : ArtistAvatarExtension, AutoCloseable {
     override val id: String = installed.manifest.id
@@ -45,7 +44,6 @@ class JavaScriptArtistAvatarExtension(
     }
 
     override suspend fun findArtistAvatar(songTitle: String, artistName: String): ArtistAvatar? {
-        cache.get(id, songTitle, artistName)?.let { return it }
         val request = JSONObject().put("songTitle", songTitle).put("artistName", artistName)
         val raw = evaluateExpression(
             "JSON.stringify(await globalThis.flowtoneExtension.findArtistAvatar(${request}))"
@@ -54,7 +52,6 @@ class JavaScriptArtistAvatarExtension(
         return when (result.optString("type")) {
             "found" -> result.optString("imageUrl").trim().takeIf { it.startsWith("https://") }
                 ?.let { imageUrl -> ArtistAvatar(ExtensionImage(extensionId = id, url = imageUrl)) }
-                ?.also { cache.put(id, songTitle, artistName, it) }
             else -> null
         }
     }
@@ -159,7 +156,6 @@ class JavaScriptArtistAvatarExtension(
         if (::port.isInitialized) port.close()
         isolate.close()
         callbackExecutor.shutdownNow()
-        cache.clear(id)
     }
 
     private fun success(id: String, value: Any?): JSONObject =

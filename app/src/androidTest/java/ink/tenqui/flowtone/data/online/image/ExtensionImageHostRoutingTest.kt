@@ -6,6 +6,7 @@ import android.graphics.Color
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import coil3.ImageLoader
+import coil3.disk.DiskCache
 import coil3.request.CachePolicy
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
@@ -16,7 +17,10 @@ import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
+import okio.Path.Companion.toPath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,6 +64,31 @@ class ExtensionImageHostRoutingTest {
         assertEquals(listOf("extension.a", "extension.b"), host.requests.map { it.extensionId })
     }
 
+    @Test
+    fun extensionImage_usesCoilDiskCacheAcrossImageLoaders() = runBlocking {
+        val directory = File(context.cacheDir, "extension-image-disk-test-${UUID.randomUUID()}")
+        val image = ExtensionImage("test.extension", InvalidUrl)
+        val firstHost = RecordingExtensionImageHost(pngBytes())
+        val firstLoader = diskCachingImageLoader(firstHost, directory)
+        try {
+            assertTrue(firstLoader.execute(diskRequest(image)) is SuccessResult)
+            assertEquals(1, firstHost.requests.size)
+        } finally {
+            firstLoader.shutdown()
+        }
+
+        val secondHost = RecordingExtensionImageHost(pngBytes(), deniedExtensions = setOf("test.extension"))
+        val secondLoader = diskCachingImageLoader(secondHost, directory)
+        try {
+            assertTrue(secondLoader.execute(diskRequest(image)) is SuccessResult)
+            assertTrue(secondHost.requests.isEmpty())
+            assertTrue(secondHost.resolvedExtensionIds.isEmpty())
+        } finally {
+            secondLoader.shutdown()
+            directory.deleteRecursively()
+        }
+    }
+
     private fun imageLoader(host: ExtensionImageNetworkHost): ImageLoader =
         ImageLoader.Builder(context)
             .memoryCache(null)
@@ -75,6 +104,28 @@ class ExtensionImageHostRoutingTest {
         .size(16)
         .memoryCachePolicy(CachePolicy.DISABLED)
         .diskCachePolicy(CachePolicy.DISABLED)
+        .build()
+
+    private fun diskCachingImageLoader(host: ExtensionImageNetworkHost, directory: File): ImageLoader =
+        ImageLoader.Builder(context)
+            .memoryCache(null)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(directory.absolutePath.toPath())
+                    .maxSizeBytes(4L * 1024 * 1024)
+                    .build()
+            }
+            .components {
+                add(ExtensionImageKeyer)
+                add(ExtensionImageFetcher.Factory(host))
+            }
+            .build()
+
+    private fun diskRequest(data: ExtensionImage): ImageRequest = ImageRequest.Builder(context)
+        .data(data)
+        .size(16)
+        .memoryCachePolicy(CachePolicy.DISABLED)
+        .diskCachePolicy(CachePolicy.ENABLED)
         .build()
 
     private fun pngBytes(): ByteArray {

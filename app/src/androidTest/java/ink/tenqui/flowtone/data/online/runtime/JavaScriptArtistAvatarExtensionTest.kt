@@ -181,7 +181,6 @@ class JavaScriptArtistAvatarExtensionTest {
             InstalledExtension(manifest, directory, true),
             requireNotNull(host.createIsolate()),
             network,
-            ExtensionResultCache(),
             ExtensionPrivateCache(privateCacheRoot)
         )
     }

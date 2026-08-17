@@ -33,7 +33,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val installer = ExtensionPackageInstaller(appContext.filesDir.resolve("extensions"))
     private val sandboxHost = JavaScriptSandboxHost(appContext)
     private val gateway = ExtensionNetworkGateway()
-    private val cache = ExtensionResultCache()
+    private val avatarResultCache = ExtensionResultCache()
+    private val persistentAvatarCache = ArtistAvatarPersistentCache(appContext.filesDir.resolve("extension-data"))
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val mutex = Mutex()
     private val runtimes = mutableMapOf<String, JavaScriptArtistAvatarExtension>()
@@ -41,7 +42,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val streamClients = ConcurrentHashMap<String, ExtensionStreamClient>()
     private val playbackResources = ExtensionPlaybackResourceStore()
     private var initialized = false
-    val artistAvatarRegistry = ArtistAvatarExtensionRegistry()
+    val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
+        resultCache = avatarResultCache,
+        persistentCache = persistentAvatarCache
+    )
     val extensionImageLoader: ImageLoader by lazy {
         ImageLoader.Builder(appContext)
             .components {
@@ -73,7 +77,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     suspend fun uninstall(extensionId: String): Boolean = mutex.withLock {
-        stop(extensionId, clearPrivateCache = true)
+        stop(extensionId, clearExtensionData = true)
         withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
     }
 
@@ -125,7 +129,6 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             installed = installed,
             isolate = isolate,
             network = networkClient,
-            cache = cache,
             privateCache = privateCache
         )
         runCatching { extension.start() }
@@ -138,14 +141,13 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             .onFailure { extension.close() }
     }
 
-    private fun stop(id: String, clearPrivateCache: Boolean = false) {
-        artistAvatarRegistry.uninstall(id)
+    private fun stop(id: String, clearExtensionData: Boolean = false) {
+        artistAvatarRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
         runtimes.remove(id)?.close()
         networkClients.remove(id)
         streamClients.remove(id)
         playbackResources.clear(id)
-        cache.clear(id)
-        if (clearPrivateCache) privateCache.deleteForUninstall(id)
+        if (clearExtensionData) privateCache.deleteForUninstall(id)
     }
 
     private fun networkClientFor(extensionId: String): ExtensionNetworkClient? = networkClients[extensionId]
