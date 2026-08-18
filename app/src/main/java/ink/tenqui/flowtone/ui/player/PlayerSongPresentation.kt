@@ -26,13 +26,15 @@ internal data class PlayerSongPresentation(
     val title: String,
     val artist: String,
     val imageRequest: ImageRequest?,
-    val artworkPainter: Painter?
+    val artworkPainter: Painter?,
+    val previousArtworkPainter: Painter? = null
 )
 
 internal data class PlayerSongPresentationTransition(
     val previous: PlayerSongPresentation?,
     val current: PlayerSongPresentation,
-    val progress: Float
+    val progress: Float,
+    val artworkCrossfadeProgress: Float
 )
 
 private data class DesiredPlayerSongPresentation(
@@ -70,6 +72,7 @@ internal fun rememberPlayerSongPresentationTransition(
     }
     var previous by remember { mutableStateOf<PlayerSongPresentation?>(null) }
     val switchProgress = remember { Animatable(1f) }
+    val artworkCrossfadeProgress = remember { Animatable(1f) }
 
     LaunchedEffect(desired) {
         val prepared = PlayerSongPresentation(
@@ -118,17 +121,36 @@ internal fun rememberPlayerSongPresentationTransition(
 
         // 封面加载完成后只补齐当前展示项，不重新触发元信息切换。
         if (current.key == desired.key) {
+            if (painter == null && current.artworkPainter != null) {
+                return@LaunchedEffect
+            }
+            val previousArtworkPainter = current.artworkPainter
             current = current.copy(
                 imageRequest = desired.imageRequest,
-                artworkPainter = painter
+                artworkPainter = painter,
+                previousArtworkPainter = previousArtworkPainter
             )
+            if (painter != null && previousArtworkPainter != null && painter != previousArtworkPainter) {
+                artworkCrossfadeProgress.snapTo(0f)
+                artworkCrossfadeProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 260, easing = TrackSwitchProgressEasing)
+                )
+                if (current.key == desired.key && current.artworkPainter == painter) {
+                    current = current.copy(previousArtworkPainter = null)
+                }
+            } else {
+                artworkCrossfadeProgress.snapTo(1f)
+                current = current.copy(previousArtworkPainter = null)
+            }
         }
     }
 
     return PlayerSongPresentationTransition(
         previous = previous,
         current = current,
-        progress = switchProgress.value.coerceIn(0f, 1f)
+        progress = switchProgress.value.coerceIn(0f, 1f),
+        artworkCrossfadeProgress = artworkCrossfadeProgress.value.coerceIn(0f, 1f)
     )
 }
 

@@ -137,6 +137,8 @@ internal fun CrossfadeArtworkImage(
 internal fun MorphArtworkLayer(
     imageRequest: ImageRequest?,
     artworkPainter: Painter?,
+    previousArtworkPainter: Painter? = null,
+    artworkCrossfadeProgress: Float = 1f,
     progress: Float,
     scaleProgress: Float,
     currentHeight: Dp,
@@ -272,6 +274,18 @@ internal fun MorphArtworkLayer(
                     animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
                     label = "MiniPlayerArtworkLoadFade"
                 )
+                previousArtworkPainter?.let { painter ->
+                    Image(
+                        painter = painter,
+                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                alpha = 1f - artworkCrossfadeProgress.coerceIn(0f, 1f)
+                            }
+                    )
+                }
                 artworkPainter?.let { painter ->
                     Image(
                         painter = painter,
@@ -279,7 +293,10 @@ internal fun MorphArtworkLayer(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .matchParentSize()
-                            .graphicsLayer { alpha = artworkFadeProgress }
+                            .graphicsLayer {
+                                alpha = artworkFadeProgress *
+                                    artworkCrossfadeProgress.coerceIn(0f, 1f)
+                            }
                     )
                 }
                 if (collapsedArtworkDimAlpha > 0.01f) {

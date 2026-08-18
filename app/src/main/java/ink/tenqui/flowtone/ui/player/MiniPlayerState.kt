@@ -48,6 +48,7 @@ internal class MiniPlayerState internal constructor(
     val artworkImageLoader: ImageLoader,
     val backgroundImageRequest: ImageRequest?,
     val coverImageRequest: ImageRequest?,
+    val largeCoverImageRequest: ImageRequest?,
     val paletteImageRequest: ImageRequest?,
     val fallbackSeedColors: List<Int>,
     val fallbackCloudColors: List<Color>,
@@ -85,6 +86,7 @@ internal fun rememberMiniPlayerState(
     title: String,
     artist: String,
     artworkData: Any?,
+    largeArtworkData: Any?,
     artworkImageLoader: ImageLoader,
     fallbackSeedColor: Int,
     isDarkTheme: Boolean,
@@ -105,6 +107,15 @@ internal fun rememberMiniPlayerState(
             ImageRequest.Builder(context)
                 .data(data)
                 .size(768, 768)
+                .crossfade(false)
+                .build()
+        }
+    }
+    val largeCoverImageRequest: ImageRequest? = remember(largeArtworkData, context) {
+        largeArtworkData?.let { data ->
+            ImageRequest.Builder(context)
+                .data(data)
+                .size(1_536, 1_536)
                 .crossfade(false)
                 .build()
         }
@@ -214,6 +225,7 @@ internal fun rememberMiniPlayerState(
         artworkImageLoader = artworkImageLoader,
         backgroundImageRequest = backgroundImageRequest,
         coverImageRequest = coverImageRequest,
+        largeCoverImageRequest = largeCoverImageRequest,
         paletteImageRequest = paletteImageRequest,
         fallbackSeedColors = fallbackSeedColors,
         fallbackCloudColors = fallbackCloudColors,

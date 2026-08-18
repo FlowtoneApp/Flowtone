@@ -476,7 +476,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             playbackController.playResolvedMediaItem(
                 song = displaySong,
                 mediaItem = mediaItem,
-                extensionArtwork = song.artwork
+                extensionArtwork = song.artwork,
+                extensionLargeArtwork = song.largeArtwork
             )
         }
     }

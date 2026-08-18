@@ -134,14 +134,16 @@ fun MiniPlayer(
     }
     val artworkUri = playerUiState.artworkUri
     val extensionArtwork = playerUiState.extensionArtwork
+    val extensionLargeArtwork = playerUiState.extensionLargeArtwork
     val artworkData = extensionArtwork ?: artworkUri
+    val largeArtworkData = extensionLargeArtwork ?: extensionArtwork ?: artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
     val durationMs = playerUiState.durationMs
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
-    val artworkImageLoader = remember(extensionArtwork, context) {
-        if (extensionArtwork != null) {
+    val artworkImageLoader = remember(extensionArtwork, extensionLargeArtwork, context) {
+        if (extensionArtwork != null || extensionLargeArtwork != null) {
             ExtensionManager.get(context).extensionImageLoader
         } else {
             context.imageLoader
@@ -175,6 +177,7 @@ fun MiniPlayer(
         title = title,
         artist = artist,
         artworkData = artworkData,
+        largeArtworkData = largeArtworkData,
         artworkImageLoader = artworkImageLoader,
         fallbackSeedColor = fallbackSeedColor,
         isDarkTheme = isDarkTheme,
@@ -871,7 +874,11 @@ fun MiniPlayer(
                         lyricsBlurredArtworkProgress = lyricsBlurredArtworkProgress
                     )
                     MiniPlayerFullscreenLayout(
-                        imageRequest = state.coverImageRequest,
+                        imageRequest = if (fullscreen) {
+                            state.largeCoverImageRequest
+                        } else {
+                            state.coverImageRequest
+                        },
                         artworkImageLoader = state.artworkImageLoader,
                         playerUiState = playerUiState,
                         songLyricsState = songLyricsState,

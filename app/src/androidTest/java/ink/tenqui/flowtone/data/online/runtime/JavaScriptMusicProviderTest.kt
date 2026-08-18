@@ -41,7 +41,7 @@ class JavaScriptMusicProviderTest {
 
     @Test fun searchBindsHostIdentityAndArtworkInsteadOfJsProviderFields() = runBlocking {
         val provider = provider("""
-            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'track-1', providerId:'forged', extensionId:'other.extension', title:'Title', artist:'Artist', durationMs:1234, artworkUrl:'https://images.example/cover.jpg'}]; }, async getPlaybackResource(){ return {}; } };
+            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'track-1', providerId:'forged', extensionId:'other.extension', title:'Title', artist:'Artist', durationMs:1234, artworkUrl:'https://images.example/cover.jpg', largeArtworkUrl:'https://images.example/cover-large.jpg'}]; }, async getPlaybackResource(){ return {}; } };
         """.trimIndent())
         val songs = provider.searchSongs("hello")
         assertEquals(1, songs.size)
@@ -49,6 +49,18 @@ class JavaScriptMusicProviderTest {
         assertEquals("track-1", songs.single().trackRef.opaqueId)
         assertEquals("example.music", songs.single().artwork?.extensionId)
         assertEquals("https://images.example/cover.jpg", songs.single().artwork?.url)
+        assertEquals("example.music", songs.single().largeArtwork?.extensionId)
+        assertEquals("https://images.example/cover-large.jpg", songs.single().largeArtwork?.url)
+    }
+
+    @Test fun missingLargeArtworkFallsBackToRegularArtwork() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'track-1', title:'Title', artist:'Artist', artworkUrl:'https://images.example/cover.jpg'}]; }, async getPlaybackResource(){ return {}; } };
+        """.trimIndent())
+
+        val song = provider.searchSongs("hello").single()
+        assertNull(song.largeArtwork)
+        assertEquals(song.artwork, song.nowPlayingArtwork)
     }
 
     @Test fun playbackMapsHlsAndProgressiveWithoutUrlSuffixInference() = runBlocking {

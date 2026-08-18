@@ -196,6 +196,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 MorphArtworkLayer(
                     imageRequest = presentation.imageRequest,
                     artworkPainter = presentation.artworkPainter,
+                    previousArtworkPainter = presentation.previousArtworkPainter,
+                    artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
                     progress = artworkAnimationProgress,
                     scaleProgress = artworkScaleProgress,
                     currentHeight = designCurrentHeight,
@@ -327,6 +329,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                         MorphArtworkLayer(
                             imageRequest = presentation.imageRequest,
                             artworkPainter = presentation.artworkPainter,
+                            previousArtworkPainter = presentation.previousArtworkPainter,
+                            artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
                             progress = 1f,
                             scaleProgress = 1f,
                             currentHeight = designCurrentHeight,

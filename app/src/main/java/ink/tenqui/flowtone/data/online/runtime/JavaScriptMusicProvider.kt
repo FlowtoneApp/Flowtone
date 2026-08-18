@@ -62,6 +62,16 @@ class JavaScriptMusicProvider internal constructor(
         val duration = item.optLong("durationMs", -1L).takeIf { it >= 0L }
         val artwork = item.optString("artworkUrl").trim().takeIf { it.startsWith("https://") }
             ?.let { ExtensionImage(runtime.extensionId, it) }
-        return ProviderSong(ExtensionTrackRef(runtime.extensionId, opaqueId), title, artist, duration, artwork)
+        val largeArtwork = item.optString("largeArtworkUrl").trim()
+            .takeIf { it.startsWith("https://") }
+            ?.let { ExtensionImage(runtime.extensionId, it) }
+        return ProviderSong(
+            trackRef = ExtensionTrackRef(runtime.extensionId, opaqueId),
+            title = title,
+            artist = artist,
+            durationMs = duration,
+            artwork = artwork,
+            largeArtwork = largeArtwork
+        )
     }
 }

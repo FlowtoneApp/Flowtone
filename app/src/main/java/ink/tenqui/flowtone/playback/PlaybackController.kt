@@ -177,23 +177,25 @@ class PlaybackController(
     fun playResolvedMediaItem(
         song: Song,
         mediaItem: MediaItem,
-        extensionArtwork: ExtensionImage? = null
+        extensionArtwork: ExtensionImage? = null,
+        extensionLargeArtwork: ExtensionImage? = null
     ) {
         val controller = currentControllerOrNull()
         if (controller == null) {
             pendingPlaybackRequest = PendingPlaybackRequest.ResolvedMediaItem(
                 song = song,
                 mediaItem = mediaItem,
-                extensionArtwork = extensionArtwork
+                extensionArtwork = extensionArtwork,
+                extensionLargeArtwork = extensionLargeArtwork
             )
-            updateCurrentSong(song, extensionArtwork)
+            updateCurrentSong(song, extensionArtwork, extensionLargeArtwork)
             return
         }
         runCatching {
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
-            updatePlaybackStarted(song, extensionArtwork)
+            updatePlaybackStarted(song, extensionArtwork, extensionLargeArtwork)
         }.onFailure { error -> updatePlaybackFailed(song, error) }
     }
 
@@ -226,11 +228,16 @@ class PlaybackController(
         }.getOrDefault(false)
     }
 
-    fun updateCurrentSong(song: Song, extensionArtwork: ExtensionImage? = null) {
+    fun updateCurrentSong(
+        song: Song,
+        extensionArtwork: ExtensionImage? = null,
+        extensionLargeArtwork: ExtensionImage? = null
+    ) {
         _playbackState.update {
             it.copy(
                 currentSong = song,
                 extensionArtwork = extensionArtwork,
+                extensionLargeArtwork = extensionLargeArtwork,
                 positionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L)
             )
@@ -515,7 +522,8 @@ class PlaybackController(
                 playResolvedMediaItem(
                     song = request.song,
                     mediaItem = request.mediaItem,
-                    extensionArtwork = request.extensionArtwork
+                    extensionArtwork = request.extensionArtwork,
+                    extensionLargeArtwork = request.extensionLargeArtwork
                 )
             }
 
@@ -525,12 +533,14 @@ class PlaybackController(
 
     private fun updatePlaybackStarted(
         song: Song,
-        extensionArtwork: ExtensionImage? = null
+        extensionArtwork: ExtensionImage? = null,
+        extensionLargeArtwork: ExtensionImage? = null
     ) {
         _playbackState.update {
             it.copy(
                 currentSong = song,
                 extensionArtwork = extensionArtwork,
+                extensionLargeArtwork = extensionLargeArtwork,
                 isPlaying = true,
                 positionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
@@ -638,7 +648,8 @@ class PlaybackController(
         data class ResolvedMediaItem(
             val song: Song,
             val mediaItem: MediaItem,
-            val extensionArtwork: ExtensionImage?
+            val extensionArtwork: ExtensionImage?,
+            val extensionLargeArtwork: ExtensionImage?
         ) : PendingPlaybackRequest
     }
 }

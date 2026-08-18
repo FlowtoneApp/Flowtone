@@ -7,6 +7,7 @@ data class PlaybackState(
     val currentSong: Song? = null,
     /** 在线歌曲的封面必须保留为受 Host 约束的图片模型，不能退化为裸 URL。 */
     val extensionArtwork: ExtensionImage? = null,
+    val extensionLargeArtwork: ExtensionImage? = null,
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
