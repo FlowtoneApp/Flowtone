@@ -1,18 +1,25 @@
 package ink.tenqui.flowtone.data.online.playback
 
 import android.content.Context
+import android.net.Uri
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.data.online.network.ExtensionCoreLogger
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpTransport
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkGateway
+import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamTransport
@@ -109,6 +116,130 @@ class ExtensionMediaDataSourceHostRoutingTest {
         localFile.delete()
     }
 
+    @Test
+    fun hlsResource_usesHlsSourceFromRegisteredType_notOpaqueUriSuffix() {
+        val transport = RecordingStreamTransport("#EXTM3U".encodeToByteArray())
+        val host = RecordingHost(transport, allowedHosts = listOf("media.invalid"))
+        val store = ExtensionPlaybackResourceStore()
+        val opaqueUri = store.register(
+            ExtensionPlaybackResource(
+                extensionId = "test.extension",
+                // 故意没有 .m3u8 后缀，类型只能来自已登记的 session 元数据。
+                url = "https://media.invalid/live",
+                type = ExtensionPlaybackResourceType.Hls
+            )
+        )
+        val extensionFactory = ExtensionMediaDataSource.Factory(store, host)
+        val factory = ExtensionMediaSourceFactory(
+            resources = store,
+            extensionDataSourceFactory = extensionFactory,
+            fallbackFactory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, extensionFactory))
+        )
+
+        val source = factory.createMediaSource(
+            MediaItem.Builder()
+                .setUri(opaqueUri)
+                .setMimeType(MimeTypes.APPLICATION_M3U8)
+                .build()
+        )
+
+        assertTrue(source is HlsMediaSource)
+    }
+
+    @Test
+    fun hlsRootPlaylistAndChildResources_keepBoundExtensionAndHostHeaders() {
+        val transport = RecordingStreamTransport("#EXTM3U\nsegment.ts".encodeToByteArray())
+        val host = RecordingHost(
+            transport,
+            allowedHosts = listOf("media.invalid", "cdn.invalid", "keys.invalid")
+        )
+        val store = ExtensionPlaybackResourceStore()
+        val resource = ExtensionPlaybackResource(
+            extensionId = "test.extension",
+            url = "https://media.invalid/live",
+            headers = mapOf(
+                "Authorization" to "Bearer session-token",
+                "Host" to "must-be-filtered",
+                "Range" to "bytes=0-999"
+            ),
+            type = ExtensionPlaybackResourceType.Hls
+        )
+        val rootUri = store.register(resource)
+        val factory = ExtensionMediaDataSource.Factory(store, host).forResource(resource)
+
+        factory.createDataSource().useOpened(DataSpec(rootUri)) { readAll(it) }
+        factory.createDataSource().useOpened(DataSpec(Uri.parse("https://cdn.invalid/segment.ts"))) { readAll(it) }
+        factory.createDataSource().useOpened(DataSpec(Uri.parse("https://keys.invalid/key.bin"))) { readAll(it) }
+
+        assertEquals(listOf("test.extension", "test.extension", "test.extension"), host.extensionIds)
+        assertEquals(
+            listOf(
+                "https://media.invalid/live",
+                "https://cdn.invalid/segment.ts",
+                "https://keys.invalid/key.bin"
+            ),
+            transport.requests.map { it.url }
+        )
+        transport.requests.forEach { request ->
+            assertEquals("Bearer session-token", request.headers["Authorization"])
+            assertTrue(request.headers.keys.none { it.equals("Host", ignoreCase = true) })
+            assertTrue(request.headers.keys.none { it.equals("Range", ignoreCase = true) })
+        }
+        assertEquals(0, host.limiter.snapshot().active)
+        assertEquals(0, host.limiter.snapshot().inFlight)
+    }
+
+    @Test
+    fun hlsChildOnUnapprovedHost_isRejectedBySameGateway() {
+        val transport = RecordingStreamTransport("#EXTM3U".encodeToByteArray())
+        val host = RecordingHost(transport, allowedHosts = listOf("media.invalid"))
+        val store = ExtensionPlaybackResourceStore()
+        val resource = ExtensionPlaybackResource(
+            extensionId = "test.extension",
+            url = "https://media.invalid/live",
+            type = ExtensionPlaybackResourceType.Hls
+        )
+        val dataSource = ExtensionMediaDataSource.Factory(store, host)
+            .forResource(resource)
+            .createDataSource()
+
+        val failure = runCatching {
+            dataSource.useOpened(DataSpec(Uri.parse("https://evil.invalid/segment.ts"))) { readAll(it) }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IOException)
+        assertEquals(listOf("test.extension"), host.extensionIds)
+        assertTrue(transport.requests.isEmpty())
+    }
+
+    @Test
+    fun hlsChildRedirectToUnapprovedHost_isRejectedBySameGateway() {
+        val transport = RecordingStreamTransport(
+            audio = "segment".encodeToByteArray(),
+            redirectTo = "https://evil.invalid/segment.ts"
+        )
+        val host = RecordingHost(transport, allowedHosts = listOf("media.invalid", "cdn.invalid"))
+        val store = ExtensionPlaybackResourceStore()
+        val resource = ExtensionPlaybackResource(
+            extensionId = "test.extension",
+            url = "https://media.invalid/live",
+            type = ExtensionPlaybackResourceType.Hls
+        )
+        val dataSource = ExtensionMediaDataSource.Factory(store, host)
+            .forResource(resource)
+            .createDataSource()
+
+        val failure = runCatching {
+            dataSource.useOpened(DataSpec(Uri.parse("https://cdn.invalid/segment.ts"))) { readAll(it) }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IOException)
+        assertEquals(listOf("test.extension"), host.extensionIds)
+        assertTrue(transport.requests.isEmpty())
+        assertEquals(0, host.limiter.snapshot().active)
+        assertEquals(0, host.limiter.snapshot().inFlight)
+    }
+
     private fun extensionDataSource(
         store: ExtensionPlaybackResourceStore,
         host: ExtensionStreamNetworkHost
@@ -142,19 +273,22 @@ class ExtensionMediaDataSourceHostRoutingTest {
         allowedHosts: List<String>
     ) : ExtensionStreamNetworkHost {
         val extensionIds = mutableListOf<String>()
+        val limiter = GlobalExtensionNetworkLimiter(maxActiveRequests = 1, maxInFlightRequests = 2)
         private val client = ExtensionNetworkGateway(
             transport = ExtensionHttpTransport { _, _ ->
                 ExtensionHttpResponse(500, emptyMap(), ByteArray(0))
             },
             streamTransport = transport,
-            logger = ExtensionCoreLogger { _, _ -> }
+            logger = ExtensionCoreLogger { _, _ -> },
+            limiter = limiter
         ).createStreamClientFor("test.extension", "media_stream", allowedHosts)
 
         override fun clientFor(extensionId: String) = client.also { extensionIds += extensionId }
     }
 
     private class RecordingStreamTransport(
-        private val audio: ByteArray
+        private val audio: ByteArray,
+        private val redirectTo: String? = null
     ) : ExtensionStreamTransport {
         val requests = mutableListOf<ExtensionStreamRequest>()
 
@@ -163,6 +297,7 @@ class ExtensionMediaDataSourceHostRoutingTest {
             authorizeUrl: (String) -> Unit
         ): ExtensionStreamResponse {
             authorizeUrl(request.url)
+            redirectTo?.let(authorizeUrl)
             requests += request
             val start = request.position.toInt()
             val endExclusive = if (request.length == C.LENGTH_UNSET.toLong()) {

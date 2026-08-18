@@ -12,8 +12,6 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
@@ -170,11 +168,7 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
         val extensionManager = ExtensionManager.get(applicationContext)
-        val dataSourceFactory = DefaultDataSource.Factory(
-            applicationContext,
-            extensionManager.extensionMediaDataSourceFactory()
-        )
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        val mediaSourceFactory = extensionManager.extensionMediaSourceFactory(applicationContext)
         val servicePlayer = ExoPlayer.Builder(applicationContext)
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)

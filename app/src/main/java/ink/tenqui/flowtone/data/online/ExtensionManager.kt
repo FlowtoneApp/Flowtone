@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkGateway
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamClient
@@ -17,7 +22,9 @@ import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaDataSource
+import ink.tenqui.flowtone.data.online.playback.ExtensionMediaSourceFactory
 import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackResourceStore
 import ink.tenqui.flowtone.data.online.playback.ExtensionStreamNetworkHost
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +94,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         url: String,
         headers: Map<String, String> = emptyMap(),
         mimeType: String? = null,
+        type: ExtensionPlaybackResourceType = ExtensionPlaybackResourceType.Progressive,
         mediaId: String = url
     ): MediaItem {
         require(streamClients.containsKey(extensionId)) { "扩展未运行：$extensionId" }
@@ -95,13 +103,20 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 extensionId = extensionId,
                 url = url,
                 headers = headers,
-                mimeType = mimeType
+                mimeType = mimeType,
+                type = type
             )
         )
         return MediaItem.Builder()
             .setMediaId(mediaId)
             .setUri(resourceUri)
-            .setMimeType(mimeType)
+            .setMimeType(
+                mimeType ?: if (type == ExtensionPlaybackResourceType.Hls) {
+                    MimeTypes.APPLICATION_M3U8
+                } else {
+                    null
+                }
+            )
             .build()
     }
 
@@ -109,6 +124,17 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         return ExtensionMediaDataSource.Factory(
             resources = playbackResources,
             host = ExtensionStreamNetworkHost(::streamClientFor)
+        )
+    }
+
+    @UnstableApi
+    fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
+        val extensionDataSourceFactory = extensionMediaDataSourceFactory()
+        val fallbackDataSourceFactory = DefaultDataSource.Factory(context, extensionDataSourceFactory)
+        return ExtensionMediaSourceFactory(
+            resources = playbackResources,
+            extensionDataSourceFactory = extensionDataSourceFactory,
+            fallbackFactory = DefaultMediaSourceFactory(fallbackDataSourceFactory)
         )
     }
 
