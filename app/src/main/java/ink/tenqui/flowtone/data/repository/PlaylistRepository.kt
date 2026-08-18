@@ -51,7 +51,8 @@ class PlaylistRepository(
                             ?: playlistAppearanceColorKeyForStableId(card.id),
                         order = index,
                         createdAt = now,
-                        updatedAt = now
+                        updatedAt = now,
+                        customArtworkUri = card.customArtworkUri?.toString()
                     )
                 } else {
                     existing.copy(
@@ -60,6 +61,8 @@ class PlaylistRepository(
                         appearanceColorKey = card.appearanceColorKey
                             ?: existing.appearanceColorKey,
                         order = index,
+                        customArtworkUri = card.customArtworkUri?.toString()
+                            ?: existing.customArtworkUri,
                         updatedAt = if (
                             existing.title != card.title ||
                             existing.subtitle != card.subtitle ||
@@ -381,6 +384,43 @@ class PlaylistRepository(
             previousEntries = currentEntries,
             nextPlaylists = nextPlaylists,
             nextEntries = nextEntries,
+            successValue = Unit
+        )
+    }
+
+    /**
+     * 为本地创建的歌单保留自定义封面入口；Provider 可以在映射歌单时提供同一字段。
+     */
+    suspend fun updatePlaylistCustomArtworkUri(
+        id: String,
+        artworkUri: String?
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        val currentPlaylist = currentPlaylists.firstOrNull { playlist -> playlist.id == id }
+            ?: return@withLock PlaylistMutationResult.Failure(
+                PlaylistMutationError.NotFound
+            )
+        val normalizedArtworkUri = artworkUri?.trim()?.ifBlank { null }
+        if (currentPlaylist.customArtworkUri == normalizedArtworkUri) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val now = System.currentTimeMillis()
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id == id) {
+                playlist.copy(
+                    customArtworkUri = normalizedArtworkUri,
+                    updatedAt = now
+                )
+            } else {
+                playlist
+            }
+        }
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = _playlistSongEntries.value,
+            nextPlaylists = nextPlaylists,
+            nextEntries = _playlistSongEntries.value,
             successValue = Unit
         )
     }

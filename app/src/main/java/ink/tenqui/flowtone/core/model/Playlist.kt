@@ -62,7 +62,11 @@ data class Playlist(
         playlistAppearanceColorKeyForStableId(id),
     val order: Int,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    /**
+     * 用户或 Provider 明确指定的歌单封面。为空时，界面使用歌单第一首歌曲的封面。
+     */
+    val customArtworkUri: String? = null
 )
 
 data class PlaylistSongEntry(

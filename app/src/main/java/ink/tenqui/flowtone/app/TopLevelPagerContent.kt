@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
@@ -34,6 +35,7 @@ internal fun TopLevelPagerContent(
     uiState: MusicUiState,
     homeScrollState: ScrollState,
     libraryPlaylistController: LibraryPlaylistController,
+    playlistSongEntries: List<PlaylistSongEntry>,
     permissionDenied: Boolean,
     showSwipeHint: Boolean,
     secondaryOpen: Boolean,
@@ -73,6 +75,7 @@ internal fun TopLevelPagerContent(
                         playlists = libraryPlaylistController.playlists,
                         likedSongCount = likedSongCount
                     ),
+                    playlistSongEntries = playlistSongEntries,
                     onSongClick = onSongClick,
                     onOpenPlaylist = onOpenPlaylist,
                     visible = !secondaryOpen,

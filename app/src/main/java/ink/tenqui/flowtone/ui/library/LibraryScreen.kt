@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.library
 
+import android.net.Uri
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
@@ -291,7 +292,8 @@ internal class LibraryPlaylistController internal constructor(
                     title = playlist.title,
                     subtitle = "$songCount \u9996\u6b4c\u66f2",
                     order = playlist.order,
-                    appearanceColorKey = playlist.appearanceColorKey
+                    appearanceColorKey = playlist.appearanceColorKey,
+                    customArtworkUri = playlist.customArtworkUri?.let(Uri::parse)
                 )
             }
         val activePlaylistIds = playlists.mapTo(mutableSetOf()) { playlist -> playlist.id }

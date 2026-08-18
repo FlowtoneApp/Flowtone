@@ -45,7 +45,10 @@ class PlaylistStorage(context: Context) {
                             ) ?: playlistAppearanceColorKeyForStableId(id),
                             order = item.optInt(ORDER_KEY, index),
                             createdAt = createdAt,
-                            updatedAt = item.optLong(UPDATED_AT_KEY, createdAt)
+                            updatedAt = item.optLong(UPDATED_AT_KEY, createdAt),
+                            customArtworkUri = item.optString(CUSTOM_ARTWORK_URI_KEY)
+                                .trim()
+                                .ifBlank { null }
                         )
                     )
                 }
@@ -72,6 +75,7 @@ class PlaylistStorage(context: Context) {
                         .put(ORDER_KEY, playlist.order)
                         .put(CREATED_AT_KEY, playlist.createdAt)
                         .put(UPDATED_AT_KEY, playlist.updatedAt)
+                        .put(CUSTOM_ARTWORK_URI_KEY, playlist.customArtworkUri)
                 )
             }
 
@@ -157,6 +161,7 @@ class PlaylistStorage(context: Context) {
         const val ORDER_KEY = "order"
         const val CREATED_AT_KEY = "createdAt"
         const val UPDATED_AT_KEY = "updatedAt"
+        const val CUSTOM_ARTWORK_URI_KEY = "customArtworkUri"
         const val DEFAULT_SUBTITLE = "0 首歌曲"
         const val ENTRY_ID_KEY = "id"
         const val ENTRY_PLAYLIST_ID_KEY = "playlistId"
@@ -180,6 +185,7 @@ private fun List<Playlist>.toPlaylistJsonArray(): JSONArray {
                     .put("order", playlist.order)
                     .put("createdAt", playlist.createdAt)
                     .put("updatedAt", playlist.updatedAt)
+                    .put("customArtworkUri", playlist.customArtworkUri)
             )
         }
     return jsonArray

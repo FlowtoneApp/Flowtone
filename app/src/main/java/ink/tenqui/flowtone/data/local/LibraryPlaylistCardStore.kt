@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.local
 
 import android.content.Context
+import android.net.Uri
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
@@ -44,7 +45,11 @@ class LibraryPlaylistCardStore(context: Context) {
                             ).toFloat(),
                             appearanceColorKey = PlaylistAppearanceColorKey.fromStorageValue(
                                 item.optString(APPEARANCE_COLOR_KEY)
-                            ) ?: playlistAppearanceColorKeyForStableId(id)
+                            ) ?: playlistAppearanceColorKeyForStableId(id),
+                            customArtworkUri = item.optString(CUSTOM_ARTWORK_URI_KEY)
+                                .trim()
+                                .ifBlank { null }
+                                ?.let(Uri::parse)
                         )
                     )
                 }
@@ -88,6 +93,7 @@ class LibraryPlaylistCardStore(context: Context) {
                             ?: playlistAppearanceColorKeyForStableId(card.id).name
                     )
                     .put(ORDER_KEY, card.order)
+                    .put(CUSTOM_ARTWORK_URI_KEY, card.customArtworkUri?.toString())
             )
         }
 
@@ -123,6 +129,7 @@ class LibraryPlaylistCardStore(context: Context) {
         const val HEIGHT_DP_KEY = "heightDp"
         const val APPEARANCE_COLOR_KEY = "appearanceColorKey"
         const val ORDER_KEY = "order"
+        const val CUSTOM_ARTWORK_URI_KEY = "customArtworkUri"
         const val DEFAULT_SUBTITLE = "0 \u9996\u6b4c\u66f2"
         const val DEFAULT_WIDTH_DP = 320f
         const val DEFAULT_HEIGHT_DP = 236f

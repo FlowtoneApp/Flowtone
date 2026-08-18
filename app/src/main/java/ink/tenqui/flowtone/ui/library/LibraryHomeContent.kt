@@ -90,7 +90,7 @@ internal fun LibraryHomeContent(
                 animationIndex = 4,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
                     LibraryProviderHeader(modifier = Modifier.fillMaxWidth())
                     LibraryCollectionMenu(
                         songCount = songCount,

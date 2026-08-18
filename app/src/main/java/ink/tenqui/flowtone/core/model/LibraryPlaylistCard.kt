@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.core.model
 
+import android.net.Uri
+
 data class LibraryPlaylistCard(
     val id: String,
     val title: String,
@@ -12,7 +14,9 @@ data class LibraryPlaylistCard(
         null
     } else {
         playlistAppearanceColorKeyForStableId(id)
-    }
+    },
+    /** Provider 或用户指定的封面；为空时由展示层回退到第一首歌曲的封面。 */
+    val customArtworkUri: Uri? = null
 )
 
 const val LikedSongsPlaylistId = "system_liked_songs"

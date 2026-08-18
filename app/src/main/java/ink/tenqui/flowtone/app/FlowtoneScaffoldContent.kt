@@ -203,6 +203,7 @@ internal fun FlowtoneScaffoldContent(
                     uiState = state.uiState,
                     homeScrollState = homeScrollState,
                     libraryPlaylistController = libraryPlaylistController,
+                    playlistSongEntries = playlistSongEntries,
                     permissionDenied = state.permissionDenied,
                     showSwipeHint = state.showSwipeHint,
                     secondaryOpen = state.secondaryOpen || !mainTabsVisible,

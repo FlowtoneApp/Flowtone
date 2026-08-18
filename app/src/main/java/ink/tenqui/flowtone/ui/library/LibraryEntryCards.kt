@@ -15,16 +15,10 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -35,15 +29,12 @@ import androidx.compose.ui.unit.dp
 internal fun LibraryProviderHeader(
     modifier: Modifier = Modifier
 ) {
-    var menuExpanded by rememberSaveable { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { menuExpanded = true }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -81,24 +72,11 @@ internal fun LibraryProviderHeader(
                 contentDescription = "切换音乐来源",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-        DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text("本地音乐") },
-                leadingIcon = {
-                    Icon(Icons.Rounded.Storage, contentDescription = null)
-                },
-                onClick = { menuExpanded = false }
-            )
-        }
     }
 }
 
 @Composable
-internal fun LibraryHomeEntryCards(
+internal fun LibraryContentEntry(
     songCount: Int,
     onOpenLocalLibrary: () -> Unit,
     modifier: Modifier = Modifier
@@ -107,12 +85,12 @@ internal fun LibraryHomeEntryCards(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onOpenLocalLibrary)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(56.dp)
                 .background(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.82f),
                     shape = MaterialTheme.shapes.medium

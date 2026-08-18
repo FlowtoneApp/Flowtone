@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.screens
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -44,27 +46,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
+import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.listening.ListeningSourceStats
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.playback.PlaybackSourceType
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
-import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
+import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
+import ink.tenqui.flowtone.ui.components.FlowtoneContentSectionTitle
+import ink.tenqui.flowtone.ui.components.FlowtoneSongArtworkCard
 import ink.tenqui.flowtone.ui.components.StaggeredPageElement
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
@@ -82,6 +93,7 @@ internal fun HomeScreen(
     songs: List<Song> = emptyList(),
     listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot(),
     playlists: List<LibraryPlaylistCard> = emptyList(),
+    playlistSongEntries: List<PlaylistSongEntry> = emptyList(),
     onSongClick: (Song) -> Unit = {},
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit = {},
     visible: Boolean = true,
@@ -108,6 +120,7 @@ internal fun HomeScreen(
             songs = songs,
             listeningStats = listeningStats,
             playlists = playlists,
+            playlistSongEntries = playlistSongEntries,
             onSongClick = onSongClick,
             onOpenPlaylist = onOpenPlaylist,
             visible = visible,
@@ -492,6 +505,7 @@ private fun HomeContent(
     songs: List<Song>,
     listeningStats: ListeningStatsSnapshot,
     playlists: List<LibraryPlaylistCard>,
+    playlistSongEntries: List<PlaylistSongEntry>,
     onSongClick: (Song) -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     visible: Boolean,
@@ -501,15 +515,7 @@ private fun HomeContent(
     modifier: Modifier = Modifier
 ) {
     val recommendedSongs = remember(songs) { songs.shuffled().take(HomeRecommendationCount) }
-    val frequentPlaylists = remember(listeningStats.totalSources, playlists) {
-        buildFrequentPlaylistCards(
-            sources = listeningStats.totalSources,
-            playlists = playlists
-        )
-    }
     val recommendationScrollState = rememberScrollState()
-    val frequentPlaylistScrollState = rememberScrollState()
-    val recentlyAddedScrollState = rememberScrollState()
     val recentlyAddedSongs = remember(songs) {
         songs.sortedWith(
             compareByDescending<Song> { song -> song.dateAddedSeconds }
@@ -520,7 +526,7 @@ private fun HomeContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(scrollState)
+            .verticalScroll(scrollState, enabled = false)
             .padding(bottom = 32.dp)
     ) {
         StaggeredPageElement(
@@ -529,7 +535,7 @@ private fun HomeContent(
         ) {
             FlowtonePageHeaderPlaceholder()
         }
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(modifier = Modifier.height(HomeHeaderToContentSpacing))
         StaggeredPageElement(
             visible = visible,
             animationIndex = 4
@@ -538,31 +544,19 @@ private fun HomeContent(
                 title = "随便听听",
                 songs = recommendedSongs,
                 scrollState = recommendationScrollState,
+                pagerState = pagerState,
+                pagerFlingBehavior = pagerFlingBehavior,
                 onSongClick = onSongClick
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(HomeSectionSpacing))
         StaggeredPageElement(
             visible = visible,
             animationIndex = 8
         ) {
-            FrequentPlaylistSection(
-                playlists = frequentPlaylists,
-                scrollState = frequentPlaylistScrollState,
-                flowCloudSpeed = flowCloudSpeed,
-                isFlowCloudPlaying = isFlowCloudPlaying,
-                onOpenPlaylist = onOpenPlaylist
-            )
-        }
-        Spacer(modifier = Modifier.height(28.dp))
-        StaggeredPageElement(
-            visible = visible,
-            animationIndex = 12
-        ) {
             RecentlyAddedSection(
                 title = "最近新增",
                 songs = recentlyAddedSongs,
-                scrollState = recentlyAddedScrollState,
                 onSongClick = onSongClick
             )
         }
@@ -574,153 +568,70 @@ private fun HomeRecommendationSection(
     title: String,
     songs: List<Song>,
     scrollState: ScrollState,
+    pagerState: PagerState,
+    pagerFlingBehavior: FlingBehavior,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        FlowtoneContentSectionTitle(
+            title = title,
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        start = HomeHorizontalListStartPadding,
-                        top = 12.dp,
-                        end = HomeHorizontalListEndPadding
-                    )
+                    .padding(top = HomeSectionTitleToContentSpacing)
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
+                    .drawWithContent {
+                        drawContent()
+                        val fadeWidth = HomeRecommendationEdgeFadeWidth.toPx()
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.White,
+                                    Color.Transparent
+                                ),
+                                startX = size.width - fadeWidth,
+                                endX = size.width
+                            ),
+                            topLeft = Offset(size.width - fadeWidth, 0f),
+                            size = Size(fadeWidth, size.height),
+                            blendMode = BlendMode.DstIn
+                        )
+                    }
             ) {
-                val cardWidth = (maxWidth - HomeHorizontalListSpacing * 2) / 3
-                Row(horizontalArrangement = Arrangement.spacedBy(HomeHorizontalListSpacing)) {
-                    songs.forEach { song ->
-                        RecommendationSongCard(
+                val cardWidth = (
+                    maxWidth - HomeHorizontalListStartPadding -
+                        HomeHorizontalListSpacing * 2 - HomeRecommendationNextCardPeek
+                ) / 3
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .controlledHorizontalListGesture(
+                            scrollState = scrollState,
+                            pagerState = pagerState,
+                            pagerFlingBehavior = pagerFlingBehavior
+                        )
+                        .horizontalScroll(scrollState, enabled = false)
+                ) {
+                    Spacer(modifier = Modifier.width(HomeHorizontalListStartPadding))
+                    songs.forEachIndexed { index, song ->
+                        if (index > 0) {
+                            Spacer(modifier = Modifier.width(HomeHorizontalListSpacing))
+                        }
+                        FlowtoneSongArtworkCard(
                             song = song,
                             onClick = { onSongClick(song) },
                             modifier = Modifier.width(cardWidth)
                         )
                     }
+                    Spacer(modifier = Modifier.width(HomeHorizontalListEndPadding))
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun FrequentPlaylistSection(
-    playlists: List<FrequentPlaylistCard>,
-    scrollState: ScrollState,
-    flowCloudSpeed: Float,
-    isFlowCloudPlaying: Boolean,
-    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "常听歌单",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
-        )
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = HomeHorizontalListStartPadding,
-                    top = 12.dp,
-                    end = HomeHorizontalListEndPadding
-                )
-        ) {
-            val cardWidth = (maxWidth - HomeFrequentPlaylistCardSpacing * 2) / 3
-            Row(horizontalArrangement = Arrangement.spacedBy(HomeFrequentPlaylistCardSpacing)) {
-                if (playlists.isEmpty()) {
-                    FrequentPlaylistPlaceholderCard(modifier = Modifier.width(cardWidth))
-                } else {
-                    playlists.forEach { playlist ->
-                        FrequentPlaylistCardItem(
-                            playlist = playlist,
-                            flowCloudSpeed = flowCloudSpeed,
-                            isFlowCloudPlaying = isFlowCloudPlaying,
-                            onClick = { onOpenPlaylist(playlist.card) },
-                            modifier = Modifier.width(cardWidth)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FrequentPlaylistPlaceholderCard(
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(HomeFrequentPlaylistCardHeight)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "暂无数据",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun FrequentPlaylistCardItem(
-    playlist: FrequentPlaylistCard,
-    flowCloudSpeed: Float,
-    isFlowCloudPlaying: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    PlaylistCardSurface(
-        visualType = playlistCardVisualTypeFor(playlist.card),
-        appearanceColorKey = playlist.card.appearanceColorKey,
-        shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(12.dp),
-        clickModifier = Modifier.clickable(onClick = onClick),
-        flowCloudSpeed = flowCloudSpeed,
-        isFlowCloudPlaying = isFlowCloudPlaying,
-        modifier = modifier
-            .height(HomeFrequentPlaylistCardHeight)
-    ) { contentColors ->
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = playlist.card.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = contentColors.titleColor,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = playlist.subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = contentColors.subtitleColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 6.dp)
-            )
         }
     }
 }
@@ -729,43 +640,27 @@ private fun FrequentPlaylistCardItem(
 private fun RecentlyAddedSection(
     title: String,
     songs: List<Song>,
-    scrollState: ScrollState,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        FlowtoneContentSectionTitle(
+            title = title,
             modifier = Modifier.padding(start = HomeHorizontalListStartPadding)
         )
         if (songs.isNotEmpty()) {
-            BoxWithConstraints(
+            Column(
+                verticalArrangement = Arrangement.spacedBy(HomeSongListItemSpacing),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
                         start = HomeHorizontalListStartPadding,
-                        top = 12.dp,
+                        top = HomeSectionTitleToContentSpacing,
                         end = HomeHorizontalListEndPadding
                     )
             ) {
-                val columnWidth = (maxWidth - HomeHorizontalListSpacing) / 2
-                Row(horizontalArrangement = Arrangement.spacedBy(HomeHorizontalListSpacing)) {
-                    songs.chunked(HomeRecentlyAddedRows).forEach { columnSongs ->
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.width(columnWidth)
-                        ) {
-                            columnSongs.forEach { song ->
-                                RecentlyAddedSongItem(song = song, onClick = { onSongClick(song) })
-                            }
-                            if (columnSongs.size == 1) Spacer(modifier = Modifier.height(72.dp))
-                        }
-                    }
+                songs.forEach { song ->
+                    RecentlyAddedSongItem(song = song, onClick = { onSongClick(song) })
                 }
             }
         }
@@ -787,7 +682,7 @@ private fun RecentlyAddedSongItem(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RecommendationArtwork(
+        FlowtoneArtwork(
             song = song,
             modifier = Modifier.size(56.dp)
         )
@@ -816,134 +711,14 @@ private fun RecentlyAddedSongItem(
     }
 }
 
-@Composable
-private fun RecommendationSongCard(
-    song: Song,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(bottom = 4.dp)
-    ) {
-        RecommendationArtwork(song = song)
-        Text(
-            text = song.title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Text(
-            text = song.artist,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-    }
-}
-
-@Composable
-private fun RecommendationArtwork(
-    song: Song,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val imageRequest: ImageRequest? = remember(song.artworkUri, context) {
-        song.artworkUri?.let { artworkUri ->
-            ImageRequest.Builder(context)
-                .data(artworkUri)
-                .size(264, 264)
-                .build()
-        }
-    }
-    val isSystemDark = isSystemInDarkTheme()
-    val placeholderColor = if (isSystemDark) {
-        Color.Black
-    } else {
-        Color.White
-    }
-    val iconColor = if (isSystemDark) {
-        Color.White.copy(alpha = 0.78f)
-    } else {
-        Color.Black.copy(alpha = 0.72f)
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(placeholderColor),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.MusicNote,
-            contentDescription = null,
-            tint = iconColor
-        )
-        imageRequest?.let { request ->
-            AsyncImage(
-                model = request,
-                contentDescription = "专辑封面",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize()
-            )
-        }
-    }
-}
-
-private const val HomeRecommendationCount = 3
-private const val HomeRecentlyAddedCount = 4
-private const val HomeRecentlyAddedRows = 2
+private const val HomeRecommendationCount = 8
+private const val HomeRecentlyAddedCount = 3
 private val HomeHorizontalListStartPadding = 20.dp
 private val HomeHorizontalListEndPadding = 20.dp
 private val HomeHorizontalListSpacing = 12.dp
-private val HomeFrequentPlaylistCardHeight = 92.dp
-private val HomeFrequentPlaylistCardSpacing = 12.dp
-
-private data class FrequentPlaylistCard(
-    val card: LibraryPlaylistCard,
-    val subtitle: String
-)
-
-private fun buildFrequentPlaylistCards(
-    sources: List<ListeningSourceStats>,
-    playlists: List<LibraryPlaylistCard>
-): List<FrequentPlaylistCard> {
-    val playlistsById = playlists.associateBy { playlist -> playlist.id }
-    val listenedPlaylists = sources
-        .asSequence()
-        .filter { source ->
-            source.sourceType == PlaybackSourceType.UserPlaylist ||
-                source.sourceType == PlaybackSourceType.LikedSongs
-        }
-        .mapNotNull { source ->
-            val sourceId = source.sourceId ?: return@mapNotNull null
-            val playlist = playlistsById[sourceId] ?: return@mapNotNull null
-            FrequentPlaylistCard(
-                card = playlist,
-                subtitle = playlist.subtitle
-            )
-        }
-        .distinctBy { playlist -> playlist.card.id }
-        .toList()
-    val likedSongsPlaylist = playlistsById[LikedSongsPlaylistId]?.let { playlist ->
-        FrequentPlaylistCard(
-            card = playlist,
-            subtitle = playlist.subtitle
-        )
-    }
-
-    return (listenedPlaylists + listOfNotNull(likedSongsPlaylist))
-        .distinctBy { playlist -> playlist.card.id }
-        .take(HomeFrequentPlaylistCount)
-}
-
-private const val HomeFrequentPlaylistCount = 3
+private val HomeRecommendationNextCardPeek = 20.dp
+private val HomeRecommendationEdgeFadeWidth = 64.dp
+private val HomeSectionTitleToContentSpacing = 12.dp
+private val HomeSectionSpacing = 24.dp
+private val HomeHeaderToContentSpacing = 20.dp
+private val HomeSongListItemSpacing = 4.dp

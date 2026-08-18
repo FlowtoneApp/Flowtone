@@ -99,9 +99,9 @@ internal fun LibraryCollectionMenu(
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LibraryHomeEntryCards(
+        LibraryContentEntry(
             songCount = songCount,
             onOpenLocalLibrary = onOpenLocalLibrary,
             modifier = Modifier.fillMaxWidth()
