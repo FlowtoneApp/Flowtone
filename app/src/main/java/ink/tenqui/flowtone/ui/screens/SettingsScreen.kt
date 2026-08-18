@@ -323,9 +323,7 @@ internal fun SettingsScreen(
                 state.showingOnlineSettings -> OnlineSettingsPage(
                     installedExtensions = installedExtensions,
                     onInstall = {
-                        extensionPackageLauncher.launch(
-                            arrayOf("application/zip", "application/octet-stream", "*/*")
-                        )
+                        extensionPackageLauncher.launch(arrayOf(FlowtoneExtensionMimeType))
                     },
                     onUninstall = { id ->
                         extensionScope.launch {
@@ -356,7 +354,10 @@ internal fun SettingsScreen(
         }
     }
 }
+
 }
+
+private const val FlowtoneExtensionMimeType = "application/x-flowtone"
 
 private data class SettingsPageState(
     val section: SettingsSection?,
