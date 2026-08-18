@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -65,6 +67,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
     onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
 ) {
+    val context = LocalContext.current
     var playlistAppearanceMutationVersion by remember { mutableIntStateOf(0) }
     var playlistAppearanceMutationJob by remember { mutableStateOf<Job?>(null) }
     val density = LocalDensity.current
@@ -213,6 +216,14 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         },
         onAddSongToPlaylist = addSongToPlaylist@{ playlist, onAdded ->
             val currentSong = state.playerUiState.currentSong ?: return@addSongToPlaylist
+            val currentTrack = state.playerUiState.currentTrack ?: run {
+                Toast.makeText(
+                    context,
+                    "当前在线来源不支持持久收藏",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@addSongToPlaylist
+            }
             if (playlist.isLikedSongsPlaylist()) {
                 callbacks.onSetSongLiked(currentSong, true)
                 onAdded()
@@ -220,9 +231,9 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             }
             coroutineScope.launch {
                 playlistRepository.syncLibraryPlaylistCards(libraryPlaylistController.playlists)
-                val result = playlistRepository.addSongToPlaylist(
+                val result = playlistRepository.addTrackToPlaylist(
                     playlistId = playlist.id,
-                    song = currentSong
+                    track = currentTrack
                 )
                 if (result is PlaylistMutationResult.Success) {
                     libraryPlaylistController.applySongCounts(
@@ -320,6 +331,21 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
                 val result = playlistRepository.createPlaylist(title)
                 if (result is PlaylistMutationResult.Success) {
+                    if (
+                        libraryPlaylistController.playlistDialogVisualStyle ==
+                            PlaylistDialogVisualStyle.AddToPlaylist
+                    ) {
+                        val track = state.playerUiState.currentTrack
+                        if (track == null) {
+                            Toast.makeText(
+                                context,
+                                "当前在线来源不支持持久收藏",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            playlistRepository.addTrackToPlaylist(result.value.id, track)
+                        }
+                    }
                     onRefreshLibraryPlaylistsFromRepository(result.value.id)
                     libraryPlaylistController.closeEditing()
                 } else {

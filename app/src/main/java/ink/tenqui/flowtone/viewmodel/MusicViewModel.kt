@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ink.tenqui.flowtone.data.local.AudioScanner
+import ink.tenqui.flowtone.data.local.LikedSongsStore
 import ink.tenqui.flowtone.lyrics.LocalLyricsRepository
 import ink.tenqui.flowtone.lyrics.LyricsLoadResult
 import ink.tenqui.flowtone.lyrics.LyricsLoadSource
@@ -26,6 +27,9 @@ import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.SearchQuery
 import ink.tenqui.flowtone.data.search.SearchRepository
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.core.model.toPersistentTrack
+import ink.tenqui.flowtone.core.model.toPresentationSong
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
@@ -59,7 +63,10 @@ data class MusicUiState(
     val currentQueueIndex: Int = -1,
     val errorMessage: String? = null,
     val hasScanned: Boolean = false,
-    val listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot()
+    val listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot(),
+    val likedTracks: List<PersistentTrack> = emptyList(),
+    val trackPlaybackErrorMessage: String? = null,
+    val trackPlaybackErrorEventId: Long = 0L
 )
 
 private fun ProviderSong.toOnlineDisplaySong(): Song {
@@ -87,6 +94,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)
+    private val likedSongsStore = LikedSongsStore(application)
     private val localLyricsRepository = LocalLyricsRepository(application)
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
     private val searchRepository = SearchRepository()
@@ -98,18 +106,27 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         onMediaItemChanged = ::syncCurrentSongFromMediaId
     )
     private val songMetadataPreloader = SongMetadataPreloader(application)
+    private val initialLikedTracks = likedSongsStore.loadLikedTracks(emptyList())
     private val _uiState = MutableStateFlow(
-        MusicUiState(listeningStats = listeningStatsRepository.getStats())
+        MusicUiState(
+            listeningStats = listeningStatsRepository.getStats(),
+            likedTracks = initialLikedTracks
+        )
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
+    private val _likedTracks = MutableStateFlow(initialLikedTracks)
     private val _songLyricsState = MutableStateFlow(SongLyricsState())
     // 歌词只使用 MediaController 确认的位置，不读取进度条的动画或拖动状态。
     private val _confirmedPlaybackPosition = MutableStateFlow(PlaybackPositionSnapshot())
     private val _lyricsFolders = MutableStateFlow(localLyricsRepository.getLyricsFolders())
     private val lyricsReloadVersion = MutableStateFlow(0)
-    private var sourceQueue: List<Song> = emptyList()
-    private var playbackQueue: List<Song> = emptyList()
+private var sourceQueue: List<Song> = emptyList()
+private var playbackQueue: List<Song> = emptyList()
+private var sourceTrackQueue: List<QueueTrackEntry> = emptyList()
+private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
+    /** 当前队列内在线展示项对应的 runtime 引用；只保存身份，不保存媒体资源。 */
+    private var onlineQueueSongs: Map<String, ProviderSong> = emptyMap()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
     private var preloadLyricsCount: Int = 5
@@ -126,6 +143,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
     val playbackState: StateFlow<PlaybackState> = playbackController.playbackState
     val lyricsState: StateFlow<LyricsState> = _lyricsState.asStateFlow()
+    val likedTracks: StateFlow<List<PersistentTrack>> = _likedTracks.asStateFlow()
     val songLyricsState: StateFlow<SongLyricsState> = _songLyricsState.asStateFlow()
     val confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot> =
         _confirmedPlaybackPosition.asStateFlow()
@@ -242,6 +260,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         currentSong: Song?
     ) {
         playbackQueue = buildPlaybackQueueForMode(sourceQueue, mode, currentSong)
+        playbackTrackQueue = playbackQueue.mapNotNull { queuedSong ->
+            sourceTrackQueue.firstOrNull { isSameSong(it.presentation, queuedSong) }
+        }
         currentQueueIndex = findSongIndex(playbackQueue, currentSong)
     }
 
@@ -341,6 +362,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 result.fold(
                     onSuccess = { songs ->
                         sourceQueue = songs
+                        sourceTrackQueue = songs.map { song ->
+                            QueueTrackEntry(song.toPersistentTrack(), song)
+                        }
                         rebuildPlaybackQueueForMode(
                             mode = playbackState.value.playbackOrderMode,
                             currentSong = playbackState.value.currentSong
@@ -366,6 +390,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (result.isSuccess) {
+                loadedSongs?.let { songs ->
+                    _likedTracks.value = likedSongsStore.loadLikedTracks(songs)
+                    likedSongsStore.saveLikedTracks(_likedTracks.value)
+                    _uiState.update { it.copy(likedTracks = _likedTracks.value) }
+                }
                 loadedSongs?.let(::refreshSearchIndex)
                 reconcileCurrentSongWithLibrary()
                 restoreFromControllerIfPossible()
@@ -412,6 +441,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         ) {
             playbackController.clearPlayback()
             sourceQueue = emptyList()
+            sourceTrackQueue = emptyList()
             playbackQueue = emptyList()
             currentQueueIndex = -1
             currentPlaybackSource = PlaybackSource.Unknown
@@ -428,12 +458,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         val songIndex = queue.indexOfFirst { it.id == song.id || it.uri == song.uri }
         if (songIndex == -1) {
             sourceQueue = listOf(song)
+            sourceTrackQueue = listOf(QueueTrackEntry(song.toPersistentTrack(), song))
             playbackQueue = listOf(song)
             playSongAt(index = 0, source = source)
             return
         }
 
         sourceQueue = queue
+        sourceTrackQueue = queue.map { QueueTrackEntry(it.toPersistentTrack(), it) }
         rebuildPlaybackQueueForMode(
             mode = playbackState.value.playbackOrderMode,
             currentSong = song
@@ -453,6 +485,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         val startSong = songs[startIndex]
         sourceQueue = songs
+        sourceTrackQueue = songs.map { QueueTrackEntry(it.toPersistentTrack(), it) }
         rebuildPlaybackQueueForMode(
             mode = playbackState.value.playbackOrderMode,
             currentSong = startSong
@@ -462,22 +495,55 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playProviderSong(song: ProviderSong) {
+        val snapshot = _searchUiState.value.onlineSongResults.toList()
+        val queue = snapshot.takeIf { results -> results.any { it.trackRef == song.trackRef } }
+            ?: listOf(song)
+        playProviderSongQueue(queue, song)
+    }
+
+    private fun playProviderSongQueue(queue: List<ProviderSong>, selected: ProviderSong) {
+        val displayQueue = queue.map(ProviderSong::toOnlineDisplaySong)
+        val selectedDisplaySong = selected.toOnlineDisplaySong()
+        sourceQueue = displayQueue
+        sourceTrackQueue = queue.zip(displayQueue) { providerSong, presentation ->
+            QueueTrackEntry(providerSong.toPersistentTrack(), presentation, providerSong)
+        }
+        onlineQueueSongs = queue.associateBy { providerSong ->
+            providerSong.toOnlineDisplaySong().uri.toString()
+        }
+        rebuildPlaybackQueueForMode(
+            mode = playbackState.value.playbackOrderMode,
+            currentSong = selectedDisplaySong
+        )
+        val selectedIndex = findSongIndex(playbackQueue, selectedDisplaySong)
+        if (selectedIndex == -1) return
+        playSongAt(index = selectedIndex, source = PlaybackSource.Search)
+    }
+
+    private fun playOnlineSongAt(
+        selectedSong: Song,
+        index: Int,
+        source: PlaybackSource
+    ) {
         viewModelScope.launch {
-            val mediaItem = extensionManager.createPlaybackMediaItem(song) ?: run {
-                _uiState.update { it.copy(errorMessage = "无法解析在线播放资源") }
+            val providerSong = playbackTrackQueue.getOrNull(index)?.runtimeProviderSong
+                ?: onlineQueueSongs[selectedSong.uri.toString()] ?: run {
+                publishTrackPlaybackError("在线歌曲引用已失效")
                 return@launch
             }
-            val displaySong = song.toOnlineDisplaySong()
-            sourceQueue = listOf(displaySong)
-            playbackQueue = listOf(displaySong)
-            currentQueueIndex = 0
-            currentPlaybackSource = PlaybackSource.Search
+            val mediaItem = extensionManager.createPlaybackMediaItem(providerSong) ?: run {
+                publishTrackPlaybackError("无法解析在线播放资源")
+                return@launch
+            }
+            currentQueueIndex = index
+            currentPlaybackSource = source
             publishPlaybackQueue()
             playbackController.playResolvedMediaItem(
-                song = displaySong,
+                song = selectedSong,
                 mediaItem = mediaItem,
-                extensionArtwork = song.artwork,
-                extensionLargeArtwork = song.largeArtwork
+                extensionArtwork = providerSong.artwork,
+                extensionLargeArtwork = providerSong.largeArtwork,
+                persistentTrack = providerSong.toPersistentTrack()
             )
         }
     }
@@ -533,7 +599,32 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val selectedSong = playbackQueue[index]
-        val playerQueue = sourceQueue.ifEmpty { playbackQueue }
+        val queueEntry = playbackTrackQueue.getOrNull(index)
+        when (queueEntry?.playbackKind) {
+            QueueTrackPlaybackKind.RuntimeProvider -> {
+                playOnlineSongAt(selectedSong, index, source)
+                return
+            }
+            QueueTrackPlaybackKind.PersistentOnline -> {
+                playPersistentOnlineTrack(
+                    queueEntry.persistentTrack as PersistentTrack.Online,
+                    selectedSong,
+                    index,
+                    source
+                )
+                return
+            }
+            QueueTrackPlaybackKind.Local, null -> Unit
+        }
+        val containsOnlineTrack = playbackTrackQueue.any {
+            it.playbackKind != QueueTrackPlaybackKind.Local
+        }
+        val playerQueue = mediaControllerQueueForSelection(
+            containsOnlineTrack = containsOnlineTrack,
+            selectedSong = selectedSong,
+            sourceQueue = sourceQueue,
+            playbackQueue = playbackQueue
+        )
         val playerStartIndex = findSongIndex(playerQueue, selectedSong)
         if (playerStartIndex == -1) {
             return
@@ -542,14 +633,23 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         currentQueueIndex = index
         currentPlaybackSource = source
         playbackController.playQueue(playerQueue, playerStartIndex, source)
-        playbackController.setPlaybackOrderMode(
-            mode = playbackState.value.playbackOrderMode,
-            shuffleOrderIndices = if (playbackState.value.playbackOrderMode == PlaybackOrderMode.Shuffle) {
-                buildPlaybackOrderIndices(playbackQueue, playerQueue)
-            } else {
-                null
-            }
-        )
+        if (!containsOnlineTrack) {
+            playbackController.setPlaybackOrderMode(
+                mode = playbackState.value.playbackOrderMode,
+                shuffleOrderIndices = if (
+                    playbackState.value.playbackOrderMode == PlaybackOrderMode.Shuffle
+                ) {
+                    buildPlaybackOrderIndices(playbackQueue, playerQueue)
+                } else {
+                    null
+                }
+            )
+        } else {
+            playbackController.setPlaybackOrderMode(
+                mode = playbackState.value.playbackOrderMode,
+                shuffleOrderIndices = null
+            )
+        }
         publishPlaybackQueue()
         scheduleNextSongsPreload()
     }
@@ -564,8 +664,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun syncCurrentSongFromMediaId(mediaId: String) {
-        val songId = mediaId.toLongOrNull() ?: return
-        val songIndex = playbackQueue.indexOfFirst { it.id == songId }
+        val songIndex = playbackQueue.indexOfFirst { song ->
+            song.id.toString() == mediaId || song.uri.toString() == mediaId
+        }
         if (songIndex == -1) {
             return
         }
@@ -801,6 +902,106 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playbackController.togglePlayPause()
     }
 
+    fun setTrackLiked(track: PersistentTrack, liked: Boolean) {
+        val next = if (liked) {
+            (_likedTracks.value + track).distinctBy(PersistentTrack::identityKey)
+        } else {
+            _likedTracks.value.filterNot { it.identityKey == track.identityKey }
+        }
+        if (next != _likedTracks.value) {
+            _likedTracks.value = next
+            _uiState.update { it.copy(likedTracks = next) }
+            likedSongsStore.saveLikedTracks(next)
+        }
+    }
+
+    fun playPersistentTrackQueue(
+        tracks: List<PersistentTrack>,
+        startIndex: Int,
+        source: PlaybackSource = PlaybackSource.Unknown
+    ) {
+        if (startIndex !in tracks.indices) return
+        val entries = tracks.mapNotNull(::queueEntryForPersistentTrack)
+        val selectedIdentity = tracks[startIndex].identityKey
+        val selectedEntry = entries.firstOrNull {
+            it.persistentTrack?.identityKey == selectedIdentity
+        } ?: run {
+            publishTrackPlaybackError("该本地歌曲已不可用")
+            return
+        }
+        sourceTrackQueue = entries.toList()
+        sourceQueue = entries.map(QueueTrackEntry::presentation)
+        rebuildPlaybackQueueForMode(
+            playbackState.value.playbackOrderMode,
+            selectedEntry.presentation
+        )
+        val index = playbackTrackQueue.indexOfFirst {
+            it.persistentTrack?.identityKey == selectedIdentity
+        }
+        playSongAt(index, source)
+    }
+
+    fun playPersistentTrack(track: PersistentTrack) = playPersistentTrackQueue(listOf(track), 0)
+
+    private fun queueEntryForPersistentTrack(track: PersistentTrack): QueueTrackEntry? = when (track) {
+        is PersistentTrack.Local -> _uiState.value.songs
+            .firstOrNull { it.id.toString() == track.songId }
+            ?.let { QueueTrackEntry(track, it) }
+        is PersistentTrack.Online -> QueueTrackEntry(
+            track,
+            requireNotNull(track.toPresentationSong(emptyList()))
+        )
+    }
+
+    private fun playPersistentOnlineTrack(
+        track: PersistentTrack.Online,
+        presentation: Song,
+        index: Int,
+        source: PlaybackSource
+    ) {
+        viewModelScope.launch {
+            when (val result = extensionManager.resolvePersistentPlaylistSong(track)) {
+                is ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved -> {
+                    val mediaItem = extensionManager.createPlaybackMediaItem(result.song)
+                    if (mediaItem == null) {
+                        publishTrackPlaybackError("无法解析在线播放资源")
+                        return@launch
+                    }
+                    currentQueueIndex = index
+                    currentPlaybackSource = source
+                    publishPlaybackQueue()
+                    playbackController.playResolvedMediaItem(
+                        song = presentation,
+                        mediaItem = mediaItem,
+                        extensionArtwork = result.song.artwork,
+                        extensionLargeArtwork = result.song.largeArtwork,
+                        persistentTrack = track
+                    )
+                }
+                is ink.tenqui.flowtone.data.online.PersistentSongResolution.ProviderMissing ->
+                    publishTrackPlaybackError("当前没有可处理 ${track.sourceHost} 的扩展")
+                is ink.tenqui.flowtone.data.online.PersistentSongResolution.Unresolved ->
+                    publishTrackPlaybackError("该在线歌曲暂时无法恢复")
+            }
+        }
+    }
+
+    private fun publishTrackPlaybackError(message: String) {
+        _uiState.update { state ->
+            state.copy(
+                trackPlaybackErrorMessage = message,
+                trackPlaybackErrorEventId = state.trackPlaybackErrorEventId + 1L
+            )
+        }
+    }
+
+    fun toggleCurrentTrackLiked(): Boolean {
+        val track = playbackState.value.currentTrack ?: return false
+        val liked = _likedTracks.value.any { it.identityKey == track.identityKey }
+        setTrackLiked(track, !liked)
+        return true
+    }
+
     fun togglePlaybackOrderMode() {
         val currentMode = playbackState.value.playbackOrderMode
         val nextMode = when (currentMode) {
@@ -982,4 +1183,45 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playbackController.release()
         super.onCleared()
     }
+}
+
+internal data class QueueTrackEntry(
+    val persistentTrack: PersistentTrack?,
+    val presentation: Song,
+    val runtimeProviderSong: ProviderSong? = null
+)
+
+internal enum class QueueTrackPlaybackKind {
+    Local,
+    RuntimeProvider,
+    PersistentOnline
+}
+
+internal val QueueTrackEntry.playbackKind: QueueTrackPlaybackKind
+    get() = when {
+        runtimeProviderSong != null -> QueueTrackPlaybackKind.RuntimeProvider
+        persistentTrack is PersistentTrack.Online -> QueueTrackPlaybackKind.PersistentOnline
+        else -> QueueTrackPlaybackKind.Local
+    }
+
+internal fun mediaControllerQueueForSelection(
+    containsOnlineTrack: Boolean,
+    selectedSong: Song,
+    sourceQueue: List<Song>,
+    playbackQueue: List<Song>
+): List<Song> = if (containsOnlineTrack) {
+    listOf(selectedSong)
+} else {
+    sourceQueue.ifEmpty { playbackQueue }
+}
+
+private fun ProviderSong.toPersistentTrack(): PersistentTrack.Online? {
+    val identity = persistentTrackRef ?: return null
+    return PersistentTrack.Online(
+        sourceHost = identity.sourceHost,
+        persistentId = identity.persistentId,
+        cachedTitle = title,
+        cachedArtist = artist,
+        cachedDurationMs = durationMs
+    )
 }

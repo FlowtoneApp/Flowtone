@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -90,6 +91,7 @@ internal fun SecondaryPageHost(
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
+    onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -300,12 +302,18 @@ internal fun SecondaryPageHost(
                     LikedSongsPlaylistScreen(
                         playlistTitle = playlistTitle,
                         allSongs = uiState.songs,
-                        likedSongKeys = likedSongKeys,
+                        likedTracks = uiState.likedTracks,
                         currentSong = currentSong,
                         songSort = playlistSongSort,
-                        onSongClick = { songs, index ->
-                            onPlaylistSongClick(songs, index, PlaybackSource.LikedSongs)
+                        onSongClick = { tracks, index ->
+                            onPersistentTrackQueueClick(
+                                tracks,
+                                index,
+                                PlaybackSource.LikedSongs
+                            )
                         },
+                        playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                        playbackErrorEventId = uiState.trackPlaybackErrorEventId,
                         batchActions = activeBatchActions,
                         itemModifier = ::songItemModifier,
                         onCollapseProgressStateChange =
@@ -324,9 +332,9 @@ internal fun SecondaryPageHost(
                         playlistSongEntries = playlistSongEntries,
                         currentSong = currentSong,
                         songSort = playlistSongSort,
-                        onSongClick = { songs, index ->
-                            onPlaylistSongClick(
-                                songs,
+                        onSongClick = { tracks, index ->
+                            onPersistentTrackQueueClick(
+                                tracks,
                                 index,
                                 PlaybackSource.userPlaylist(
                                     playlistId = activePlaylistId.orEmpty(),
@@ -334,6 +342,8 @@ internal fun SecondaryPageHost(
                                 )
                             )
                         },
+                        playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                        playbackErrorEventId = uiState.trackPlaybackErrorEventId,
                         batchActions = activeBatchActions,
                         itemModifier = ::songItemModifier,
                         onCollapseProgressStateChange =

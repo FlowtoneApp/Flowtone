@@ -4,6 +4,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.isSongLiked
 
@@ -24,17 +25,17 @@ internal fun flowtoneDisplayedLibraryPlaylists(
 internal fun flowtonePlaylistIdsContainingCurrentSong(
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
+    currentTrack: PersistentTrack?,
     likedSongKeys: List<String>
 ): Set<String> {
-    val currentSongId = currentSong?.id?.toString()
-    if (currentSong == null || currentSongId == null) {
+    if (currentSong == null || currentTrack == null) {
         return emptySet()
     }
 
     val normalPlaylistIds = playlistSongEntries
-        .filter { entry -> entry.songId == currentSongId }
+        .filter { entry -> entry.track.identityKey == currentTrack.identityKey }
         .mapTo(mutableSetOf()) { entry -> entry.playlistId }
-    return if (isSongLiked(currentSong, likedSongKeys)) {
+    return if (currentTrack.identityKey in likedSongKeys) {
         normalPlaylistIds + LikedSongsPlaylistId
     } else {
         normalPlaylistIds

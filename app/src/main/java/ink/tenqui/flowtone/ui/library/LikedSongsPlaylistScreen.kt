@@ -18,7 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.data.local.isSongLiked
+import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.core.model.toPresentationSong
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
@@ -28,10 +29,12 @@ import ink.tenqui.flowtone.ui.components.SongListItem
 internal fun LikedSongsPlaylistScreen(
     playlistTitle: String,
     allSongs: List<Song>,
-    likedSongKeys: List<String>,
+    likedTracks: List<PersistentTrack>,
     currentSong: Song?,
     songSort: PlaylistSongSort = PlaylistSongSort(),
-    onSongClick: (List<Song>, Int) -> Unit,
+    onSongClick: (List<PersistentTrack>, Int) -> Unit,
+    playbackErrorMessage: String? = null,
+    playbackErrorEventId: Long = 0L,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     itemModifier: (Int) -> Modifier = { Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
@@ -40,8 +43,10 @@ internal fun LikedSongsPlaylistScreen(
     modifier: Modifier = Modifier
 ) {
     val listState = remember(LikedSongsPlaylistId) { LazyListState() }
-    val likedSongs = remember(allSongs, likedSongKeys) {
-        allSongs.filter { song -> isSongLiked(song, likedSongKeys) }
+    val likedSongs = remember(allSongs, likedTracks) {
+        likedTracks.mapNotNull { track ->
+            track.toPresentationSong(allSongs)?.let { song -> track to song }
+        }
     }
 
     if (likedSongs.isEmpty()) {
@@ -83,10 +88,11 @@ internal fun LikedSongsPlaylistScreen(
             sourceKey = LikedSongsPlaylistId,
             source = PlaylistSelectionSource.LikedSongs,
             playlistTitle = playlistTitle,
-            entries = likedSongs.map { song ->
+            entries = likedSongs.map { (track, song) ->
                 SelectablePlaylistSong(
-                    selectionKey = "liked:${song.id}:${song.uri}",
-                    song = song
+                    selectionKey = "liked:${track.identityKey}",
+                    song = song,
+                    track = track
                 )
             }.sortedForPlaylist(songSort),
             listState = listState,
@@ -97,6 +103,8 @@ internal fun LikedSongsPlaylistScreen(
             onSelectionModeChange = batchActions.onSelectionModeChange,
             onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
             onSongClick = onSongClick,
+            externalErrorMessage = playbackErrorMessage,
+            externalErrorEventId = playbackErrorEventId,
             onAddSongsNext = batchActions.onAddSongsNext,
             onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
             onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,

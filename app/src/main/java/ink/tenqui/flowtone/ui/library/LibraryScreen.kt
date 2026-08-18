@@ -33,6 +33,7 @@ import ink.tenqui.flowtone.core.model.Playlist
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.toPresentationSong
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
@@ -563,7 +564,17 @@ internal fun LocalLibraryScreen(
                 clearSelectionRequest = batchActions.clearSelectionRequest,
                 onSelectionModeChange = batchActions.onSelectionModeChange,
                 onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
-                onSongClick = { songs, index -> onSongClick(songs[index]) },
+                onSongClick = { tracks, index ->
+                    val localTrack = tracks[index] as? ink.tenqui.flowtone.core.model.PersistentTrack.Local
+                    val song = localTrack?.let { track ->
+                        uiState.songs.firstOrNull { candidate ->
+                            candidate.id.toString() == track.songId
+                        }
+                    }
+                    if (song != null) {
+                        onSongClick(song)
+                    }
+                },
                 onAddSongsNext = batchActions.onAddSongsNext,
                 onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
                 onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
@@ -586,7 +597,9 @@ internal fun PlaylistDetailScreen(
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
     songSort: PlaylistSongSort = PlaylistSongSort(),
-    onSongClick: (List<Song>, Int) -> Unit,
+    onSongClick: (List<ink.tenqui.flowtone.core.model.PersistentTrack>, Int) -> Unit,
+    playbackErrorMessage: String? = null,
+    playbackErrorEventId: Long = 0L,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     itemModifier: (Int) -> Modifier = { Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
@@ -600,15 +613,15 @@ internal fun PlaylistDetailScreen(
         if (playlistId == null) {
             emptyList()
         } else {
-            val songsById = allSongs.associateBy { song -> song.id.toString() }
             playlistSongEntries
                 .filter { entry -> entry.playlistId == playlistId }
                 .sortedBy { entry -> entry.addedAt }
                 .mapNotNull { entry ->
-                    songsById[entry.songId]?.let { song ->
+                    entry.track.toPresentationSong(allSongs)?.let { song ->
                         SelectablePlaylistSong(
                             selectionKey = entry.id,
                             song = song,
+                            track = entry.track,
                             playlistEntryId = entry.id,
                             playlistAddedAtSeconds = entry.addedAt
                         )
@@ -658,6 +671,8 @@ internal fun PlaylistDetailScreen(
             onSelectionModeChange = batchActions.onSelectionModeChange,
             onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
             onSongClick = onSongClick,
+            externalErrorMessage = playbackErrorMessage,
+            externalErrorEventId = playbackErrorEventId,
             onAddSongsNext = batchActions.onAddSongsNext,
             onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
             onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,

@@ -70,6 +70,8 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
@@ -119,6 +121,7 @@ private sealed interface SecondaryScrollCommand {
 internal data class SelectablePlaylistSong(
     val selectionKey: String,
     val song: Song,
+    val track: PersistentTrack = song.toPersistentTrack(),
     val playlistEntryId: String? = null,
     val playlistAddedAtSeconds: Long? = null
 )
@@ -133,9 +136,9 @@ internal data class PlaylistBatchActions(
     val onAddSongsNext: (List<Song>) -> Boolean = { false },
     val onAppendSongsToQueue: (List<Song>) -> Boolean = { false },
     val onAddSongsToPlaylists:
-        (Set<String>, List<Song>, (Boolean, Int) -> Unit) -> Unit =
+        (Set<String>, List<PersistentTrack>, (Boolean, Int) -> Unit) -> Unit =
         { _, _, done -> done(false, 0) },
-    val onSetSongsLiked: (List<Song>, Boolean) -> Unit = { _, _ -> },
+    val onSetSongsLiked: (List<PersistentTrack>, Boolean) -> Unit = { _, _ -> },
     val onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     val onRemoveEntries:
         (String, Set<String>, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) }
@@ -154,11 +157,14 @@ internal fun SelectablePlaylistSongList(
     clearSelectionRequest: Int,
     onSelectionModeChange: (Boolean) -> Unit,
     onSelectionTopBarStateChange: (PlaylistSelectionTopBarState?) -> Unit,
-    onSongClick: (List<Song>, Int) -> Unit,
+    onSongClick: (List<PersistentTrack>, Int) -> Unit,
+    externalErrorMessage: String? = null,
+    externalErrorEventId: Long = 0L,
     onAddSongsNext: (List<Song>) -> Boolean,
     onAppendSongsToQueue: (List<Song>) -> Boolean,
-    onAddSongsToPlaylists: (Set<String>, List<Song>, (Boolean, Int) -> Unit) -> Unit,
-    onSetSongsLiked: (List<Song>, Boolean) -> Unit,
+    onAddSongsToPlaylists:
+        (Set<String>, List<PersistentTrack>, (Boolean, Int) -> Unit) -> Unit,
+    onSetSongsLiked: (List<PersistentTrack>, Boolean) -> Unit,
     onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit,
     onRemoveEntries: (Set<String>, (Boolean) -> Unit) -> Unit,
     reorderAnimationKey: Any? = null,
@@ -178,6 +184,10 @@ internal fun SelectablePlaylistSongList(
     var secondaryScrollOwnsGesture by remember(sourceKey) { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(externalErrorEventId) {
+        externalErrorMessage?.let { snackbarHostState.showSnackbar(it) }
+    }
     val hapticFeedback = LocalHapticFeedback.current
     val density = LocalDensity.current
     val flingBehavior = ScrollableDefaults.flingBehavior()
@@ -211,6 +221,7 @@ internal fun SelectablePlaylistSongList(
     // 按 selectionKey 被加入集合的先后生成操作列表。
     val selectedEntries = selectedKeys.mapNotNull(entriesByKey::get)
     val selectedSongs = selectedEntries.map { it.song }
+    val selectedTracks = selectedEntries.map { it.track }
 
     LaunchedEffect(entries) {
         // 曲库扫描或歌单内容变更不应被误认为一次排序切换。
@@ -366,7 +377,7 @@ internal fun SelectablePlaylistSongList(
                             {
                                 if (!busy) {
                                     busy = true
-                                    onSetSongsLiked(selectedSongs, false)
+                                    onSetSongsLiked(selectedTracks, false)
                                     finishWith(
                                         "已从“我喜欢的音乐”移除 ${selectedSongs.size} 首"
                                     )
@@ -691,7 +702,7 @@ internal fun SelectablePlaylistSongList(
                                 onSelectionTopBarStateChange(null)
                             }
                         } else {
-                            onSongClick(renderedEntries.map { it.song }, index)
+                            onSongClick(renderedEntries.map { it.track }, index)
                         }
                     },
                     // 长按与拖动统一由 LazyColumn 识别，避免松手时再触发播放。
@@ -845,7 +856,7 @@ internal fun SelectablePlaylistSongList(
             onDismiss = { showPlaylistDialog = false },
             onConfirm = { playlistIds ->
                 busy = true
-                onAddSongsToPlaylists(playlistIds, selectedSongs) {
+                onAddSongsToPlaylists(playlistIds, selectedTracks) {
                         success,
                         duplicateCount ->
                     showPlaylistDialog = false

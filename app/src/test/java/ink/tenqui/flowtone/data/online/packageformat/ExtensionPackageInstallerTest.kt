@@ -23,6 +23,18 @@ class ExtensionPackageInstallerTest {
         assertTrue(combined.supportsArtistAvatar)
     }
 
+    @Test fun `musicSources 是独立的服务声明 而非网络权限`() {
+        val parsed = ExtensionManifestParser.parse(
+            manifest(
+                capabilities = "\"music_provider\"",
+                musicSources = "\"service.example\""
+            )
+        )
+
+        assertEquals(listOf("service.example"), parsed.musicSources)
+        assertEquals(listOf("example.com"), parsed.networkHosts)
+    }
+
     @Test fun `合法 flowtone 和 zip 可以安装`() {
         listOf("test.flowtone", "test.zip").forEach { fileName ->
             val root = Files.createTempDirectory("flowtone-test").toFile()
@@ -72,10 +84,11 @@ class ExtensionPackageInstallerTest {
     private fun manifest(
         formatVersion: Int = 1,
         id: String = "example.avatar",
-        capabilities: String = "\"artist_avatar\""
+        capabilities: String = "\"artist_avatar\"",
+        musicSources: String? = null
     ) = """
         {"formatVersion":$formatVersion,"id":"$id","name":"Example","version":"1","author":"Test",
-        "entry":"main.js","capabilities":[$capabilities],"permissions":{"network":{"hosts":["example.com"]}}}
+        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()},"permissions":{"network":{"hosts":["example.com"]}}}
     """.trimIndent()
 
     private fun zip(entries: Map<String, String>): ByteArrayInputStream {

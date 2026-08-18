@@ -28,7 +28,10 @@ internal fun buildLibraryPlaylistCoverCollages(
                 .orEmpty()
                 .asSequence()
                 .take(MaxPlaylistCoverCollageSongSamples)
-                .mapNotNull { entry -> songsById[entry.songId] }
+                .mapNotNull { entry ->
+                    (entry.track as? ink.tenqui.flowtone.core.model.PersistentTrack.Local)
+                        ?.songId?.let(songsById::get)
+                }
                 .mapNotNull { song -> song.toPlaylistCoverCandidate() }
                 .distinctBy { candidate -> candidate.key }
                 .take(PlaylistCoverCollageSize)

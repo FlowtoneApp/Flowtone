@@ -27,7 +27,8 @@ internal data class PlayerSongPresentation(
     val artist: String,
     val imageRequest: ImageRequest?,
     val artworkPainter: Painter?,
-    val previousArtworkPainter: Painter? = null
+    val previousArtworkPainter: Painter? = null,
+    val largeArtworkPainter: Painter? = null
 )
 
 internal data class PlayerSongPresentationTransition(
@@ -41,7 +42,8 @@ private data class DesiredPlayerSongPresentation(
     val key: Long?,
     val title: String,
     val artist: String,
-    val imageRequest: ImageRequest?
+    val imageRequest: ImageRequest?,
+    val largeArtworkRequest: ImageRequest?
 )
 
 @Composable
@@ -50,6 +52,7 @@ internal fun rememberPlayerSongPresentationTransition(
     title: String,
     artist: String,
     imageRequest: ImageRequest?,
+    largeArtworkRequest: ImageRequest?,
     imageLoader: ImageLoader
 ): PlayerSongPresentationTransition {
     val context = LocalContext.current
@@ -57,7 +60,8 @@ internal fun rememberPlayerSongPresentationTransition(
         key = songKey,
         title = title,
         artist = artist,
-        imageRequest = imageRequest
+        imageRequest = imageRequest,
+        largeArtworkRequest = largeArtworkRequest
     )
     var current by remember {
         mutableStateOf(
@@ -143,6 +147,30 @@ internal fun rememberPlayerSongPresentationTransition(
                 artworkCrossfadeProgress.snapTo(1f)
                 current = current.copy(previousArtworkPainter = null)
             }
+        }
+    }
+
+    // 大图是缩略图之上的增强层。只有稳定全屏时调用方才会提供请求；并且先保证
+    // 当前歌曲已有缩略图基线，避免全屏切歌时直接显示空白等待大图。
+    LaunchedEffect(desired.key, desired.largeArtworkRequest, current.artworkPainter, imageLoader) {
+        val request = desired.largeArtworkRequest
+        if (request == null) {
+            if (current.key == desired.key && current.largeArtworkPainter != null) {
+                current = current.copy(largeArtworkPainter = null)
+            }
+            return@LaunchedEffect
+        }
+        if (current.key != desired.key || current.artworkPainter == null) return@LaunchedEffect
+
+        val painter = try {
+            (imageLoader.execute(request) as? SuccessResult)?.image?.asPainter(context)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            null
+        }
+        if (painter != null && current.key == desired.key) {
+            current = current.copy(largeArtworkPainter = painter)
         }
     }
 

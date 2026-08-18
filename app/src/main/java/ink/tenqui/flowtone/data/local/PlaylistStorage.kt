@@ -5,6 +5,7 @@ import ink.tenqui.flowtone.core.model.Playlist
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistCardStyle
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import org.json.JSONArray
 import org.json.JSONObject
@@ -86,53 +87,12 @@ class PlaylistStorage(context: Context) {
 
     fun loadPlaylistSongEntries(): List<PlaylistSongEntry> {
         val rawValue = prefs.getString(PLAYLIST_SONG_ENTRIES_KEY, null) ?: return emptyList()
-
-        return runCatching {
-            val jsonArray = JSONArray(rawValue)
-            buildList {
-                for (index in 0 until jsonArray.length()) {
-                    val item = jsonArray.optJSONObject(index) ?: continue
-                    val playlistId = item.optString(ENTRY_PLAYLIST_ID_KEY).trim()
-                    val songId = item.optSongId()
-                    if (playlistId.isEmpty() || songId.isEmpty()) {
-                        continue
-                    }
-
-                    add(
-                        PlaylistSongEntry(
-                            id = item.optString(ENTRY_ID_KEY).ifBlank {
-                                "entry_${playlistId}_${songId}"
-                            },
-                            playlistId = playlistId,
-                            songId = songId,
-                            addedAt = item.optLong(ENTRY_ADDED_AT_KEY, 0L)
-                        )
-                    )
-                }
-            }
-                .sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.playlistId }
-                    .thenBy { entry -> entry.addedAt })
-                .distinctBy { entry -> "${entry.playlistId}:${entry.songId}" }
-        }.getOrDefault(emptyList())
+        return decodePlaylistSongEntries(rawValue)
     }
 
     fun savePlaylistSongEntries(entries: List<PlaylistSongEntry>): Boolean {
-        val jsonArray = JSONArray()
-        entries
-            .sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.playlistId }
-                .thenBy { entry -> entry.addedAt })
-            .forEach { entry ->
-                jsonArray.put(
-                    JSONObject()
-                        .put(ENTRY_ID_KEY, entry.id)
-                        .put(ENTRY_PLAYLIST_ID_KEY, entry.playlistId)
-                        .put(ENTRY_SONG_ID_KEY, entry.songId)
-                        .put(ENTRY_ADDED_AT_KEY, entry.addedAt)
-                )
-            }
-
         return prefs.edit()
-            .putString(PLAYLIST_SONG_ENTRIES_KEY, jsonArray.toString())
+            .putString(PLAYLIST_SONG_ENTRIES_KEY, encodePlaylistSongEntries(entries))
             .commit()
     }
 
@@ -144,7 +104,7 @@ class PlaylistStorage(context: Context) {
             .putString(PLAYLISTS_KEY, playlists.toPlaylistJsonArray().toString())
             .putString(
                 PLAYLIST_SONG_ENTRIES_KEY,
-                entries.toPlaylistSongEntryJsonArray().toString()
+                encodePlaylistSongEntries(entries)
             )
             .commit()
     }
@@ -165,7 +125,7 @@ class PlaylistStorage(context: Context) {
         const val DEFAULT_SUBTITLE = "0 首歌曲"
         const val ENTRY_ID_KEY = "id"
         const val ENTRY_PLAYLIST_ID_KEY = "playlistId"
-        const val ENTRY_SONG_ID_KEY = "songId"
+        const val ENTRY_TRACK_KEY = "track"
         const val ENTRY_ADDED_AT_KEY = "addedAt"
     }
 }
@@ -193,19 +153,49 @@ private fun List<Playlist>.toPlaylistJsonArray(): JSONArray {
 
 private fun List<PlaylistSongEntry>.toPlaylistSongEntryJsonArray(): JSONArray {
     val jsonArray = JSONArray()
-    sortedWith(compareBy<PlaylistSongEntry> { entry -> entry.playlistId }
-        .thenBy { entry -> entry.addedAt })
-        .forEach { entry ->
+    forEach { entry ->
             jsonArray.put(
                 JSONObject()
                     .put("id", entry.id)
                     .put("playlistId", entry.playlistId)
-                    .put("songId", entry.songId)
-                    .put("addedAt", entry.addedAt)
+                .put("track", PersistentTrackJsonCodec.encode(entry.track))
+                .put("addedAt", entry.addedAt)
             )
         }
     return jsonArray
 }
+
+internal fun encodePlaylistSongEntries(entries: List<PlaylistSongEntry>): String =
+    JSONObject()
+        .put("formatVersion", 2)
+        .put("entries", entries.toPlaylistSongEntryJsonArray())
+        .toString()
+
+internal fun decodePlaylistSongEntries(raw: String): List<PlaylistSongEntry> = runCatching {
+    val jsonArray = if (raw.trimStart().startsWith("[")) {
+        JSONArray(raw)
+    } else {
+        JSONObject(raw).optJSONArray("entries") ?: JSONArray()
+    }
+    buildList {
+        for (index in 0 until jsonArray.length()) {
+            val item = jsonArray.optJSONObject(index) ?: continue
+            val playlistId = item.optString("playlistId").trim()
+            val track = item.optPersistentTrack()
+            if (playlistId.isEmpty() || track == null) continue
+            add(
+                PlaylistSongEntry(
+                    id = item.optString("id").ifBlank {
+                        "entry_${playlistId}_${track.identityKey.hashCode()}"
+                    },
+                    playlistId = playlistId,
+                    track = track,
+                    addedAt = item.optLong("addedAt", 0L)
+                )
+            )
+        }
+    }.distinctBy { entry -> "${entry.playlistId}:${entry.track.identityKey}" }
+}.getOrDefault(emptyList())
 
 private fun JSONObject.optSongId(): String {
     val storedSongId = optString("songId").trim()
@@ -215,6 +205,26 @@ private fun JSONObject.optSongId(): String {
 
     val legacySongId = optLong("songId", -1L)
     return if (legacySongId >= 0L) legacySongId.toString() else ""
+}
+
+private fun JSONObject.optPersistentTrack(): PersistentTrack? {
+    optJSONObject("track")?.let(PersistentTrackJsonCodec::decode)?.let { return it }
+    val item = optJSONObject("onlineSong")
+    if (item == null) {
+        return optSongId().takeIf(String::isNotEmpty)?.let(PersistentTrack::Local)
+    }
+    val sourceHost = item.optString("sourceHost").trim()
+    val persistentId = item.optString("persistentId").trim()
+    val title = item.optString("title").trim()
+    val artist = item.optString("artist").trim()
+    if (sourceHost.isEmpty() || persistentId.isEmpty() || title.isEmpty() || artist.isEmpty()) return null
+    return PersistentTrack.Online(
+        sourceHost = sourceHost,
+        persistentId = persistentId,
+        cachedTitle = title,
+        cachedArtist = artist,
+        cachedDurationMs = item.optLong("durationMs", -1L).takeIf { it >= 0L }
+    )
 }
 
 private fun JSONObject.optPlaylistCardStyle(): PlaylistCardStyle {

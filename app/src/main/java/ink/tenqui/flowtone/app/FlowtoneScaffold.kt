@@ -108,12 +108,7 @@ internal fun FlowtoneScaffold(
         mutableStateOf(Color(0xFF1B1B20))
     }
     val playlistSongEntries by playlistRepository.playlistSongEntries.collectAsState()
-    val likedSongCount = remember(state.uiState.songs, state.likedSongKeys) {
-        flowtoneLikedSongCount(
-            songs = state.uiState.songs,
-            likedSongKeys = state.likedSongKeys
-        )
-    }
+    val likedSongCount = state.uiState.likedTracks.size
     val displayedLibraryPlaylists = remember(libraryPlaylistController.playlists, likedSongCount) {
         flowtoneDisplayedLibraryPlaylists(
             playlists = libraryPlaylistController.playlists,
@@ -124,11 +119,13 @@ internal fun FlowtoneScaffold(
         playlistSongEntries,
         state.playerUiState.currentSong?.id,
         state.playerUiState.currentSong?.uri,
+        state.playerUiState.currentTrack?.identityKey,
         state.likedSongKeys
     ) {
         flowtonePlaylistIdsContainingCurrentSong(
             playlistSongEntries = playlistSongEntries,
             currentSong = state.playerUiState.currentSong,
+            currentTrack = state.playerUiState.currentTrack,
             likedSongKeys = state.likedSongKeys
         )
     }
@@ -212,34 +209,39 @@ internal fun FlowtoneScaffold(
         onRequestClearSelection = { clearSongSelectionRequest += 1 },
         onAddSongsNext = callbacks.onAddSongsToNext,
         onAppendSongsToQueue = callbacks.onAppendSongsToQueue,
-        onSetSongsLiked = callbacks.onSetSongsLiked,
+        onSetSongsLiked = callbacks.onSetTracksLiked,
         onDeleteSongs = callbacks.onDeleteSongs,
-        onAddSongsToPlaylists = { playlistIds, songs, done ->
+        onAddSongsToPlaylists = { playlistIds, tracks, done ->
             coroutineScope.launch {
                 val userPlaylistIds = playlistIds - LikedSongsPlaylistId
                 val addToLikedSongs = LikedSongsPlaylistId in playlistIds
                 val currentEntries = playlistRepository.playlistSongEntries.value
-                val duplicateSongIds = songs
-                    .filter { song ->
-                        val songId = song.id.toString()
-                        (addToLikedSongs && isSongLiked(song, state.likedSongKeys)) ||
+                val duplicateTrackKeys = tracks
+                    .filter { track ->
+                        (addToLikedSongs && track.identityKey in state.likedSongKeys) ||
                             currentEntries.any { entry ->
                                 entry.playlistId in userPlaylistIds &&
-                                    entry.songId == songId
+                                    entry.track.identityKey == track.identityKey
                             }
                     }
-                    .mapTo(mutableSetOf()) { song -> song.id.toString() }
+                    .mapTo(mutableSetOf()) { track -> track.identityKey }
 
                 playlistRepository.syncLibraryPlaylistCards(
                     libraryPlaylistController.playlists
                 )
-                val result = playlistRepository.addSongsToPlaylists(userPlaylistIds, songs)
-                if (result is PlaylistMutationResult.Success) {
+                var succeeded = true
+                userPlaylistIds.forEach { playlistId ->
+                    tracks.forEach { track ->
+                        val result = playlistRepository.addTrackToPlaylist(playlistId, track)
+                        if (result is PlaylistMutationResult.Failure) succeeded = false
+                    }
+                }
+                if (succeeded) {
                     if (addToLikedSongs) {
-                        callbacks.onSetSongsLiked(songs, true)
+                        callbacks.onSetTracksLiked(tracks, true)
                     }
                     refreshLibraryPlaylistsFromRepository()
-                    done(true, duplicateSongIds.size)
+                    done(true, duplicateTrackKeys.size)
                 } else {
                     done(false, 0)
                 }

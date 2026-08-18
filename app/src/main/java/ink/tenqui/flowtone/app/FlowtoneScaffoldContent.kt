@@ -283,6 +283,7 @@ internal fun FlowtoneScaffoldContent(
                     onRequestPermission = callbacks.onRequestPermission,
                     onSongClick = callbacks.onSongClick,
                     onPlaylistSongClick = callbacks.onPlaylistSongClick,
+                    onPersistentTrackQueueClick = callbacks.onPersistentTrackQueueClick,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
                     onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange,

@@ -9,6 +9,9 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -178,7 +181,8 @@ class PlaybackController(
         song: Song,
         mediaItem: MediaItem,
         extensionArtwork: ExtensionImage? = null,
-        extensionLargeArtwork: ExtensionImage? = null
+        extensionLargeArtwork: ExtensionImage? = null,
+        persistentTrack: PersistentTrack? = null
     ) {
         val controller = currentControllerOrNull()
         if (controller == null) {
@@ -186,16 +190,17 @@ class PlaybackController(
                 song = song,
                 mediaItem = mediaItem,
                 extensionArtwork = extensionArtwork,
-                extensionLargeArtwork = extensionLargeArtwork
+                extensionLargeArtwork = extensionLargeArtwork,
+                persistentTrack = persistentTrack
             )
-            updateCurrentSong(song, extensionArtwork, extensionLargeArtwork)
+            updateCurrentSong(song, extensionArtwork, extensionLargeArtwork, persistentTrack)
             return
         }
         runCatching {
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
-            updatePlaybackStarted(song, extensionArtwork, extensionLargeArtwork)
+            updatePlaybackStarted(song, extensionArtwork, extensionLargeArtwork, persistentTrack)
         }.onFailure { error -> updatePlaybackFailed(song, error) }
     }
 
@@ -231,11 +236,14 @@ class PlaybackController(
     fun updateCurrentSong(
         song: Song,
         extensionArtwork: ExtensionImage? = null,
-        extensionLargeArtwork: ExtensionImage? = null
+        extensionLargeArtwork: ExtensionImage? = null,
+        persistentTrack: PersistentTrack? = null
     ) {
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                currentTrack = persistentTrack
+                    ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack(),
                 extensionArtwork = extensionArtwork,
                 extensionLargeArtwork = extensionLargeArtwork,
                 positionMs = 0L,
@@ -523,7 +531,8 @@ class PlaybackController(
                     song = request.song,
                     mediaItem = request.mediaItem,
                     extensionArtwork = request.extensionArtwork,
-                    extensionLargeArtwork = request.extensionLargeArtwork
+                    extensionLargeArtwork = request.extensionLargeArtwork,
+                    persistentTrack = request.persistentTrack
                 )
             }
 
@@ -534,11 +543,14 @@ class PlaybackController(
     private fun updatePlaybackStarted(
         song: Song,
         extensionArtwork: ExtensionImage? = null,
-        extensionLargeArtwork: ExtensionImage? = null
+        extensionLargeArtwork: ExtensionImage? = null,
+        persistentTrack: PersistentTrack? = null
     ) {
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                currentTrack = persistentTrack
+                    ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack(),
                 extensionArtwork = extensionArtwork,
                 extensionLargeArtwork = extensionLargeArtwork,
                 isPlaying = true,
@@ -649,7 +661,8 @@ class PlaybackController(
             val song: Song,
             val mediaItem: MediaItem,
             val extensionArtwork: ExtensionImage?,
-            val extensionLargeArtwork: ExtensionImage?
+            val extensionLargeArtwork: ExtensionImage?,
+            val persistentTrack: PersistentTrack?
         ) : PendingPlaybackRequest
     }
 }

@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 @Composable
 internal fun BoxScope.MiniPlayerFullscreenLayout(
     imageRequest: ImageRequest?,
+    largeArtworkRequest: ImageRequest?,
     artworkImageLoader: ImageLoader,
     playerUiState: PlayerUiState,
     songLyricsState: SongLyricsState,
@@ -179,6 +180,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             title = title,
             artist = artist,
             imageRequest = imageRequest,
+            largeArtworkRequest = largeArtworkRequest,
             imageLoader = artworkImageLoader
         )
         val playbackArtworkAlpha = if (hidePlaybackSharedArtwork) {
@@ -198,6 +200,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     artworkPainter = presentation.artworkPainter,
                     previousArtworkPainter = presentation.previousArtworkPainter,
                     artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
+                    largeArtworkPainter = presentation.largeArtworkPainter,
                     progress = artworkAnimationProgress,
                     scaleProgress = artworkScaleProgress,
                     currentHeight = designCurrentHeight,
@@ -331,6 +334,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                             artworkPainter = presentation.artworkPainter,
                             previousArtworkPainter = presentation.previousArtworkPainter,
                             artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
+                            largeArtworkPainter = presentation.largeArtworkPainter,
                             progress = 1f,
                             scaleProgress = 1f,
                             currentHeight = designCurrentHeight,

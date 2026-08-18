@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.playback.PlaybackSource
@@ -61,10 +62,12 @@ internal data class FlowtoneAppCallbacks(
     val onTogglePlaybackOrderMode: () -> Unit,
     val onPlayQueueSong: (Song) -> Unit,
     val onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
+    val onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
     val onAddSongsToNext: (List<Song>) -> Boolean,
     val onAppendSongsToQueue: (List<Song>) -> Boolean,
     val onSetSongLiked: (Song, Boolean) -> Unit,
     val onSetSongsLiked: (List<Song>, Boolean) -> Unit,
+    val onSetTracksLiked: (List<PersistentTrack>, Boolean) -> Unit,
     val onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit,
     val onToggleSongLiked: (Song) -> Unit,
     val onOpenSearch: () -> Unit,
@@ -88,6 +91,7 @@ internal fun flowtoneAppCallbacks(
     onSongClick: (Song) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
+    onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayPrevious: () -> Unit,
@@ -99,6 +103,7 @@ internal fun flowtoneAppCallbacks(
     onAppendSongsToQueue: (List<Song>) -> Boolean,
     onSetSongLiked: (Song, Boolean) -> Unit,
     onSetSongsLiked: (List<Song>, Boolean) -> Unit,
+    onSetTracksLiked: (List<PersistentTrack>, Boolean) -> Unit,
     onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit,
     onToggleSongLiked: (Song) -> Unit,
     onOpenSearch: () -> Unit,
@@ -308,10 +313,12 @@ internal fun flowtoneAppCallbacks(
         onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
         onPlayQueueSong = onPlayQueueSong,
         onPlaylistSongClick = onPlaylistSongClick,
+        onPersistentTrackQueueClick = onPersistentTrackQueueClick,
         onAddSongsToNext = onAddSongsToNext,
         onAppendSongsToQueue = onAppendSongsToQueue,
         onSetSongLiked = onSetSongLiked,
         onSetSongsLiked = onSetSongsLiked,
+        onSetTracksLiked = onSetTracksLiked,
         onDeleteSongs = onDeleteSongs,
         onToggleSongLiked = onToggleSongLiked,
         onOpenSearch = onOpenSearch,

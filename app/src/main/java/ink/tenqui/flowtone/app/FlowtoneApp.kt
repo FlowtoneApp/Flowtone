@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import android.app.Activity
+import android.widget.Toast
 import android.os.Build
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,7 +44,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.data.local.LikedSongsStore
+import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
@@ -80,17 +82,18 @@ fun FlowtoneApp(
     val playbackState by musicViewModel.playbackState.collectAsState()
     val songLyricsState by musicViewModel.songLyricsState.collectAsState()
     val searchUiState by musicViewModel.searchUiState.collectAsState()
+    val likedTracks by musicViewModel.likedTracks.collectAsState()
     val playerUiState = PlayerUiState.from(playbackState)
     val appPreferences = remember(context) {
         AppPreferences(context.applicationContext)
-    }
-    val likedSongsStore = remember(context) {
-        LikedSongsStore(context.applicationContext)
     }
     val defaultStartPage = remember(appPreferences) {
         appPreferences.getDefaultStartPage()
     }
     val appState = rememberFlowtoneAppState(appPreferences)
+    LaunchedEffect(likedTracks) {
+        appState.likedSongKeys = likedTracks.map { it.identityKey }
+    }
     val coroutineScope = rememberCoroutineScope()
     val permissionActivity = context as? Activity
     var audioPermissionGranted by remember(context) {
@@ -369,28 +372,25 @@ fun FlowtoneApp(
         }
     }
     fun setSongLiked(song: Song, liked: Boolean) {
-        val nextKeys = nextLikedSongKeys(
-            song = song,
-            liked = liked,
-            currentKeys = appState.likedSongKeys
-        )
-
-        if (nextKeys != appState.likedSongKeys) {
-            appState.likedSongKeys = nextKeys
-            likedSongsStore.saveLikedSongKeys(nextKeys)
+        val track = playbackState.currentTrack.takeIf { playbackState.currentSong == song }
+            ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack()
+        if (track == null) {
+            Toast.makeText(context, "当前在线来源不支持持久收藏", Toast.LENGTH_SHORT).show()
+            return
         }
+        musicViewModel.setTrackLiked(track, liked)
     }
     fun toggleSongLiked(song: Song) {
-        setSongLiked(song, !isSongLiked(song, appState.likedSongKeys))
+        val track = playbackState.currentTrack.takeIf { playbackState.currentSong == song }
+            ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack()
+        if (track == null) {
+            Toast.makeText(context, "当前在线来源不支持持久收藏", Toast.LENGTH_SHORT).show()
+            return
+        }
+        setSongLiked(song, track.identityKey !in appState.likedSongKeys)
     }
     fun setSongsLiked(songs: List<Song>, liked: Boolean) {
-        val nextKeys = songs.fold(appState.likedSongKeys) { keys, song ->
-            nextLikedSongKeys(song = song, liked = liked, currentKeys = keys)
-        }
-        if (nextKeys != appState.likedSongKeys) {
-            appState.likedSongKeys = nextKeys
-            likedSongsStore.saveLikedSongKeys(nextKeys)
-        }
+        songs.forEach { song -> musicViewModel.setTrackLiked(song.toPersistentTrack(), liked) }
     }
     val exitMiniPlayerFullscreen: () -> Unit = {
         appState.miniPlayerFullscreen = false
@@ -602,7 +602,6 @@ fun FlowtoneApp(
         hasCurrentSong = hasCurrentSong,
         hasScanned = uiState.hasScanned,
         songs = uiState.songs,
-        likedSongsStore = likedSongsStore,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         preloadLyricsCount = appState.preloadLyricsCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
@@ -635,9 +634,6 @@ fun FlowtoneApp(
             }
         },
         onOpenExpandedPlayerRequestConsumed = onOpenExpandedPlayerRequestConsumed,
-        onLikedSongKeysLoaded = { keys ->
-            appState.likedSongKeys = keys
-        },
         onHideSwipeHint = {
             appState.showSwipeHint = false
         }
@@ -701,6 +697,9 @@ fun FlowtoneApp(
             onPlaylistSongClick = { songs, startIndex, source ->
                 musicViewModel.playSongQueue(songs, startIndex, source)
             },
+            onPersistentTrackQueueClick = { tracks, startIndex, source ->
+                musicViewModel.playPersistentTrackQueue(tracks, startIndex, source)
+            },
             onCloseArtistRootPage = ::closeArtistRootPage,
             onOpenArtistRootPage = ::openArtistRootPage,
             onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,
@@ -714,6 +713,9 @@ fun FlowtoneApp(
             onAppendSongsToQueue = musicViewModel::appendSongsToQueue,
             onSetSongLiked = ::setSongLiked,
             onSetSongsLiked = ::setSongsLiked,
+            onSetTracksLiked = { tracks, liked ->
+                tracks.forEach { track -> musicViewModel.setTrackLiked(track, liked) }
+            },
             onDeleteSongs = requestSongDeletion,
             onToggleSongLiked = ::toggleSongLiked,
             onOpenSearch = ::enterSearchMode,

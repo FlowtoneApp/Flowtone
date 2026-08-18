@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.online
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -193,7 +194,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     artistAvatarRegistry.install(JavaScriptArtistAvatarExtension(runtime))
                 }
                 if (installed.manifest.supportsMusicProvider) {
-                    musicProviders[installed.manifest.id] = JavaScriptMusicProvider(runtime)
+                    musicProviders[installed.manifest.id] = JavaScriptMusicProvider(
+                        runtime = runtime,
+                        musicSources = installed.manifest.musicSources.toSet()
+                    )
                 }
             }
             .onFailure { runtime.close() }
@@ -212,6 +216,26 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private fun networkClientFor(extensionId: String): ExtensionNetworkClient? = networkClients[extensionId]
 
     private fun streamClientFor(extensionId: String): ExtensionStreamClient? = streamClients[extensionId]
+
+    /**
+     * 以 manifest 的 musicSources 选择当前 Provider。排序后的 extension ID 是当前简单且确定的
+     * 选择规则；未来可在此处替换为用户偏好或显式优先级。
+     */
+    internal suspend fun resolvePersistentSong(
+        sourceHost: String,
+        persistentId: String
+    ): ProviderSong? {
+        val provider = selectMusicProviderForSource(musicProviders, sourceHost) ?: return null
+        return runCatching { provider.resolvePersistentSong(persistentId) }
+            .onFailure { error ->
+                Log.w(LogTag, "extension.music.persistent.resolve.failed type=${error.javaClass.simpleName}")
+            }
+            .getOrNull()
+    }
+
+    internal suspend fun resolvePersistentPlaylistSong(
+        entry: ink.tenqui.flowtone.core.model.PersistentTrack.Online
+    ): PersistentSongResolution = resolvePersistentSongWithProviders(musicProviders, entry)
 
     private fun displayName(uri: Uri): String? {
         return appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -232,4 +256,31 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             instance ?: ExtensionManager(context).also { instance = it }
         }
     }
+}
+
+internal fun selectMusicProviderForSource(
+    providers: Map<String, MusicProvider>,
+    sourceHost: String
+): MusicProvider? {
+    val normalizedSource = normalizeMusicSourceHost(sourceHost)
+    return providers.entries
+        .sortedBy(Map.Entry<String, MusicProvider>::key)
+        .firstOrNull { (_, provider) ->
+            normalizedSource in provider.musicSources.map(::normalizeMusicSourceHost)
+        }
+        ?.value
+}
+
+internal suspend fun resolvePersistentSongWithProviders(
+    providers: Map<String, MusicProvider>,
+    track: ink.tenqui.flowtone.core.model.PersistentTrack.Online
+): PersistentSongResolution {
+    val provider = selectMusicProviderForSource(providers, track.sourceHost)
+        ?: return PersistentSongResolution.ProviderMissing(track)
+    val song = runCatching { provider.resolvePersistentSong(track.persistentId) }.getOrNull()
+    return song?.let(PersistentSongResolution::Resolved)
+        ?: PersistentSongResolution.Unresolved(track).also {
+            // TODO: Future persistent track recovery:
+            // direct resolve -> cached metadata fuzzy search -> high-confidence rebind -> unavailable.
+        }
 }

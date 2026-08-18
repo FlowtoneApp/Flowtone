@@ -11,7 +11,9 @@ data class ExtensionManifest(
     val description: String,
     val entry: String,
     val capabilities: List<String>,
-    val networkHosts: List<String>
+    val networkHosts: List<String>,
+    /** 可解析持久歌曲身份的服务来源，不能拿网络 hosts 代替。 */
+    val musicSources: List<String> = emptyList()
 ) {
     val supportsArtistAvatar: Boolean get() = "artist_avatar" in capabilities
     val supportsMusicProvider: Boolean get() = "music_provider" in capabilities
@@ -29,6 +31,9 @@ object ExtensionManifestParser {
         val hosts = network?.optJSONArray("hosts")?.let { array ->
             List(array.length()) { array.getString(it).lowercase() }
         }.orEmpty()
+        val musicSources = json.optJSONArray("musicSources")?.let { array ->
+            List(array.length()) { array.getString(it).trim().lowercase() }
+        }.orEmpty()
         return ExtensionManifest(
             formatVersion = json.getInt("formatVersion"),
             id = json.getString("id"),
@@ -38,7 +43,8 @@ object ExtensionManifestParser {
             description = json.optString("description"),
             entry = json.getString("entry"),
             capabilities = capabilities,
-            networkHosts = hosts
+            networkHosts = hosts,
+            musicSources = musicSources
         ).also(::validate)
     }
 
@@ -50,6 +56,11 @@ object ExtensionManifestParser {
         require(manifest.capabilities.isNotEmpty()) { "扩展未声明能力" }
         manifest.networkHosts.forEach { rule ->
             require(isValidHostRule(rule)) { "网络 host 规则非法：$rule" }
+        }
+        manifest.musicSources.forEach { source ->
+            require(isValidHostRule(source) && !source.startsWith("*.")) {
+                "音乐服务来源非法：$source"
+            }
         }
     }
 

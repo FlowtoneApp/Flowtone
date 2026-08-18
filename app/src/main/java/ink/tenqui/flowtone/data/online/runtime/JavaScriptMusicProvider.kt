@@ -6,12 +6,14 @@ import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.MusicProvider
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** music_provider capability 的最小 JS bridge，不包含任何 Provider 专用协议。 */
 class JavaScriptMusicProvider internal constructor(
-    private val runtime: JavaScriptExtensionRuntime
+    private val runtime: JavaScriptExtensionRuntime,
+    override val musicSources: Set<String> = emptySet()
 ) : MusicProvider {
     override suspend fun searchSongs(keyword: String): List<ProviderSong> {
         if (keyword.isBlank()) return emptyList()
@@ -55,6 +57,16 @@ class JavaScriptMusicProvider internal constructor(
         )
     }
 
+    override suspend fun resolvePersistentSong(persistentId: String): ProviderSong? {
+        val normalizedId = persistentId.trim()
+        if (normalizedId.isEmpty()) return null
+        val result = runtime.invokeObject(
+            "resolvePersistentSong",
+            JSONObject().put("persistentId", normalizedId)
+        )
+        return parseSong(result)
+    }
+
     private fun parseSong(item: JSONObject): ProviderSong? {
         val opaqueId = item.optString("id").trim().takeIf(String::isNotEmpty) ?: return null
         val title = item.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
@@ -65,13 +77,27 @@ class JavaScriptMusicProvider internal constructor(
         val largeArtwork = item.optString("largeArtworkUrl").trim()
             .takeIf { it.startsWith("https://") }
             ?.let { ExtensionImage(runtime.extensionId, it) }
+        val persistentId = item.optString("persistentId").trim().takeIf(String::isNotEmpty)
+        val sourceHost = boundSourceHost(item)
         return ProviderSong(
             trackRef = ExtensionTrackRef(runtime.extensionId, opaqueId),
             title = title,
             artist = artist,
             durationMs = duration,
             artwork = artwork,
-            largeArtwork = largeArtwork
+            largeArtwork = largeArtwork,
+            persistentId = persistentId,
+            sourceHost = sourceHost
         )
+    }
+
+    private fun boundSourceHost(item: JSONObject): String? {
+        val requested = normalizeMusicSourceHost(item.optString("sourceHost"))
+        val normalizedSources = musicSources.mapTo(linkedSetOf(), ::normalizeMusicSourceHost)
+        return when {
+            requested in normalizedSources -> requested
+            normalizedSources.size == 1 -> normalizedSources.single()
+            else -> null
+        }
     }
 }

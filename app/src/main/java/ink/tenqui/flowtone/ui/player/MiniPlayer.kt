@@ -494,7 +494,8 @@ fun MiniPlayer(
     val progressTrackColor = Color(0xFF9E9E9E)
     val progressColor = Color.White
     val isCurrentSongLiked = currentSong?.let { song ->
-        isSongLiked(song, likedSongKeys)
+        playerUiState.currentTrack?.identityKey?.let(likedSongKeys::contains)
+            ?: isSongLiked(song, likedSongKeys)
     } ?: false
     BackHandler(
         enabled = state.fullscreenContentMode == FullscreenContentMode.AddToPlaylist &&
@@ -874,11 +875,9 @@ fun MiniPlayer(
                         lyricsBlurredArtworkProgress = lyricsBlurredArtworkProgress
                     )
                     MiniPlayerFullscreenLayout(
-                        imageRequest = if (fullscreen) {
-                            state.largeCoverImageRequest
-                        } else {
-                            state.coverImageRequest
-                        },
+                        imageRequest = state.coverImageRequest,
+                        largeArtworkRequest = state.largeCoverImageRequest
+                            .takeIf { state.isFullscreenPlayer },
                         artworkImageLoader = state.artworkImageLoader,
                         playerUiState = playerUiState,
                         songLyricsState = songLyricsState,

@@ -6,6 +6,9 @@ import ink.tenqui.flowtone.core.model.PlaylistCardStyle
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.core.model.toPersistentTrack
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import ink.tenqui.flowtone.core.model.randomPlaylistAppearanceColorKey
 import ink.tenqui.flowtone.data.local.PlaylistStorage
@@ -290,9 +293,9 @@ class PlaylistRepository(
         }
 
         val currentEntries = _playlistSongEntries.value
-        val songId = song.stablePlaylistSongId()
+        val track = song.toPersistentTrack()
         val alreadyExists = currentEntries.any { entry ->
-            entry.playlistId == playlistId && entry.songId == songId
+            entry.playlistId == playlistId && entry.track.identityKey == track.identityKey
         }
         if (alreadyExists) {
             return@withLock PlaylistMutationResult.Success(Unit)
@@ -302,7 +305,7 @@ class PlaylistRepository(
         val nextEntry = PlaylistSongEntry(
             id = UUID.randomUUID().toString(),
             playlistId = playlistId,
-            songId = songId,
+            track = track,
             addedAt = now
         )
         val nextEntries = currentEntries + nextEntry
@@ -316,6 +319,79 @@ class PlaylistRepository(
             }
         }
 
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = currentEntries,
+            nextPlaylists = nextPlaylists,
+            nextEntries = nextEntries,
+            successValue = Unit
+        )
+    }
+
+    suspend fun addTrackToPlaylist(
+        playlistId: String,
+        track: PersistentTrack
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        if (currentPlaylists.none { it.id == playlistId }) {
+            return@withLock PlaylistMutationResult.Failure(PlaylistMutationError.NotFound)
+        }
+        val currentEntries = _playlistSongEntries.value
+        if (currentEntries.any {
+                it.playlistId == playlistId && it.track.identityKey == track.identityKey
+            }) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+        val now = System.currentTimeMillis()
+        val nextEntries = currentEntries + PlaylistSongEntry(
+            id = UUID.randomUUID().toString(),
+            playlistId = playlistId,
+            track = track,
+            addedAt = now
+        )
+        val nextPlaylists = currentPlaylists.map {
+            if (it.id == playlistId) it.copy(updatedAt = now) else it
+        }
+        commitMutation(currentPlaylists, currentEntries, nextPlaylists, nextEntries, Unit)
+    }
+
+    /** 仅接受 Provider 明确给出的长期身份，绝不把 runtime opaqueId 当作 persistentId。 */
+    suspend fun addProviderSongToPlaylist(
+        playlistId: String,
+        song: ProviderSong
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val identity = song.persistentTrackRef
+            ?: return@withLock PlaylistMutationResult.Failure(
+                PlaylistMutationError.PersistentIdentityUnsupported
+            )
+        val currentPlaylists = _playlists.value
+        if (currentPlaylists.none { it.id == playlistId }) {
+            return@withLock PlaylistMutationResult.Failure(PlaylistMutationError.NotFound)
+        }
+        val currentEntries = _playlistSongEntries.value
+        if (currentEntries.any { entry ->
+                entry.playlistId == playlistId &&
+                    entry.track.identityKey == "online:${identity.sourceHost}:${identity.persistentId}"
+            }) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+        val now = System.currentTimeMillis()
+        val onlineSong = PersistentTrack.Online(
+            sourceHost = identity.sourceHost,
+            persistentId = identity.persistentId,
+            cachedTitle = song.title,
+            cachedArtist = song.artist,
+            cachedDurationMs = song.durationMs
+        )
+        val nextEntries = currentEntries + PlaylistSongEntry(
+            id = UUID.randomUUID().toString(),
+            playlistId = playlistId,
+            track = onlineSong,
+            addedAt = now,
+        )
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id == playlistId) playlist.copy(updatedAt = now) else playlist
+        }
         commitMutation(
             previousPlaylists = currentPlaylists,
             previousEntries = currentEntries,
@@ -348,18 +424,18 @@ class PlaylistRepository(
         }
 
         val currentEntries = _playlistSongEntries.value
-        val songId = song.stablePlaylistSongId()
+        val track = song.toPersistentTrack()
         val existingEntryKeys = currentEntries.mapTo(mutableSetOf()) { entry ->
-            entry.playlistId to entry.songId
+            entry.playlistId to entry.track.identityKey
         }
         val now = System.currentTimeMillis()
         val newEntries = targetPlaylistIds
-            .filterNot { playlistId -> playlistId to songId in existingEntryKeys }
+            .filterNot { playlistId -> playlistId to track.identityKey in existingEntryKeys }
             .map { playlistId ->
                 PlaylistSongEntry(
                     id = UUID.randomUUID().toString(),
                     playlistId = playlistId,
-                    songId = songId,
+                    track = track,
                     addedAt = now
                 )
             }
@@ -440,23 +516,23 @@ class PlaylistRepository(
         val currentEntries = _playlistSongEntries.value
         // A multi-selection may include repeated playlist entries. Keep only one
         // playlist entry per song and treat a repeat add as a recency/weight boost.
-        val uniqueSongs = songs.distinctBy { song -> song.stablePlaylistSongId() }
+        val uniqueSongs = songs.distinctBy { song -> song.toPersistentTrack().identityKey }
         val now = System.currentTimeMillis()
         var sequence = 0L
         val nextEntries = currentEntries.toMutableList()
         targetPlaylistIds.forEach { playlistId ->
             uniqueSongs.forEach { song ->
-                val songId = song.stablePlaylistSongId()
+                val track = song.toPersistentTrack()
                 val matchingIndices = nextEntries.indices.filter { index ->
                     nextEntries[index].playlistId == playlistId &&
-                        nextEntries[index].songId == songId
+                        nextEntries[index].track.identityKey == track.identityKey
                 }
                 val weightedAddedAt = now + sequence++
                 if (matchingIndices.isEmpty()) {
                     nextEntries += PlaylistSongEntry(
                         id = UUID.randomUUID().toString(),
                         playlistId = playlistId,
-                        songId = songId,
+                        track = track,
                         addedAt = weightedAddedAt
                     )
                 } else {
@@ -513,7 +589,8 @@ class PlaylistRepository(
 
         val currentEntries = _playlistSongEntries.value
         val nextEntries = currentEntries.filterNot { entry ->
-            entry.playlistId == playlistId && entry.songId == normalizedSongId
+            entry.playlistId == playlistId &&
+                (entry.track as? PersistentTrack.Local)?.songId == normalizedSongId
         }
         if (nextEntries.size == currentEntries.size) {
             return@withLock PlaylistMutationResult.Success(Unit)
@@ -596,11 +673,13 @@ class PlaylistRepository(
         playlistId: String,
         availableSongs: List<Song>
     ): List<Song> {
-        val songsById = availableSongs.associateBy { song -> song.stablePlaylistSongId() }
+        val songsById = availableSongs.associateBy { song -> song.id.toString() }
         return _playlistSongEntries.value
             .filter { entry -> entry.playlistId == playlistId }
             .sortedBy { entry -> entry.addedAt }
-            .mapNotNull { entry -> songsById[entry.songId] }
+            .mapNotNull { entry ->
+                (entry.track as? PersistentTrack.Local)?.songId?.let(songsById::get)
+            }
     }
 
     private suspend fun <T> commitMutation(
@@ -640,7 +719,8 @@ enum class PlaylistMutationError {
     BlankTitle,
     DuplicateTitle,
     NotFound,
-    SaveFailed
+    SaveFailed,
+    PersistentIdentityUnsupported
 }
 
 private fun normalizePlaylistOrder(playlists: List<Playlist>): List<Playlist> {
@@ -656,8 +736,4 @@ private fun sortedEntriesForPlaylist(
     return entries
         .filter { entry -> entry.playlistId == playlistId }
         .sortedBy { entry -> entry.addedAt }
-}
-
-private fun Song.stablePlaylistSongId(): String {
-    return id.toString()
 }

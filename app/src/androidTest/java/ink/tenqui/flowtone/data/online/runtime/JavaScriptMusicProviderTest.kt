@@ -63,6 +63,24 @@ class JavaScriptMusicProviderTest {
         assertEquals(song.artwork, song.nowPlayingArtwork)
     }
 
+    @Test fun persistentIdIsPassedThroughWithoutHostParsing() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = {
+              async searchSongs() { return [{id:'runtime-id', persistentId:'opaque://provider/long-lived-id', title:'Title', artist:'Artist'}]; },
+              async resolvePersistentSong(request) { return {id:'resolved-id', persistentId:request.persistentId, title:'Resolved', artist:'Artist'}; },
+              async getPlaybackResource(){ return {}; }
+            };
+        """.trimIndent())
+
+        val searched = provider.searchSongs("hello").single()
+        assertEquals("opaque://provider/long-lived-id", searched.persistentId)
+        assertEquals("example.music", searched.trackRef.extensionId)
+        assertEquals("example.com", searched.sourceHost)
+        val resolved = provider.resolvePersistentSong(searched.persistentId!!)
+        assertEquals("resolved-id", resolved?.trackRef?.opaqueId)
+        assertEquals(searched.persistentId, resolved?.persistentId)
+    }
+
     @Test fun playbackMapsHlsAndProgressiveWithoutUrlSuffixInference() = runBlocking {
         val provider = provider("""
             globalThis.flowtoneExtension = {
@@ -96,11 +114,11 @@ class JavaScriptMusicProviderTest {
     private suspend fun provider(script: String): JavaScriptMusicProvider {
         val directory = Files.createTempDirectory(context.cacheDir.toPath(), "js-music-provider").toFile()
         directory.resolve("main.js").writeText(script)
-        val manifest = ExtensionManifest(1, "example.music", "Example", "1", "Test", "", "main.js", listOf("music_provider"), listOf("example.com"))
+        val manifest = ExtensionManifest(1, "example.music", "Example", "1", "Test", "", "main.js", listOf("music_provider"), listOf("example.com"), listOf("example.com"))
         val runtime = JavaScriptExtensionRuntime(InstalledExtension(manifest, directory, true), requireNotNull(host.createIsolate()), unusedNetwork(), ExtensionPrivateCache(cacheRoot))
         runtime.start()
         runtimes += runtime
-        return JavaScriptMusicProvider(runtime)
+        return JavaScriptMusicProvider(runtime, manifest.musicSources.toSet())
     }
 
     private fun song(id: String) = ProviderSong(ExtensionTrackRef("example.music", id), "Title", "Artist")

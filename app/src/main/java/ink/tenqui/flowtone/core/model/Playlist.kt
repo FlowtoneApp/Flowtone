@@ -72,6 +72,6 @@ data class Playlist(
 data class PlaylistSongEntry(
     val id: String,
     val playlistId: String,
-    val songId: String,
+    val track: PersistentTrack,
     val addedAt: Long
 )

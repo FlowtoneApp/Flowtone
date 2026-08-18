@@ -3,7 +3,6 @@ package ink.tenqui.flowtone.app
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.data.local.LikedSongsStore
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
 
@@ -17,7 +16,6 @@ internal fun FlowtoneAppEffects(
     hasCurrentSong: Boolean,
     hasScanned: Boolean,
     songs: List<Song>,
-    likedSongsStore: LikedSongsStore,
     preloadSongMetadataCount: Int,
     preloadLyricsCount: Int,
     songRecordThresholdSeconds: Int,
@@ -27,7 +25,6 @@ internal fun FlowtoneAppEffects(
     onArtistRootReturnCompleted: () -> Unit,
     onOpenExpandedMiniPlayer: () -> Unit,
     onOpenExpandedPlayerRequestConsumed: () -> Unit,
-    onLikedSongKeysLoaded: (List<String>) -> Unit,
     onHideSwipeHint: () -> Unit
 ) {
     LaunchedEffect(selectedTopLevelPage, secondaryPage) {
@@ -58,10 +55,6 @@ internal fun FlowtoneAppEffects(
         } else if (hasScanned && songs.isEmpty()) {
             onOpenExpandedPlayerRequestConsumed()
         }
-    }
-
-    LaunchedEffect(likedSongsStore) {
-        onLikedSongKeysLoaded(likedSongsStore.loadLikedSongKeys())
     }
 
     LaunchedEffect(Unit) {
