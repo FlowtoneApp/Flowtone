@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.search
 
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.online.ProviderSong
 
 sealed interface SearchResult {
     data class SongResult(
@@ -46,7 +47,8 @@ data class GlobalSearchUiState(
     val queryText: String = "",
     val isSearching: Boolean = false,
     val songResults: List<Song> = emptyList(),
-    val artistResults: List<SearchArtist> = emptyList()
+    val artistResults: List<SearchArtist> = emptyList(),
+    val onlineSongResults: List<ProviderSong> = emptyList()
 ) {
     val query: SearchQuery
         get() = SearchQuery.from(queryText)
@@ -55,5 +57,5 @@ data class GlobalSearchUiState(
         get() = query.isBlank
 
     val hasNoResults: Boolean
-        get() = !isEmptyQuery && !isSearching && songResults.isEmpty() && artistResults.isEmpty()
+        get() = !isEmptyQuery && !isSearching && songResults.isEmpty() && artistResults.isEmpty() && onlineSongResults.isEmpty()
 }

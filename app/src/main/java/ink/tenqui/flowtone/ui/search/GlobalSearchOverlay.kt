@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.ui.search
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -8,30 +10,45 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.SearchArtist
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.search.searchPlaybackQueueStartIndex
 import ink.tenqui.flowtone.ui.components.ArtistListItem
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageProgressElement
+import coil3.compose.AsyncImage
 
 @Composable
 internal fun GlobalSearchOverlay(
@@ -39,6 +56,7 @@ internal fun GlobalSearchOverlay(
     currentSong: Song?,
     listState: LazyListState,
     onSongClick: (List<Song>, Int) -> Unit,
+    onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
     onExitSearch: () -> Unit,
     interactionsEnabled: Boolean,
@@ -89,6 +107,7 @@ internal fun GlobalSearchOverlay(
                 currentSong = currentSong,
                 listState = listState,
                 onSongClick = onSongClick,
+                onOnlineSongClick = onOnlineSongClick,
                 onArtistClick = { artist ->
                     if (interactionsEnabled) {
                         keyboardController?.hide()
@@ -110,6 +129,7 @@ private fun SearchResultList(
     currentSong: Song?,
     listState: LazyListState,
     onSongClick: (List<Song>, Int) -> Unit,
+    onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
     interactionsEnabled: Boolean,
     reentryProgress: Float,
@@ -226,6 +246,89 @@ private fun SearchResultList(
                     )
                 )
             }
+        }
+
+        if (searchUiState.onlineSongResults.isNotEmpty()) {
+            val headerIndex = nextItemIndex
+            nextItemIndex += 1
+            item(key = "online-sources-header") {
+                SearchSectionHeader(
+                    title = "在线来源",
+                    modifier = Modifier
+                        .staggeredPageProgressElement(
+                            visibleSearchAnimationIndex(headerIndex, listState),
+                            reentryProgress
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                )
+            }
+            val firstOnlineIndex = nextItemIndex
+            nextItemIndex += searchUiState.onlineSongResults.size
+            itemsIndexed(
+                items = searchUiState.onlineSongResults,
+                key = { _, song -> "online:${song.trackRef.extensionId}:${song.id}" }
+            ) { index, song ->
+                OnlineSongListItem(
+                    song = song,
+                    onClick = { if (interactionsEnabled) onOnlineSongClick(song) },
+                    modifier = Modifier.staggeredPageProgressElement(
+                        visibleSearchAnimationIndex(firstOnlineIndex + index, listState),
+                        reentryProgress
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun OnlineSongListItem(
+    song: ProviderSong,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
+    var artworkLoaded by remember(song.artwork) { mutableStateOf(false) }
+    val artworkAlpha by animateFloatAsState(
+        targetValue = if (artworkLoaded) 1f else 0f,
+        animationSpec = tween(durationMillis = 220),
+        label = "OnlineSearchArtworkAlpha"
+    )
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("online-song:${song.trackRef.extensionId}:${song.trackRef.opaqueId}")
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f)
+        ) {
+            if (song.artwork != null) {
+                AsyncImage(
+                    model = song.artwork,
+                    imageLoader = extensionManager.extensionImageLoader,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onSuccess = { artworkLoaded = true },
+                    onError = { artworkLoaded = false },
+                    modifier = Modifier.alpha(artworkAlpha)
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            Text(
+                song.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
     }
 }

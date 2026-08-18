@@ -11,6 +11,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExtensionPackageInstallerTest {
+    @Test fun `music provider capability can stand alone or coexist with artist avatar`() {
+        val musicOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"music_provider\""))
+        val combined = ExtensionManifestParser.parse(
+            manifest(capabilities = "\"artist_avatar\",\"music_provider\"")
+        )
+
+        assertTrue(musicOnly.supportsMusicProvider)
+        assertTrue(!musicOnly.supportsArtistAvatar)
+        assertTrue(combined.supportsMusicProvider)
+        assertTrue(combined.supportsArtistAvatar)
+    }
+
     @Test fun `合法 flowtone 和 zip 可以安装`() {
         listOf("test.flowtone", "test.zip").forEach { fileName ->
             val root = Files.createTempDirectory("flowtone-test").toFile()
@@ -57,9 +69,13 @@ class ExtensionPackageInstallerTest {
     private fun validEntries(manifest: String = manifest(), main: String = "globalThis.flowtoneExtension={};") =
         mapOf("manifest.json" to manifest, "main.js" to main)
 
-    private fun manifest(formatVersion: Int = 1, id: String = "example.avatar") = """
+    private fun manifest(
+        formatVersion: Int = 1,
+        id: String = "example.avatar",
+        capabilities: String = "\"artist_avatar\""
+    ) = """
         {"formatVersion":$formatVersion,"id":"$id","name":"Example","version":"1","author":"Test",
-        "entry":"main.js","capabilities":["artist_avatar"],"permissions":{"network":{"hosts":["example.com"]}}}
+        "entry":"main.js","capabilities":[$capabilities],"permissions":{"network":{"hosts":["example.com"]}}}
     """.trimIndent()
 
     private fun zip(entries: Map<String, String>): ByteArrayInputStream {

@@ -14,7 +14,7 @@ class MusicRepository(
         return localMusicRepository.loadSongs()
     }
 
-    fun searchOnlineSongs(keyword: String): List<ProviderSong> {
+    suspend fun searchOnlineSongs(keyword: String): List<ProviderSong> {
         return musicProvider.searchSongs(keyword)
     }
 }

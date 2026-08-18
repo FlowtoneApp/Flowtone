@@ -19,6 +19,9 @@ import ink.tenqui.flowtone.data.local.SongMetadataPreloader
 import ink.tenqui.flowtone.data.listening.ListeningStatsRepositoryProvider
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.repository.MusicRepository
+import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.SearchQuery
 import ink.tenqui.flowtone.data.search.SearchRepository
@@ -59,6 +62,24 @@ data class MusicUiState(
     val listeningStats: ListeningStatsSnapshot = ListeningStatsSnapshot()
 )
 
+private fun ProviderSong.toOnlineDisplaySong(): Song {
+    val opaqueUri = Uri.Builder()
+        .scheme("flowtone-extension")
+        .authority("track")
+        .appendPath(trackRef.extensionId)
+        .appendPath(trackRef.opaqueId)
+        .build()
+    return Song(
+        id = -((trackRef.extensionId + ":" + trackRef.opaqueId).hashCode().toLong().let { kotlin.math.abs(it) + 1L }),
+        sourceType = SourceType.Online,
+        title = title,
+        artist = artist,
+        durationMs = durationMs ?: 0L,
+        uri = opaqueUri,
+        displayName = title
+    )
+}
+
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val musicRepository = MusicRepository(
         localMusicRepository = LocalMusicRepository(
@@ -69,6 +90,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val localLyricsRepository = LocalLyricsRepository(application)
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
     private val searchRepository = SearchRepository()
+    private val extensionManager = ExtensionManager.get(application)
     private val playbackController = PlaybackController(
         context = application,
         initialPlaybackOrderMode = playbackSettingsStore.getPlaybackOrderMode(),
@@ -184,14 +206,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         visibleQueryText: String
     ) {
         val results = searchRepository.search(query)
+        val onlineResults = extensionManager.searchMusicProviders(query.text)
         _searchUiState.update { currentState ->
             if (currentState.queryText != visibleQueryText) {
                 currentState
             } else {
                 currentState.copy(
-                    isSearching = false,
-                    songResults = results.songs,
-                    artistResults = results.artists
+                      isSearching = false,
+                      songResults = results.songs,
+                      artistResults = results.artists,
+                      onlineSongResults = onlineResults
                 )
             }
         }
@@ -435,6 +459,22 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
         val playbackIndex = findSongIndex(playbackQueue, startSong)
         playSongAt(index = playbackIndex, source = source)
+    }
+
+    fun playProviderSong(song: ProviderSong) {
+        viewModelScope.launch {
+            val mediaItem = extensionManager.createPlaybackMediaItem(song) ?: run {
+                _uiState.update { it.copy(errorMessage = "无法解析在线播放资源") }
+                return@launch
+            }
+            val displaySong = song.toOnlineDisplaySong()
+            sourceQueue = listOf(displaySong)
+            playbackQueue = listOf(displaySong)
+            currentQueueIndex = 0
+            currentPlaybackSource = PlaybackSource.Search
+            publishPlaybackQueue()
+            playbackController.playResolvedMediaItem(displaySong, mediaItem)
+        }
     }
 
     fun playQueueSong(song: Song) {

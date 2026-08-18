@@ -14,6 +14,7 @@ data class ExtensionManifest(
     val networkHosts: List<String>
 ) {
     val supportsArtistAvatar: Boolean get() = "artist_avatar" in capabilities
+    val supportsMusicProvider: Boolean get() = "music_provider" in capabilities
 }
 
 object ExtensionManifestParser {

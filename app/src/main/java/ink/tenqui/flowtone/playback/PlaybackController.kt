@@ -172,6 +172,22 @@ class PlaybackController(
         }
     }
 
+    /** 由 Host 已解析好的受控媒体项仍进入同一 MediaController，不创建第二个播放器。 */
+    fun playResolvedMediaItem(song: Song, mediaItem: MediaItem) {
+        val controller = currentControllerOrNull()
+        if (controller == null) {
+            pendingPlaybackRequest = PendingPlaybackRequest.ResolvedMediaItem(song, mediaItem)
+            updateCurrentSong(song)
+            return
+        }
+        runCatching {
+            controller.setMediaItem(mediaItem)
+            controller.prepare()
+            controller.play()
+            updatePlaybackStarted(song)
+        }.onFailure { error -> updatePlaybackFailed(song, error) }
+    }
+
     fun addSongsNext(
         songs: List<Song>,
         source: PlaybackSource = PlaybackSource.Unknown
@@ -484,6 +500,11 @@ class PlaybackController(
                 play(request.song, request.source)
             }
 
+            is PendingPlaybackRequest.ResolvedMediaItem -> {
+                pendingPlaybackRequest = null
+                playResolvedMediaItem(request.song, request.mediaItem)
+            }
+
             null -> Unit
         }
     }
@@ -594,6 +615,11 @@ class PlaybackController(
             val songs: List<Song>,
             val startIndex: Int,
             val source: PlaybackSource
+        ) : PendingPlaybackRequest
+
+        data class ResolvedMediaItem(
+            val song: Song,
+            val mediaItem: MediaItem
         ) : PendingPlaybackRequest
     }
 }

@@ -323,7 +323,7 @@ internal fun SettingsScreen(
                 state.showingOnlineSettings -> OnlineSettingsPage(
                     installedExtensions = installedExtensions,
                     onInstall = {
-                        extensionPackageLauncher.launch(arrayOf(FlowtoneExtensionMimeType))
+                        extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes)
                     },
                     onUninstall = { id ->
                         extensionScope.launch {
@@ -357,7 +357,13 @@ internal fun SettingsScreen(
 
 }
 
-private const val FlowtoneExtensionMimeType = "application/x-flowtone"
+// Android DocumentsProvider 往往把自定义 .flowtone 包标成 ZIP 或通用二进制流，
+// 因而不能只请求自定义 MIME；实际后缀与包内容仍由 Host 安装器校验。
+private val FlowtoneExtensionMimeTypes = arrayOf(
+    "application/x-flowtone",
+    "application/zip",
+    "application/octet-stream"
+)
 
 private data class SettingsPageState(
     val section: SettingsSection?,

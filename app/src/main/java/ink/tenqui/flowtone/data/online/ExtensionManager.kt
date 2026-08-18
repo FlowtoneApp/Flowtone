@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.online
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -20,6 +21,8 @@ import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
+import ink.tenqui.flowtone.data.online.runtime.JavaScriptExtensionRuntime
+import ink.tenqui.flowtone.data.online.runtime.JavaScriptMusicProvider
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
@@ -44,7 +47,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val persistentAvatarCache = ArtistAvatarPersistentCache(appContext.filesDir.resolve("extension-data"))
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val mutex = Mutex()
-    private val runtimes = mutableMapOf<String, JavaScriptArtistAvatarExtension>()
+    private val runtimes = mutableMapOf<String, JavaScriptExtensionRuntime>()
+    private val musicProviders = ConcurrentHashMap<String, JavaScriptMusicProvider>()
     private val networkClients = ConcurrentHashMap<String, ExtensionNetworkClient>()
     private val streamClients = ConcurrentHashMap<String, ExtensionStreamClient>()
     private val playbackResources = ExtensionPlaybackResourceStore()
@@ -70,6 +74,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     suspend fun install(uri: Uri): InstalledExtension = mutex.withLock {
         val name = requireNotNull(displayName(uri)) { "无法确认扩展包文件名" }
+        require(name.endsWith(".flowtone", ignoreCase = true)) { "请选择 .flowtone 扩展包" }
         val installed = withContext(Dispatchers.IO) {
             val input = requireNotNull(appContext.contentResolver.openInputStream(uri)) { "无法读取扩展包" }
             installer.install(name, input)
@@ -127,6 +132,33 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         )
     }
 
+    /** 在线曲目只保存 Host 绑定的 track ref；每次播放重新向所属 runtime 解析短期播放资源。 */
+    internal suspend fun createPlaybackMediaItem(song: ProviderSong): MediaItem? {
+        val provider = musicProviders[song.trackRef.extensionId] ?: return null
+        val resource = runCatching { provider.getPlaybackResource(song) }
+            .onFailure { error ->
+                Log.w(LogTag, "extension.playback.resolve.failed extension=${song.trackRef.extensionId} type=${error.javaClass.simpleName}")
+            }
+            .getOrNull() ?: return null
+        return createPlaybackMediaItem(
+            extensionId = song.trackRef.extensionId,
+            url = resource.url,
+            headers = resource.headers,
+            mimeType = resource.mimeType,
+            type = resource.type,
+            mediaId = song.trackRef.opaqueId
+        )
+    }
+
+    internal suspend fun searchMusicProviders(keyword: String): List<ProviderSong> =
+        musicProviders.values.flatMap { provider ->
+            runCatching { provider.searchSongs(keyword) }
+                .onFailure { error ->
+                    Log.w(LogTag, "extension.music.search.failed type=${error.javaClass.simpleName}")
+                }
+                .getOrDefault(emptyList())
+        }
+
     @UnstableApi
     fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
         val extensionDataSourceFactory = extensionMediaDataSourceFactory()
@@ -139,11 +171,11 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     private suspend fun load(installed: InstalledExtension) {
-        if (!installed.manifest.supportsArtistAvatar) return
+        if (!installed.manifest.supportsArtistAvatar && !installed.manifest.supportsMusicProvider) return
         val isolate = sandboxHost.createIsolate() ?: return
         val networkClient = gateway.createClientFor(
             extensionId = installed.manifest.id,
-            capability = "artist_avatar",
+            capability = if (installed.manifest.supportsMusicProvider) "music_provider" else "artist_avatar",
             allowedHosts = installed.manifest.networkHosts
         )
         val streamClient = gateway.createStreamClientFor(
@@ -151,25 +183,26 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             capability = "media_stream",
             allowedHosts = installed.manifest.networkHosts
         )
-        val extension = JavaScriptArtistAvatarExtension(
-            installed = installed,
-            isolate = isolate,
-            network = networkClient,
-            privateCache = privateCache
-        )
-        runCatching { extension.start() }
+        val runtime = JavaScriptExtensionRuntime(installed, isolate, networkClient, privateCache)
+        runCatching { runtime.start() }
             .onSuccess {
-                runtimes[installed.manifest.id] = extension
+                runtimes[installed.manifest.id] = runtime
                 networkClients[installed.manifest.id] = networkClient
                 streamClients[installed.manifest.id] = streamClient
-                artistAvatarRegistry.install(extension)
+                if (installed.manifest.supportsArtistAvatar) {
+                    artistAvatarRegistry.install(JavaScriptArtistAvatarExtension(runtime))
+                }
+                if (installed.manifest.supportsMusicProvider) {
+                    musicProviders[installed.manifest.id] = JavaScriptMusicProvider(runtime)
+                }
             }
-            .onFailure { extension.close() }
+            .onFailure { runtime.close() }
     }
 
     private fun stop(id: String, clearExtensionData: Boolean = false) {
         artistAvatarRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
         runtimes.remove(id)?.close()
+        musicProviders.remove(id)
         networkClients.remove(id)
         streamClients.remove(id)
         playbackResources.clear(id)
@@ -193,6 +226,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     companion object {
+        private const val LogTag = "FlowtoneExtension"
         @Volatile private var instance: ExtensionManager? = null
         fun get(context: Context): ExtensionManager = instance ?: synchronized(this) {
             instance ?: ExtensionManager(context).also { instance = it }

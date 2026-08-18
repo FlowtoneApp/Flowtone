@@ -1,9 +1,9 @@
 package ink.tenqui.flowtone.data.online
 
-import android.net.Uri
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 
 interface MusicProvider {
-    fun searchSongs(keyword: String): List<ProviderSong>
+    suspend fun searchSongs(keyword: String): List<ProviderSong>
 
-    fun getPlayableUri(song: ProviderSong): Uri?
+    suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource?
 }

@@ -1,13 +1,13 @@
 package ink.tenqui.flowtone.data.online
 
-import android.net.Uri
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 
 class NoopMusicProvider : MusicProvider {
-    override fun searchSongs(keyword: String): List<ProviderSong> {
+    override suspend fun searchSongs(keyword: String): List<ProviderSong> {
         return emptyList()
     }
 
-    override fun getPlayableUri(song: ProviderSong): Uri? {
+    override suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource? {
         return null
     }
 }

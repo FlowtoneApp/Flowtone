@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.app
 
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
@@ -48,6 +49,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenSourceBack: () -> Unit,
     val onRequestPermission: () -> Unit,
     val onSongClick: (Song) -> Unit,
+    val onOnlineSongClick: (ProviderSong) -> Unit,
     val onDismissExpandedPlayer: () -> Unit,
     val onExpandedChange: (Boolean) -> Unit,
     val onFullscreenChange: (Boolean) -> Unit,
@@ -84,6 +86,7 @@ internal fun flowtoneAppCallbacks(
     onOpenArtistRootPage: (String, ArtistRootNavigationMode) -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
+    onOnlineSongClick: (ProviderSong) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -261,6 +264,7 @@ internal fun flowtoneAppCallbacks(
         },
         onRequestPermission = onRequestPermission,
         onSongClick = onSongClick,
+        onOnlineSongClick = onOnlineSongClick,
         onDismissExpandedPlayer = {
             if (appState.miniPlayerFullscreen) {
                 onExitMiniPlayerFullscreen()

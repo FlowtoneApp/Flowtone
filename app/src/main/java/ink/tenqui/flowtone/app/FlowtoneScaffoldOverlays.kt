@@ -134,6 +134,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                     PlaybackSource.Search
                 )
             },
+            onOnlineSongClick = callbacks.onOnlineSongClick,
             onArtistClick = { artist ->
                 callbacks.onOpenArtistRootPage(
                     artist.name,
