@@ -1,7 +1,6 @@
 package ink.tenqui.flowtone.ui.player
 
 import android.content.Context
-import android.net.Uri
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
@@ -45,6 +45,7 @@ internal class MiniPlayerState internal constructor(
     val noRippleInteractionSource: MutableInteractionSource,
     val addToPlaylistListState: LazyListState,
     val queueSheetBackgroundBlurProgress: Animatable<Float, AnimationVector1D>,
+    val artworkImageLoader: ImageLoader,
     val backgroundImageRequest: ImageRequest?,
     val coverImageRequest: ImageRequest?,
     val paletteImageRequest: ImageRequest?,
@@ -83,41 +84,42 @@ internal fun rememberMiniPlayerState(
     currentSong: Song?,
     title: String,
     artist: String,
-    artworkUri: Uri?,
+    artworkData: Any?,
+    artworkImageLoader: ImageLoader,
     fallbackSeedColor: Int,
     isDarkTheme: Boolean,
     context: Context,
     allSongs: List<Song>
 ): MiniPlayerState {
-    val backgroundImageRequest: ImageRequest? = remember(artworkUri, context) {
-        artworkUri?.let { uri ->
+    val backgroundImageRequest: ImageRequest? = remember(artworkData, context) {
+        artworkData?.let { data ->
             ImageRequest.Builder(context)
-                .data(uri)
+                .data(data)
                 .size(256, 256)
                 .crossfade(false)
                 .build()
         }
     }
-    val coverImageRequest: ImageRequest? = remember(artworkUri, context) {
-        artworkUri?.let { uri ->
+    val coverImageRequest: ImageRequest? = remember(artworkData, context) {
+        artworkData?.let { data ->
             ImageRequest.Builder(context)
-                .data(uri)
+                .data(data)
                 .size(768, 768)
                 .crossfade(false)
                 .build()
         }
     }
-    val paletteImageRequest: ImageRequest? = remember(artworkUri, context) {
-        artworkUri?.let { uri ->
+    val paletteImageRequest: ImageRequest? = remember(artworkData, context) {
+        artworkData?.let { data ->
             ImageRequest.Builder(context)
-                .data(uri)
+                .data(data)
                 .size(96, 96)
                 .allowHardware(false)
                 .crossfade(false)
                 .build()
         }
     }
-    val fallbackSeedColors = remember(currentSong?.id, title, artist, artworkUri, fallbackSeedColor) {
+    val fallbackSeedColors = remember(currentSong?.id, title, artist, artworkData, fallbackSeedColor) {
         songFallbackCloudSeedColors(
             song = currentSong,
             fallbackColor = fallbackSeedColor
@@ -209,6 +211,7 @@ internal fun rememberMiniPlayerState(
         noRippleInteractionSource = noRippleInteractionSource,
         addToPlaylistListState = addToPlaylistListState,
         queueSheetBackgroundBlurProgress = queueSheetBackgroundBlurProgress,
+        artworkImageLoader = artworkImageLoader,
         backgroundImageRequest = backgroundImageRequest,
         coverImageRequest = coverImageRequest,
         paletteImageRequest = paletteImageRequest,

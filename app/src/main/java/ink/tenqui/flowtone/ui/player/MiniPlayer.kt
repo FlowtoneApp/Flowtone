@@ -42,10 +42,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.imageLoader
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.debug.performanceSample
@@ -131,11 +133,20 @@ fun MiniPlayer(
         )
     }
     val artworkUri = playerUiState.artworkUri
+    val extensionArtwork = playerUiState.extensionArtwork
+    val artworkData = extensionArtwork ?: artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
     val durationMs = playerUiState.durationMs
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val context = LocalContext.current
+    val artworkImageLoader = remember(extensionArtwork, context) {
+        if (extensionArtwork != null) {
+            ExtensionManager.get(context).extensionImageLoader
+        } else {
+            context.imageLoader
+        }
+    }
     val lyricsViewModel: MusicViewModel = viewModel()
     val lyricsDirectoryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -163,7 +174,8 @@ fun MiniPlayer(
         currentSong = currentSong,
         title = title,
         artist = artist,
-        artworkUri = artworkUri,
+        artworkData = artworkData,
+        artworkImageLoader = artworkImageLoader,
         fallbackSeedColor = fallbackSeedColor,
         isDarkTheme = isDarkTheme,
         context = context,
@@ -450,7 +462,7 @@ fun MiniPlayer(
     MiniPlayerBackdropEffects(
         currentSong = currentSong,
         title = title,
-        artworkUri = artworkUri,
+        artworkData = artworkData,
         fallbackSeedColor = fallbackSeedColor,
         isDarkTheme = isDarkTheme,
         paletteImageRequest = state.paletteImageRequest,
@@ -462,6 +474,7 @@ fun MiniPlayer(
         lastStableBackdrop = state.lastStableBackdrop,
         usingFallbackCloudColors = state.usingFallbackCloudColors,
         context = context,
+        artworkImageLoader = state.artworkImageLoader,
         onLastStableBackdropChange = { state.lastStableBackdrop = it },
         onUsingFallbackCloudColorsChange = {
             state.usingFallbackCloudColors = it
@@ -859,6 +872,7 @@ fun MiniPlayer(
                     )
                     MiniPlayerFullscreenLayout(
                         imageRequest = state.coverImageRequest,
+                        artworkImageLoader = state.artworkImageLoader,
                         playerUiState = playerUiState,
                         songLyricsState = songLyricsState,
                         confirmedPlaybackPosition =

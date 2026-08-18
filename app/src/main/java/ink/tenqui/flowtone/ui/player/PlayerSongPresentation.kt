@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.asPainter
-import coil3.imageLoader
+import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import kotlinx.coroutines.CancellationException
@@ -47,7 +47,8 @@ internal fun rememberPlayerSongPresentationTransition(
     songKey: Long?,
     title: String,
     artist: String,
-    imageRequest: ImageRequest?
+    imageRequest: ImageRequest?,
+    imageLoader: ImageLoader
 ): PlayerSongPresentationTransition {
     val context = LocalContext.current
     val desired = DesiredPlayerSongPresentation(
@@ -102,10 +103,10 @@ internal fun rememberPlayerSongPresentationTransition(
         previous = null
     }
 
-    LaunchedEffect(desired.key, desired.imageRequest) {
+    LaunchedEffect(desired.key, desired.imageRequest, imageLoader) {
         val painter = try {
             desired.imageRequest?.let { request ->
-                (context.imageLoader.execute(request) as? SuccessResult)
+                (imageLoader.execute(request) as? SuccessResult)
                     ?.image
                     ?.asPainter(context)
             }

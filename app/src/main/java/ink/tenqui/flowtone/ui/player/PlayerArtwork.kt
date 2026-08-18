@@ -6,6 +6,7 @@ import android.graphics.RectF
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -257,25 +258,31 @@ internal fun MorphArtworkLayer(
                     .then(blurModifier),
                 contentAlignment = Alignment.Center
             ) {
-                if (artworkPainter != null) {
-                    Image(
-                        painter = artworkPainter,
-                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else {
-                    MissingArtworkPlaceholder(
-                        modifier = Modifier.matchParentSize(),
-                        iconModifier = Modifier.size(
-                            maxOf(
-                                artworkSize * MissingArtworkIconSizeFraction,
-                                MissingArtworkCompactIconSize
-                            )
+                MissingArtworkPlaceholder(
+                    modifier = Modifier.matchParentSize(),
+                    iconModifier = Modifier.size(
+                        maxOf(
+                            artworkSize * MissingArtworkIconSizeFraction,
+                            MissingArtworkCompactIconSize
                         )
                     )
+                )
+                val artworkFadeProgress by animateFloatAsState(
+                    targetValue = if (artworkPainter != null) 1f else 0f,
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                    label = "MiniPlayerArtworkLoadFade"
+                )
+                artworkPainter?.let { painter ->
+                    Image(
+                        painter = painter,
+                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer { alpha = artworkFadeProgress }
+                    )
                 }
-                if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
+                if (collapsedArtworkDimAlpha > 0.01f) {
                     Box(
                         modifier = Modifier
                             .matchParentSize()

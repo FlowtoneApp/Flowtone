@@ -1,7 +1,6 @@
 package ink.tenqui.flowtone.ui.player
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -12,7 +11,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
-import coil3.imageLoader
+import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.toBitmap
@@ -45,7 +44,7 @@ internal fun MiniPlayerLyricsKeepScreenOnEffect(keepScreenOn: Boolean) {
 internal fun MiniPlayerBackdropEffects(
     currentSong: Song?,
     title: String,
-    artworkUri: Uri?,
+    artworkData: Any?,
     fallbackSeedColor: Int,
     isDarkTheme: Boolean,
     paletteImageRequest: ImageRequest?,
@@ -57,22 +56,23 @@ internal fun MiniPlayerBackdropEffects(
     lastStableBackdrop: PlayerBackdropState,
     usingFallbackCloudColors: Boolean,
     context: Context,
+    artworkImageLoader: ImageLoader,
     onLastStableBackdropChange: (PlayerBackdropState) -> Unit,
     onUsingFallbackCloudColorsChange: (Boolean) -> Unit
 ) {
-    LaunchedEffect(currentSong?.id, currentSong?.uri, artworkUri, fallbackSeedColor, isDarkTheme) {
+    LaunchedEffect(currentSong?.id, currentSong?.uri, artworkData, fallbackSeedColor, isDarkTheme) {
         Log.d(
             FLOWTONE_CLOUD_COLORS_TAG,
-            "start songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+            "start songId=${currentSong?.id}, song=${title}, artwork=$artworkData, " +
                 "requestData=${paletteImageRequest?.data}"
         )
 
-        if (artworkUri == null || paletteImageRequest == null) {
+        if (artworkData == null || paletteImageRequest == null) {
             onLastStableBackdropChange(fallbackBackdrop)
             onUsingFallbackCloudColorsChange(true)
             Log.d(
                 FLOWTONE_CLOUD_COLORS_TAG,
-                "fallback used for songId=${currentSong?.id}, song=${title}, reason=artworkUri is null, " +
+                "fallback used for songId=${currentSong?.id}, song=${title}, reason=artwork is null, " +
                     "path=songFallback, " +
                     "colors=${fallbackCloudColors.joinToString { it.toArgbHex() }}"
             )
@@ -81,7 +81,7 @@ internal fun MiniPlayerBackdropEffects(
 
         runCatching {
             withContext(Dispatchers.Default) {
-                val result = context.imageLoader.execute(paletteImageRequest)
+                val result = artworkImageLoader.execute(paletteImageRequest)
                 Log.d(
                     FLOWTONE_CLOUD_COLORS_TAG,
                     "coil result songId=${currentSong?.id}, song=${title}, success=${result is SuccessResult}"
@@ -114,7 +114,7 @@ internal fun MiniPlayerBackdropEffects(
                     seedResult.colorPath == CloudColorPath.ThemeFallback
                 Log.d(
                     FLOWTONE_CLOUD_COLORS_TAG,
-                    "success songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+                    "success songId=${currentSong?.id}, song=${title}, artwork=$artworkData, " +
                         "requestData=${paletteImageRequest.data}, bitmap=${bitmap.width}x${bitmap.height}, " +
                         "opaque=${seedResult.opaquePixelCount}, quantized=${seedResult.quantizedColorCount}, " +
                         "sat=${seedResult.averageSaturation}, lum=${seedResult.averageLuminance}, " +
@@ -149,7 +149,7 @@ internal fun MiniPlayerBackdropEffects(
             onUsingFallbackCloudColorsChange(true)
             Log.w(
                 FLOWTONE_CLOUD_COLORS_TAG,
-                "fallback used for songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+                "fallback used for songId=${currentSong?.id}, song=${title}, artwork=$artworkData, " +
                     "requestData=${paletteImageRequest.data}, reason=${throwable.message}, " +
                     "path=songFallback, " +
                     "colors=${fallbackCloudColors.joinToString { it.toArgbHex() }}",
@@ -157,14 +157,14 @@ internal fun MiniPlayerBackdropEffects(
             )
         }
     }
-    LaunchedEffect(currentSong?.id, artworkUri, lastStableBackdrop) {
+    LaunchedEffect(currentSong?.id, artworkData, lastStableBackdrop) {
         val backdropName = when (lastStableBackdrop) {
             is PlayerBackdropState.Artwork -> "Artwork"
             is PlayerBackdropState.Fallback -> "Fallback"
         }
         Log.d(
             FLOWTONE_CLOUD_COLORS_TAG,
-            "render songId=${currentSong?.id}, song=${title}, artworkUri=$artworkUri, " +
+            "render songId=${currentSong?.id}, song=${title}, artwork=$artworkData, " +
                 "backdrop=$backdropName, " +
                 "colors=${lastStableBackdrop.colors.joinToString { it.toArgbHex() }}, " +
                 "usingFallback=$usingFallbackCloudColors"

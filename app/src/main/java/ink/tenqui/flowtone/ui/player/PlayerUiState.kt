@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.player
 
 import android.net.Uri
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
 import ink.tenqui.flowtone.playback.PlaybackState
 
@@ -11,6 +12,7 @@ data class PlayerUiState(
     val positionMs: Long,
     val durationMs: Long,
     val artworkUri: Uri?,
+    val extensionArtwork: ExtensionImage?,
     val playbackOrderMode: PlaybackOrderMode,
     val hasCurrentSong: Boolean,
     val canPlay: Boolean
@@ -30,6 +32,7 @@ data class PlayerUiState(
                 positionMs = playbackState.positionMs,
                 durationMs = durationMs,
                 artworkUri = currentSong?.artworkUri,
+                extensionArtwork = playbackState.extensionArtwork,
                 playbackOrderMode = playbackState.playbackOrderMode,
                 hasCurrentSong = currentSong != null,
                 canPlay = currentSong != null

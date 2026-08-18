@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
+import coil3.ImageLoader
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.lyrics.SongLyricsState
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 @Composable
 internal fun BoxScope.MiniPlayerFullscreenLayout(
     imageRequest: ImageRequest?,
+    artworkImageLoader: ImageLoader,
     playerUiState: PlayerUiState,
     songLyricsState: SongLyricsState,
     confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
@@ -176,7 +178,8 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             songKey = playerUiState.currentSong?.id,
             title = title,
             artist = artist,
-            imageRequest = imageRequest
+            imageRequest = imageRequest,
+            imageLoader = artworkImageLoader
         )
         val playbackArtworkAlpha = if (hidePlaybackSharedArtwork) {
             0f

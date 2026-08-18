@@ -9,6 +9,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -173,18 +174,26 @@ class PlaybackController(
     }
 
     /** 由 Host 已解析好的受控媒体项仍进入同一 MediaController，不创建第二个播放器。 */
-    fun playResolvedMediaItem(song: Song, mediaItem: MediaItem) {
+    fun playResolvedMediaItem(
+        song: Song,
+        mediaItem: MediaItem,
+        extensionArtwork: ExtensionImage? = null
+    ) {
         val controller = currentControllerOrNull()
         if (controller == null) {
-            pendingPlaybackRequest = PendingPlaybackRequest.ResolvedMediaItem(song, mediaItem)
-            updateCurrentSong(song)
+            pendingPlaybackRequest = PendingPlaybackRequest.ResolvedMediaItem(
+                song = song,
+                mediaItem = mediaItem,
+                extensionArtwork = extensionArtwork
+            )
+            updateCurrentSong(song, extensionArtwork)
             return
         }
         runCatching {
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
-            updatePlaybackStarted(song)
+            updatePlaybackStarted(song, extensionArtwork)
         }.onFailure { error -> updatePlaybackFailed(song, error) }
     }
 
@@ -217,10 +226,11 @@ class PlaybackController(
         }.getOrDefault(false)
     }
 
-    fun updateCurrentSong(song: Song) {
+    fun updateCurrentSong(song: Song, extensionArtwork: ExtensionImage? = null) {
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                extensionArtwork = extensionArtwork,
                 positionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L)
             )
@@ -502,17 +512,25 @@ class PlaybackController(
 
             is PendingPlaybackRequest.ResolvedMediaItem -> {
                 pendingPlaybackRequest = null
-                playResolvedMediaItem(request.song, request.mediaItem)
+                playResolvedMediaItem(
+                    song = request.song,
+                    mediaItem = request.mediaItem,
+                    extensionArtwork = request.extensionArtwork
+                )
             }
 
             null -> Unit
         }
     }
 
-    private fun updatePlaybackStarted(song: Song) {
+    private fun updatePlaybackStarted(
+        song: Song,
+        extensionArtwork: ExtensionImage? = null
+    ) {
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                extensionArtwork = extensionArtwork,
                 isPlaying = true,
                 positionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
@@ -619,7 +637,8 @@ class PlaybackController(
 
         data class ResolvedMediaItem(
             val song: Song,
-            val mediaItem: MediaItem
+            val mediaItem: MediaItem,
+            val extensionArtwork: ExtensionImage?
         ) : PendingPlaybackRequest
     }
 }

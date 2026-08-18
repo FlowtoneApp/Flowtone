@@ -473,7 +473,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentQueueIndex = 0
             currentPlaybackSource = PlaybackSource.Search
             publishPlaybackQueue()
-            playbackController.playResolvedMediaItem(displaySong, mediaItem)
+            playbackController.playResolvedMediaItem(
+                song = displaySong,
+                mediaItem = mediaItem,
+                extensionArtwork = song.artwork
+            )
         }
     }
 
