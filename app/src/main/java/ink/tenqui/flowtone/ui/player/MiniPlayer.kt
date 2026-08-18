@@ -391,8 +391,17 @@ fun MiniPlayer(
         },
         label = "FullscreenLyricsVisibilityProgress"
     )
-    val lyricsControlsOffsetY =
+    // 从歌词页进入二级内容再返回时，直到退出动画结束都沿用歌词页的位移基准，
+    // 避免内容退出与歌词恢复两条动画产生相反方向的回弹。
+    val keepsLyricsControlsOffsetDuringFullscreenContent =
+        state.addToPlaylistEnteredFromLyrics ||
+            state.songInfoEnteredFromLyrics ||
+            state.artistEnteredFromLyrics
+    val lyricsControlsOffsetY = if (keepsLyricsControlsOffsetDuringFullscreenContent) {
+        LyricsControlsDownOffset
+    } else {
         LyricsControlsDownOffset * (1f - artworkVisibilityProgress)
+    }
     val lyricsBlurredArtworkProgress by animateFloatAsState(
         targetValue = if (
             lyricsModeActive && lyricsBackgroundStyle == LyricsBackgroundStyle.BlurredArtwork
