@@ -267,7 +267,12 @@ internal fun MorphArtworkLayer(
                 } else {
                     MissingArtworkPlaceholder(
                         modifier = Modifier.matchParentSize(),
-                        iconModifier = Modifier.size(42.dp)
+                        iconModifier = Modifier.size(
+                            maxOf(
+                                artworkSize * MissingArtworkIconSizeFraction,
+                                MissingArtworkCompactIconSize
+                            )
+                        )
                     )
                 }
                 if (collapsedArtworkDimAlpha > 0.01f && imageRequest != null) {
@@ -361,3 +366,7 @@ private fun missingArtworkIcon(
         modifier = modifier
     )
 }
+
+// 主封面按比例放大；缩略封面不小于常规歌曲 Item 的 24dp 图标。
+private const val MissingArtworkIconSizeFraction = 0.18f
+private val MissingArtworkCompactIconSize = 24.dp
