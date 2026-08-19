@@ -260,6 +260,7 @@ internal fun GlobalSearchOverlay(
 
 private enum class SearchResultCategory(val label: String, val providerCategory: ProviderSearchCategory) {
     Single("单曲", ProviderSearchCategory.Single),
+    Playlist("歌单", ProviderSearchCategory.Playlist),
     Album("专辑", ProviderSearchCategory.Album),
     User("用户", ProviderSearchCategory.User)
 }

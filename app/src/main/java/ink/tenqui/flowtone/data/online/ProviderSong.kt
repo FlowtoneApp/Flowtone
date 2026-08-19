@@ -7,11 +7,13 @@ import ink.tenqui.flowtone.core.online.PersistentProviderTrackRef
 /** Provider 搜索项在 Host 搜索页中的有限分类，不代表 Provider 导航能力。 */
 enum class ProviderSearchCategory {
     Single,
+    Playlist,
     Album,
     User
 }
 
 internal fun providerSearchCategoryFromWire(value: String): ProviderSearchCategory = when (value.trim().lowercase()) {
+    "playlist" -> ProviderSearchCategory.Playlist
     "album" -> ProviderSearchCategory.Album
     "user", "artist" -> ProviderSearchCategory.User
     else -> ProviderSearchCategory.Single

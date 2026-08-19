@@ -55,6 +55,17 @@ class JavaScriptMusicProviderTest {
         assertEquals("https://images.example/cover-large.jpg", songs.single().largeArtwork?.url)
     }
 
+    @Test fun searchParsesPlaylistCategory() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'playlist-1', category:'playlist', title:'Playlist', artist:'Creator'}]; }, async getPlaybackResource(){ return {}; } };
+        """.trimIndent())
+
+        assertEquals(
+            ink.tenqui.flowtone.data.online.ProviderSearchCategory.Playlist,
+            provider.searchSongs("hello").single().searchCategory
+        )
+    }
+
     @Test fun missingLargeArtworkFallsBackToRegularArtwork() = runBlocking {
         val provider = provider("""
             globalThis.flowtoneExtension = { async searchSongs() { return [{id:'track-1', title:'Title', artist:'Artist', artworkUrl:'https://images.example/cover.jpg'}]; }, async getPlaybackResource(){ return {}; } };
