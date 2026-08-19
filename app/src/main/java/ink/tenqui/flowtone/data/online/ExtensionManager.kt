@@ -24,6 +24,7 @@ import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptExtensionRuntime
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptMusicProvider
+import ink.tenqui.flowtone.data.search.SearchProviderOption
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
@@ -54,6 +55,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val streamClients = ConcurrentHashMap<String, ExtensionStreamClient>()
     private val playbackResources = ExtensionPlaybackResourceStore()
     private val presentationCache = ConcurrentHashMap<String, ProviderSong>()
+    private val searchLandingCache = ConcurrentHashMap<String, ProviderSearchLanding>()
     private var initialized = false
     val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
         resultCache = avatarResultCache,
@@ -161,6 +163,30 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 .getOrDefault(emptyList())
         }
 
+    internal suspend fun searchMusicProvider(extensionId: String, keyword: String): List<ProviderSong> {
+        val provider = musicProviders[extensionId] ?: return emptyList()
+        return runCatching { provider.searchSongs(keyword) }
+            .onFailure { error ->
+                Log.w(LogTag, "extension.music.search.failed extension=$extensionId type=${error.javaClass.simpleName}")
+            }
+            .getOrDefault(emptyList())
+    }
+
+    /** 当前已运行且具有 music_provider 能力的 Provider，显示名来自 manifest。 */
+    internal fun availableMusicProviderOptions(): List<SearchProviderOption> =
+        installedExtensions()
+            .asSequence()
+            .filter { it.runtimeAvailable && it.manifest.supportsMusicProvider && musicProviders.containsKey(it.manifest.id) }
+            .map { SearchProviderOption(it.manifest.id, it.manifest.name, it.manifest.color) }
+            .sortedBy(SearchProviderOption::name)
+            .toList()
+
+    internal suspend fun getSearchLanding(extensionId: String): ProviderSearchLanding? {
+        searchLandingCache[extensionId]?.let { return it }
+        val provider = musicProviders[extensionId] ?: return null
+        return provider.getSearchLanding()?.also { searchLandingCache[extensionId] = it }
+    }
+
     @UnstableApi
     fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
         val extensionDataSourceFactory = extensionMediaDataSourceFactory()
@@ -212,6 +238,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         streamClients.remove(id)
         playbackResources.clear(id)
         presentationCache.entries.removeIf { (_, song) -> song.trackRef.extensionId == id }
+        searchLandingCache.remove(id)
         if (clearExtensionData) privateCache.deleteForUninstall(id)
     }
 

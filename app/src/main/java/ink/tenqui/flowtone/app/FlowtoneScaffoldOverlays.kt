@@ -1,11 +1,11 @@
 package ink.tenqui.flowtone.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,10 +72,27 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     val context = LocalContext.current
     var playlistAppearanceMutationVersion by remember { mutableIntStateOf(0) }
     var playlistAppearanceMutationJob by remember { mutableStateOf<Job?>(null) }
+    var searchRevealLayerVisible by remember { mutableStateOf(state.searchActive) }
     val density = LocalDensity.current
     val searchTopPadding = with(density) {
         WindowInsets.statusBars.getTop(this).toDp()
     } + 56.dp
+    val searchRevealProgress by animateFloatAsState(
+        targetValue = if (state.searchActive) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtonePageEasing
+        ),
+        label = "SearchRevealProgress"
+    )
+    LaunchedEffect(state.searchActive) {
+        if (state.searchActive) {
+            searchRevealLayerVisible = true
+        } else {
+            delay(FlowtoneMotion.DurationMillis.toLong())
+            searchRevealLayerVisible = false
+        }
+    }
     val searchMiniPlayerSpaceProgress by animateFloatAsState(
         targetValue = if (
             state.searchActive &&
@@ -104,29 +122,14 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     }
 
     AnimatedVisibility(
-        visible = state.searchActive,
-        enter = fadeIn(
-            tween(
-                durationMillis = 180,
-                easing = FlowtonePageEasing
-            )
-        ),
-        exit = fadeOut(
-            tween(
-                durationMillis = 180,
-                easing = FlowtonePageEasing
-            )
-        ),
+        visible = searchRevealLayerVisible,
+        enter = EnterTransition.None,
+        exit = ExitTransition.None,
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(10f)
+            // 搜索内容覆盖普通页面，但始终位于 MiniPlayer 播放层下方。
+            .zIndex(29f)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = searchTopPadding)
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))
-        )
         GlobalSearchOverlay(
             searchUiState = state.searchUiState,
             currentSong = state.playerUiState.currentSong,
@@ -147,14 +150,15 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
             },
             onExitSearch = callbacks.onExitSearch,
+            onQueryChange = callbacks.onSearchQueryChange,
+            onScopeChange = callbacks.onSearchScopeChange,
+            bottomContentPadding = searchContentBottomPadding,
             interactionsEnabled = searchInteractionsEnabled,
             reentryProgress = searchLayerProgress,
+            revealProgress = searchRevealProgress,
+            revealColor = state.searchColors.container,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(
-                    top = searchTopPadding,
-                    bottom = searchContentBottomPadding
-                )
         )
     }
 

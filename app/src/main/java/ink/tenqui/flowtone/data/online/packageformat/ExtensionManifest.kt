@@ -13,7 +13,9 @@ data class ExtensionManifest(
     val capabilities: List<String>,
     val networkHosts: List<String>,
     /** 可解析持久歌曲身份的服务来源，不能拿网络 hosts 代替。 */
-    val musicSources: List<String> = emptyList()
+    val musicSources: List<String> = emptyList(),
+    /** 可选 Provider 品牌色，仅用于 Host 控制的搜索来源选项行。格式为 #RRGGBB。 */
+    val color: String? = null
 ) {
     val supportsArtistAvatar: Boolean get() = "artist_avatar" in capabilities
     val supportsMusicProvider: Boolean get() = "music_provider" in capabilities
@@ -21,6 +23,7 @@ data class ExtensionManifest(
 
 object ExtensionManifestParser {
     private val SafeId = Regex("[a-zA-Z0-9._-]+")
+    private val HexColor = Regex("#[0-9a-fA-F]{6}")
 
     fun parse(text: String): ExtensionManifest {
         val json = JSONObject(text)
@@ -34,6 +37,7 @@ object ExtensionManifestParser {
         val musicSources = json.optJSONArray("musicSources")?.let { array ->
             List(array.length()) { array.getString(it).trim().lowercase() }
         }.orEmpty()
+        val color = json.optString("color").trim().takeIf(String::isNotEmpty)
         return ExtensionManifest(
             formatVersion = json.getInt("formatVersion"),
             id = json.getString("id"),
@@ -44,7 +48,8 @@ object ExtensionManifestParser {
             entry = json.getString("entry"),
             capabilities = capabilities,
             networkHosts = hosts,
-            musicSources = musicSources
+            musicSources = musicSources,
+            color = color
         ).also(::validate)
     }
 
@@ -61,6 +66,9 @@ object ExtensionManifestParser {
             require(isValidHostRule(source) && !source.startsWith("*.")) {
                 "音乐服务来源非法：$source"
             }
+        }
+        require(manifest.color == null || manifest.color.matches(HexColor)) {
+            "扩展色彩格式非法，仅支持 #RRGGBB"
         }
     }
 

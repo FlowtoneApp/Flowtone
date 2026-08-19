@@ -8,6 +8,9 @@ interface MusicProvider {
 
     suspend fun searchSongs(keyword: String): List<ProviderSong>
 
+    /** 可选：Provider 的空搜索词首页；未实现时返回 null。 */
+    suspend fun getSearchLanding(): ProviderSearchLanding? = null
+
     suspend fun resolvePersistentSong(persistentId: String): ProviderSong?
 
     suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource?

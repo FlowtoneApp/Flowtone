@@ -236,6 +236,12 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getSearchScopePreference(): String = prefs.getString(SEARCH_SCOPE_KEY, SEARCH_SCOPE_ALL).orEmpty()
+
+    fun setSearchScopePreference(value: String) {
+        prefs.edit().putString(SEARCH_SCOPE_KEY, value).apply()
+    }
+
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
@@ -256,6 +262,8 @@ class AppPreferences(context: Context) {
         const val DARK_FLOW_CLOUD_OVERLAY_KEY = "dark_flow_cloud_overlay"
         const val LYRICS_BACKGROUND_STYLE_KEY = "lyrics_background_style"
         const val AUDIO_PERMISSION_REQUESTED_KEY = "audio_permission_requested"
+        const val SEARCH_SCOPE_KEY = "search_scope"
+        const val SEARCH_SCOPE_ALL = "all"
         const val DEFAULT_PRELOAD_COUNT = 5
         const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30
         const val MIN_SONG_RECORD_THRESHOLD_SECONDS = 1

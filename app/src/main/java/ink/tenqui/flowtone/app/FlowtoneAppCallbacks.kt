@@ -4,6 +4,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
@@ -73,6 +74,8 @@ internal data class FlowtoneAppCallbacks(
     val onOpenSearch: () -> Unit,
     val onExitSearch: () -> Unit,
     val onSearchQueryChange: (String) -> Unit,
+    val onSearchScopeChange: (SearchScope) -> Unit,
+    val onRefreshSearchSources: () -> Unit,
     val onClearSearch: () -> Unit,
     val onSearchFocusRequestConsumed: () -> Unit,
     val onSearchKeyboardDismissRequestConsumed: () -> Unit,
@@ -109,6 +112,8 @@ internal fun flowtoneAppCallbacks(
     onOpenSearch: () -> Unit,
     onExitSearch: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onSearchScopeChange: (SearchScope) -> Unit,
+    onRefreshSearchSources: () -> Unit,
     onClearSearch: () -> Unit
 ): FlowtoneAppCallbacks {
     return FlowtoneAppCallbacks(
@@ -324,6 +329,8 @@ internal fun flowtoneAppCallbacks(
         onOpenSearch = onOpenSearch,
         onExitSearch = onExitSearch,
         onSearchQueryChange = onSearchQueryChange,
+        onSearchScopeChange = onSearchScopeChange,
+        onRefreshSearchSources = onRefreshSearchSources,
         onClearSearch = onClearSearch,
         onSearchFocusRequestConsumed = {
             appState.searchFocusRequest = 0

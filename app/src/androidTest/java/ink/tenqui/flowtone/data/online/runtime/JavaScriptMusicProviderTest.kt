@@ -7,6 +7,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.SearchLandingAction
+import ink.tenqui.flowtone.data.online.SearchLandingBlock
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
@@ -109,6 +111,26 @@ class JavaScriptMusicProviderTest {
             globalThis.flowtoneExtension = { async searchSongs(){ return [{id:'',title:'bad',artist:'a'},{id:'ok',title:'',artist:'a'},{id:'good',title:'Title',artist:'Artist'}]; }, async getPlaybackResource(){return {}; } };
         """.trimIndent())
         assertEquals(listOf("good"), provider.searchSongs("q").map { it.id })
+    }
+
+    @Test fun searchLandingParsesLimitedHostOwnedBlocksAndWrapsArtwork() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = {
+              async getSearchLanding() { return { blocks: [
+                { type:'chips', title:'热门', items:[{ id:'chip', title:'Ambient', action:{type:'search',query:'ambient'} }] },
+                { type:'media_row', title:'内容', items:[{ id:'media', title:'Night Drive', subtitle:'Playlist', artworkUrl:'https://images.example/cover.jpg' }] }
+              ]}; },
+              async searchSongs(){ return []; }, async getPlaybackResource(){ return {}; }
+            };
+        """.trimIndent())
+
+        val landing = requireNotNull(provider.getSearchLanding())
+        val chips = landing.blocks[0] as SearchLandingBlock.Chips
+        assertEquals("Ambient", chips.items.single().title)
+        assertEquals(SearchLandingAction.Search("ambient"), chips.items.single().action)
+        val media = landing.blocks[1] as SearchLandingBlock.MediaRow
+        assertEquals("example.music", media.items.single().artwork?.extensionId)
+        assertEquals("https://images.example/cover.jpg", media.items.single().artwork?.url)
     }
 
     private suspend fun provider(script: String): JavaScriptMusicProvider {

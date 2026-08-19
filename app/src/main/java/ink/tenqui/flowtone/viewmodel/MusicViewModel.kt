@@ -27,6 +27,9 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.SearchQuery
 import ink.tenqui.flowtone.data.search.SearchRepository
+import ink.tenqui.flowtone.data.search.SearchScope
+import ink.tenqui.flowtone.data.online.ProviderSearchLandingState
+import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.toPersistentTrack
@@ -100,6 +103,18 @@ private fun ProviderSong.toOnlineDisplaySong(): Song {
     )
 }
 
+private fun searchScopeFromPreference(value: String): SearchScope = when {
+    value == "local" -> SearchScope.Local
+    value.startsWith("provider:") -> SearchScope.Provider(value.removePrefix("provider:").trim())
+    else -> SearchScope.All
+}
+
+private fun searchScopePreferenceValue(scope: SearchScope): String = when (scope) {
+    SearchScope.All -> "all"
+    SearchScope.Local -> "local"
+    is SearchScope.Provider -> "provider:${scope.extensionId}"
+}
+
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val musicRepository = MusicRepository(
         localMusicRepository = LocalMusicRepository(
@@ -112,6 +127,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
     private val searchRepository = SearchRepository()
     private val extensionManager = ExtensionManager.get(application)
+    private val appPreferences = AppPreferences(application)
     private val playbackController = PlaybackController(
         context = application,
         initialPlaybackOrderMode = playbackSettingsStore.getPlaybackOrderMode(),
@@ -155,6 +171,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         LyricsPreloadScheduler(viewModelScope, localLyricsRepository)
     }
     private var searchJob: Job? = null
+    private var searchLandingJob: Job? = null
+    private var searchLandingGeneration: Long = 0L
     private var playbackOrderModeJob: Job? = null
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
 
@@ -212,6 +230,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         observeControllerConnection()
         observeListeningStats()
         observeLyrics()
+        refreshSearchSources()
     }
 
     fun setPermissionStatus(hasPermission: Boolean) {
@@ -255,7 +274,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         searchJob?.cancel()
 
         if (query.isBlank) {
-            _searchUiState.value = GlobalSearchUiState(queryText = queryText)
+            _searchUiState.update { current ->
+                current.copy(
+                    queryText = queryText,
+                    isSearching = false,
+                    songResults = emptyList(),
+                    artistResults = emptyList(),
+                    onlineSongResults = emptyList()
+                )
+            }
+            loadSearchLandingForCurrentScope()
             return
         }
 
@@ -267,23 +295,75 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
         searchJob = viewModelScope.launch {
             delay(200)
-            publishSearchResults(query = query, visibleQueryText = queryText)
+            publishSearchResults(query = query, visibleQueryText = queryText, scope = _searchUiState.value.scope)
         }
     }
 
     fun clearSearchQuery() {
         searchJob?.cancel()
-        _searchUiState.value = GlobalSearchUiState()
+        _searchUiState.update { current ->
+            current.copy(
+                queryText = "",
+                isSearching = false,
+                songResults = emptyList(),
+                artistResults = emptyList(),
+                onlineSongResults = emptyList()
+            )
+        }
+        loadSearchLandingForCurrentScope()
+    }
+
+    fun refreshSearchSources() {
+        val providers = extensionManager.availableMusicProviderOptions()
+        val preferredScope = searchScopeFromPreference(appPreferences.getSearchScopePreference())
+        _searchUiState.update { current ->
+            val selected = when (val existing = if (current.providerOptions.isEmpty()) preferredScope else current.scope) {
+                is SearchScope.Provider -> existing.takeIf { candidate -> providers.any { it.extensionId == candidate.extensionId } }
+                    ?: SearchScope.All
+                else -> existing
+            }
+            current.copy(scope = selected, providerOptions = providers)
+        }
+        if (_searchUiState.value.query.isBlank) loadSearchLandingForCurrentScope()
+    }
+
+    fun selectSearchScope(scope: SearchScope) {
+        val validScope = when (scope) {
+            is SearchScope.Provider -> scope.takeIf { selected ->
+                _searchUiState.value.providerOptions.any { it.extensionId == selected.extensionId }
+            } ?: SearchScope.All
+            else -> scope
+        }
+        appPreferences.setSearchScopePreference(searchScopePreferenceValue(validScope))
+        _searchUiState.update {
+            it.copy(
+                scope = validScope,
+                songResults = emptyList(),
+                artistResults = emptyList(),
+                onlineSongResults = emptyList(),
+                isSearching = false
+            )
+        }
+        val currentQuery = _searchUiState.value.queryText
+        if (SearchQuery.from(currentQuery).isBlank) loadSearchLandingForCurrentScope()
+        else updateSearchQuery(currentQuery)
     }
 
     private suspend fun publishSearchResults(
         query: SearchQuery,
-        visibleQueryText: String
+        visibleQueryText: String,
+        scope: SearchScope
     ) {
-        val results = searchRepository.search(query)
-        val onlineResults = extensionManager.searchMusicProviders(query.text)
+        val results = if (scope == SearchScope.All || scope == SearchScope.Local) {
+            searchRepository.search(query)
+        } else ink.tenqui.flowtone.data.search.SearchResults.Empty
+        val onlineResults = when (scope) {
+            SearchScope.All -> extensionManager.searchMusicProviders(query.text)
+            SearchScope.Local -> emptyList()
+            is SearchScope.Provider -> extensionManager.searchMusicProvider(scope.extensionId, query.text)
+        }
         _searchUiState.update { currentState ->
-            if (currentState.queryText != visibleQueryText) {
+            if (currentState.queryText != visibleQueryText || currentState.scope != scope) {
                 currentState
             } else {
                 currentState.copy(
@@ -306,7 +386,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 _searchUiState.update { it.copy(isSearching = true) }
                 publishSearchResults(
                     query = query,
-                    visibleQueryText = currentSearchState.queryText
+                    visibleQueryText = currentSearchState.queryText,
+                    scope = currentSearchState.scope
                 )
             }
         }
@@ -996,6 +1077,29 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                         ImageRequest.Builder(getApplication()).data(image).build()
                     )
                 } ?: Log.d("FlowtonePlayback", "online.artwork.preload.skip reason=noLargeArtwork")
+            }
+        }
+    }
+
+    private fun loadSearchLandingForCurrentScope() {
+        searchLandingJob?.cancel()
+        val generation = ++searchLandingGeneration
+        val scope = _searchUiState.value.scope
+        if (scope !is SearchScope.Provider) {
+            _searchUiState.update { it.copy(landingState = ProviderSearchLandingState.Idle) }
+            return
+        }
+        _searchUiState.update { it.copy(landingState = ProviderSearchLandingState.Loading) }
+        searchLandingJob = viewModelScope.launch {
+            val state = runCatching { extensionManager.getSearchLanding(scope.extensionId) }
+                .fold(
+                    onSuccess = { ProviderSearchLandingState.Loaded(it) },
+                    onFailure = { ProviderSearchLandingState.Error }
+                )
+            _searchUiState.update { current ->
+                if (generation == searchLandingGeneration && current.scope == scope && current.query.isBlank) {
+                    current.copy(landingState = state)
+                } else current
             }
         }
     }

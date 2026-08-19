@@ -6,6 +6,11 @@ import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.MusicProvider
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.providerSearchCategoryFromWire
+import ink.tenqui.flowtone.data.online.ProviderSearchLanding
+import ink.tenqui.flowtone.data.online.SearchLandingAction
+import ink.tenqui.flowtone.data.online.SearchLandingBlock
+import ink.tenqui.flowtone.data.online.SearchLandingItem
 import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,6 +39,12 @@ class JavaScriptMusicProvider internal constructor(
                 parseSong(item)?.let(::add)
             }
         }
+    }
+
+    override suspend fun getSearchLanding(): ProviderSearchLanding? {
+        val raw = runCatching { runtime.invokeJson("getSearchLanding", JSONObject()) }.getOrNull()
+            ?: return null
+        return parseSearchLanding(raw)
     }
 
     override suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource? {
@@ -87,7 +98,8 @@ class JavaScriptMusicProvider internal constructor(
             artwork = artwork,
             largeArtwork = largeArtwork,
             persistentId = persistentId,
-            sourceHost = sourceHost
+            sourceHost = sourceHost,
+            searchCategory = providerSearchCategoryFromWire(item.optString("category"))
         )
     }
 
@@ -99,5 +111,73 @@ class JavaScriptMusicProvider internal constructor(
             normalizedSources.size == 1 -> normalizedSources.single()
             else -> null
         }
+    }
+
+    private fun parseSearchLanding(raw: String): ProviderSearchLanding? {
+        val blocks = runCatching { JSONObject(raw).optJSONArray("blocks") }.getOrNull() ?: return null
+        return ProviderSearchLanding(
+            blocks = buildList {
+                repeat(blocks.length().coerceAtMost(MaxLandingBlocks)) { index ->
+                    parseLandingBlock(blocks.optJSONObject(index))?.let(::add)
+                }
+            }
+        )
+    }
+
+    private fun parseLandingBlock(json: JSONObject?): SearchLandingBlock? {
+        json ?: return null
+        val title = json.optString("title").trim().take(MaxTextLength).takeIf(String::isNotBlank)
+        return when (json.optString("type").trim().lowercase()) {
+            "chips" -> parseLandingItems(json).takeIf(List<SearchLandingItem>::isNotEmpty)
+                ?.let { SearchLandingBlock.Chips(title, it) }
+            "tile_grid", "tilegrid" -> parseLandingItems(json).takeIf(List<SearchLandingItem>::isNotEmpty)
+                ?.let { SearchLandingBlock.TileGrid(title, it) }
+            "media_row", "mediarow" -> parseLandingItems(json).takeIf(List<SearchLandingItem>::isNotEmpty)
+                ?.let { SearchLandingBlock.MediaRow(title, it) }
+            "text", "empty" -> json.optString("text").trim().take(MaxTextLength)
+                .takeIf(String::isNotBlank)?.let { SearchLandingBlock.Text(title, it) }
+            else -> null
+        }
+    }
+
+    private fun parseLandingItems(block: JSONObject): List<SearchLandingItem> {
+        val items = block.optJSONArray("items") ?: return emptyList()
+        return buildList {
+            repeat(items.length().coerceAtMost(MaxItemsPerBlock)) { index ->
+                val item = items.optJSONObject(index) ?: return@repeat
+                val id = item.optString("id").trim().take(MaxTextLength).takeIf(String::isNotBlank)
+                    ?: "item-$index"
+                val title = item.optString("title").trim().take(MaxTextLength)
+                    .takeIf(String::isNotBlank) ?: return@repeat
+                val artwork = item.optString("artworkUrl").trim().takeIf { it.startsWith("https://") }
+                    ?.let { ExtensionImage(runtime.extensionId, it) }
+                add(
+                    SearchLandingItem(
+                        id = id,
+                        title = title,
+                        subtitle = item.optString("subtitle").trim().take(MaxTextLength)
+                            .takeIf(String::isNotBlank),
+                        artwork = artwork,
+                        action = parseLandingAction(item.optJSONObject("action"))
+                    )
+                )
+            }
+        }
+    }
+
+    private fun parseLandingAction(json: JSONObject?): SearchLandingAction? = when (
+        json?.optString("type")?.trim()?.lowercase()
+    ) {
+        "search" -> json.optString("query").trim().take(MaxTextLength)
+            .takeIf(String::isNotBlank)?.let(SearchLandingAction::Search)
+        "provider_action" -> json.optString("id").trim().take(MaxTextLength)
+            .takeIf(String::isNotBlank)?.let(SearchLandingAction::ProviderAction)
+        else -> null
+    }
+
+    private companion object {
+        const val MaxLandingBlocks = 12
+        const val MaxItemsPerBlock = 24
+        const val MaxTextLength = 120
     }
 }

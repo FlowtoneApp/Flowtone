@@ -35,6 +35,18 @@ class ExtensionPackageInstallerTest {
         assertEquals(listOf("example.com"), parsed.networkHosts)
     }
 
+    @Test fun `manifest supports an optional provider selector color`() {
+        val parsed = ExtensionManifestParser.parse(manifest(color = "#1A73E8"))
+
+        assertEquals("#1A73E8", parsed.color)
+    }
+
+    @Test fun `manifest rejects ambiguous provider selector colors`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ExtensionManifestParser.parse(manifest(color = "rgba(1,2,3,0.5)"))
+        }
+    }
+
     @Test fun `合法 flowtone 和 zip 可以安装`() {
         listOf("test.flowtone", "test.zip").forEach { fileName ->
             val root = Files.createTempDirectory("flowtone-test").toFile()
@@ -85,10 +97,11 @@ class ExtensionPackageInstallerTest {
         formatVersion: Int = 1,
         id: String = "example.avatar",
         capabilities: String = "\"artist_avatar\"",
-        musicSources: String? = null
+        musicSources: String? = null,
+        color: String? = null
     ) = """
         {"formatVersion":$formatVersion,"id":"$id","name":"Example","version":"1","author":"Test",
-        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()},"permissions":{"network":{"hosts":["example.com"]}}}
+        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()}${color?.let { ",\"color\":\"$it\"" }.orEmpty()},"permissions":{"network":{"hosts":["example.com"]}}}
     """.trimIndent()
 
     private fun zip(entries: Map<String, String>): ByteArrayInputStream {

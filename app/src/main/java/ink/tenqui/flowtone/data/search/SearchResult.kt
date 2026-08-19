@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.data.search
 
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSearchLandingState
 
 sealed interface SearchResult {
     data class SongResult(
@@ -45,6 +46,9 @@ data class SearchResults(
 
 data class GlobalSearchUiState(
     val queryText: String = "",
+    val scope: SearchScope = SearchScope.All,
+    val providerOptions: List<SearchProviderOption> = emptyList(),
+    val landingState: ProviderSearchLandingState = ProviderSearchLandingState.Idle,
     val isSearching: Boolean = false,
     val songResults: List<Song> = emptyList(),
     val artistResults: List<SearchArtist> = emptyList(),

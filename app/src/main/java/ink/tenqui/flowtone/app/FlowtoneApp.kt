@@ -340,7 +340,9 @@ fun FlowtoneApp(
         appState.searchFrozenContainerArgb = snapshot.containerArgb
         appState.searchFrozenContentArgb = snapshot.contentArgb
         appState.searchActive = true
-        appState.searchFocusRequest += 1
+        musicViewModel.refreshSearchSources()
+        // 当前搜索页仅展示占位内容，因此不自动唤起旧输入框和键盘。
+        appState.searchFocusRequest = 0
         appState.searchKeyboardDismissRequest = 0
         coroutineScope.launch {
             pagerState.scrollToPage(enteredPageIndex)
@@ -366,7 +368,14 @@ fun FlowtoneApp(
         appState.searchReturnListIndex = 0
         appState.searchReturnListOffset = 0
         clearFrozenSearchColors()
-        musicViewModel.clearSearchQuery()
+        // 保留搜索结果到圆形返回裁切完成，避免 AnimatedContent 先切到空 Landing
+        // 而让列表主动渐出或重新排布。
+        coroutineScope.launch {
+            delay(FlowtoneMotion.DurationMillis.toLong())
+            if (!appState.searchActive) {
+                musicViewModel.clearSearchQuery()
+            }
+        }
         coroutineScope.launch {
             pagerState.scrollToPage(restorePageIndex)
         }
@@ -721,6 +730,8 @@ fun FlowtoneApp(
             onOpenSearch = ::enterSearchMode,
             onExitSearch = ::exitSearchMode,
             onSearchQueryChange = musicViewModel::updateSearchQuery,
+            onSearchScopeChange = musicViewModel::selectSearchScope,
+            onRefreshSearchSources = musicViewModel::refreshSearchSources,
             onClearSearch = musicViewModel::clearSearchQuery
             ),
             modifier = Modifier.fillMaxSize()

@@ -115,21 +115,12 @@ internal fun FlowtoneTopBar(
         ) + additionalPathSegments
         null -> emptyList()
     }
-    val showBackButton = secondaryPage != null && !hideBackButton && !searchActive
+    // 搜索展开时顶栏保持原样，由上层扩散覆盖层遮住，而不是自行退出。
+    val showBackButton = secondaryPage != null && !hideBackButton
     val backButtonProgress by animateFloatAsState(
         targetValue = if (showBackButton) 1f else 0f,
         animationSpec = tween(280, easing = FlowtonePageEasing),
         label = "SecondaryBackButtonProgress"
-    )
-    val searchProgress by animateFloatAsState(
-        targetValue = if (searchActive) 1f else 0f,
-        animationSpec = tween(360, easing = FlowtonePageEasing),
-        label = "GlobalSearchTopBarProgress"
-    )
-    val searchOverlayAlpha by animateFloatAsState(
-        targetValue = if (searchActive) 1f else 0f,
-        animationSpec = tween(180, easing = FlowtonePageEasing),
-        label = "SearchTopBarBaseBackgroundAlpha"
     )
     val titleVisibilityAlpha by animateFloatAsState(
         targetValue = if (titleVisible) 1f else 0f,
@@ -154,21 +145,13 @@ internal fun FlowtoneTopBar(
     val navigationShiftPx = with(density) {
         FlowtoneTopBarNavigationTitleShift.toPx()
     } * backButtonProgress
-    val searchAvailable = secondaryPage == null || searchActive
+    val searchAvailable = secondaryPage == null
     val titleEndPadding = if (searchAvailable) 84.dp else 24.dp
     val titleExitDistancePx = with(density) { 12.dp.toPx() }
     val actionButtonMotionDistancePx = with(density) { 16.dp.roundToPx() }
-    val searchReentryLayerProgress = searchReentryProgress.coerceIn(0f, 1f)
-    val searchReentryTranslationY = with(density) {
-        -FlowtoneTopBarContentHeight.toPx() * (1f - searchReentryLayerProgress)
-    }
     val topBarBackgroundAlpha = backgroundAlpha
-    val topBarBaseBackground = if (searchOverlayAlpha > 0f) {
-        MaterialTheme.colorScheme.background.copy(alpha = searchOverlayAlpha * 0.97f)
-    } else {
-        Color.Transparent
-    }
-    val rootTopBarBackgroundAlpha = if (searchActive) 0f else topBarBackgroundAlpha
+    val topBarBaseBackground = Color.Transparent
+    val rootTopBarBackgroundAlpha = topBarBackgroundAlpha
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -216,9 +199,9 @@ internal fun FlowtoneTopBar(
                 .padding(start = FlowtoneTopBarTitleStartPadding, end = titleEndPadding)
                 .clipToBounds()
                 .graphicsLayer {
-                    alpha = (1f - searchProgress) * titleVisibilityAlpha *
-                        (1f - selectionProgress) * (1f - playlistSortProgress)
-                    translationX = -titleExitDistancePx * (searchProgress + playlistSortProgress)
+                    alpha = titleVisibilityAlpha * (1f - selectionProgress) *
+                        (1f - playlistSortProgress)
+                    translationX = -titleExitDistancePx * playlistSortProgress
                     // 进入多选时原标题向下退出，退出多选时向上回到原位。
                     translationY = titleExitDistancePx * selectionProgress
                 }
@@ -236,7 +219,7 @@ internal fun FlowtoneTopBar(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        alpha = (1f - searchProgress) * selectionProgress
+                        alpha = selectionProgress
                     }
             ) {
                 Text(
@@ -326,57 +309,23 @@ internal fun FlowtoneTopBar(
                 },
             modifier = Modifier.fillMaxSize()
         ) {
-            if (searchActive) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = searchReentryLayerProgress
-                            translationY = searchReentryTranslationY
-                        }
-                        .background(
-                            MaterialTheme.colorScheme.surfaceContainer.copy(
-                                alpha = topBarBackgroundAlpha
-                            )
-                        )
-                ) {
-                    GlobalSearchTopBarControl(
-                        progress = searchProgress,
-                        active = true,
-                        query = searchQuery,
-                        colors = searchColors,
-                        focusRequest = searchFocusRequest,
-                        keyboardDismissRequest = searchKeyboardDismissRequest,
-                        onSearchClick = onSearchClick,
-                        onQueryChange = onSearchQueryChange,
-                        onExitSearch = onExitSearch,
-                        onClearSearch = onClearSearch,
-                        onFocusRequestConsumed = onSearchFocusRequestConsumed,
-                        onKeyboardDismissRequestConsumed = onSearchKeyboardDismissRequestConsumed,
-                        onInputFocusChange = onSearchInputFocusChange,
-                        onImeAction = onSearchImeAction,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            } else {
-                GlobalSearchTopBarControl(
-                    progress = searchProgress,
-                    active = false,
-                    query = searchQuery,
-                    colors = searchColors,
-                    focusRequest = searchFocusRequest,
-                    keyboardDismissRequest = searchKeyboardDismissRequest,
-                    onSearchClick = onSearchClick,
-                    onQueryChange = onSearchQueryChange,
-                    onExitSearch = onExitSearch,
-                    onClearSearch = onClearSearch,
-                    onFocusRequestConsumed = onSearchFocusRequestConsumed,
-                    onKeyboardDismissRequestConsumed = onSearchKeyboardDismissRequestConsumed,
-                    onInputFocusChange = onSearchInputFocusChange,
-                    onImeAction = onSearchImeAction,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            GlobalSearchTopBarControl(
+                progress = 0f,
+                active = false,
+                query = searchQuery,
+                colors = searchColors,
+                focusRequest = searchFocusRequest,
+                keyboardDismissRequest = searchKeyboardDismissRequest,
+                onSearchClick = onSearchClick,
+                onQueryChange = onSearchQueryChange,
+                onExitSearch = onExitSearch,
+                onClearSearch = onClearSearch,
+                onFocusRequestConsumed = onSearchFocusRequestConsumed,
+                onKeyboardDismissRequestConsumed = onSearchKeyboardDismissRequestConsumed,
+                onInputFocusChange = onSearchInputFocusChange,
+                onImeAction = onSearchImeAction,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }

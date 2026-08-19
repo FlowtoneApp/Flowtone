@@ -4,6 +4,19 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.core.online.PersistentProviderTrackRef
 
+/** Provider 搜索项在 Host 搜索页中的有限分类，不代表 Provider 导航能力。 */
+enum class ProviderSearchCategory {
+    Single,
+    Album,
+    User
+}
+
+internal fun providerSearchCategoryFromWire(value: String): ProviderSearchCategory = when (value.trim().lowercase()) {
+    "album" -> ProviderSearchCategory.Album
+    "user", "artist" -> ProviderSearchCategory.User
+    else -> ProviderSearchCategory.Single
+}
+
 data class ProviderSong(
     val trackRef: ExtensionTrackRef,
     val title: String,
@@ -12,7 +25,9 @@ data class ProviderSong(
     val artwork: ExtensionImage? = null,
     val largeArtwork: ExtensionImage? = null,
     val persistentId: String? = null,
-    val sourceHost: String? = null
+    val sourceHost: String? = null,
+    /** 由 Provider 声明的搜索展示分类；未声明时保持与旧扩展兼容的单曲。 */
+    val searchCategory: ProviderSearchCategory = ProviderSearchCategory.Single
 ) {
     /** 兼容旧展示代码；身份来自 Host 绑定的 trackRef，而非 JS 返回字段。 */
     val providerId: String get() = trackRef.extensionId
