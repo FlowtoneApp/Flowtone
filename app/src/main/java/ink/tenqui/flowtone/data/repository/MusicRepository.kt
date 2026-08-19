@@ -5,6 +5,8 @@ import ink.tenqui.flowtone.data.local.LocalMusicRepository
 import ink.tenqui.flowtone.data.online.MusicProvider
 import ink.tenqui.flowtone.data.online.NoopMusicProvider
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSearchCategory
+import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 
 class MusicRepository(
     private val localMusicRepository: LocalMusicRepository,
@@ -15,6 +17,8 @@ class MusicRepository(
     }
 
     suspend fun searchOnlineSongs(keyword: String): List<ProviderSong> {
-        return musicProvider.searchSongs(keyword)
+        return musicProvider.searchPage(
+            ProviderSearchRequest(keyword = keyword, category = ProviderSearchCategory.Single)
+        ).results
     }
 }

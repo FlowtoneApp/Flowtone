@@ -1,12 +1,16 @@
 package ink.tenqui.flowtone.data.online.runtime
 
+import android.util.Log
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.MusicProvider
+import ink.tenqui.flowtone.data.online.ProviderSearchPage
+import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.providerSearchCategoryFromWire
+import ink.tenqui.flowtone.data.online.toWireValue
 import ink.tenqui.flowtone.data.online.ProviderSearchLanding
 import ink.tenqui.flowtone.data.online.SearchLandingAction
 import ink.tenqui.flowtone.data.online.SearchLandingBlock
@@ -20,25 +24,37 @@ class JavaScriptMusicProvider internal constructor(
     private val runtime: JavaScriptExtensionRuntime,
     override val musicSources: Set<String> = emptySet()
 ) : MusicProvider {
-    override suspend fun searchSongs(keyword: String): List<ProviderSong> {
-        if (keyword.isBlank()) return emptyList()
-        val raw = runtime.invokeJson("searchSongs", JSONObject().put("keyword", keyword.trim()))
-        val values = if (raw.trimStart().startsWith("[")) {
-            JSONArray(raw)
-        } else {
-            val result = JSONObject(raw)
-            when {
-                result.has("songs") -> result.optJSONArray("songs")
-                result.has("results") -> result.optJSONArray("results")
-                else -> JSONArray().put(result)
-            }
-        } ?: return emptyList()
-        return buildList {
+    override suspend fun searchPage(request: ProviderSearchRequest): ProviderSearchPage {
+        require(request.keyword.isNotBlank()) { "keyword must not be blank" }
+        val raw = runtime.invokeJson(
+            "searchPage",
+            JSONObject()
+                .put("keyword", request.keyword.trim())
+                .put("category", request.category.toWireValue())
+                .put("cursor", request.cursor ?: JSONObject.NULL)
+                .put("limit", request.limit)
+        )
+        val response = JSONObject(raw)
+        val values = response.optJSONArray("results")
+            ?: throw IllegalArgumentException("searchPage results must be an array")
+        val results = buildList {
             repeat(values.length()) { index ->
                 val item = values.optJSONObject(index) ?: return@repeat
-                parseSong(item)?.let(::add)
+                val song = parseSong(item) ?: return@repeat
+                if (song.searchCategory == request.category) {
+                    add(song)
+                } else {
+                    Log.w(
+                        "FlowtoneExtension",
+                        "search.page.category_mismatch extension=${runtime.extensionId} expected=${request.category} actual=${song.searchCategory}"
+                    )
+                }
             }
         }
+        return ProviderSearchPage(
+            results = results,
+            nextCursor = response.opt("nextCursor") as? String
+        )
     }
 
     override suspend fun getSearchLanding(): ProviderSearchLanding? {

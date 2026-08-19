@@ -4,11 +4,8 @@ import android.content.Context
 import androidx.javascriptengine.JavaScriptSandbox
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
-import ink.tenqui.flowtone.core.online.ExtensionTrackRef
-import ink.tenqui.flowtone.data.online.ProviderSong
-import ink.tenqui.flowtone.data.online.SearchLandingAction
-import ink.tenqui.flowtone.data.online.SearchLandingBlock
+import ink.tenqui.flowtone.data.online.ProviderSearchCategory
+import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
@@ -39,109 +36,43 @@ class JavaScriptMusicProviderTest {
         cacheRoot = Files.createTempDirectory(context.cacheDir.toPath(), "js-music-cache").toFile()
     }
 
-    @After fun tearDown() { runtimes.forEach { it.close() }; if (::host.isInitialized) host.close(); if (::cacheRoot.isInitialized) cacheRoot.deleteRecursively() }
-
-    @Test fun searchBindsHostIdentityAndArtworkInsteadOfJsProviderFields() = runBlocking {
-        val provider = provider("""
-            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'track-1', providerId:'forged', extensionId:'other.extension', title:'Title', artist:'Artist', durationMs:1234, artworkUrl:'https://images.example/cover.jpg', largeArtworkUrl:'https://images.example/cover-large.jpg'}]; }, async getPlaybackResource(){ return {}; } };
-        """.trimIndent())
-        val songs = provider.searchSongs("hello")
-        assertEquals(1, songs.size)
-        assertEquals("example.music", songs.single().trackRef.extensionId)
-        assertEquals("track-1", songs.single().trackRef.opaqueId)
-        assertEquals("example.music", songs.single().artwork?.extensionId)
-        assertEquals("https://images.example/cover.jpg", songs.single().artwork?.url)
-        assertEquals("example.music", songs.single().largeArtwork?.extensionId)
-        assertEquals("https://images.example/cover-large.jpg", songs.single().largeArtwork?.url)
+    @After fun tearDown() {
+        runtimes.forEach { it.close() }
+        if (::host.isInitialized) host.close()
+        if (::cacheRoot.isInitialized) cacheRoot.deleteRecursively()
     }
 
-    @Test fun searchParsesPlaylistCategory() = runBlocking {
+    @Test fun searchPageSendsRequestAndParsesPage() = runBlocking {
         val provider = provider("""
-            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'playlist-1', category:'playlist', title:'Playlist', artist:'Creator'}]; }, async getPlaybackResource(){ return {}; } };
+            globalThis.flowtoneExtension = { async searchPage(request) {
+              return { results:[{id:'playlist-1',title:request.keyword + '|' + request.category + '|' + request.cursor + '|' + request.limit,artist:'Creator',category:'playlist'}], nextCursor:'opaque-next' };
+            }};
         """.trimIndent())
 
-        assertEquals(
-            ink.tenqui.flowtone.data.online.ProviderSearchCategory.Playlist,
-            provider.searchSongs("hello").single().searchCategory
-        )
+        val page = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.Playlist, null, 20))
+
+        assertEquals(listOf("playlist-1"), page.results.map { it.id })
+        assertEquals("opaque-next", page.nextCursor)
+        assertEquals("miku|playlist|null|20", page.results.single().title)
     }
 
-    @Test fun missingLargeArtworkFallsBackToRegularArtwork() = runBlocking {
-        val provider = provider("""
-            globalThis.flowtoneExtension = { async searchSongs() { return [{id:'track-1', title:'Title', artist:'Artist', artworkUrl:'https://images.example/cover.jpg'}]; }, async getPlaybackResource(){ return {}; } };
-        """.trimIndent())
-
-        val song = provider.searchSongs("hello").single()
-        assertNull(song.largeArtwork)
-        assertEquals(song.artwork, song.nowPlayingArtwork)
+    @Test fun searchPageAcceptsNullCursorAndNormalEmptyResults() = runBlocking {
+        val provider = provider("""globalThis.flowtoneExtension = { async searchPage() { return {results:[],nextCursor:null}; } };""")
+        val page = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.Single, "opaque"))
+        assertTrue(page.results.isEmpty())
+        assertNull(page.nextCursor)
     }
 
-    @Test fun persistentIdIsPassedThroughWithoutHostParsing() = runBlocking {
+    @Test fun searchPageIgnoresMalformedAndWrongCategoryItems() = runBlocking {
         val provider = provider("""
-            globalThis.flowtoneExtension = {
-              async searchSongs() { return [{id:'runtime-id', persistentId:'opaque://provider/long-lived-id', title:'Title', artist:'Artist'}]; },
-              async resolvePersistentSong(request) { return {id:'resolved-id', persistentId:request.persistentId, title:'Resolved', artist:'Artist'}; },
-              async getPlaybackResource(){ return {}; }
-            };
+            globalThis.flowtoneExtension = { async searchPage() { return { results:[
+              {id:'wrong',title:'Wrong',artist:'Artist',category:'single'},
+              {id:'bad',title:'',artist:'Artist',category:'playlist'},
+              {id:'good',title:'Good',artist:'Artist',category:'playlist'}
+            ], nextCursor:null }; } };
         """.trimIndent())
-
-        val searched = provider.searchSongs("hello").single()
-        assertEquals("opaque://provider/long-lived-id", searched.persistentId)
-        assertEquals("example.music", searched.trackRef.extensionId)
-        assertEquals("example.com", searched.sourceHost)
-        val resolved = provider.resolvePersistentSong(searched.persistentId!!)
-        assertEquals("resolved-id", resolved?.trackRef?.opaqueId)
-        assertEquals(searched.persistentId, resolved?.persistentId)
-    }
-
-    @Test fun playbackMapsHlsAndProgressiveWithoutUrlSuffixInference() = runBlocking {
-        val provider = provider("""
-            globalThis.flowtoneExtension = {
-              async searchSongs(){ return []; },
-              async getPlaybackResource(request) { return request.id === 'hls' ? {type:'hls',url:'https://media.example/live',headers:{Referer:'https://provider.example'},mimeType:'application/x-mpegURL'} : {type:'progressive',url:'https://media.example/audio',mimeType:'audio/mpeg'}; }
-            };
-        """.trimIndent())
-        val hls = provider.getPlaybackResource(song("hls"))
-        val progressive = provider.getPlaybackResource(song("progressive"))
-        assertEquals(ExtensionPlaybackResourceType.Hls, hls?.type)
-        assertEquals("https://media.example/live", hls?.url)
-        assertEquals("https://provider.example", hls?.headers?.get("Referer"))
-        assertEquals(ExtensionPlaybackResourceType.Progressive, progressive?.type)
-    }
-
-    @Test fun invalidResourceAndForeignTrackAreRejected() = runBlocking {
-        val provider = provider("""
-            globalThis.flowtoneExtension = { async searchSongs(){ return []; }, async getPlaybackResource(){ return {type:'dash',url:''}; } };
-        """.trimIndent())
-        assertNull(provider.getPlaybackResource(song("bad")))
-        assertNull(provider.getPlaybackResource(ProviderSong(ExtensionTrackRef("other.extension", "bad"), "t", "a")))
-    }
-
-    @Test fun malformedSearchEntriesAreIgnored() = runBlocking {
-        val provider = provider("""
-            globalThis.flowtoneExtension = { async searchSongs(){ return [{id:'',title:'bad',artist:'a'},{id:'ok',title:'',artist:'a'},{id:'good',title:'Title',artist:'Artist'}]; }, async getPlaybackResource(){return {}; } };
-        """.trimIndent())
-        assertEquals(listOf("good"), provider.searchSongs("q").map { it.id })
-    }
-
-    @Test fun searchLandingParsesLimitedHostOwnedBlocksAndWrapsArtwork() = runBlocking {
-        val provider = provider("""
-            globalThis.flowtoneExtension = {
-              async getSearchLanding() { return { blocks: [
-                { type:'chips', title:'热门', items:[{ id:'chip', title:'Ambient', action:{type:'search',query:'ambient'} }] },
-                { type:'media_row', title:'内容', items:[{ id:'media', title:'Night Drive', subtitle:'Playlist', artworkUrl:'https://images.example/cover.jpg' }] }
-              ]}; },
-              async searchSongs(){ return []; }, async getPlaybackResource(){ return {}; }
-            };
-        """.trimIndent())
-
-        val landing = requireNotNull(provider.getSearchLanding())
-        val chips = landing.blocks[0] as SearchLandingBlock.Chips
-        assertEquals("Ambient", chips.items.single().title)
-        assertEquals(SearchLandingAction.Search("ambient"), chips.items.single().action)
-        val media = landing.blocks[1] as SearchLandingBlock.MediaRow
-        assertEquals("example.music", media.items.single().artwork?.extensionId)
-        assertEquals("https://images.example/cover.jpg", media.items.single().artwork?.url)
+        val page = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.Playlist))
+        assertEquals(listOf("good"), page.results.map { it.id })
     }
 
     private suspend fun provider(script: String): JavaScriptMusicProvider {
@@ -154,6 +85,7 @@ class JavaScriptMusicProviderTest {
         return JavaScriptMusicProvider(runtime, manifest.musicSources.toSet())
     }
 
-    private fun song(id: String) = ProviderSong(ExtensionTrackRef("example.music", id), "Title", "Artist")
-    private fun unusedNetwork() = object : ExtensionNetworkClient { override suspend fun execute(request: ExtensionHttpRequest) = ExtensionHttpResponse(200, emptyMap(), ByteArray(0)) }
+    private fun unusedNetwork() = object : ExtensionNetworkClient {
+        override suspend fun execute(request: ExtensionHttpRequest) = ExtensionHttpResponse(200, emptyMap(), ByteArray(0))
+    }
 }

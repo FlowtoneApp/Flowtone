@@ -71,7 +71,7 @@ class PersistentSongResolverTest {
         val resolvedIds = mutableListOf<String>()
         var playbackRequests = 0
 
-        override suspend fun searchSongs(keyword: String): List<ProviderSong> = emptyList()
+        override suspend fun searchPage(request: ProviderSearchRequest) = ProviderSearchPage(emptyList())
 
         override suspend fun resolvePersistentSong(persistentId: String): ProviderSong? {
             resolvedIds += persistentId

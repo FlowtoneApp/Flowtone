@@ -152,6 +152,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             onExitSearch = callbacks.onExitSearch,
             onQueryChange = callbacks.onSearchQueryChange,
             onScopeChange = callbacks.onSearchScopeChange,
+            onCategoryChange = callbacks.onSearchCategoryChange,
+            onLoadMore = callbacks.onLoadMoreSearchResults,
             bottomContentPadding = searchContentBottomPadding,
             interactionsEnabled = searchInteractionsEnabled,
             reentryProgress = searchLayerProgress,

@@ -23,8 +23,17 @@ import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
+import ink.tenqui.flowtone.data.online.ProviderSearchCategory
+import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
+import ink.tenqui.flowtone.data.search.ProviderSearchCategoryState
+import ink.tenqui.flowtone.data.search.ProviderSearchCoordinator
+import ink.tenqui.flowtone.data.search.ExtensionManagerProviderSearchGateway
+import ink.tenqui.flowtone.data.search.acceptFailure
+import ink.tenqui.flowtone.data.search.acceptPage
+import ink.tenqui.flowtone.data.search.startRequest
 import ink.tenqui.flowtone.data.search.SearchQuery
 import ink.tenqui.flowtone.data.search.SearchRepository
 import ink.tenqui.flowtone.data.search.SearchScope
@@ -115,6 +124,9 @@ private fun searchScopePreferenceValue(scope: SearchScope): String = when (scope
     is SearchScope.Provider -> "provider:${scope.extensionId}"
 }
 
+private fun emptyProviderSearchCategoryStates(): Map<ProviderSearchCategory, ProviderSearchCategoryState> =
+    ProviderSearchCategory.entries.associateWith { ProviderSearchCategoryState() }
+
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val musicRepository = MusicRepository(
         localMusicRepository = LocalMusicRepository(
@@ -143,6 +155,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
+    private val providerSearchCoordinator = ProviderSearchCoordinator(
+        state = _searchUiState,
+        gateway = ExtensionManagerProviderSearchGateway(extensionManager)
+    )
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
     private val _likedTracks = MutableStateFlow(initialLikedTracks)
     private val _songLyricsState = MutableStateFlow(SongLyricsState())
@@ -171,6 +187,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         LyricsPreloadScheduler(viewModelScope, localLyricsRepository)
     }
     private var searchJob: Job? = null
+    private var providerSearchJob: Job? = null
     private var searchLandingJob: Job? = null
     private var searchLandingGeneration: Long = 0L
     private var playbackOrderModeJob: Job? = null
@@ -272,6 +289,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     fun updateSearchQuery(queryText: String) {
         val query = SearchQuery.from(queryText)
         searchJob?.cancel()
+        providerSearchJob?.cancel()
 
         if (query.isBlank) {
             _searchUiState.update { current ->
@@ -280,7 +298,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     isSearching = false,
                     songResults = emptyList(),
                     artistResults = emptyList(),
-                    onlineSongResults = emptyList()
+                    providerCategoryStates = emptyProviderSearchCategoryStates(),
+                    searchGeneration = current.searchGeneration + 1
                 )
             }
             loadSearchLandingForCurrentScope()
@@ -290,24 +309,32 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         _searchUiState.update { currentState ->
             currentState.copy(
                 queryText = queryText,
-                isSearching = true
+                isSearching = currentState.scope == SearchScope.All || currentState.scope == SearchScope.Local,
+                songResults = emptyList(),
+                artistResults = emptyList(),
+                providerCategoryStates = emptyProviderSearchCategoryStates(),
+                searchGeneration = currentState.searchGeneration + 1
             )
         }
         searchJob = viewModelScope.launch {
             delay(200)
-            publishSearchResults(query = query, visibleQueryText = queryText, scope = _searchUiState.value.scope)
+            val scope = _searchUiState.value.scope
+            publishLocalSearchResults(query = query, visibleQueryText = queryText, scope = scope)
+            loadInitialProviderSearchPage()
         }
     }
 
     fun clearSearchQuery() {
         searchJob?.cancel()
+        providerSearchJob?.cancel()
         _searchUiState.update { current ->
             current.copy(
                 queryText = "",
                 isSearching = false,
                 songResults = emptyList(),
                 artistResults = emptyList(),
-                onlineSongResults = emptyList()
+                providerCategoryStates = emptyProviderSearchCategoryStates(),
+                searchGeneration = current.searchGeneration + 1
             )
         }
         loadSearchLandingForCurrentScope()
@@ -340,8 +367,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 scope = validScope,
                 songResults = emptyList(),
                 artistResults = emptyList(),
-                onlineSongResults = emptyList(),
-                isSearching = false
+                providerCategoryStates = emptyProviderSearchCategoryStates(),
+                isSearching = false,
+                searchGeneration = it.searchGeneration + 1
             )
         }
         val currentQuery = _searchUiState.value.queryText
@@ -349,7 +377,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         else updateSearchQuery(currentQuery)
     }
 
-    private suspend fun publishSearchResults(
+    private suspend fun publishLocalSearchResults(
         query: SearchQuery,
         visibleQueryText: String,
         scope: SearchScope
@@ -357,11 +385,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         val results = if (scope == SearchScope.All || scope == SearchScope.Local) {
             searchRepository.search(query)
         } else ink.tenqui.flowtone.data.search.SearchResults.Empty
-        val onlineResults = when (scope) {
-            SearchScope.All -> extensionManager.searchMusicProviders(query.text)
-            SearchScope.Local -> emptyList()
-            is SearchScope.Provider -> extensionManager.searchMusicProvider(scope.extensionId, query.text)
-        }
         _searchUiState.update { currentState ->
             if (currentState.queryText != visibleQueryText || currentState.scope != scope) {
                 currentState
@@ -369,11 +392,23 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 currentState.copy(
                       isSearching = false,
                       songResults = results.songs,
-                      artistResults = results.artists,
-                      onlineSongResults = onlineResults
+                      artistResults = results.artists
                 )
             }
         }
+    }
+
+    fun selectProviderSearchCategory(category: ProviderSearchCategory) {
+        _searchUiState.update { it.copy(selectedProviderCategory = category) }
+        if (!_searchUiState.value.query.isBlank) loadInitialProviderSearchPage()
+    }
+
+    fun loadMoreProviderSearchResults(category: ProviderSearchCategory = _searchUiState.value.selectedProviderCategory) {
+        viewModelScope.launch { providerSearchCoordinator.loadMore(category) }
+    }
+
+    private fun loadInitialProviderSearchPage() {
+        providerSearchJob = viewModelScope.launch { providerSearchCoordinator.loadInitial() }
     }
 
     private fun refreshSearchIndex(songs: List<Song>) {
@@ -384,7 +419,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             if (!query.isBlank) {
                 searchJob?.cancel()
                 _searchUiState.update { it.copy(isSearching = true) }
-                publishSearchResults(
+                publishLocalSearchResults(
                     query = query,
                     visibleQueryText = currentSearchState.queryText,
                     scope = currentSearchState.scope
@@ -633,7 +668,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     fun playProviderSong(song: ProviderSong) {
-        val snapshot = _searchUiState.value.onlineSongResults.toList()
+        val snapshot = _searchUiState.value.providerCategoryStates[ProviderSearchCategory.Single]
+            ?.items.orEmpty()
         val queue = snapshot.takeIf { results -> results.any { it.trackRef == song.trackRef } }
             ?: listOf(song)
         playProviderSongQueue(queue, song)
@@ -1436,6 +1472,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
     override fun onCleared() {
         searchJob?.cancel()
+        providerSearchJob?.cancel()
         playbackOrderModeJob?.cancel()
         lyricsPreloadScheduler.clear()
         localLyricsRepository.close()

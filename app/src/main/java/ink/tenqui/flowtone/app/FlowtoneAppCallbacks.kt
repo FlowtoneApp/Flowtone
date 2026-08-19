@@ -11,6 +11,7 @@ import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 
 internal data class FlowtoneAppCallbacks(
     val onThemeModeChange: (AppThemeMode) -> Unit,
@@ -75,6 +76,8 @@ internal data class FlowtoneAppCallbacks(
     val onExitSearch: () -> Unit,
     val onSearchQueryChange: (String) -> Unit,
     val onSearchScopeChange: (SearchScope) -> Unit,
+    val onSearchCategoryChange: (ProviderSearchCategory) -> Unit,
+    val onLoadMoreSearchResults: () -> Unit,
     val onRefreshSearchSources: () -> Unit,
     val onClearSearch: () -> Unit,
     val onSearchFocusRequestConsumed: () -> Unit,
@@ -113,6 +116,8 @@ internal fun flowtoneAppCallbacks(
     onExitSearch: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSearchScopeChange: (SearchScope) -> Unit,
+    onSearchCategoryChange: (ProviderSearchCategory) -> Unit,
+    onLoadMoreSearchResults: () -> Unit,
     onRefreshSearchSources: () -> Unit,
     onClearSearch: () -> Unit
 ): FlowtoneAppCallbacks {
@@ -330,6 +335,8 @@ internal fun flowtoneAppCallbacks(
         onExitSearch = onExitSearch,
         onSearchQueryChange = onSearchQueryChange,
         onSearchScopeChange = onSearchScopeChange,
+        onSearchCategoryChange = onSearchCategoryChange,
+        onLoadMoreSearchResults = onLoadMoreSearchResults,
         onRefreshSearchSources = onRefreshSearchSources,
         onClearSearch = onClearSearch,
         onSearchFocusRequestConsumed = {

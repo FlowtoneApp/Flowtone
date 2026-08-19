@@ -154,22 +154,39 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         )
     }
 
-    internal suspend fun searchMusicProviders(keyword: String): List<ProviderSong> =
-        musicProviders.values.flatMap { provider ->
-            runCatching { provider.searchSongs(keyword) }
-                .onFailure { error ->
-                    Log.w(LogTag, "extension.music.search.failed type=${error.javaClass.simpleName}")
-                }
-                .getOrDefault(emptyList())
+    /** All 仅合并每个 Provider 的第一页；跨 Provider cursor 留待后续设计。 */
+    internal suspend fun searchMusicProviders(request: ProviderSearchRequest): ProviderSearchCallResult {
+        val calls = musicProviders.map { (extensionId, provider) ->
+            extensionId to runCatching { provider.searchPage(request) }
         }
+        val pages = calls.mapNotNull { (extensionId, result) ->
+            result.onFailure { error ->
+                Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
+            }.getOrNull()
+        }
+        if (pages.isEmpty() && calls.isNotEmpty()) {
+            val failure = calls.firstNotNullOfOrNull { it.second.exceptionOrNull() }
+            if (failure != null) return ProviderSearchCallResult.Failure(failure)
+        }
+        return ProviderSearchCallResult.Success(
+            ProviderSearchPage(results = pages.flatMap(ProviderSearchPage::results))
+        )
+    }
 
-    internal suspend fun searchMusicProvider(extensionId: String, keyword: String): List<ProviderSong> {
-        val provider = musicProviders[extensionId] ?: return emptyList()
-        return runCatching { provider.searchSongs(keyword) }
-            .onFailure { error ->
-                Log.w(LogTag, "extension.music.search.failed extension=$extensionId type=${error.javaClass.simpleName}")
-            }
-            .getOrDefault(emptyList())
+    internal suspend fun searchMusicProvider(
+        extensionId: String,
+        request: ProviderSearchRequest
+    ): ProviderSearchCallResult {
+        val provider = musicProviders[extensionId]
+            ?: return ProviderSearchCallResult.Failure(NoSuchElementException("Provider not found"))
+        return runCatching { provider.searchPage(request) }
+            .fold(
+                onSuccess = { ProviderSearchCallResult.Success(it) },
+                onFailure = { error ->
+                    Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
+                    ProviderSearchCallResult.Failure(error)
+                }
+            )
     }
 
     /** 当前已运行且具有 music_provider 能力的 Provider，显示名来自 manifest。 */

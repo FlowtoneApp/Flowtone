@@ -30,6 +30,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -43,8 +46,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +81,7 @@ import ink.tenqui.flowtone.data.online.SearchLandingAction
 import ink.tenqui.flowtone.data.online.SearchLandingBlock
 import ink.tenqui.flowtone.data.online.SearchLandingItem
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
+import ink.tenqui.flowtone.data.search.providerCategoryState
 import ink.tenqui.flowtone.data.search.SearchArtist
 import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
@@ -85,6 +91,7 @@ import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
 import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 internal fun GlobalSearchOverlay(
@@ -98,6 +105,8 @@ internal fun GlobalSearchOverlay(
     onExitSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
     onScopeChange: (SearchScope) -> Unit,
+    onCategoryChange: (ProviderSearchCategory) -> Unit,
+    onLoadMore: () -> Unit,
     bottomContentPadding: Dp = 0.dp,
     interactionsEnabled: Boolean,
     reentryProgress: Float,
@@ -111,7 +120,7 @@ internal fun GlobalSearchOverlay(
     val revealOriginEndPadding = with(density) { 41.dp.toPx() }
     val revealOriginY = with(density) { WindowInsets.statusBars.getTop(this).toFloat() + 28.dp.toPx() }
     var sourceSwitcherState by remember { mutableStateOf<SearchSourceSwitcherState>(SearchSourceSwitcherState.Collapsed) }
-    var selectedResultCategory by remember { mutableStateOf(SearchResultCategory.Single) }
+    val selectedResultCategory = SearchResultCategory.from(searchUiState.selectedProviderCategory)
     val sourceSwitcherExpanded = sourceSwitcherState !is SearchSourceSwitcherState.Collapsed
     BackHandler(enabled = sourceSwitcherExpanded) {
         sourceSwitcherState = SearchSourceSwitcherState.Collapsed
@@ -209,7 +218,7 @@ internal fun GlobalSearchOverlay(
             )
             SearchResultCategorySelector(
                 selectedCategory = selectedResultCategory,
-                onCategorySelected = { selectedResultCategory = it },
+                onCategorySelected = { onCategoryChange(it.providerCategory) },
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)))
@@ -233,6 +242,8 @@ internal fun GlobalSearchOverlay(
                         onOnlineSongClick = onOnlineSongClick,
                         onArtistClick = onArtistClick,
                         category = selectedResultCategory,
+                        listState = listState,
+                        onLoadMore = onLoadMore,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -262,7 +273,12 @@ private enum class SearchResultCategory(val label: String, val providerCategory:
     Single("单曲", ProviderSearchCategory.Single),
     Playlist("歌单", ProviderSearchCategory.Playlist),
     Album("专辑", ProviderSearchCategory.Album),
-    User("用户", ProviderSearchCategory.User)
+    User("用户", ProviderSearchCategory.User);
+
+    companion object {
+        fun from(category: ProviderSearchCategory): SearchResultCategory =
+            entries.first { it.providerCategory == category }
+    }
 }
 
 @Composable
@@ -372,62 +388,71 @@ private fun SearchResultCategorySelector(
     onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
     category: SearchResultCategory,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val localSongs = if (category == SearchResultCategory.Single) state.songResults else emptyList()
     val localArtists = if (category == SearchResultCategory.User) state.artistResults else emptyList()
-    val onlineResults = state.onlineSongResults.filter { it.searchCategory == category.providerCategory }
-    val hasNoResults = !state.query.isBlank && !state.isSearching &&
+    val categoryState = state.providerCategoryState(category.providerCategory)
+    val onlineResults = categoryState.items
+    val isInitialLoading = categoryState.isInitialLoading
+    val hasNoResults = !state.query.isBlank && !state.isSearching && !isInitialLoading &&
         localSongs.isEmpty() && localArtists.isEmpty() && onlineResults.isEmpty()
     val resultSnapshot = SearchResultSnapshot(
         localSongs = localSongs,
         localArtists = localArtists,
         onlineResults = onlineResults,
         hasNoResults = hasNoResults,
-        isStale = state.isSearching
+        isStale = state.isSearching,
+        isLoadingMore = categoryState.isLoadingMore,
+        error = categoryState.error
     )
-    Column(
+    LaunchedEffect(category, state.searchGeneration, categoryState.nextCursor, categoryState.isLoadingMore) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            info.visibleItemsInfo.lastOrNull()?.index to info.totalItemsCount
+        }.distinctUntilChanged().collect { (lastVisible, totalItems) ->
+            if (lastVisible != null && totalItems > 0 && lastVisible >= totalItems - 5) onLoadMore()
+        }
+    }
+    LazyColumn(
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = modifier.padding(horizontal = 8.dp).verticalScroll(rememberScrollState())
+        modifier = modifier.padding(horizontal = 8.dp)
     ) {
-        AnimatedVisibility(
-            visible = state.isSearching,
-            enter = expandVertically(
-                expandFrom = Alignment.Top,
-                animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-            ) + fadeIn(tween(180, easing = FlowtoneMotion.Easing)),
-            exit = shrinkVertically(
-                shrinkTowards = Alignment.Top,
-                animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-            ) + fadeOut(tween(140, easing = FlowtoneMotion.Easing))
-        ) {
-            Box(
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                contentAlignment = Alignment.Center
-            ) {
+        if (state.isSearching || isInitialLoading) item {
+            Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
             }
         }
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            AnimatedContent(
-                targetState = resultSnapshot,
-                transitionSpec = {
-                    fadeIn(tween(220, easing = FlowtoneMotion.Easing)) togetherWith
-                        fadeOut(tween(160, easing = FlowtoneMotion.Easing))
-                },
-                label = "SearchResultsChange"
-            ) { snapshot ->
-                SearchResultRows(
-                    snapshot = snapshot,
-                    currentSong = currentSong,
-                    onSongClick = onSongClick,
-                    onOnlineSongClick = onOnlineSongClick,
-                    onArtistClick = onArtistClick
-                )
+        itemsIndexed(localSongs, key = { _, song -> "local:${song.uri}" }) { index, song ->
+            SongListItem(song, currentSong?.uri == song.uri, onClick = { onSongClick(localSongs, index) })
+        }
+        items(localArtists, key = { artist -> "artist:${artist.id}" }) { artist ->
+            LocalSearchArtist(artist, onClick = { onArtistClick(artist) }, alpha = 1f)
+        }
+        items(onlineResults, key = { song -> "online:${song.trackRef.extensionId}:${song.trackRef.opaqueId}" }) { song ->
+            OnlineSearchSong(song, alpha = 1f, onClick = if (song.searchCategory == ProviderSearchCategory.Single) {
+                { onOnlineSongClick(song) }
+            } else null)
+        }
+        if (categoryState.isLoadingMore) item {
+            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             }
         }
+        if (onlineResults.isNotEmpty() && categoryState.error != null &&
+            !categoryState.isLoadingMore && categoryState.nextCursor != null
+        ) item {
+            Text(
+                text = "加载失败，重试",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadMore).padding(16.dp)
+            )
+        }
+        if (hasNoResults) item { LandingMessage(categoryState.error ?: "没有找到相关内容") }
     }
 }
 
@@ -436,7 +461,9 @@ private data class SearchResultSnapshot(
     val localArtists: List<SearchArtist>,
     val onlineResults: List<ProviderSong>,
     val hasNoResults: Boolean,
-    val isStale: Boolean
+    val isStale: Boolean,
+    val isLoadingMore: Boolean,
+    val error: String?
 )
 
 @Composable
@@ -445,7 +472,9 @@ private fun SearchResultRows(
     currentSong: Song?,
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
-    onArtistClick: (SearchArtist) -> Unit
+    onArtistClick: (SearchArtist) -> Unit,
+    isLoadingMore: Boolean,
+    onLoadMore: () -> Unit
 ) {
     val staleAlpha = if (snapshot.isStale) 0.48f else 1f
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -470,6 +499,11 @@ private fun SearchResultRows(
                     null
                 }
             )
+        }
+        if (isLoadingMore) {
+            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
         }
         if (snapshot.hasNoResults) LandingMessage("没有找到相关内容")
     }

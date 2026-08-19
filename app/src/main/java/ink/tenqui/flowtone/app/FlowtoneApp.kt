@@ -731,6 +731,8 @@ fun FlowtoneApp(
             onExitSearch = ::exitSearchMode,
             onSearchQueryChange = musicViewModel::updateSearchQuery,
             onSearchScopeChange = musicViewModel::selectSearchScope,
+            onSearchCategoryChange = musicViewModel::selectProviderSearchCategory,
+            onLoadMoreSearchResults = musicViewModel::loadMoreProviderSearchResults,
             onRefreshSearchSources = musicViewModel::refreshSearchSources,
             onClearSearch = musicViewModel::clearSearchQuery
             ),

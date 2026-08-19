@@ -7,10 +7,9 @@ interface MusicProvider {
     val musicSources: Set<String>
 
     /**
-     * 搜索结果中的 category 可为 single、playlist、album 或 user。
-     * Host 当前仅展示歌单的封面、标题和创作者，不提供歌单详情操作。
+     * 搜索一个明确分类的一页结果。cursor 由 Provider 定义，Host 不会解析或修改它。
      */
-    suspend fun searchSongs(keyword: String): List<ProviderSong>
+    suspend fun searchPage(request: ProviderSearchRequest): ProviderSearchPage
 
     /** 可选：Provider 的空搜索词首页；未实现时返回 null。 */
     suspend fun getSearchLanding(): ProviderSearchLanding? = null
