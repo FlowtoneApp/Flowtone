@@ -71,6 +71,9 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ExtensionManager
+import androidx.compose.ui.platform.LocalContext
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
@@ -152,6 +155,7 @@ internal fun SelectablePlaylistSongList(
     entries: List<SelectablePlaylistSong>,
     listState: LazyListState,
     currentSong: Song?,
+    pendingTrackIdentityKey: String? = null,
     likedSongKeys: List<String>,
     editablePlaylists: List<LibraryPlaylistCard>,
     clearSelectionRequest: Int,
@@ -674,6 +678,7 @@ internal fun SelectablePlaylistSongList(
                 }
                 val itemReorderProgress = MiniPlayerEasing.transform(itemRawProgress)
                 val selected = entry.selectionKey in selectedKeySet
+                val hydratedArtwork = rememberOnlineArtwork(entry.track)
                 val isPreviousSelected = index > 0 &&
                     renderedEntries[index - 1].selectionKey in selectedKeySet
                 val isNextSelected = index < renderedEntries.lastIndex &&
@@ -681,6 +686,8 @@ internal fun SelectablePlaylistSongList(
                 SongListItem(
                     song = entry.song,
                     isCurrentSong = currentSong?.id == entry.song.id,
+                    isPendingPlayback = entry.track.identityKey == pendingTrackIdentityKey,
+                    extensionArtwork = hydratedArtwork,
                     selectionMode = selectionMode,
                     isSelected = selected,
                     isPreviousSelected = isPreviousSelected,
@@ -876,6 +883,17 @@ internal fun SelectablePlaylistSongList(
             }
         )
     }
+}
+
+@Composable
+private fun rememberOnlineArtwork(track: PersistentTrack): ExtensionImage? {
+    val context = LocalContext.current
+    var artwork by remember(track.identityKey) { mutableStateOf<ExtensionImage?>(null) }
+    LaunchedEffect(track.identityKey) {
+        val online = track as? PersistentTrack.Online ?: return@LaunchedEffect
+        artwork = ExtensionManager.get(context).hydratePersistentPresentation(online)?.artwork
+    }
+    return artwork
 }
 
 @Composable

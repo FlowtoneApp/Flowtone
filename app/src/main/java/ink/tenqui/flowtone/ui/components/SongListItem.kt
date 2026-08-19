@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.ui.components
 
 import androidx.compose.animation.animateColor
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
@@ -32,6 +33,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +58,8 @@ import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ExtensionManager
 
 @Composable
 fun SongListItem(
@@ -72,7 +77,9 @@ fun SongListItem(
     isPreviousSelected: Boolean = false,
     isNextSelected: Boolean = false,
     selectionSlotPadding: Dp = 0.dp,
-    onLongClick: ((Song) -> Unit)? = null
+    onLongClick: ((Song) -> Unit)? = null,
+    isPendingPlayback: Boolean = false,
+    extensionArtwork: ExtensionImage? = null
 ) {
     val hapticFeedback = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
@@ -258,6 +265,7 @@ fun SongListItem(
                 AlbumArtwork(
                     song = song,
                     isCurrentSong = isCurrentSong,
+                    extensionArtwork = extensionArtwork,
                     modifier = Modifier.matchParentSize()
                 )
                 SongSelectionIndicator(
@@ -294,7 +302,12 @@ fun SongListItem(
             Box(
                 modifier = Modifier.width(96.dp)
             ) {
-                if (isCurrentSong) {
+                if (isPendingPlayback) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else if (isCurrentSong) {
                     Text(
                         text = "\u64ad\u653e\u4e2d",
                         style = MaterialTheme.typography.labelMedium,
@@ -486,9 +499,16 @@ private val SelectionCornerRadius = 20.dp
 private fun AlbumArtwork(
     song: Song,
     isCurrentSong: Boolean,
+    extensionArtwork: ExtensionImage?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var extensionArtworkLoaded by remember(extensionArtwork) { mutableStateOf(false) }
+    val extensionArtworkAlpha by animateFloatAsState(
+        targetValue = if (extensionArtworkLoaded) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "PlaylistOnlineArtworkFade"
+    )
     val imageRequest: ImageRequest? = remember(song.artworkUri, context) {
         song.artworkUri?.let { artworkUri ->
             ImageRequest.Builder(context)
@@ -522,7 +542,19 @@ private fun AlbumArtwork(
             contentDescription = null,
             tint = iconColor
         )
-        imageRequest?.let { request ->
+        extensionArtwork?.let { artwork ->
+            AsyncImage(
+                model = artwork,
+                imageLoader = ExtensionManager.get(context).extensionImageLoader,
+                contentDescription = "专辑封面",
+                contentScale = ContentScale.Crop,
+                onSuccess = { extensionArtworkLoaded = true },
+                onError = { extensionArtworkLoaded = false },
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { alpha = extensionArtworkAlpha }
+            )
+        } ?: imageRequest?.let { request ->
             AsyncImage(
                 model = request,
                 contentDescription = "\u4e13\u8f91\u5c01\u9762",

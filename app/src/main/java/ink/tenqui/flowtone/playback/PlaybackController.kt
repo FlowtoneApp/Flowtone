@@ -176,6 +176,11 @@ class PlaybackController(
         }
     }
 
+    /** ViewModel 开始了更新的切歌请求时，丢弃尚未连接 Controller 的旧请求。 */
+    fun clearPendingPlaybackRequest() {
+        pendingPlaybackRequest = null
+    }
+
     /** 由 Host 已解析好的受控媒体项仍进入同一 MediaController，不创建第二个播放器。 */
     fun playResolvedMediaItem(
         song: Song,

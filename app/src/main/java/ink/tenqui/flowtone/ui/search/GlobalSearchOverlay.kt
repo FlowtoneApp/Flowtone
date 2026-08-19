@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.SearchArtist
 import ink.tenqui.flowtone.data.online.ProviderSong
@@ -57,6 +58,7 @@ internal fun GlobalSearchOverlay(
     listState: LazyListState,
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
+    pendingTrackIdentityKey: String? = null,
     onArtistClick: (SearchArtist) -> Unit,
     onExitSearch: () -> Unit,
     interactionsEnabled: Boolean,
@@ -108,6 +110,7 @@ internal fun GlobalSearchOverlay(
                 listState = listState,
                 onSongClick = onSongClick,
                 onOnlineSongClick = onOnlineSongClick,
+                pendingTrackIdentityKey = pendingTrackIdentityKey,
                 onArtistClick = { artist ->
                     if (interactionsEnabled) {
                         keyboardController?.hide()
@@ -130,6 +133,7 @@ private fun SearchResultList(
     listState: LazyListState,
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
+    pendingTrackIdentityKey: String?,
     onArtistClick: (SearchArtist) -> Unit,
     interactionsEnabled: Boolean,
     reentryProgress: Float,
@@ -270,6 +274,9 @@ private fun SearchResultList(
             ) { index, song ->
                 OnlineSongListItem(
                     song = song,
+                    isPending = song.persistentTrackRef?.let { ref ->
+                        PersistentTrack.Online(ref.sourceHost, ref.persistentId, "", "").identityKey == pendingTrackIdentityKey
+                    } == true,
                     onClick = { if (interactionsEnabled) onOnlineSongClick(song) },
                     modifier = Modifier.staggeredPageProgressElement(
                         visibleSearchAnimationIndex(firstOnlineIndex + index, listState),
@@ -284,6 +291,7 @@ private fun SearchResultList(
 @Composable
 internal fun OnlineSongListItem(
     song: ProviderSong,
+    isPending: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -329,6 +337,9 @@ internal fun OnlineSongListItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
             )
+        }
+        if (isPending) {
+            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
         }
     }
 }

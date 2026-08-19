@@ -45,6 +45,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     artist: String,
     hasCurrentSong: Boolean,
     visualIsPlaying: Boolean,
+    isPendingPlayback: Boolean = false,
     strictProgressBar: Boolean,
     lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
     currentHeight: Dp,
@@ -443,6 +444,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             SharedPlaybackControls(
                 progress = animationProgress,
                 isPlaying = visualIsPlaying,
+                isPendingPlayback = isPendingPlayback,
                 iconColor = controlIconColor,
                 screenWidth = designPlayerWidth,
                 minimizedProgress = minimizedProgress,

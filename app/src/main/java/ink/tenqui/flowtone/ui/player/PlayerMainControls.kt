@@ -10,11 +10,13 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun PlayerMainControls(
@@ -31,6 +33,7 @@ internal fun PlayerMainControls(
     currentTop: Dp,
     fullscreenScale: Float,
     controlsEnabled: Boolean,
+    isPendingPlayback: Boolean = false,
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
@@ -74,7 +77,13 @@ internal fun PlayerMainControls(
                     scaleY = fullscreenScale
                 }
         ) {
-            Icon(
+            if (isPendingPlayback) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(playPauseIconSize),
+                    color = iconColor,
+                    strokeWidth = 2.dp
+                )
+            } else Icon(
                 imageVector = if (isPlaying) {
                     Icons.Filled.Pause
                 } else {

@@ -304,6 +304,7 @@ internal fun SecondaryPageHost(
                         allSongs = uiState.songs,
                         likedTracks = uiState.likedTracks,
                         currentSong = currentSong,
+                        pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                         songSort = playlistSongSort,
                         onSongClick = { tracks, index ->
                             onPersistentTrackQueueClick(
@@ -331,6 +332,7 @@ internal fun SecondaryPageHost(
                         allSongs = uiState.songs,
                         playlistSongEntries = playlistSongEntries,
                         currentSong = currentSong,
+                        pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                         songSort = playlistSongSort,
                         onSongClick = { tracks, index ->
                             onPersistentTrackQueueClick(

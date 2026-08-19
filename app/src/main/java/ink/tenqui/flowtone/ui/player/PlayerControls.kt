@@ -21,6 +21,7 @@ import ink.tenqui.flowtone.playback.PlaybackOrderMode
 internal fun SharedPlaybackControls(
     progress: Float,
     isPlaying: Boolean,
+    isPendingPlayback: Boolean = false,
     iconColor: Color,
     screenWidth: Dp,
     minimizedProgress: Float,
@@ -99,6 +100,7 @@ internal fun SharedPlaybackControls(
         currentTop = currentTop,
         fullscreenScale = fullscreenScale,
         controlsEnabled = controlsEnabled,
+        isPendingPlayback = isPendingPlayback,
         onPlayPrevious = onPlayPrevious,
         onTogglePlayPause = onTogglePlayPause,
         onPlayNext = onPlayNext,

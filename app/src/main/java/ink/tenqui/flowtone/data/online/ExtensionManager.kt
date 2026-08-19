@@ -53,6 +53,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val networkClients = ConcurrentHashMap<String, ExtensionNetworkClient>()
     private val streamClients = ConcurrentHashMap<String, ExtensionStreamClient>()
     private val playbackResources = ExtensionPlaybackResourceStore()
+    private val presentationCache = ConcurrentHashMap<String, ProviderSong>()
     private var initialized = false
     val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
         resultCache = avatarResultCache,
@@ -210,6 +211,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         networkClients.remove(id)
         streamClients.remove(id)
         playbackResources.clear(id)
+        presentationCache.entries.removeIf { (_, song) -> song.trackRef.extensionId == id }
         if (clearExtensionData) privateCache.deleteForUninstall(id)
     }
 
@@ -236,6 +238,21 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     internal suspend fun resolvePersistentPlaylistSong(
         entry: ink.tenqui.flowtone.core.model.PersistentTrack.Online
     ): PersistentSongResolution = resolvePersistentSongWithProviders(musicProviders, entry)
+
+    /** 只 hydrate presentation，不会获取播放资源。 */
+    internal suspend fun hydratePersistentPresentation(
+        entry: ink.tenqui.flowtone.core.model.PersistentTrack.Online
+    ): ProviderSong? {
+        presentationCache[entry.identityKey]?.let { return it }
+        val resolution = resolvePersistentPlaylistSong(entry)
+        return (resolution as? PersistentSongResolution.Resolved)?.song?.also {
+            presentationCache[entry.identityKey] = it
+        }
+    }
+
+    /** Runtime provider 引用只能在所属扩展仍运行时复用。 */
+    internal fun isMusicProviderRuntimeAvailable(extensionId: String): Boolean =
+        musicProviders.containsKey(extensionId)
 
     private fun displayName(uri: Uri): String? {
         return appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)

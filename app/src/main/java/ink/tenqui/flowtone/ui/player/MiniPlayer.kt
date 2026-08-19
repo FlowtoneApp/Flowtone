@@ -60,6 +60,7 @@ import ink.tenqui.flowtone.viewmodel.MusicViewModel
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
+    isPendingPlayback: Boolean = false,
     songLyricsState: SongLyricsState = SongLyricsState(),
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -887,6 +888,7 @@ fun MiniPlayer(
                         artist = artist,
                         hasCurrentSong = hasCurrentSong,
                         visualIsPlaying = visualIsPlaying,
+                        isPendingPlayback = isPendingPlayback,
                         strictProgressBar = strictProgressBar,
                         lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                         currentHeight = currentHeight,
