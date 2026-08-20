@@ -8,6 +8,7 @@ import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.MusicProvider
 import ink.tenqui.flowtone.data.online.ProviderSearchPage
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
+import ink.tenqui.flowtone.data.online.ProviderSearchMetadata
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.providerSearchCategoryFromWire
 import ink.tenqui.flowtone.data.online.toWireValue
@@ -51,10 +52,14 @@ class JavaScriptMusicProvider internal constructor(
                 }
             }
         }
-        return ProviderSearchPage(
-            results = results,
-            nextCursor = response.opt("nextCursor") as? String
+        val nextCursor = response.opt("nextCursor") as? String
+        Log.d(
+            "FlowtoneExtension",
+            "extension.music.search.page.bridge extension=${runtime.extensionId} " +
+                "category=${request.category} results=${results.size} " +
+                "hasNextCursor=${nextCursor != null} nextCursorLength=${nextCursor?.length ?: 0}"
         )
+        return ProviderSearchPage(results = results, nextCursor = nextCursor)
     }
 
     override suspend fun getSearchLanding(): ProviderSearchLanding? {
@@ -115,8 +120,42 @@ class JavaScriptMusicProvider internal constructor(
             largeArtwork = largeArtwork,
             persistentId = persistentId,
             sourceHost = sourceHost,
-            searchCategory = providerSearchCategoryFromWire(item.optString("category"))
+            searchCategory = providerSearchCategoryFromWire(item.optString("category")),
+            metadata = parseMetadata(item)
         )
+    }
+
+    private fun parseMetadata(item: JSONObject): List<ProviderSearchMetadata>? {
+        if (!item.has("metadata")) return null
+        val values = item.optJSONArray("metadata") ?: return null
+        return buildList {
+            repeat(values.length().coerceAtMost(MaxMetadataItems)) { index ->
+                val metadata = parseMetadataItem(values.optJSONObject(index))
+                if (metadata != null) add(metadata)
+            }
+        }
+    }
+
+    private fun parseMetadataItem(item: JSONObject?): ProviderSearchMetadata? {
+        item ?: return null
+        val type = (item.opt("type") as? String)?.trim()?.lowercase()
+            ?.take(MaxMetadataTypeLength)
+            ?.takeIf { it.isNotBlank() } ?: return null
+        val value = item.opt("value")?.let { raw ->
+            if (raw === JSONObject.NULL || raw !is Number) return@let null
+            val number = raw.toDouble()
+            if (!number.isFinite() || number < Long.MIN_VALUE || number > Long.MAX_VALUE ||
+                number != number.toLong().toDouble()
+            ) null else number.toLong()
+        }
+        val text = (item.opt("text") as? String)?.trim()?.take(MaxTextLength)
+            ?.takeIf { it.isNotBlank() }
+        when (type) {
+            "track_count", "play_count" -> if (value == null || value < 0L) return null
+            "creator", "text" -> if (text == null) return null
+            else -> if (text == null) return null
+        }
+        return ProviderSearchMetadata(type = type, value = value, text = text)
     }
 
     private fun boundSourceHost(item: JSONObject): String? {
@@ -194,6 +233,8 @@ class JavaScriptMusicProvider internal constructor(
     private companion object {
         const val MaxLandingBlocks = 12
         const val MaxItemsPerBlock = 24
+        const val MaxMetadataItems = 8
+        const val MaxMetadataTypeLength = 40
         const val MaxTextLength = 120
     }
 }

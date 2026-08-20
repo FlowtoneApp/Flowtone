@@ -45,7 +45,7 @@ class JavaScriptMusicProviderTest {
     @Test fun searchPageSendsRequestAndParsesPage() = runBlocking {
         val provider = provider("""
             globalThis.flowtoneExtension = { async searchPage(request) {
-              return { results:[{id:'playlist-1',title:request.keyword + '|' + request.category + '|' + request.cursor + '|' + request.limit,artist:'Creator',category:'playlist'}], nextCursor:'opaque-next' };
+              return { results:[{id:'playlist-1',title:request.keyword + '|' + request.category + '|' + request.cursor + '|' + request.limit,artist:'Creator',category:'playlist',metadata:[{type:'track_count',value:24},{type:'creator',text:'Creator'}]}], nextCursor:'opaque-next' };
             }};
         """.trimIndent())
 
@@ -54,6 +54,11 @@ class JavaScriptMusicProviderTest {
         assertEquals(listOf("playlist-1"), page.results.map { it.id })
         assertEquals("opaque-next", page.nextCursor)
         assertEquals("miku|playlist|null|20", page.results.single().title)
+        assertEquals(
+            listOf("track_count", "creator"),
+            page.results.single().metadata?.map { it.type }
+        )
+        assertEquals(24L, page.results.single().metadata?.first()?.value)
     }
 
     @Test fun searchPageAcceptsNullCursorAndNormalEmptyResults() = runBlocking {
@@ -73,6 +78,35 @@ class JavaScriptMusicProviderTest {
         """.trimIndent())
         val page = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.Playlist))
         assertEquals(listOf("good"), page.results.map { it.id })
+    }
+
+    @Test fun metadataMissingAndEmptyRemainDistinguishable() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = { async searchPage() { return { results:[
+              {id:'missing',title:'Missing',artist:'Creator',category:'playlist'},
+              {id:'empty',title:'Empty',artist:'Creator',category:'playlist',metadata:[]}
+            ], nextCursor:null }; } };
+        """.trimIndent())
+
+        val page = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.Playlist))
+
+        assertEquals(null, page.results.first { it.id == "missing" }.metadata)
+        assertEquals(emptyList<Any>(), page.results.first { it.id == "empty" }.metadata)
+    }
+
+    @Test fun malformedMetadataItemsAreSkippedAndOrderIsKept() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = { async searchPage() { return { results:[
+              {id:'playlist',title:'Playlist',artist:'Creator',category:'playlist',metadata:[
+                {type:'track_count',value:24}, {}, {type:'creator',text:'Creator'},
+                {type:'text',text:'custom'}, {type:'ignored',value:1}
+              ]}
+            ], nextCursor:null }; } };
+        """.trimIndent())
+
+        val result = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.Playlist)).results.single()
+
+        assertEquals(listOf("track_count", "creator", "text"), result.metadata?.map { it.type })
     }
 
     private suspend fun provider(script: String): JavaScriptMusicProvider {

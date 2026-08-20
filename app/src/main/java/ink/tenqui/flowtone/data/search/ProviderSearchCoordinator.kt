@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.search
 
+import android.util.Log
 import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
@@ -65,9 +66,25 @@ class ProviderSearchCoordinator(
             if (!current.matches(generation, keyword, scope)) return@update current
             val previous = current.providerCategoryState(category)
             val next = when (result) {
-                is ProviderSearchCallResult.Success -> previous.acceptPage(result.page, scope != SearchScope.All)
+                is ProviderSearchCallResult.Success -> {
+                    Log.d(
+                        "FlowtoneExtension",
+                        "extension.music.search.page.state category=$category " +
+                            "results=${result.page.results.size} " +
+                            "hasNextCursor=${result.page.nextCursor != null} " +
+                            "nextCursorLength=${result.page.nextCursor?.length ?: 0} " +
+                            "allowNextPage=${scope != SearchScope.All}"
+                    )
+                    previous.acceptPage(result.page, scope != SearchScope.All)
+                }
                 is ProviderSearchCallResult.Failure -> previous.acceptFailure(result.exception.javaClass.simpleName)
             }
+            Log.d(
+                "FlowtoneExtension",
+                "extension.music.search.page.state.accepted category=$category " +
+                    "hasNextCursor=${next.nextCursor != null} " +
+                    "nextCursorLength=${next.nextCursor?.length ?: 0}"
+            )
             current.copy(providerCategoryStates = current.providerCategoryStates + (category to next))
         }
     }

@@ -67,6 +67,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -77,6 +78,8 @@ import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSearchLandingState
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSearchMetadataLabels
+import ink.tenqui.flowtone.data.online.formatProviderSearchMetadataLine
 import ink.tenqui.flowtone.data.online.SearchLandingAction
 import ink.tenqui.flowtone.data.online.SearchLandingBlock
 import ink.tenqui.flowtone.data.online.SearchLandingItem
@@ -92,6 +95,8 @@ import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
 import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
 import kotlinx.coroutines.flow.distinctUntilChanged
+import ink.tenqui.flowtone.R
+import androidx.compose.ui.res.stringResource
 
 @Composable
 internal fun GlobalSearchOverlay(
@@ -527,6 +532,18 @@ private fun LocalSearchArtist(artist: SearchArtist, onClick: () -> Unit, alpha: 
 @Composable
 private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> Unit)?) {
     val loader = ExtensionManager.get(LocalContext.current).extensionImageLoader
+    val metadataLabels = ProviderSearchMetadataLabels(
+        trackCountSuffix = stringResource(R.string.provider_metadata_track_count_suffix),
+        playCountSuffix = stringResource(R.string.provider_metadata_play_count_suffix)
+    )
+    val secondaryText = if (song.searchCategory == ProviderSearchCategory.Playlist) {
+        when {
+            song.metadata == null -> song.artist
+            else -> formatProviderSearchMetadataLine(song.metadata, metadataLabels)
+        }
+    } else {
+        song.artist
+    }
     Row(
         modifier = Modifier.fillMaxWidth().alpha(alpha).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -543,7 +560,15 @@ private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> U
         }
         Column(Modifier.padding(start = 12.dp)) {
             Text(song.title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.66f))
+            secondaryText?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.66f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

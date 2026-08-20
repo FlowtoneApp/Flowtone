@@ -162,7 +162,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         val pages = calls.mapNotNull { (extensionId, result) ->
             result.onFailure { error ->
                 Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
-            }.getOrNull()
+            }.getOrNull()?.also { page ->
+                Log.d(
+                    LogTag,
+                    "extension.music.search.page.success extension=$extensionId " +
+                        "category=${request.category} results=${page.results.size} " +
+                        "hasNextCursor=${page.nextCursor != null} " +
+                        "nextCursorLength=${page.nextCursor?.length ?: 0}"
+                )
+            }
         }
         if (pages.isEmpty() && calls.isNotEmpty()) {
             val failure = calls.firstNotNullOfOrNull { it.second.exceptionOrNull() }
@@ -181,7 +189,16 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             ?: return ProviderSearchCallResult.Failure(NoSuchElementException("Provider not found"))
         return runCatching { provider.searchPage(request) }
             .fold(
-                onSuccess = { ProviderSearchCallResult.Success(it) },
+                onSuccess = { page ->
+                    Log.d(
+                        LogTag,
+                        "extension.music.search.page.success extension=$extensionId " +
+                            "category=${request.category} results=${page.results.size} " +
+                            "hasNextCursor=${page.nextCursor != null} " +
+                            "nextCursorLength=${page.nextCursor?.length ?: 0}"
+                    )
+                    ProviderSearchCallResult.Success(page)
+                },
                 onFailure = { error ->
                     Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
                     ProviderSearchCallResult.Failure(error)

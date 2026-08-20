@@ -6,4 +6,6 @@
     <string name="top_level_library_subtitle">收集自己喜欢的声音</string>
     <string name="top_level_mine_title">我的</string>
     <string name="top_level_mine_subtitle">内部版本，不代表最终品质</string>
+    <string name="provider_metadata_track_count_suffix">首</string>
+    <string name="provider_metadata_play_count_suffix">次播放</string>
 </resources>
