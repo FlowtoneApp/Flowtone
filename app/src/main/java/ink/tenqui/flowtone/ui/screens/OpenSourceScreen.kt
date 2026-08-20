@@ -40,9 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 
@@ -54,6 +56,7 @@ fun OpenSourceScreen(
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
+    val staggerOffsetPx = with(LocalDensity.current) { FlowtoneMotion.StaggerOffset.roundToPx() }
     var selectedComponentId by rememberSaveable { mutableStateOf<String?>(null) }
     var showingLicense by rememberSaveable { mutableStateOf(false) }
     val selectedComponent = openSourceComponents.firstOrNull {
@@ -112,7 +115,9 @@ fun OpenSourceScreen(
             .rightSwipeBackGesture(handleBack)
     ) { view ->
         fun viewElementModifier(index: Int): Modifier {
-            return elementModifier(index).then(staggeredPageElementModifier(index))
+            return elementModifier(index).then(
+                staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
+            )
         }
 
         when (view) {

@@ -12,17 +12,19 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 
 fun AnimatedVisibilityScope.staggeredPageElementModifier(
     animationIndex: Int,
     exitAnimationIndex: Int = animationIndex,
-    initialOffsetY: (fullHeight: Int) -> Int = { it / 6 },
-    targetOffsetY: (fullHeight: Int) -> Int = { -it / 6 }
+    offsetPx: Int,
+    initialOffsetY: (fullHeight: Int) -> Int = { offsetPx },
+    targetOffsetY: (fullHeight: Int) -> Int = { -offsetPx }
 ): Modifier {
     val delayMillis = FlowtoneMotion.staggerDelayMillis(animationIndex)
     val durationMillis = FlowtoneMotion.staggerDurationMillis(animationIndex)
     val exitDelayMillis = FlowtoneMotion.staggerDelayMillis(exitAnimationIndex)
-    val exitDurationMillis = FlowtoneMotion.staggerDurationMillis(exitAnimationIndex)
+    val exitDurationMillis = FlowtoneMotion.staggerExitDurationMillis(exitAnimationIndex)
     return Modifier.animateEnterExit(
         enter = fadeIn(
             tween(
@@ -55,7 +57,8 @@ fun AnimatedVisibilityScope.staggeredPageElementModifier(
 
 fun Modifier.staggeredPageProgressElement(
     animationIndex: Int,
-    progress: Float
+    progress: Float,
+    offsetPx: Int
 ): Modifier {
     val elementProgress = staggeredPageElementProgress(
         globalProgress = progress,
@@ -63,7 +66,7 @@ fun Modifier.staggeredPageProgressElement(
     )
     return graphicsLayer {
         alpha = elementProgress
-        translationY = size.height / 6f * (1f - elementProgress)
+        translationY = offsetPx.toFloat() * (1f - elementProgress)
     }
 }
 
@@ -93,6 +96,7 @@ fun StaggeredPageElement(
     applyElementMotion: Boolean = true,
     content: @Composable AnimatedVisibilityScope.() -> Unit
 ) {
+    val staggerOffsetPx = with(LocalDensity.current) { FlowtoneMotion.StaggerOffset.roundToPx() }
     val delayMillis = FlowtoneMotion.staggerDelayMillis(animationIndex)
     val durationMillis = FlowtoneMotion.staggerDurationMillis(animationIndex)
     val enterTransition = if (applyElementMotion) {
@@ -108,24 +112,25 @@ fun StaggeredPageElement(
                 delayMillis = delayMillis,
                 easing = FlowtoneMotion.Easing
             )
-        ) { it / 6 }
+        ) { staggerOffsetPx }
     } else {
         EnterTransition.None
     }
+    val exitDurationMillis = FlowtoneMotion.staggerExitDurationMillis(animationIndex)
     val exitTransition = if (applyElementMotion) {
         fadeOut(
             tween(
-                durationMillis = durationMillis,
+                durationMillis = exitDurationMillis,
                 delayMillis = delayMillis,
                 easing = FlowtoneMotion.Easing
             )
         ) + slideOutVertically(
             animationSpec = tween(
-                durationMillis = durationMillis,
+                durationMillis = exitDurationMillis,
                 delayMillis = delayMillis,
                 easing = FlowtoneMotion.Easing
             )
-        ) { -it / 6 }
+        ) { -staggerOffsetPx }
     } else {
         ExitTransition.None
     }

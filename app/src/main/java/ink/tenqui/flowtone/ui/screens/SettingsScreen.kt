@@ -65,6 +65,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -77,9 +78,10 @@ import ink.tenqui.flowtone.app.TopLevelPage
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
@@ -110,6 +112,7 @@ internal fun SettingsScreen(
     onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     allowFullscreenFromCollapsed: Boolean,
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
+    elementModifier: (Int) -> Modifier,
     openExpandedMiniPlayerOnMediaClick: Boolean,
     onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
@@ -124,7 +127,6 @@ internal fun SettingsScreen(
     onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
-    elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
     var selectedSection by rememberSaveable {
@@ -252,8 +254,13 @@ internal fun SettingsScreen(
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
     ) { state ->
+        val staggerOffsetPx = with(LocalDensity.current) {
+            FlowtoneMotion.StaggerOffset.roundToPx()
+        }
         fun viewElementModifier(index: Int): Modifier {
-            return elementModifier(index).then(staggeredPageElementModifier(index))
+            return elementModifier(index).then(
+                staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
+            )
         }
 
         when (state.section) {
@@ -278,7 +285,7 @@ internal fun SettingsScreen(
                     onOpenFlowCloudSpeedDialog = onOpenFlowCloudSpeedDialog,
                     darkFlowCloudOverlayEnabled = darkFlowCloudOverlayEnabled,
                     onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
-                    elementModifier = ::viewElementModifier
+                elementModifier = ::viewElementModifier
                 )
 
             SettingsSection.Playback -> PlaybackSettingsPage(
@@ -306,7 +313,7 @@ internal fun SettingsScreen(
                     folders = lyricsFolders,
                     onAddFolder = { lyricsFolderLauncher.launch(null) },
                     onRemoveFolder = { folder -> musicViewModel.removeLyricsFolder(folder.uri) },
-                    elementModifier = ::viewElementModifier
+                elementModifier = ::viewElementModifier
                 )
 
                 state.showingLyricsSettings -> LyricsSettingsPage(
@@ -317,7 +324,7 @@ internal fun SettingsScreen(
                         onAllowScreenOffOnLyricsPageChange,
                     lyricsFolders = lyricsFolders,
                     onOpenLyricsFolders = { managingLyricsFolders = true },
-                    elementModifier = ::viewElementModifier
+                elementModifier = ::viewElementModifier
                 )
 
                 state.showingOnlineSettings -> OnlineSettingsPage(
@@ -354,7 +361,6 @@ internal fun SettingsScreen(
         }
     }
 }
-
 }
 
 // Android DocumentsProvider 往往把自定义 .flowtone 包标成 ZIP 或通用二进制流，

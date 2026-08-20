@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.PersistentTrack
@@ -101,6 +102,7 @@ internal fun SecondaryPageHost(
     onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val staggerOffsetPx = with(LocalDensity.current) { FlowtoneMotion.StaggerOffset.roundToPx() }
     var songSelectionActive by remember { mutableStateOf(false) }
     val activeBatchActions = playlistBatchActions.copy(
         onSelectionModeChange = { active ->
@@ -142,7 +144,6 @@ internal fun SecondaryPageHost(
             val usesAboutFade =
                 (initialState == null && targetState == SecondaryPage.About) ||
                     (initialState == SecondaryPage.About && targetState == null)
-
             if (usesAboutFade) {
                 fadeIn(
                     tween(
@@ -163,7 +164,7 @@ internal fun SecondaryPageHost(
         modifier = modifier
     ) { page ->
         fun elementModifier(index: Int): Modifier {
-            return staggeredPageElementModifier(index)
+            return staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
         }
         fun fadingContainerModifier(): Modifier = Modifier.animateEnterExit(
             enter = fadeIn(
@@ -182,6 +183,7 @@ internal fun SecondaryPageHost(
         fun songItemModifier(index: Int): Modifier {
             val delayMillis = FlowtoneMotion.staggerDelayMillis(index)
             val durationMillis = FlowtoneMotion.staggerDurationMillis(index)
+            val exitDurationMillis = FlowtoneMotion.staggerExitDurationMillis(index)
             return Modifier.animateEnterExit(
                 enter = fadeIn(
                     tween(
@@ -195,20 +197,20 @@ internal fun SecondaryPageHost(
                         delayMillis = delayMillis,
                         easing = FlowtonePageEasing
                     )
-                ) { it / 6 },
+                ) { staggerOffsetPx },
                 exit = fadeOut(
                     tween(
-                        durationMillis = durationMillis,
+                        durationMillis = exitDurationMillis,
                         delayMillis = delayMillis,
                         easing = FlowtonePageEasing
                     )
                 ) + slideOutVertically(
                     animationSpec = tween(
-                        durationMillis = durationMillis,
+                        durationMillis = exitDurationMillis,
                         delayMillis = delayMillis,
                         easing = FlowtonePageEasing
                     )
-                ) { -it / 6 }
+                ) { -staggerOffsetPx }
             )
         }
         when (page) {
@@ -232,6 +234,7 @@ internal fun SecondaryPageHost(
                 onResumePlaybackAfterCallChange = onResumePlaybackAfterCallChange,
                 allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
                 onAllowFullscreenFromCollapsedChange = onAllowFullscreenFromCollapsedChange,
+                elementModifier = ::elementModifier,
                 openExpandedMiniPlayerOnMediaClick = openExpandedMiniPlayerOnMediaClick,
                 onOpenExpandedMiniPlayerOnMediaClickChange =
                     onOpenExpandedMiniPlayerOnMediaClickChange,
@@ -247,7 +250,6 @@ internal fun SecondaryPageHost(
                 onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
-                elementModifier = ::elementModifier,
                 modifier = Modifier.fillMaxSize()
             )
 
