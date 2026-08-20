@@ -152,7 +152,7 @@ internal fun SecondaryPageHost(
                     )
                 ) togetherWith fadeOut(
                     tween(
-                        durationMillis = FlowtoneMotion.DurationMillis,
+                        durationMillis = FlowtoneMotion.ExitDurationMillis,
                         easing = FlowtonePageEasing
                     )
                 )
@@ -163,6 +163,18 @@ internal fun SecondaryPageHost(
         label = "SecondaryContentTransition",
         modifier = modifier
     ) { page ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .animateEnterExit(
+                    exit = fadeOut(
+                        tween(
+                            durationMillis = FlowtoneMotion.ExitDurationMillis,
+                            easing = FlowtoneMotion.Easing
+                        )
+                    )
+                )
+        ) {
         fun elementModifier(index: Int): Modifier {
             return staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
         }
@@ -175,7 +187,7 @@ internal fun SecondaryPageHost(
             ),
             exit = fadeOut(
                 tween(
-                    durationMillis = FlowtoneMotion.DurationMillis,
+                    durationMillis = FlowtoneMotion.ExitDurationMillis,
                     easing = FlowtonePageEasing
                 )
             )
@@ -399,6 +411,7 @@ internal fun SecondaryPageHost(
             )
 
             null -> Box(modifier = Modifier.fillMaxSize())
+        }
         }
     }
 }

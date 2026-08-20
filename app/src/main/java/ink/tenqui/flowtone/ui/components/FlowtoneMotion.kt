@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.dp
 
 internal object FlowtoneMotion {
     const val DurationMillis = 400
-    const val ExitDurationMillis = 280
+    const val ExitDurationMillis = 200
     val StaggerOffset: Dp = 24.dp
     val Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
