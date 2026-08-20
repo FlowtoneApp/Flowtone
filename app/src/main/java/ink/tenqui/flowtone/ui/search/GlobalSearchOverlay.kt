@@ -40,6 +40,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -522,7 +525,7 @@ private fun LocalSearchArtist(artist: SearchArtist, onClick: () -> Unit, alpha: 
         songTitle = artist.representativeSongTitle,
         artistName = artist.name
     )
-    SearchUserAvatar(avatarImage = avatarImage)
+    SearchUserAvatar(image = avatarImage)
     Column(Modifier.padding(start = 12.dp)) {
         Text(artist.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
         Text("本地艺人 · ${artist.songCount} 首歌曲", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.66f))
@@ -549,13 +552,13 @@ private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> U
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (song.searchCategory == ProviderSearchCategory.User) {
-            SearchUserAvatar(
-                avatarImage = rememberExperimentalArtistAvatarImage(song.title, song.artist),
-                fallbackImage = song.artwork
-            )
+            // Online User 只使用 Provider 返回的 artwork；绝不回退到本地 Artist Avatar 服务。
+            SearchUserAvatar(image = song.artwork)
         } else {
-            song.artwork?.let { artwork ->
-                SearchArtwork(artwork, loader)
+            if (song.artwork != null) {
+                SearchArtwork(song.artwork, loader)
+            } else {
+                SearchArtworkPlaceholder(song.searchCategory)
             }
         }
         Column(Modifier.padding(start = 12.dp)) {
@@ -575,8 +578,7 @@ private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> U
 
 @Composable
 private fun SearchUserAvatar(
-    avatarImage: ExtensionImage?,
-    fallbackImage: ExtensionImage? = null
+    image: ExtensionImage?
 ) {
     Box(
         modifier = Modifier
@@ -591,8 +593,30 @@ private fun SearchUserAvatar(
             modifier = Modifier.size(26.dp)
         )
         ExperimentalArtistAvatarImage(
-            image = avatarImage ?: fallbackImage,
+            image = image,
             modifier = Modifier.fillMaxSize().clip(CircleShape)
+        )
+    }
+}
+
+@Composable
+private fun SearchArtworkPlaceholder(category: ProviderSearchCategory) {
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = when (category) {
+                ProviderSearchCategory.Album -> Icons.Rounded.Album
+                ProviderSearchCategory.Playlist -> Icons.Rounded.QueueMusic
+                else -> Icons.Rounded.MusicNote
+            },
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f),
+            modifier = Modifier.size(26.dp)
         )
     }
 }

@@ -12,11 +12,14 @@ import org.junit.Test
 
 class ExtensionPackageInstallerTest {
     @Test fun `music provider capability can stand alone or coexist with artist avatar`() {
+        val avatarOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"artist_avatar\""))
         val musicOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"music_provider\""))
         val combined = ExtensionManifestParser.parse(
             manifest(capabilities = "\"artist_avatar\",\"music_provider\"")
         )
 
+        assertTrue(!avatarOnly.supportsMusicProvider)
+        assertTrue(avatarOnly.supportsArtistAvatar)
         assertTrue(musicOnly.supportsMusicProvider)
         assertTrue(!musicOnly.supportsArtistAvatar)
         assertTrue(combined.supportsMusicProvider)

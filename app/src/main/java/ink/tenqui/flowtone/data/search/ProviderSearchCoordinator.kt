@@ -67,8 +67,7 @@ class ProviderSearchCoordinator(
             val previous = current.providerCategoryState(category)
             val next = when (result) {
                 is ProviderSearchCallResult.Success -> {
-                    Log.d(
-                        "FlowtoneExtension",
+                    logSearchDiagnostic(
                         "extension.music.search.page.state category=$category " +
                             "results=${result.page.results.size} " +
                             "hasNextCursor=${result.page.nextCursor != null} " +
@@ -79,8 +78,7 @@ class ProviderSearchCoordinator(
                 }
                 is ProviderSearchCallResult.Failure -> previous.acceptFailure(result.exception.javaClass.simpleName)
             }
-            Log.d(
-                "FlowtoneExtension",
+            logSearchDiagnostic(
                 "extension.music.search.page.state.accepted category=$category " +
                     "hasNextCursor=${next.nextCursor != null} " +
                     "nextCursorLength=${next.nextCursor?.length ?: 0}"
@@ -88,6 +86,11 @@ class ProviderSearchCoordinator(
             current.copy(providerCategoryStates = current.providerCategoryStates + (category to next))
         }
     }
+}
+
+private fun logSearchDiagnostic(message: String) {
+    // JVM tests 不提供 Android Log；真机上仍保留这条通用诊断日志。
+    runCatching { Log.d("FlowtoneExtension", message) }
 }
 
 private fun GlobalSearchUiState.matches(generation: Long, keyword: String, scope: SearchScope): Boolean =

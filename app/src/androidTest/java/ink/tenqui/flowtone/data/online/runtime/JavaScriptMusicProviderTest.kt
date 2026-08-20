@@ -68,6 +68,18 @@ class JavaScriptMusicProviderTest {
         assertNull(page.nextCursor)
     }
 
+    @Test fun providerItemMayOmitArtwork() = runBlocking {
+        val provider = provider("""
+            globalThis.flowtoneExtension = { async searchPage() { return { results:[
+              {id:'no-artwork',title:'No artwork',artist:'Creator',category:'user'}
+            ], nextCursor:null }; } };
+        """.trimIndent())
+
+        val song = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.User)).results.single()
+        assertNull(song.artwork)
+        assertNull(song.largeArtwork)
+    }
+
     @Test fun searchPageIgnoresMalformedAndWrongCategoryItems() = runBlocking {
         val provider = provider("""
             globalThis.flowtoneExtension = { async searchPage() { return { results:[
