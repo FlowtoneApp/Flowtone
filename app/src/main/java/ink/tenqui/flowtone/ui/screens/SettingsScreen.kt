@@ -5,17 +5,10 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -65,7 +58,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -78,8 +70,8 @@ import ink.tenqui.flowtone.app.TopLevelPage
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.OptionGroup
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
+import ink.tenqui.flowtone.ui.components.PageTransitionHost
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -112,7 +104,7 @@ internal fun SettingsScreen(
     onResumePlaybackAfterCallChange: (Boolean) -> Unit,
     allowFullscreenFromCollapsed: Boolean,
     onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
-    elementModifier: (Int) -> Modifier,
+    pageScope: PageTransitionScope,
     openExpandedMiniPlayerOnMediaClick: Boolean,
     onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
     preloadSongMetadataCount: Int,
@@ -241,26 +233,31 @@ internal fun SettingsScreen(
     }
     BackHandler(onBack = handleBack)
 
-    AnimatedContent(
+    PageTransitionHost(
         targetState = SettingsPageState(
             section = selectedSection,
             showingOnlineSettings = showingOnlineSettings,
             showingLyricsSettings = showingLyricsSettings,
             managingLyricsFolders = managingLyricsFolders
         ),
-        transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
-        label = "SettingsContent",
+        parentScope = pageScope,
         modifier = modifier
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
     ) { state ->
-        val staggerOffsetPx = with(LocalDensity.current) {
-            FlowtoneMotion.StaggerOffset.roundToPx()
+        val localScope = this
+        val elementCount = when {
+            state.section == null -> 5
+            state.section == SettingsSection.Appearance -> 2
+            state.section == SettingsSection.General && state.managingLyricsFolders -> 1
+            state.section == SettingsSection.General && state.showingLyricsSettings -> 1
+            state.section == SettingsSection.General && state.showingOnlineSettings ->
+                (installedExtensions.size + 1).coerceAtLeast(1)
+            state.section == SettingsSection.General -> 3
+            else -> 1
         }
         fun viewElementModifier(index: Int): Modifier {
-            return elementModifier(index).then(
-                staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
-            )
+            return localScope.elementModifier(index, elementCount)
         }
 
         when (state.section) {

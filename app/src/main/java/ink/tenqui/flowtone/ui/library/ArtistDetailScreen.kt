@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,13 +32,22 @@ fun ArtistDetailScreen(
     allSongs: List<Song>,
     currentSong: Song?,
     onSongClick: (List<Song>, Int) -> Unit,
-    itemModifier: (Int) -> Modifier = { Modifier },
+    itemModifier: (order: Int, orderCount: Int) -> Modifier = { _, _ -> Modifier },
     modifier: Modifier = Modifier
 ) {
     val displayArtist = artistName?.trim().orEmpty()
     val listState = rememberLazyListState()
     val artistSongs = remember(displayArtist, allSongs) {
         localSongsForArtist(allSongs, displayArtist)
+    }
+    val viewportSongIndices by remember(listState, artistSongs) {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo
+                .map { it.index - 1 }
+                .filter { it in artistSongs.indices }
+                .distinct()
+                .sorted()
+        }
     }
 
     if (displayArtist.isBlank()) {
@@ -67,7 +78,7 @@ fun ArtistDetailScreen(
     ) {
         item(key = "artist-title") {
             Column(
-                modifier = itemModifier(0)
+                modifier = itemModifier(0, 1)
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 16.dp)
             ) {
@@ -91,16 +102,15 @@ fun ArtistDetailScreen(
             items = artistSongs,
             key = { _, song -> song.id }
         ) { index, song ->
-            val visibleAnimationIndex = (
-                index - listState.firstVisibleItemIndex + 1
-                ).coerceIn(0, 10)
+            val viewportOrder = viewportSongIndices.indexOf(index).coerceAtLeast(0)
+            val viewportOrderCount = viewportSongIndices.size.coerceAtLeast(1)
             SongListItem(
                 song = song,
                 isCurrentSong = currentSong?.id == song.id,
                 onClick = {
                     onSongClick(artistSongs, index)
                 },
-                modifier = itemModifier(visibleAnimationIndex)
+                modifier = itemModifier(viewportOrder, viewportOrderCount)
             )
         }
     }

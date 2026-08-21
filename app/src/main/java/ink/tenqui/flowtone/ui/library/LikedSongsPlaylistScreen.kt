@@ -24,6 +24,7 @@ import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 @Composable
 internal fun LikedSongsPlaylistScreen(
@@ -37,7 +38,9 @@ internal fun LikedSongsPlaylistScreen(
     playbackErrorMessage: String? = null,
     playbackErrorEventId: Long = 0L,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
-    itemModifier: (Int) -> Modifier = { Modifier },
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
+        { _, _, _ -> Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
@@ -114,6 +117,7 @@ internal fun LikedSongsPlaylistScreen(
             onDeleteSongs = batchActions.onDeleteSongs,
             onRemoveEntries = { _, done -> done(false) },
             reorderAnimationKey = songSort,
+            pageTransition = pageTransition,
             itemModifier = itemModifier,
             modifier = Modifier.fillMaxSize()
         )

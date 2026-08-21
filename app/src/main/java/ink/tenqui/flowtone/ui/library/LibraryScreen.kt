@@ -40,6 +40,8 @@ import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import kotlinx.coroutines.Dispatchers
@@ -400,7 +402,7 @@ internal fun LibraryScreen(
     likedSongCount: Int,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    visible: Boolean,
+    pageScope: PageTransitionScope,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     playlistController: LibraryPlaylistController,
@@ -414,16 +416,17 @@ internal fun LibraryScreen(
     val playlistItemOffsetYPx = with(density) {
         playlistItemHeight.toPx() / LibraryItemSlideOffsetDivisor
     }
+    val pageVisible = pageScope.phase != PageTransitionPhase.Outgoing
     val libraryCardsProgress = remember {
-        Animatable(if (visible) 1f else 0f)
+        Animatable(if (pageVisible) 1f else 0f)
     }
 
-    LaunchedEffect(visible) {
-        if (!visible) {
+    LaunchedEffect(pageVisible) {
+        if (!pageVisible) {
             playlistController.clearPlaylistEditing()
         }
         libraryCardsProgress.animateTo(
-            targetValue = if (visible) 1f else 0f,
+            targetValue = if (pageVisible) 1f else 0f,
             animationSpec = tween(
                 durationMillis = FlowtoneMotion.DurationMillis,
                 easing = LinearEasing
@@ -433,7 +436,7 @@ internal fun LibraryScreen(
 
     LibraryHomeContent(
         songCount = songCount,
-        visible = visible,
+        pageScope = pageScope,
         likedPlaylist = likedPlaylist,
         playlists = playlistController.displayedPlaylists,
         playlistItemHeight = playlistItemHeight,
@@ -495,7 +498,9 @@ internal fun LocalLibraryScreen(
     onSongClick: (Song) -> Unit,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
     showContentHeader: Boolean = true,
-    itemModifier: (Int) -> Modifier = { Modifier },
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
+        { _, _, _ -> Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
@@ -583,6 +588,7 @@ internal fun LocalLibraryScreen(
                 onDeleteSongs = batchActions.onDeleteSongs,
                 onRemoveEntries = { _, done -> done(false) },
                 reorderAnimationKey = songSort,
+                pageTransition = pageTransition,
                 itemModifier = itemModifier,
                 modifier = Modifier.fillMaxSize()
             )
@@ -603,7 +609,9 @@ internal fun PlaylistDetailScreen(
     playbackErrorMessage: String? = null,
     playbackErrorEventId: Long = 0L,
     batchActions: PlaylistBatchActions = PlaylistBatchActions(),
-    itemModifier: (Int) -> Modifier = { Modifier },
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
+        { _, _, _ -> Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
@@ -685,6 +693,7 @@ internal fun PlaylistDetailScreen(
                 batchActions.onRemoveEntries(playlistId.orEmpty(), entryIds, done)
             },
             reorderAnimationKey = songSort,
+            pageTransition = pageTransition,
             itemModifier = itemModifier,
             modifier = Modifier.fillMaxSize()
         )

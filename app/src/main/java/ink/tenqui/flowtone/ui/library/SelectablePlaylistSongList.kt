@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,8 @@ import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.MINI_PLAYER_ANIMATION_DURATION_MS
 import ink.tenqui.flowtone.ui.player.MiniPlayerEasing
@@ -172,7 +175,8 @@ internal fun SelectablePlaylistSongList(
     onDeleteSongs: (List<Song>, (Boolean) -> Unit) -> Unit,
     onRemoveEntries: (Set<String>, (Boolean) -> Unit) -> Unit,
     reorderAnimationKey: Any? = null,
-    itemModifier: (Int) -> Modifier,
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
     var selectedKeys by rememberSaveable(sourceKey) { mutableStateOf(emptyList<String>()) }
@@ -226,6 +230,66 @@ internal fun SelectablePlaylistSongList(
     val selectedEntries = selectedKeys.mapNotNull(entriesByKey::get)
     val selectedSongs = selectedEntries.map { it.song }
     val selectedTracks = selectedEntries.map { it.track }
+    var frozenTransitionId by remember(sourceKey) { mutableStateOf<Int?>(null) }
+    var frozenViewportKeys by remember(sourceKey) { mutableStateOf<List<String>>(emptyList()) }
+    var capturedPageProgress by remember(sourceKey) { mutableStateOf(0f) }
+    val visibleSongKeys by remember(listState, renderedEntries) {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo
+                .mapNotNull { item -> renderedEntries.getOrNull(item.index)?.selectionKey }
+                .distinct()
+        }
+    }
+    LaunchedEffect(
+        pageTransition.transitionId,
+        pageTransition.phase,
+        visibleSongKeys
+    ) {
+        if (pageTransition.phase == PageTransitionPhase.Current) {
+            frozenTransitionId = null
+            frozenViewportKeys = emptyList()
+            capturedPageProgress = 0f
+        } else if (
+            frozenTransitionId != pageTransition.transitionId &&
+            visibleSongKeys.isNotEmpty()
+        ) {
+            frozenTransitionId = pageTransition.transitionId
+            frozenViewportKeys = visibleSongKeys
+            capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
+        }
+    }
+
+    val animationGroupKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
+        visibleSongKeys
+    } else if (pageTransition.phase == PageTransitionPhase.Incoming) {
+        // Enter waits for the first real layout. A synthetic group would remap
+        // an item that has already started animating.
+        frozenViewportKeys
+    } else {
+        frozenViewportKeys
+            .ifEmpty { visibleSongKeys }
+    }
+
+    val listProgress = when {
+        pageTransition.phase != PageTransitionPhase.Incoming -> pageTransition.progress
+        frozenViewportKeys.isEmpty() -> 0f
+        else -> {
+            val remaining = (1f - capturedPageProgress).coerceAtLeast(0.0001f)
+            ((pageTransition.progress - capturedPageProgress) / remaining)
+                .coerceIn(0f, 1f)
+        }
+    }
+    val enterGroupReady = pageTransition.phase != PageTransitionPhase.Incoming ||
+        frozenViewportKeys.isNotEmpty()
+
+    val animationOrderByKey = remember(animationGroupKeys) {
+        animationGroupKeys.withIndex().associate { (order, key) -> key to order }
+    }
+
+    fun animationOrderFor(key: String): Pair<Int, Int> {
+        val order = animationOrderByKey[key] ?: 0
+        return order to animationGroupKeys.size.coerceAtLeast(1)
+    }
 
     LaunchedEffect(entries) {
         // 曲库扫描或歌单内容变更不应被误认为一次排序切换。
@@ -666,10 +730,9 @@ internal fun SelectablePlaylistSongList(
             verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 itemsIndexed(renderedEntries, key = { _, entry -> entry.selectionKey }) { index, entry ->
-                val firstVisibleSongIndex = (listState.firstVisibleItemIndex - 1).coerceAtLeast(0)
-                val animationIndex = (index - firstVisibleSongIndex).coerceIn(0, 10)
+                val (viewportOrder, viewportOrderCount) = animationOrderFor(entry.selectionKey)
                 val elapsedMillis = reorderProgress.value * reorderTotalDurationMillis
-                val itemDelayMillis = animationIndex * SortItemStaggerMillis
+                val itemDelayMillis = viewportOrder * SortItemStaggerMillis
                 val itemRawProgress = if (reorderAnimationActive) {
                     ((elapsedMillis - itemDelayMillis) / MINI_PLAYER_ANIMATION_DURATION_MS)
                         .coerceIn(0f, 1f)
@@ -714,7 +777,11 @@ internal fun SelectablePlaylistSongList(
                     },
                     // 长按与拖动统一由 LazyColumn 识别，避免松手时再触发播放。
                     onLongClick = null,
-                    modifier = itemModifier(animationIndex)
+                    modifier = if (enterGroupReady) {
+                        itemModifier(listProgress, viewportOrder, viewportOrderCount)
+                    } else {
+                        Modifier.graphicsLayer { alpha = 0f }
+                    }
                         .graphicsLayer {
                             alpha = itemReorderProgress
                             translationY = reorderDistancePx * (1f - itemReorderProgress)

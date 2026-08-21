@@ -17,7 +17,8 @@ import ink.tenqui.flowtone.ui.components.FlowtoneCollapsingPageHeader
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarRootTitleOffsetY
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
-import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.PageTransitionElement
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsedTitleScale
 import ink.tenqui.flowtone.ui.components.rememberFlowtoneCollapsedTitleTravelYPx
 import kotlin.math.abs
@@ -54,12 +55,13 @@ internal fun topLevelPageHeaderContent(page: TopLevelPage): TopLevelPageHeaderCo
 internal fun TopLevelSharedPageHeader(
     pagerState: PagerState,
     collapseProgress: TopLevelPageCollapseProgress,
-    visible: Boolean,
+    pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
-    StaggeredPageElement(
-        visible = visible,
-        animationIndex = 0,
+    PageTransitionElement(
+        scope = pageScope,
+        order = 0,
+        orderCount = 1,
         modifier = modifier.fillMaxWidth()
     ) {
         val headerContents = remember {

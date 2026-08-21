@@ -59,7 +59,8 @@ internal fun LibraryProviderHeader(
                 Text(
                     text = "本地音乐",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "此设备",
@@ -113,6 +114,7 @@ internal fun LibraryContentEntry(
                 text = "本地曲库",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

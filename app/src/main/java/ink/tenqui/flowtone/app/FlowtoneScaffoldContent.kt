@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -19,7 +20,6 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
@@ -27,6 +27,8 @@ import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionHost
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
@@ -44,7 +46,6 @@ import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
 internal fun FlowtoneScaffoldContent(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
-    mainTabsVisible: Boolean,
     homeScrollState: ScrollState,
     topLevelPageCollapseProgress: TopLevelPageCollapseProgress,
     libraryPlaylistController: LibraryPlaylistController,
@@ -56,22 +57,11 @@ internal fun FlowtoneScaffoldContent(
     playlistSortPanelOpen: Boolean,
     onClosePlaylistSortPanel: () -> Unit,
     innerPadding: PaddingValues,
+    topBarBackgroundHeight: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier
 ) {
-    val keepsSharedCloud = state.secondaryPage == null ||
-        state.secondaryPage == SecondaryPage.Playlist ||
-        state.secondaryPage == SecondaryPage.LocalLibrary
-    val rootCloudAlpha by animateFloatAsState(
-        targetValue = if (keepsSharedCloud) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "TopLevelBackgroundCloudAlpha"
-    )
     val detailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
         state.secondaryPage == SecondaryPage.LocalLibrary
-    val secondaryBackgroundAlpha = if (detailUsesSharedCloud) 0f else 1f - rootCloudAlpha
     val pagePosition = topLevelContinuousPagePosition(
         currentPage = state.pagerState.currentPage,
         currentPageOffsetFraction = state.pagerState.currentPageOffsetFraction
@@ -169,69 +159,109 @@ internal fun FlowtoneScaffoldContent(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (state.rootPage == FlowtoneRootPage.MainTabs) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .topLevelPageBackground(
-                        cloudPalette = animatedCloudPalette,
-                        cloudAlpha = rootCloudAlpha,
-                        cloudPlacement = cloudPlacement
-                    )
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        MaterialTheme.colorScheme.background.copy(
-                            alpha = secondaryBackgroundAlpha
-                        )
-                    )
-            )
-        }
-
         SharedTransitionLayout(
             modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(state.topBarScrollConnection)
-                .padding(innerPadding)
-                .padding(bottom = state.miniPlayerContentBottomPadding)
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                TopLevelPagerContent(
-                    pagerState = state.pagerState,
-                    uiState = state.uiState,
-                    homeScrollState = homeScrollState,
-                    libraryPlaylistController = libraryPlaylistController,
-                    playlistSongEntries = playlistSongEntries,
-                    permissionDenied = state.permissionDenied,
-                    showSwipeHint = state.showSwipeHint,
-                    secondaryOpen = state.secondaryOpen || !mainTabsVisible,
-                    userScrollEnabled = !state.searchActive &&
-                        libraryPlaylistController.editingPlaylistId == null,
-                    onRequestPermission = callbacks.onRequestPermission,
-                    onSongClick = callbacks.onSongClick,
-                    onOpenSettings = callbacks.onOpenSettings,
-                    onOpenAbout = callbacks.onOpenAbout,
-                    onOpenLocalLibrary = callbacks.onOpenLocalLibrary,
-                    onOpenPlaylist = callbacks.onOpenPlaylist,
-                    onOpenListeningRecords = callbacks.onOpenListeningRecords,
-                    likedSongCount = likedSongCount,
-                    flowCloudSpeed = state.flowCloudSpeed,
-                    modifier = Modifier.fillMaxSize()
-                )
-                TopLevelSharedPageHeader(
-                    pagerState = state.pagerState,
-                    collapseProgress = topLevelPageCollapseProgress,
-                    visible = state.rootPage == FlowtoneRootPage.MainTabs &&
-                        !state.secondaryOpen && mainTabsVisible,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 21.dp, top = 48.dp, end = 20.dp)
-                )
-                SecondaryPageHost(
-                    secondaryPage = state.secondaryPage,
-                    appPreferences = state.appPreferences,
+            PageTransitionHost(
+                targetState = if (state.secondaryPage == null) {
+                    FlowtoneScaffoldPage.MainTabs
+                } else {
+                    FlowtoneScaffoldPage.Secondary(state.secondaryPage)
+                },
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                val pageScope = this
+                val pageUsesSharedCloud = when (page) {
+                    FlowtoneScaffoldPage.MainTabs -> true
+                    is FlowtoneScaffoldPage.Secondary ->
+                        page.page == SecondaryPage.Playlist ||
+                            page.page == SecondaryPage.LocalLibrary
+                }
+                val pageCloudAlpha = if (pageUsesSharedCloud) 1f else 0f
+                val pageSecondaryBackgroundAlpha = if (pageUsesSharedCloud) 0f else 1f
+                val pageTopBarSurfaceAlpha = when {
+                    // FlowtoneAppEffects resets the shared scroll offset after navigation.
+                    // An incoming slot must not briefly inherit the outgoing page's alpha
+                    // while that reset animates; every destination starts with its normal
+                    // transparent scroll surface and PageTransitionHost reveals it as one layer.
+                    pageScope.phase == PageTransitionPhase.Incoming -> 0f
+
+                    page is FlowtoneScaffoldPage.MainTabs && state.searchActive -> 0f
+                    else -> state.topBarBackgroundAlpha
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (state.rootPage == FlowtoneRootPage.MainTabs) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(pageScope.backgroundModifier())
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                        .topLevelPageBackground(
+                                        cloudPalette = animatedCloudPalette,
+                                        cloudAlpha = pageCloudAlpha,
+                                        cloudPlacement = cloudPlacement
+                                    )
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                        .background(
+                                            MaterialTheme.colorScheme.background.copy(
+                                            alpha = pageSecondaryBackgroundAlpha
+                                            )
+                                        )
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .padding(bottom = state.miniPlayerContentBottomPadding)
+                    ) {
+                    when (page) {
+                        FlowtoneScaffoldPage.MainTabs -> Box(modifier = Modifier.fillMaxSize()) {
+                        TopLevelPagerContent(
+                            pagerState = state.pagerState,
+                            uiState = state.uiState,
+                            homeScrollState = homeScrollState,
+                            libraryPlaylistController = libraryPlaylistController,
+                            playlistSongEntries = playlistSongEntries,
+                            permissionDenied = state.permissionDenied,
+                            showSwipeHint = state.showSwipeHint,
+                            pageScope = pageScope,
+                            userScrollEnabled = !state.searchActive &&
+                                libraryPlaylistController.editingPlaylistId == null,
+                            onRequestPermission = callbacks.onRequestPermission,
+                            onSongClick = callbacks.onSongClick,
+                            onOpenSettings = callbacks.onOpenSettings,
+                            onOpenAbout = callbacks.onOpenAbout,
+                            onOpenLocalLibrary = callbacks.onOpenLocalLibrary,
+                            onOpenPlaylist = callbacks.onOpenPlaylist,
+                            onOpenListeningRecords = callbacks.onOpenListeningRecords,
+                            likedSongCount = likedSongCount,
+                            flowCloudSpeed = state.flowCloudSpeed,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        TopLevelSharedPageHeader(
+                            pagerState = state.pagerState,
+                            collapseProgress = topLevelPageCollapseProgress,
+                            pageScope = pageScope,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 21.dp, top = 48.dp, end = 20.dp)
+                        )
+                        }
+
+                        is FlowtoneScaffoldPage.Secondary -> SecondaryPageHost(
+                        secondaryPage = page.page,
+                        pageScope = pageScope,
+                        appPreferences = state.appPreferences,
                     themeMode = state.themeMode,
                     onThemeModeChange = callbacks.onThemeModeChange,
                     disablePausedArtworkTilt = state.disablePausedArtworkTilt,
@@ -292,10 +322,33 @@ internal fun FlowtoneScaffoldContent(
                     onOpenSourceBackActionChange = callbacks.openSourceBackActionChange,
                     onOpenSourcePathSegmentsChange = callbacks.onOpenSourcePathSegmentsChange,
                     modifier = Modifier.fillMaxSize()
-                )
+                        )
+                        }
+                    }
+                    }
+
+                    // The top-bar color is part of this page visual layer. The
+                    // controls remain in ScaffoldTopLayer, but no second page
+                    // clock is needed to synchronize their background.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(topBarBackgroundHeight)
+                            .then(pageScope.backgroundModifier())
+                            .background(
+                                MaterialTheme.colorScheme.surfaceContainer.copy(
+                                    alpha = pageTopBarSurfaceAlpha
+                                )
+                            )
+                    )
+                }
             }
-        }
     }
+}
+
+private sealed interface FlowtoneScaffoldPage {
+    data object MainTabs : FlowtoneScaffoldPage
+    data class Secondary(val page: SecondaryPage) : FlowtoneScaffoldPage
 }
 
 private fun topLevelContinuousPagePosition(

@@ -1,7 +1,6 @@
 package ink.tenqui.flowtone.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -77,7 +76,6 @@ import ink.tenqui.flowtone.ui.components.LyricsBackgroundStyleSelector
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay

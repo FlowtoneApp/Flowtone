@@ -1,14 +1,5 @@
 package ink.tenqui.flowtone.app
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -19,15 +10,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.library.ArtistDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
@@ -45,7 +34,8 @@ import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
 @Composable
 internal fun SecondaryPageHost(
-    secondaryPage: SecondaryPage?,
+    secondaryPage: SecondaryPage,
+    pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
@@ -102,7 +92,6 @@ internal fun SecondaryPageHost(
     onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val staggerOffsetPx = with(LocalDensity.current) { FlowtoneMotion.StaggerOffset.roundToPx() }
     var songSelectionActive by remember { mutableStateOf(false) }
     val activeBatchActions = playlistBatchActions.copy(
         onSelectionModeChange = { active ->
@@ -138,94 +127,23 @@ internal fun SecondaryPageHost(
         }
     }
 
-    AnimatedContent(
-        targetState = secondaryPage,
-        transitionSpec = {
-            val usesAboutFade =
-                (initialState == null && targetState == SecondaryPage.About) ||
-                    (initialState == SecondaryPage.About && targetState == null)
-            if (usesAboutFade) {
-                fadeIn(
-                    tween(
-                        durationMillis = FlowtoneMotion.DurationMillis,
-                        easing = FlowtonePageEasing
-                    )
-                ) togetherWith fadeOut(
-                    tween(
-                        durationMillis = FlowtoneMotion.ExitDurationMillis,
-                        easing = FlowtonePageEasing
-                    )
-                )
-            } else {
-                EnterTransition.None togetherWith ExitTransition.None
-            }
-        },
-        label = "SecondaryContentTransition",
-        modifier = modifier
-    ) { page ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .animateEnterExit(
-                    exit = fadeOut(
-                        tween(
-                            durationMillis = FlowtoneMotion.ExitDurationMillis,
-                            easing = FlowtoneMotion.Easing
-                        )
-                    )
-                )
-        ) {
-        fun elementModifier(index: Int): Modifier {
-            return staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
-        }
-        fun fadingContainerModifier(): Modifier = Modifier.animateEnterExit(
-            enter = fadeIn(
-                tween(
-                    durationMillis = FlowtoneMotion.DurationMillis,
-                    easing = FlowtonePageEasing
-                )
-            ),
-            exit = fadeOut(
-                tween(
-                    durationMillis = FlowtoneMotion.ExitDurationMillis,
-                    easing = FlowtonePageEasing
-                )
-            )
-        )
-        fun songItemModifier(index: Int): Modifier {
-            val delayMillis = FlowtoneMotion.staggerDelayMillis(index)
-            val durationMillis = FlowtoneMotion.staggerDurationMillis(index)
-            val exitDurationMillis = FlowtoneMotion.staggerExitDurationMillis(index)
-            return Modifier.animateEnterExit(
-                enter = fadeIn(
-                    tween(
-                        durationMillis = durationMillis,
-                        delayMillis = delayMillis,
-                        easing = FlowtonePageEasing
-                    )
-                ) + slideInVertically(
-                    animationSpec = tween(
-                        durationMillis = durationMillis,
-                        delayMillis = delayMillis,
-                        easing = FlowtonePageEasing
-                    )
-                ) { staggerOffsetPx },
-                exit = fadeOut(
-                    tween(
-                        durationMillis = exitDurationMillis,
-                        delayMillis = delayMillis,
-                        easing = FlowtonePageEasing
-                    )
-                ) + slideOutVertically(
-                    animationSpec = tween(
-                        durationMillis = exitDurationMillis,
-                        delayMillis = delayMillis,
-                        easing = FlowtonePageEasing
-                    )
-                ) { -staggerOffsetPx }
-            )
-        }
-        when (page) {
+    fun elementModifier(index: Int): Modifier {
+        return pageScope.elementModifier(index)
+    }
+
+    fun playlistItemModifier(
+        pageProgress: Float,
+        order: Int,
+        orderCount: Int
+    ): Modifier {
+        return pageScope.elementModifierAt(pageProgress, order, orderCount)
+    }
+
+    fun viewportItemModifier(order: Int, orderCount: Int): Modifier {
+        return pageScope.elementModifier(order, orderCount)
+    }
+    Box(modifier = modifier) {
+        when (secondaryPage) {
             SecondaryPage.Settings -> SettingsScreen(
                 appPreferences = appPreferences,
                 themeMode = themeMode,
@@ -246,7 +164,7 @@ internal fun SecondaryPageHost(
                 onResumePlaybackAfterCallChange = onResumePlaybackAfterCallChange,
                 allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
                 onAllowFullscreenFromCollapsedChange = onAllowFullscreenFromCollapsedChange,
-                elementModifier = ::elementModifier,
+                pageScope = pageScope,
                 openExpandedMiniPlayerOnMediaClick = openExpandedMiniPlayerOnMediaClick,
                 onOpenExpandedMiniPlayerOnMediaClickChange =
                     onOpenExpandedMiniPlayerOnMediaClickChange,
@@ -268,7 +186,7 @@ internal fun SecondaryPageHost(
             SecondaryPage.About -> AboutScreen(
                 onOpenSource = onOpenSource,
                 onBack = onCloseSecondaryPage,
-                elementModifier = ::elementModifier,
+                pageScope = pageScope,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -276,7 +194,7 @@ internal fun SecondaryPageHost(
                 onBack = onOpenSourceBack,
                 onBackActionChange = onOpenSourceBackActionChange,
                 onPathSegmentsChange = onOpenSourcePathSegmentsChange,
-                elementModifier = ::elementModifier,
+                pageScope = pageScope,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -290,11 +208,11 @@ internal fun SecondaryPageHost(
                 onSongClick = onSongClick,
                 batchActions = activeBatchActions,
                 showContentHeader = false,
-                itemModifier = ::songItemModifier,
+                pageTransition = pageScope,
+                itemModifier = ::playlistItemModifier,
                 onCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,
                 headerModifier = elementModifier(0),
-                contentModifier = fadingContainerModifier(),
                 modifier = Modifier
                     .fillMaxSize()
                     .rightSwipeBackGesture(::closeSelectionOrPage)
@@ -330,11 +248,11 @@ internal fun SecondaryPageHost(
                         playbackErrorMessage = uiState.trackPlaybackErrorMessage,
                         playbackErrorEventId = uiState.trackPlaybackErrorEventId,
                         batchActions = activeBatchActions,
-                        itemModifier = ::songItemModifier,
+                        pageTransition = pageScope,
+                        itemModifier = ::playlistItemModifier,
                         onCollapseProgressStateChange =
                             onDetailHeaderCollapseProgressStateChange,
                         headerModifier = elementModifier(0),
-                        contentModifier = fadingContainerModifier(),
                         modifier = Modifier
                             .fillMaxSize()
                             .rightSwipeBackGesture(::closeSelectionOrPage)
@@ -361,11 +279,11 @@ internal fun SecondaryPageHost(
                         playbackErrorMessage = uiState.trackPlaybackErrorMessage,
                         playbackErrorEventId = uiState.trackPlaybackErrorEventId,
                         batchActions = activeBatchActions,
-                        itemModifier = ::songItemModifier,
+                        pageTransition = pageScope,
+                        itemModifier = ::playlistItemModifier,
                         onCollapseProgressStateChange =
                             onDetailHeaderCollapseProgressStateChange,
                         headerModifier = elementModifier(0),
-                        contentModifier = fadingContainerModifier(),
                         suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
                         modifier = Modifier
                             .fillMaxSize()
@@ -395,8 +313,8 @@ internal fun SecondaryPageHost(
                         )
                     )
                 },
-                itemModifier = ::songItemModifier,
-                modifier = fadingContainerModifier()
+                itemModifier = ::viewportItemModifier,
+                modifier = Modifier
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)
             )
@@ -406,12 +324,10 @@ internal fun SecondaryPageHost(
                 initialTab = listeningRecordInitialTab,
                 onBack = onCloseSecondaryPage,
                 itemModifier = ::elementModifier,
-                modifier = fadingContainerModifier()
+                modifier = Modifier
                     .fillMaxSize()
             )
 
-            null -> Box(modifier = Modifier.fillMaxSize())
-        }
         }
     }
 }

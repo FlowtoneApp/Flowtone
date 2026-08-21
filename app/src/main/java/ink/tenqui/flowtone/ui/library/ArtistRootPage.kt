@@ -69,7 +69,6 @@ private const val ArtistRootHeaderNameAnimationIndex = 2
 private const val ArtistRootSectionTitleAnimationIndex = 3
 private const val ArtistRootFirstSongAnimationIndex = 4
 private const val ArtistRootToolbarAnimationIndex = 0
-private const val ArtistRootVisibleSongStaggerCount = 8
 
 @Composable
 fun ArtistRootPage(
@@ -282,7 +281,7 @@ private fun artistRootSongAnimationIndex(
 ): Int {
     val visibleSongOffset = (songIndex - firstVisibleItemIndex).coerceAtLeast(0)
     return ArtistRootFirstSongAnimationIndex +
-        visibleSongOffset.coerceAtMost(ArtistRootVisibleSongStaggerCount)
+        visibleSongOffset
 }
 
 @Composable
