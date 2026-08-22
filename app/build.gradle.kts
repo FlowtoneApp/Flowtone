@@ -213,6 +213,7 @@ dependencies {
     implementation(libs.androidx.javascriptengine)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
     implementation(libs.coil.network.okhttp)
     implementation(libs.google.material)
     implementation(libs.taglib)

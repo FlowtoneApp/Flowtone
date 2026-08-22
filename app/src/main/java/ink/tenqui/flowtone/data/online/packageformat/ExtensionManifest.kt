@@ -15,7 +15,9 @@ data class ExtensionManifest(
     /** 可解析持久歌曲身份的服务来源，不能拿网络 hosts 代替。 */
     val musicSources: List<String> = emptyList(),
     /** 可选 Provider 品牌色，仅用于 Host 控制的搜索来源选项行。格式为 #RRGGBB。 */
-    val color: String? = null
+    val color: String? = null,
+    val icon: String? = null,
+    val iconColor: String? = null
 ) {
     val supportsArtistAvatar: Boolean get() = "artist_avatar" in capabilities
     val supportsMusicProvider: Boolean get() = "music_provider" in capabilities
@@ -38,6 +40,8 @@ object ExtensionManifestParser {
             List(array.length()) { array.getString(it).trim().lowercase() }
         }.orEmpty()
         val color = json.optString("color").trim().takeIf(String::isNotEmpty)
+        val icon = json.optString("icon").trim().takeIf(::isSafeIconPath)
+        val iconColor = json.optString("iconColor").trim().takeIf { it.matches(HexColor) }
         return ExtensionManifest(
             formatVersion = json.getInt("formatVersion"),
             id = json.getString("id"),
@@ -49,7 +53,9 @@ object ExtensionManifestParser {
             capabilities = capabilities,
             networkHosts = hosts,
             musicSources = musicSources,
-            color = color
+            color = color,
+            icon = icon,
+            iconColor = iconColor
         ).also(::validate)
     }
 
@@ -76,6 +82,14 @@ object ExtensionManifestParser {
         val host = rule.removePrefix("*.")
         return rule.isNotBlank() && '*' !in host && host.contains('.') &&
             host.split('.').all { label -> label.isNotBlank() && label.all { it.isLetterOrDigit() || it == '-' } }
+    }
+
+    private fun isSafeIconPath(path: String): Boolean {
+        if (!path.startsWith("assets/") || path.length <= "assets/".length) return false
+        if ('\\' in path || path.startsWith('/') || ":" in path) return false
+        return path.split('/').all { segment ->
+            segment.isNotBlank() && segment != "." && segment != ".."
+        }
     }
 }
 

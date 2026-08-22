@@ -38,8 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -48,8 +51,11 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.search.SearchProviderOption
+import ink.tenqui.flowtone.data.search.SearchProviderVisual
 import ink.tenqui.flowtone.data.search.SearchScope
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,7 +68,8 @@ internal sealed interface SearchSourceSwitcherState {
 internal data class SearchSourceSwitcherItem(
     val scope: SearchScope,
     val label: String,
-    val color: String? = null
+    val color: String? = null,
+    val visual: SearchProviderVisual? = null
 )
 
 internal fun searchSourceSwitcherItems(
@@ -73,7 +80,12 @@ internal fun searchSourceSwitcherItems(
         SearchSourceSwitcherItem(SearchScope.All, "全部"),
         SearchSourceSwitcherItem(SearchScope.Local, "本地")
     ) + providers.map { option ->
-        SearchSourceSwitcherItem(SearchScope.Provider(option.extensionId), option.name, option.color)
+        SearchSourceSwitcherItem(
+            scope = SearchScope.Provider(option.extensionId),
+            label = option.name,
+            color = option.color,
+            visual = option.visual
+        )
     }
     val currentItem = all.firstOrNull { it.scope == current } ?: all.first()
     return listOf(currentItem) + all.filterNot { it.scope == currentItem.scope }
@@ -112,12 +124,24 @@ internal fun SearchSourceSwitcher(
         tween(durationMillis = FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
         label = "SearchSourceSwitcherWidth"
     )
-    val heightTarget = if (expanded) (RowHeight * items.size.coerceAtMost(MaxVisibleRows)) else RowHeight
+    val expandedHeight = RowHeight * items.size.coerceAtMost(MaxVisibleRows)
+    val heightTarget = if (expanded) expandedHeight else RowHeight
     val height by animateDpAsState(
         heightTarget,
         tween(durationMillis = FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
         label = "SearchSourceSwitcherHeight"
     )
+    val widthProgress = if (expandedWidth == collapsedWidth) {
+        1f
+    } else {
+        ((width - collapsedWidth) / (expandedWidth - collapsedWidth)).coerceIn(0f, 1f)
+    }
+    val heightProgress = if (expandedHeight == RowHeight) {
+        1f
+    } else {
+        ((height - RowHeight) / (expandedHeight - RowHeight)).coerceIn(0f, 1f)
+    }
+    val popupProgress = minOf(widthProgress, heightProgress)
     val nameAlpha by animateFloatAsState(
         // 收起时文字由 surface 的 clip 直接裁掉；完全收起后才复位透明度，
         // 下次展开仍能保持名称渐入。
@@ -141,6 +165,10 @@ internal fun SearchSourceSwitcher(
             modifier = Modifier
                 // 收起专用 row 只有一行，背景仍必须填满外层的动画高度。
                 .fillMaxSize()
+                .shadow(
+                    elevation = 8.dp * popupProgress,
+                    shape = RoundedCornerShape(20.dp)
+                )
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f))
                 .then(if (items.size > MaxVisibleRows) Modifier.verticalScroll(rememberScrollState()) else Modifier)
@@ -224,22 +252,24 @@ private fun SearchSourceSwitcherRow(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    val background = item.color?.let(::providerRowColor)
-    val contentColor = background?.let { color ->
-        if (color.luminance() > 0.45f) Color.Black else Color.White
-    } ?: MaterialTheme.colorScheme.onSurface
+    val contentColor = MaterialTheme.colorScheme.onSurface
+    val providerFallbackColor = item.color?.let(::providerRowColor)
+        ?: MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .height(RowHeight)
             .alpha(alpha)
-            .then(if (background != null) Modifier.background(background) else Modifier)
             .clickable(onClick = onClick)
             .semantics { contentDescription = if (current) "当前搜索来源：${item.label}，点击切换" else "切换到${item.label}" }
             .padding(horizontal = 9.dp)
     ) {
-        SearchScopeIcon(item.scope, contentColor)
+        SearchScopeIcon(
+            item = item,
+            tint = contentColor,
+            providerFallbackColor = providerFallbackColor
+        )
         Text(
             text = item.label,
             style = MaterialTheme.typography.labelLarge,
@@ -255,13 +285,58 @@ private fun SearchSourceSwitcherRow(
 }
 
 @Composable
-private fun SearchScopeIcon(scope: SearchScope, tint: Color) {
-    val icon = when (scope) {
-        SearchScope.All -> Icons.Rounded.Language
-        SearchScope.Local -> Icons.Rounded.LibraryMusic
-        is SearchScope.Provider -> Icons.Rounded.Radio
+private fun SearchScopeIcon(
+    item: SearchSourceSwitcherItem,
+    tint: Color,
+    providerFallbackColor: Color,
+    iconSize: Dp = 22.dp
+) {
+    when (item.scope) {
+        SearchScope.All -> Icon(Icons.Rounded.Language, null, tint = tint, modifier = Modifier.size(iconSize))
+        SearchScope.Local -> Icon(Icons.Rounded.LibraryMusic, null, tint = tint, modifier = Modifier.size(iconSize))
+        is SearchScope.Provider -> ProviderScopeIcon(
+            visual = item.visual,
+            fallbackColor = providerFallbackColor,
+            iconSize = iconSize
+        )
     }
-    Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
+}
+
+@Composable
+private fun ProviderScopeIcon(
+    visual: SearchProviderVisual?,
+    fallbackColor: Color,
+    iconSize: Dp
+) {
+    val iconColor = visual?.iconColor?.let(::providerRowColor)
+    val fallbackIconColor = iconColor ?: fallbackColor
+    val iconFile = visual?.iconFile
+    if (iconFile == null) {
+        Icon(Icons.Rounded.Radio, null, tint = fallbackIconColor, modifier = Modifier.size(iconSize))
+        return
+    }
+
+    val context = LocalContext.current
+    val imageLoader = remember(context) { ExtensionManager.get(context).extensionImageLoader }
+    var imageLoaded by remember(iconFile) { mutableStateOf(false) }
+    Box(
+        modifier = Modifier.size(iconSize),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!imageLoaded) {
+            Icon(Icons.Rounded.Radio, null, tint = fallbackIconColor, modifier = Modifier.size(iconSize))
+        }
+        AsyncImage(
+            model = iconFile,
+            imageLoader = imageLoader,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            colorFilter = iconColor?.let(ColorFilter::tint),
+            onSuccess = { imageLoaded = true },
+            onError = { imageLoaded = false },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }
 
 private fun providerRowColor(hex: String): Color =

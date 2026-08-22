@@ -18,6 +18,7 @@ import ink.tenqui.flowtone.data.online.image.ExtensionImageFetcher
 import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
 import ink.tenqui.flowtone.data.online.image.ExtensionImageNetworkHost
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageInstaller
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionProviderVisualResolver
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
@@ -37,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import coil3.ImageLoader
+import coil3.svg.SvgDecoder
 import java.util.concurrent.ConcurrentHashMap
 
 /** 安装、扫描、运行和卸载外部脚本扩展的应用级所有者。 */
@@ -64,6 +66,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     val extensionImageLoader: ImageLoader by lazy {
         ImageLoader.Builder(appContext)
             .components {
+                add(SvgDecoder.Factory())
                 add(ExtensionImageKeyer)
                 add(ExtensionImageFetcher.Factory(ExtensionImageNetworkHost(::networkClientFor)))
             }
@@ -211,7 +214,14 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         installedExtensions()
             .asSequence()
             .filter { it.runtimeAvailable && it.manifest.supportsMusicProvider && musicProviders.containsKey(it.manifest.id) }
-            .map { SearchProviderOption(it.manifest.id, it.manifest.name, it.manifest.color) }
+            .map {
+                SearchProviderOption(
+                    extensionId = it.manifest.id,
+                    name = it.manifest.name,
+                    color = it.manifest.color,
+                    visual = ExtensionProviderVisualResolver.resolve(it)
+                )
+            }
             .sortedBy(SearchProviderOption::name)
             .toList()
 

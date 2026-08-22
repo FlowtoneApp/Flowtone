@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.ui.search
 
+import android.os.Build
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -58,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -131,6 +134,16 @@ internal fun GlobalSearchOverlay(
     var sourceSwitcherState by remember { mutableStateOf<SearchSourceSwitcherState>(SearchSourceSwitcherState.Collapsed) }
     val selectedResultCategory = SearchResultCategory.from(searchUiState.selectedProviderCategory)
     val sourceSwitcherExpanded = sourceSwitcherState !is SearchSourceSwitcherState.Collapsed
+    val sourceFocusProgress by animateFloatAsState(
+        targetValue = if (sourceSwitcherExpanded) 1f else 0f,
+        animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
+        label = "SearchSourceFocusProgress"
+    )
+    val sourceContentBlurModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Modifier.blur(14.dp * sourceFocusProgress)
+    } else {
+        Modifier
+    }
     BackHandler(enabled = sourceSwitcherExpanded) {
         sourceSwitcherState = SearchSourceSwitcherState.Collapsed
     }
@@ -158,25 +171,16 @@ internal fun GlobalSearchOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(sourceContentBlurModifier)
+        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
                 .topLevelPageBackground(
                     cloudPalette = searchCloudPalette(),
                     cloudPlacement = SearchBackgroundCloudPlacement
                 )
         )
-        if (sourceSwitcherExpanded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // 位于页面内容之上、selector 之下：任意空白点击只负责收起。
-                    .zIndex(3f)
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        sourceSwitcherState = SearchSourceSwitcherState.Collapsed
-                    }
-            )
-        }
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -264,6 +268,26 @@ internal fun GlobalSearchOverlay(
         }
         // 视觉上位于搜索框 trailing 区域，但作为页面 overlay，不参与搜索框的测量。
         // 这样展开的来源行可以覆盖 Landing，而不会受输入框圆角或高度裁切。
+        }
+        if (sourceSwitcherExpanded || sourceFocusProgress > 0.001f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(3f)
+                    .background(
+                        Color.Black.copy(
+                            alpha = sourceFocusProgress *
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.12f else 0.18f
+                        )
+                    )
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        sourceSwitcherState = SearchSourceSwitcherState.Collapsed
+                    }
+            )
+        }
         SearchSourceSwitcher(
             currentScope = searchUiState.scope,
             providers = searchUiState.providerOptions,
@@ -566,6 +590,11 @@ private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> U
                 SearchArtworkPlaceholder(song.searchCategory)
             }
         }
+        /*
+        }
+                    // 位于统一 blur visual 之上、selector 之下：任意空白点击只负责收起。
+                    .zIndex(3f)
+        */
         Column(Modifier.padding(start = 12.dp)) {
             Text(song.title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
             secondaryText?.let {
