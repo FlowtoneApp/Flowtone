@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
+import ink.tenqui.flowtone.core.model.LocalPlaylistCreatorName
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -34,6 +35,7 @@ import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
+import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
@@ -157,6 +159,35 @@ internal fun FlowtoneScaffoldContent(
     } else {
         monochromeFlowtoneCloudPalette(mainPageCloudAccent)
     }
+    val playlistDetailDestination = state.selectedPlaylistId?.let { playlistId ->
+        val metadata = if (playlistId == LikedSongsPlaylistId) {
+            PlaylistDetailMetadata(
+                title = state.selectedPlaylistTitle ?: "我喜欢的音乐",
+                creatorName = LocalPlaylistCreatorName
+            )
+        } else {
+            PlaylistDetailMetadata(
+                title = state.selectedPlaylistTitle
+                    ?: selectedPlaylistCard?.title
+                    ?: SecondaryPage.Playlist.title,
+                creatorName = selectedPlaylistCard?.creatorName,
+                description = selectedPlaylistCard?.description,
+                customArtworkUri = selectedPlaylistCard?.customArtworkUri
+            )
+        }
+        PlaylistDetailDestination(
+            playlistId = playlistId,
+            metadata = metadata
+        )
+    }
+    val targetPage = if (state.secondaryPage == null) {
+        FlowtoneScaffoldPage.MainTabs
+    } else {
+        FlowtoneScaffoldPage.Secondary(
+            page = state.secondaryPage,
+            playlistDetailDestination = playlistDetailDestination
+        )
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         SharedTransitionLayout(
@@ -165,11 +196,7 @@ internal fun FlowtoneScaffoldContent(
                 .nestedScroll(state.topBarScrollConnection)
         ) {
             PageTransitionHost(
-                targetState = if (state.secondaryPage == null) {
-                    FlowtoneScaffoldPage.MainTabs
-                } else {
-                    FlowtoneScaffoldPage.Secondary(state.secondaryPage)
-                },
+                targetState = targetPage,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 val pageScope = this
@@ -297,8 +324,7 @@ internal fun FlowtoneScaffoldContent(
                     onLyricsBackgroundStyleChange = callbacks.onLyricsBackgroundStyleChange,
                     uiState = state.uiState,
                     currentSong = state.playerUiState.currentSong,
-                    selectedPlaylistId = state.selectedPlaylistId,
-                    selectedPlaylistTitle = state.selectedPlaylistTitle,
+                    playlistDetailDestination = page.playlistDetailDestination,
                     selectedArtistName = state.selectedArtistName,
                     listeningRecordInitialTab = state.listeningRecordInitialTab,
                     likedSongKeys = state.likedSongKeys,
@@ -348,7 +374,10 @@ internal fun FlowtoneScaffoldContent(
 
 private sealed interface FlowtoneScaffoldPage {
     data object MainTabs : FlowtoneScaffoldPage
-    data class Secondary(val page: SecondaryPage) : FlowtoneScaffoldPage
+    data class Secondary(
+        val page: SecondaryPage,
+        val playlistDetailDestination: PlaylistDetailDestination? = null
+    ) : FlowtoneScaffoldPage
 }
 
 private fun topLevelContinuousPagePosition(

@@ -66,8 +66,12 @@ data class Playlist(
     /**
      * 用户或 Provider 明确指定的歌单封面。为空时，界面使用歌单第一首歌曲的封面。
      */
-    val customArtworkUri: String? = null
+    val customArtworkUri: String? = null,
+    val creatorName: String? = null,
+    val description: String? = null
 )
+
+const val LocalPlaylistCreatorName = "我"
 
 data class PlaylistSongEntry(
     val id: String,

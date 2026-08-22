@@ -7,6 +7,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -296,7 +297,9 @@ internal class LibraryPlaylistController internal constructor(
                     subtitle = "$songCount \u9996\u6b4c\u66f2",
                     order = playlist.order,
                     appearanceColorKey = playlist.appearanceColorKey,
-                    customArtworkUri = playlist.customArtworkUri?.let(Uri::parse)
+                    customArtworkUri = playlist.customArtworkUri?.let(Uri::parse),
+                    creatorName = playlist.creatorName,
+                    description = playlist.description
                 )
             }
         val activePlaylistIds = playlists.mapTo(mutableSetOf()) { playlist -> playlist.id }
@@ -599,7 +602,7 @@ internal fun LocalLibraryScreen(
 @Composable
 internal fun PlaylistDetailScreen(
     playlistId: String?,
-    playlistTitle: String,
+    metadata: PlaylistDetailMetadata,
     allSongs: List<Song>,
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
@@ -640,10 +643,16 @@ internal fun PlaylistDetailScreen(
                 .sortedForPlaylist(songSort)
         }
     }
+    val playlistArtworkUri = remember(metadata.customArtworkUri, playlistSongs) {
+        metadata.customArtworkUri ?: playlistSongs
+            .asSequence()
+            .mapNotNull { song -> song.song.artworkUri }
+            .firstOrNull()
+    }
 
     if (playlistSongs.isEmpty()) {
         PlaylistDetailCollapsingHeaderScaffold(
-            title = playlistTitle,
+            title = metadata.title,
             listState = null,
             showContentHeader = false,
             onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -651,16 +660,23 @@ internal fun PlaylistDetailScreen(
             contentModifier = contentModifier,
             modifier = modifier
         ) {
-            EmptyPlaylistState(
-                visible = !suppressEmptyState,
-                modifier = Modifier.fillMaxSize()
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    artworkUri = playlistArtworkUri,
+                    modifier = pageTransition.elementModifier(0)
+                )
+                EmptyPlaylistState(
+                    visible = !suppressEmptyState,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
         return
     }
 
     PlaylistDetailCollapsingHeaderScaffold(
-        title = playlistTitle,
+        title = metadata.title,
         listState = listState,
         showContentHeader = false,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -671,7 +687,7 @@ internal fun PlaylistDetailScreen(
         SelectablePlaylistSongList(
             sourceKey = playlistId.orEmpty(),
             source = PlaylistSelectionSource.UserPlaylist,
-            playlistTitle = playlistTitle,
+            playlistTitle = metadata.title,
             entries = playlistSongs,
             listState = listState,
             currentSong = currentSong,
@@ -695,6 +711,13 @@ internal fun PlaylistDetailScreen(
             reorderAnimationKey = songSort,
             pageTransition = pageTransition,
             itemModifier = itemModifier,
+            headerContent = {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    artworkUri = playlistArtworkUri,
+                    modifier = pageTransition.elementModifier(0)
+                )
+            },
             modifier = Modifier.fillMaxSize()
         )
     }

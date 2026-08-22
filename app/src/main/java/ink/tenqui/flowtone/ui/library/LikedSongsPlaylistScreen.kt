@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -28,7 +29,7 @@ import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 @Composable
 internal fun LikedSongsPlaylistScreen(
-    playlistTitle: String,
+    metadata: PlaylistDetailMetadata,
     allSongs: List<Song>,
     likedTracks: List<PersistentTrack>,
     currentSong: Song?,
@@ -52,10 +53,16 @@ internal fun LikedSongsPlaylistScreen(
             track.toPresentationSong(allSongs)?.let { song -> track to song }
         }
     }
+    val artworkUri = remember(metadata.customArtworkUri, likedSongs) {
+        metadata.customArtworkUri ?: likedSongs
+            .asSequence()
+            .mapNotNull { (_, song) -> song.artworkUri }
+            .firstOrNull()
+    }
 
     if (likedSongs.isEmpty()) {
         PlaylistDetailCollapsingHeaderScaffold(
-            title = playlistTitle,
+            title = metadata.title,
             listState = null,
             showContentHeader = false,
             onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -63,24 +70,31 @@ internal fun LikedSongsPlaylistScreen(
             contentModifier = contentModifier,
             modifier = modifier
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 28.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "\u8fd8\u6ca1\u6709\u559c\u6b22\u7684\u97f3\u4e50",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Column(modifier = Modifier.fillMaxSize()) {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    artworkUri = artworkUri,
+                    modifier = pageTransition.elementModifier(0)
                 )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "\u8fd8\u6ca1\u6709\u559c\u6b22\u7684\u97f3\u4e50",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         return
     }
 
     PlaylistDetailCollapsingHeaderScaffold(
-        title = playlistTitle,
+        title = metadata.title,
         listState = listState,
         showContentHeader = false,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -91,7 +105,7 @@ internal fun LikedSongsPlaylistScreen(
         SelectablePlaylistSongList(
             sourceKey = LikedSongsPlaylistId,
             source = PlaylistSelectionSource.LikedSongs,
-            playlistTitle = playlistTitle,
+            playlistTitle = metadata.title,
             entries = likedSongs.map { (track, song) ->
                 SelectablePlaylistSong(
                     selectionKey = "liked:${track.identityKey}",
@@ -119,6 +133,13 @@ internal fun LikedSongsPlaylistScreen(
             reorderAnimationKey = songSort,
             pageTransition = pageTransition,
             itemModifier = itemModifier,
+            headerContent = {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    artworkUri = artworkUri,
+                    modifier = pageTransition.elementModifier(0)
+                )
+            },
             modifier = Modifier.fillMaxSize()
         )
     }

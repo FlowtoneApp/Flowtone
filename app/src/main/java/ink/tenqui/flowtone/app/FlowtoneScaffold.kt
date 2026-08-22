@@ -388,7 +388,9 @@ private data class LibraryPlaylistRepositorySyncKey(
     val title: String,
     val subtitle: String,
     val order: Int,
-    val customArtworkUri: String?
+    val customArtworkUri: String?,
+    val creatorName: String?,
+    val description: String?
 )
 
 private fun LibraryPlaylistCard.repositorySyncKey(): LibraryPlaylistRepositorySyncKey {
@@ -397,6 +399,8 @@ private fun LibraryPlaylistCard.repositorySyncKey(): LibraryPlaylistRepositorySy
         title = title,
         subtitle = subtitle,
         order = order,
-        customArtworkUri = customArtworkUri?.toString()
+        customArtworkUri = customArtworkUri?.toString(),
+        creatorName = creatorName,
+        description = description
     )
 }
