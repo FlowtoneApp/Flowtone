@@ -87,6 +87,8 @@ import androidx.compose.ui.window.PopupProperties
 internal fun AppearanceSettingsPage(
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
+    lyricsBackgroundStyle: LyricsBackgroundStyle,
+    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     disablePausedArtworkTilt: Boolean,
     onDisablePausedArtworkTiltChange: (Boolean) -> Unit,
     strictProgressBar: Boolean,
@@ -136,6 +138,15 @@ internal fun AppearanceSettingsPage(
                 checked = strictProgressBar,
                 onCheckedChange = onStrictProgressBarChange,
                 modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        OptionGroup(
+            title = "歌词",
+            modifier = elementModifier(2).padding(top = 24.dp)
+        ) {
+            LyricsBackgroundStyleSelector(
+                selectedStyle = lyricsBackgroundStyle,
+                onStyleSelected = onLyricsBackgroundStyleChange
             )
         }
     }
@@ -212,8 +223,6 @@ internal fun AdvancedSettingsPage(
 
 @Composable
 internal fun LyricsSettingsPage(
-    lyricsBackgroundStyle: LyricsBackgroundStyle,
-    onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     allowScreenOffOnLyricsPage: Boolean,
     onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     lyricsFolders: List<LyricsFolder>,
@@ -226,10 +235,6 @@ internal fun LyricsSettingsPage(
             title = "歌词",
             modifier = elementModifier(0)
         ) {
-            LyricsBackgroundStyleSelector(
-                selectedStyle = lyricsBackgroundStyle,
-                onStyleSelected = onLyricsBackgroundStyleChange
-            )
             SettingSwitchRow(
                 title = "允许歌词页息屏",
                 subtitle = "开启后，歌词页遵循系统的屏幕超时设置",

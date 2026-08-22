@@ -248,7 +248,7 @@ internal fun SettingsScreen(
         val localScope = this
         val elementCount = when {
             state.section == null -> 5
-            state.section == SettingsSection.Appearance -> 2
+            state.section == SettingsSection.Appearance -> 3
             state.section == SettingsSection.General && state.managingLyricsFolders -> 1
             state.section == SettingsSection.General && state.showingLyricsSettings -> 1
             state.section == SettingsSection.General && state.showingOnlineSettings ->
@@ -274,6 +274,8 @@ internal fun SettingsScreen(
             SettingsSection.Appearance -> AppearanceSettingsPage(
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
+                    lyricsBackgroundStyle = lyricsBackgroundStyle,
+                    onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                     disablePausedArtworkTilt = disablePausedArtworkTilt,
                     onDisablePausedArtworkTiltChange = onDisablePausedArtworkTiltChange,
                     strictProgressBar = strictProgressBar,
@@ -314,8 +316,6 @@ internal fun SettingsScreen(
                 )
 
                 state.showingLyricsSettings -> LyricsSettingsPage(
-                    lyricsBackgroundStyle = lyricsBackgroundStyle,
-                    onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                     allowScreenOffOnLyricsPage = allowScreenOffOnLyricsPage,
                     onAllowScreenOffOnLyricsPageChange =
                         onAllowScreenOffOnLyricsPageChange,
