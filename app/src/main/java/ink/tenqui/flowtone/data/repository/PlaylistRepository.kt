@@ -511,6 +511,40 @@ class PlaylistRepository(
         )
     }
 
+    suspend fun updatePlaylistDescription(
+        id: String,
+        description: String?
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        val currentPlaylist = currentPlaylists.firstOrNull { playlist -> playlist.id == id }
+            ?: return@withLock PlaylistMutationResult.Failure(
+                PlaylistMutationError.NotFound
+            )
+        val normalizedDescription = description?.trim()?.ifBlank { null }
+        if (currentPlaylist.description == normalizedDescription) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val now = System.currentTimeMillis()
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id == id) {
+                playlist.copy(
+                    description = normalizedDescription,
+                    updatedAt = now
+                )
+            } else {
+                playlist
+            }
+        }
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = _playlistSongEntries.value,
+            nextPlaylists = nextPlaylists,
+            nextEntries = _playlistSongEntries.value,
+            successValue = Unit
+        )
+    }
+
     suspend fun addSongsToPlaylists(
         playlistIds: Set<String>,
         songs: List<Song>

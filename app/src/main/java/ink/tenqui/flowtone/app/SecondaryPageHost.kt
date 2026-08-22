@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -35,8 +36,23 @@ import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
 internal class PlaylistDetailDestination(
     val playlistId: String?,
-    val metadata: PlaylistDetailMetadata
+    initialMetadata: PlaylistDetailMetadata
 ) {
+    var metadata by mutableStateOf(initialMetadata)
+        private set
+
+    fun updateMetadata(updatedMetadata: PlaylistDetailMetadata) {
+        if (metadata != updatedMetadata) {
+            metadata = updatedMetadata
+        }
+    }
+
+    fun updateDescription(description: String?): Boolean {
+        if (metadata.description == description) return false
+        updateMetadata(metadata.copy(description = description))
+        return true
+    }
+
     override fun equals(other: Any?): Boolean {
         return other is PlaylistDetailDestination && playlistId == other.playlistId
     }
@@ -85,6 +101,8 @@ internal fun SecondaryPageHost(
     likedSongKeys: List<String>,
     playlistSongEntries: List<PlaylistSongEntry>,
     playlistBatchActions: PlaylistBatchActions,
+    onUpdatePlaylistDescription: (String, String?) -> Unit,
+    onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -274,6 +292,32 @@ internal fun SecondaryPageHost(
                             onDetailHeaderCollapseProgressStateChange,
                         headerModifier = elementModifier(0),
                         suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
+                        onDescriptionChange = { description ->
+                            if (destination.updateDescription(description)) {
+                                Log.d(
+                                    "FlowtonePlaylistDebug",
+                                    "DESCRIPTION_SNAPSHOT_UPDATED " +
+                                        "length=${description?.length ?: 0}"
+                                )
+                                onUpdatePlaylistDescription(
+                                    destination.playlistId.orEmpty(),
+                                    description
+                                )
+                            }
+                        },
+                        onDescriptionEditEndRequestChange = { request ->
+                            onPlaylistBackActionChange(
+                                request?.let { finish ->
+                                    {
+                                        Log.d(
+                                            "FlowtonePlaylistDebug",
+                                            "DESCRIPTION_OUTSIDE_TAP topBar=true"
+                                        )
+                                        finish()
+                                    }
+                                }
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .rightSwipeBackGesture(::closeSelectionOrPage)

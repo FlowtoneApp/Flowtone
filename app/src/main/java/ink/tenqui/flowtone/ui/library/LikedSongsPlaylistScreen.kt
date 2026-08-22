@@ -73,6 +73,7 @@ internal fun LikedSongsPlaylistScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 PlaylistMetadataHeader(
                     metadata = metadata,
+                    songCount = likedSongs.size,
                     artworkUri = artworkUri,
                     modifier = pageTransition.elementModifier(0)
                 )
@@ -136,6 +137,7 @@ internal fun LikedSongsPlaylistScreen(
             headerContent = {
                 PlaylistMetadataHeader(
                     metadata = metadata,
+                    songCount = likedSongs.size,
                     artworkUri = artworkUri,
                     modifier = pageTransition.elementModifier(0)
                 )

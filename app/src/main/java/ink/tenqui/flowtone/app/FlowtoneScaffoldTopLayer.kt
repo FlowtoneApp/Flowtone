@@ -1,5 +1,8 @@
 package ink.tenqui.flowtone.app
 
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
@@ -13,7 +16,9 @@ internal fun FlowtoneScaffoldTopLayer(
     detailHeaderCollapseProgressState: State<Float>?,
     songSelectionState: PlaylistSelectionTopBarState?,
     onCloseSongSelection: () -> Unit,
-    playlistSortProgress: Float
+    playlistBackAction: (() -> Unit)?,
+    playlistSortProgress: Float,
+    descriptionBlurRadius: Dp
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
         val titleVisible = state.secondaryPage != null
@@ -34,6 +39,8 @@ internal fun FlowtoneScaffoldTopLayer(
             searchReentryProgress = state.searchReentryProgress,
             onBack = if (songSelectionState != null) {
                 onCloseSongSelection
+            } else if (state.secondaryPage == SecondaryPage.Playlist) {
+                playlistBackAction ?: callbacks.onCloseSecondaryPage
             } else {
                 callbacks.onNavigateBack
             },
@@ -46,7 +53,8 @@ internal fun FlowtoneScaffoldTopLayer(
                 callbacks.onSearchKeyboardDismissRequestConsumed,
             onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
             onSearchImeAction = callbacks.onSearchImeAction,
-            playlistSortProgress = playlistSortProgress
+            playlistSortProgress = playlistSortProgress,
+            modifier = Modifier.blur(descriptionBlurRadius)
         )
     }
 }

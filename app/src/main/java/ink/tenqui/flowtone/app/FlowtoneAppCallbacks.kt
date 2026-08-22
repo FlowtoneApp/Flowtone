@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import android.util.Log
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
@@ -228,11 +229,13 @@ internal fun flowtoneAppCallbacks(
         },
         onNavigateBack = onNavigateBack,
         onCloseSecondaryPage = {
+            Log.d("FlowtonePlaylistDebug", "PLAYLIST_CLOSE_REQUESTED")
             appState.secondaryPage = null
             appState.secondaryPathSegments = emptyList()
             appState.selectedPlaylistId = null
             appState.selectedPlaylistTitle = null
             appState.selectedArtistName = null
+            Log.d("FlowtonePlaylistDebug", "PLAYLIST_LIVE_SELECTION_CLEARED")
         },
         onOpenSettings = {
             appState.secondaryPathSegments = emptyList()

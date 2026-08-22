@@ -16,12 +16,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.LocalPlaylistCreatorName
@@ -54,6 +57,9 @@ internal fun FlowtoneScaffoldContent(
     playlistSongEntries: List<PlaylistSongEntry>,
     playlistBatchActions: PlaylistBatchActions,
     likedSongCount: Int,
+    descriptionBlurRadius: Dp,
+    onUpdatePlaylistDescription: (String, String?) -> Unit,
+    onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -170,15 +176,22 @@ internal fun FlowtoneScaffoldContent(
                 title = state.selectedPlaylistTitle
                     ?: selectedPlaylistCard?.title
                     ?: SecondaryPage.Playlist.title,
-                creatorName = selectedPlaylistCard?.creatorName,
+                creatorName = selectedPlaylistCard?.creatorName ?: LocalPlaylistCreatorName,
                 description = selectedPlaylistCard?.description,
-                customArtworkUri = selectedPlaylistCard?.customArtworkUri
+                customArtworkUri = selectedPlaylistCard?.customArtworkUri,
+                isDescriptionEditable = true
             )
         }
-        PlaylistDetailDestination(
-            playlistId = playlistId,
-            metadata = metadata
-        )
+        remember(playlistId) {
+            PlaylistDetailDestination(
+                playlistId = playlistId,
+                initialMetadata = metadata
+            )
+        }.also { destination ->
+            SideEffect {
+                destination.updateMetadata(metadata)
+            }
+        }
     }
     val targetPage = if (state.secondaryPage == null) {
         FlowtoneScaffoldPage.MainTabs
@@ -224,6 +237,7 @@ internal fun FlowtoneScaffoldContent(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(pageScope.backgroundModifier())
+                                .blur(descriptionBlurRadius)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -325,6 +339,8 @@ internal fun FlowtoneScaffoldContent(
                     uiState = state.uiState,
                     currentSong = state.playerUiState.currentSong,
                     playlistDetailDestination = page.playlistDetailDestination,
+                    onUpdatePlaylistDescription = onUpdatePlaylistDescription,
+                    onPlaylistBackActionChange = onPlaylistBackActionChange,
                     selectedArtistName = state.selectedArtistName,
                     listeningRecordInitialTab = state.listeningRecordInitialTab,
                     likedSongKeys = state.likedSongKeys,
@@ -366,6 +382,7 @@ internal fun FlowtoneScaffoldContent(
                                     alpha = pageTopBarSurfaceAlpha
                                 )
                             )
+                            .blur(descriptionBlurRadius)
                     )
                 }
             }

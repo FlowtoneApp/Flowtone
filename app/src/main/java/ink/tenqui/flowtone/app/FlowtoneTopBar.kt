@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -165,7 +166,10 @@ internal fun FlowtoneTopBar(
                 .graphicsLayer { alpha = 1f - playlistSortProgress }
         ) {
             IconButton(
-                onClick = onBack,
+                onClick = {
+                    Log.d("FlowtonePlaylistDebug", "TOPBAR_BACK_CLICKED")
+                    onBack()
+                },
                 modifier = Modifier
                     .padding(start = 12.dp)
                     .size(40.dp)

@@ -176,6 +176,7 @@ internal fun SelectablePlaylistSongList(
     onRemoveEntries: (Set<String>, (Boolean) -> Unit) -> Unit,
     reorderAnimationKey: Any? = null,
     pageTransition: PageTransitionScope,
+    descriptionEditing: Boolean = false,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier,
     headerContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -494,7 +495,7 @@ internal fun SelectablePlaylistSongList(
             userScrollEnabled = !selectionGestureActive && !reorderAnimationActive,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(sourceKey, entryKeys) {
+                .pointerInput(sourceKey, entryKeys, descriptionEditing) {
                     awaitEachGesture {
                         var secondaryPointerId: PointerId? = null
                         var secondaryDragDistance = 0f
@@ -635,7 +636,7 @@ internal fun SelectablePlaylistSongList(
                         secondaryScrollChannel?.close()
                     }
                 }
-                .pointerInput(sourceKey, entryKeys) {
+                .pointerInput(sourceKey, entryKeys, descriptionEditing) {
                     var autoScrollJob: Job? = null
                     var autoScrollDirection = 0
 
@@ -673,7 +674,7 @@ internal fun SelectablePlaylistSongList(
                         }
                     }
 
-                    detectDragGesturesAfterLongPress(
+                    if (!descriptionEditing) detectDragGesturesAfterLongPress(
                         onDragStart = { position ->
                             selectionGestureState.reset(position.y)
                             selectionGestureActive = true
