@@ -1,9 +1,9 @@
 package ink.tenqui.flowtone.app
 
-import ink.tenqui.flowtone.ui.screens.HomeBackgroundCloudPlacement
-import ink.tenqui.flowtone.ui.screens.LibraryBackgroundCloudPlacement
-import ink.tenqui.flowtone.ui.screens.MineBackgroundCloudPlacement
-import ink.tenqui.flowtone.ui.screens.TopLevelBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.LibraryBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.MineBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.TopLevelBackgroundCloudPlacement
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt

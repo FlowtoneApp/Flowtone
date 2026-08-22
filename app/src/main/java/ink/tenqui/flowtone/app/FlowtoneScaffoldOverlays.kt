@@ -158,7 +158,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             interactionsEnabled = searchInteractionsEnabled,
             reentryProgress = searchLayerProgress,
             revealProgress = searchRevealProgress,
-            revealColor = state.searchColors.container,
             modifier = Modifier
                 .fillMaxSize()
         )

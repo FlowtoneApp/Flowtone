@@ -58,7 +58,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -95,6 +94,9 @@ import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
+import ink.tenqui.flowtone.ui.components.SearchBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.searchCloudPalette
+import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.library.ExperimentalArtistAvatarImage
 import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -119,7 +121,6 @@ internal fun GlobalSearchOverlay(
     interactionsEnabled: Boolean,
     reentryProgress: Float,
     revealProgress: Float,
-    revealColor: Color,
     modifier: Modifier = Modifier
 ) {
     @Suppress("UNUSED_VARIABLE")
@@ -146,10 +147,6 @@ internal fun GlobalSearchOverlay(
         modifier = modifier
             .fillMaxSize()
             .then(swipeBackModifier)
-            .drawBehind {
-                val origin = Offset(size.width - revealOriginEndPadding, revealOriginY)
-                drawCircle(revealColor, searchRevealMaxRadius(origin, size.width, size.height) * revealProgress, origin)
-            }
             .drawWithContent {
                 val contentScope = this
                 val origin = Offset(size.width - revealOriginEndPadding, revealOriginY)
@@ -158,6 +155,14 @@ internal fun GlobalSearchOverlay(
                 clipPath(path) { contentScope.drawContent() }
             }
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .topLevelPageBackground(
+                    cloudPalette = searchCloudPalette(),
+                    cloudPlacement = SearchBackgroundCloudPlacement
+                )
+        )
         if (sourceSwitcherExpanded) {
             Box(
                 modifier = Modifier

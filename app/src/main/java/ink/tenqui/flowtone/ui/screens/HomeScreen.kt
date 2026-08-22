@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -45,15 +44,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -79,9 +76,9 @@ import ink.tenqui.flowtone.ui.components.FlowtoneSongArtworkCard
 import ink.tenqui.flowtone.ui.components.PageTransitionElement
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
+import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
-import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
 import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -105,7 +102,11 @@ internal fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val backgroundModifier = if (drawBackground) {
-        Modifier.homeScreenBackground()
+        Modifier.topLevelPageBackground(
+            cloudPalette = monochromeFlowtoneCloudPalette(
+                LocalMainPagesCloudPalette.current.homeAccent
+            )
+        )
     } else {
         Modifier
     }
@@ -134,120 +135,6 @@ internal fun HomeScreen(
         )
     }
 }
-
-@Composable
-internal fun Modifier.homeScreenBackground(): Modifier {
-    return topLevelPageBackground(LocalMainPagesCloudPalette.current.homeAccent)
-}
-
-@Composable
-internal fun Modifier.topLevelPageBackground(
-    accentColor: Color,
-    cloudAlpha: Float = 1f,
-    cloudPlacement: TopLevelBackgroundCloudPlacement = HomeBackgroundCloudPlacement
-): Modifier = topLevelPageBackground(
-    cloudPalette = monochromeFlowtoneCloudPalette(accentColor),
-    cloudAlpha = cloudAlpha,
-    cloudPlacement = cloudPlacement
-)
-
-@Composable
-internal fun Modifier.topLevelPageBackground(
-    cloudPalette: FlowtoneCloudPalette,
-    cloudAlpha: Float = 1f,
-    cloudPlacement: TopLevelBackgroundCloudPlacement = HomeBackgroundCloudPlacement
-): Modifier {
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val safeCloudAlpha = cloudAlpha.coerceIn(0f, 1f)
-    return drawBehind {
-        drawRect(color = backgroundColor)
-        drawTopPageColorCloud(
-            cloudPalette = cloudPalette,
-            backgroundColor = backgroundColor,
-            cloudAlpha = safeCloudAlpha,
-            cloudPlacement = cloudPlacement
-        )
-    }
-}
-
-internal data class TopLevelBackgroundCloudPlacement(
-    val cloudCenterWidthFraction: Float,
-    val cloudCenterRadiusOffsetXFactor: Float,
-    val cloudCenterRadiusOffsetYFactor: Float,
-    val clearCenterWidthFraction: Float,
-    val clearCenterHeightFraction: Float
-)
-
-internal val HomeBackgroundCloudPlacement = TopLevelBackgroundCloudPlacement(
-    cloudCenterWidthFraction = 0f,
-    cloudCenterRadiusOffsetXFactor = -0.08f,
-    cloudCenterRadiusOffsetYFactor = 0.08f,
-    clearCenterWidthFraction = 1f,
-    clearCenterHeightFraction = 1f
-)
-
-internal val LibraryBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
-    cloudCenterWidthFraction = 0.5f,
-    cloudCenterRadiusOffsetXFactor = 0f,
-    cloudCenterRadiusOffsetYFactor = -0.12f
-)
-
-internal val MineBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
-    cloudCenterWidthFraction = 1f,
-    cloudCenterRadiusOffsetXFactor = 0.08f,
-    clearCenterWidthFraction = 0f
-)
-
-private fun DrawScope.drawTopPageColorCloud(
-    cloudPalette: FlowtoneCloudPalette,
-    backgroundColor: Color,
-    cloudAlpha: Float,
-    cloudPlacement: TopLevelBackgroundCloudPlacement
-) {
-    if (cloudAlpha <= 0f) return
-    val cloudDiameter = size.height * TopCloudVisibleHeightFraction * 2f /
-        (1f + HomeBackgroundCloudPlacement.cloudCenterRadiusOffsetYFactor)
-    if (cloudDiameter <= 0f) return
-
-    val cloudRadius = cloudDiameter / 2f
-    val cloudCenter = Offset(
-        x = size.width * cloudPlacement.cloudCenterWidthFraction +
-            cloudRadius * cloudPlacement.cloudCenterRadiusOffsetXFactor,
-        y = cloudRadius * cloudPlacement.cloudCenterRadiusOffsetYFactor
-    )
-
-    drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                cloudPalette.primary.copy(alpha = 0.34f * cloudAlpha),
-                cloudPalette.secondary.copy(alpha = 0.22f * cloudAlpha),
-                cloudPalette.tertiary.copy(alpha = 0.08f * cloudAlpha),
-                Color.Transparent
-            ),
-            center = cloudCenter,
-            radius = cloudRadius
-        ),
-        radius = cloudRadius,
-        center = cloudCenter
-    )
-    drawRect(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                backgroundColor.copy(alpha = 0.98f * cloudAlpha),
-                backgroundColor.copy(alpha = 0.72f * cloudAlpha),
-                Color.Transparent
-            ),
-            center = Offset(
-                x = size.width * cloudPlacement.clearCenterWidthFraction,
-                y = size.height * cloudPlacement.clearCenterHeightFraction
-            ),
-            radius = size.minDimension * BottomRightClearRadiusFraction
-        )
-    )
-}
-
-private const val TopCloudVisibleHeightFraction = 1.30f
-private const val BottomRightClearRadiusFraction = 0.82f
 
 @Composable
 private fun Modifier.controlledHorizontalListGesture(

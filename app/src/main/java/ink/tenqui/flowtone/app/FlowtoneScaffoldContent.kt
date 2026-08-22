@@ -35,7 +35,7 @@ import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
-import ink.tenqui.flowtone.ui.screens.topLevelPageBackground
+import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
 import ink.tenqui.flowtone.ui.theme.accentAt
