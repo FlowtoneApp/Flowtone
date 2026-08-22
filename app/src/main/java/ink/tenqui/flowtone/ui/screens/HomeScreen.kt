@@ -76,7 +76,8 @@ import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.FlowtoneContentSectionTitle
 import ink.tenqui.flowtone.ui.components.FlowtoneSongArtworkCard
-import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.PageTransitionElement
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
@@ -96,7 +97,7 @@ internal fun HomeScreen(
     playlistSongEntries: List<PlaylistSongEntry> = emptyList(),
     onSongClick: (Song) -> Unit = {},
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit = {},
-    visible: Boolean = true,
+    pageScope: PageTransitionScope,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     isFlowCloudPlaying: Boolean = true,
     drawBackground: Boolean = true,
@@ -123,7 +124,7 @@ internal fun HomeScreen(
             playlistSongEntries = playlistSongEntries,
             onSongClick = onSongClick,
             onOpenPlaylist = onOpenPlaylist,
-            visible = visible,
+            pageScope = pageScope,
             flowCloudSpeed = flowCloudSpeed,
             isFlowCloudPlaying = isFlowCloudPlaying,
             scrollState = scrollState,
@@ -508,7 +509,7 @@ private fun HomeContent(
     playlistSongEntries: List<PlaylistSongEntry>,
     onSongClick: (Song) -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    visible: Boolean,
+    pageScope: PageTransitionScope,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     scrollState: ScrollState,
@@ -529,16 +530,18 @@ private fun HomeContent(
             .verticalScroll(scrollState, enabled = false)
             .padding(bottom = 32.dp)
     ) {
-        StaggeredPageElement(
-            visible = visible,
-            animationIndex = 0
+        PageTransitionElement(
+            scope = pageScope,
+            order = 0,
+            orderCount = 3
         ) {
             FlowtonePageHeaderPlaceholder()
         }
         Spacer(modifier = Modifier.height(HomeHeaderToContentSpacing))
-        StaggeredPageElement(
-            visible = visible,
-            animationIndex = 4
+        PageTransitionElement(
+            scope = pageScope,
+            order = 1,
+            orderCount = 3
         ) {
             HomeRecommendationSection(
                 title = "随便听听",
@@ -550,9 +553,10 @@ private fun HomeContent(
             )
         }
         Spacer(modifier = Modifier.height(HomeSectionSpacing))
-        StaggeredPageElement(
-            visible = visible,
-            animationIndex = 8
+        PageTransitionElement(
+            scope = pageScope,
+            order = 2,
+            orderCount = 3
         ) {
             RecentlyAddedSection(
                 title = "最近新增",

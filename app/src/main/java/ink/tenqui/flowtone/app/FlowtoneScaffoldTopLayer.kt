@@ -1,11 +1,7 @@
 package ink.tenqui.flowtone.app
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
@@ -20,37 +16,19 @@ internal fun FlowtoneScaffoldTopLayer(
     playlistSortProgress: Float
 ) {
     if (state.rootPage == FlowtoneRootPage.MainTabs) {
-        val isTopLevelRootPage = state.secondaryPage == null
-        val usesSharedCloudTopBar = state.secondaryPage == SecondaryPage.Playlist ||
-            state.secondaryPage == SecondaryPage.LocalLibrary
-        val secondaryBackgroundAlpha by animateFloatAsState(
-            targetValue = if (isTopLevelRootPage || usesSharedCloudTopBar) 0f else 1f,
-            animationSpec = tween(
-                durationMillis = FlowtoneMotion.DurationMillis,
-                easing = FlowtoneMotion.Easing
-            ),
-            label = "TopBarSecondaryBackgroundAlpha"
-        )
-        val backgroundAlpha = when {
-            isTopLevelRootPage || state.searchActive -> 0f
-            usesSharedCloudTopBar -> 0f
-            else -> state.topBarBackgroundAlpha * secondaryBackgroundAlpha
-        }
-        val titleVisible = !isTopLevelRootPage
+        val titleVisible = state.secondaryPage != null
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,
             additionalPathSegments = state.secondaryPathSegments,
-            backgroundAlpha = backgroundAlpha,
             titleVisible = titleVisible,
             songSelectionState = songSelectionState,
             hideBackButton = state.hideSecondaryBackButton,
             searchActive = state.searchActive,
             searchQuery = state.searchUiState.queryText,
             searchColors = state.searchColors,
-            secondaryBackgroundAlpha = secondaryBackgroundAlpha,
             searchFocusRequest = state.searchFocusRequest,
             searchKeyboardDismissRequest = state.searchKeyboardDismissRequest,
             searchReentryProgress = state.searchReentryProgress,

@@ -8,6 +8,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,7 +57,6 @@ import kotlinx.coroutines.launch
 internal fun FlowtoneScaffold(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
-    mainTabsVisible: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -266,12 +266,16 @@ internal fun FlowtoneScaffold(
     CompositionLocalProvider(
         LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled
     ) {
-        BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        BoxWithConstraints(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(scaffoldBlurRadius),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0),
             topBar = {
                 FlowtoneScaffoldTopLayer(
@@ -284,15 +288,15 @@ internal fun FlowtoneScaffold(
                 )
             }
         ) { innerPadding ->
+            val topBarBackgroundHeight = innerPadding.calculateTopPadding()
             val contentInnerPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() +
+                top = topBarBackgroundHeight +
                     playlistSortPanelHeight * playlistSortProgress.coerceIn(0f, 1f),
                 bottom = innerPadding.calculateBottomPadding()
             )
             FlowtoneScaffoldContent(
                 state = state,
                 callbacks = callbacks,
-                mainTabsVisible = mainTabsVisible,
                 homeScrollState = homeScrollState,
                 topLevelPageCollapseProgress = topLevelPageCollapseProgress,
                 libraryPlaylistController = libraryPlaylistController,
@@ -305,6 +309,7 @@ internal fun FlowtoneScaffold(
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
                 innerPadding = contentInnerPadding,
+                topBarBackgroundHeight = topBarBackgroundHeight,
                 modifier = Modifier.blur(
                     PlaylistSortContentBlurRadius *
                         playlistSortProgress.coerceIn(0f, 1f)

@@ -1,21 +1,13 @@
 package ink.tenqui.flowtone.app
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import ink.tenqui.flowtone.playback.PlaybackSource
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 import ink.tenqui.flowtone.ui.library.ArtistRootPage
-
-private const val ArtistRootExitLastAnimationIndex = 12
 
 @Composable
 internal fun FlowtoneArtistRootLayer(
@@ -24,7 +16,6 @@ internal fun FlowtoneArtistRootLayer(
     hostMode: ArtistRootNavigationMode,
     modifier: Modifier = Modifier
 ) {
-    val staggerOffsetPx = with(LocalDensity.current) { FlowtoneMotion.StaggerOffset.roundToPx() }
     val artistRootPage = state.rootPage as? FlowtoneRootPage.ArtistRootPage
     val modeMatches = state.artistRootNavigationMode == hostMode
     val artistVisible = artistRootPage != null &&
@@ -35,53 +26,19 @@ internal fun FlowtoneArtistRootLayer(
                 state.searchReturnStage != SearchReturnStage.ArtistExitingToSearch
         }
 
-    AnimatedVisibility(
-        visible = artistVisible,
-        enter = fadeIn(
-            animationSpec = tween(
-                durationMillis = FlowtoneMotion.DurationMillis,
-                easing = FlowtonePageEasing
-            ),
-            initialAlpha = 1f
-        ),
-        exit = fadeOut(
-            animationSpec = tween(
-                durationMillis = FlowtoneMotion.DurationMillis,
-                easing = FlowtonePageEasing
-            ),
-            targetAlpha = 1f
-        ),
-        label = "ArtistRootPageVisibility",
+    PageTransitionHost(
+        targetState = artistVisible,
         modifier = modifier.fillMaxSize()
-    ) {
+    ) { visible ->
+        if (!visible) {
+            return@PageTransitionHost
+        }
+        val pageScope = this
         fun artistPageItemModifier(index: Int): Modifier {
-            if (hostMode == ArtistRootNavigationMode.MiniPlayer) {
-                return staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
-            }
-            return staggeredPageElementModifier(
-                    animationIndex = index,
-                    exitAnimationIndex = (ArtistRootExitLastAnimationIndex - index)
-                        .coerceAtLeast(0),
-                    offsetPx = staggerOffsetPx
-            )
+            return pageScope.elementModifier(index, orderCount = 24)
         }
         fun artistHeaderCardModifier(index: Int): Modifier {
-            if (hostMode == ArtistRootNavigationMode.MiniPlayer) {
-                return staggeredPageElementModifier(
-                    animationIndex = index,
-                    offsetPx = staggerOffsetPx,
-                    initialOffsetY = { -staggerOffsetPx },
-                    targetOffsetY = { -staggerOffsetPx }
-                )
-            }
-            return staggeredPageElementModifier(
-                    animationIndex = index,
-                    exitAnimationIndex = (ArtistRootExitLastAnimationIndex - index)
-                        .coerceAtLeast(0),
-                    offsetPx = staggerOffsetPx,
-                    initialOffsetY = { -staggerOffsetPx },
-                    targetOffsetY = { -staggerOffsetPx }
-            )
+            return pageScope.elementModifier(index, orderCount = 4)
         }
         Box(modifier = Modifier.fillMaxSize()) {
             val page = artistRootPage ?: return@Box

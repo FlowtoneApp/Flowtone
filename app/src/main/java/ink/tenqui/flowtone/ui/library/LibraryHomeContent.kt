@@ -18,12 +18,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
-import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.PageTransitionElement
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 @Composable
 internal fun LibraryHomeContent(
     songCount: Int,
-    visible: Boolean,
+    pageScope: PageTransitionScope,
     likedPlaylist: LibraryPlaylistCard,
     playlists: List<LibraryPlaylistCard>,
     playlistItemHeight: Dp,
@@ -71,9 +72,10 @@ internal fun LibraryHomeContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(key = "library-header") {
-            StaggeredPageElement(
-                visible = visible,
-                animationIndex = 0,
+            PageTransitionElement(
+                scope = pageScope,
+                order = 0,
+                orderCount = 2,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column {
@@ -85,9 +87,10 @@ internal fun LibraryHomeContent(
             }
         }
         item(key = "library-collection-menu") {
-            StaggeredPageElement(
-                visible = visible,
-                animationIndex = 4,
+            PageTransitionElement(
+                scope = pageScope,
+                order = 1,
+                orderCount = 2,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {

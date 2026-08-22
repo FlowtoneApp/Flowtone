@@ -24,6 +24,7 @@ import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.screens.HomeScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.MineScreen
@@ -38,7 +39,7 @@ internal fun TopLevelPagerContent(
     playlistSongEntries: List<PlaylistSongEntry>,
     permissionDenied: Boolean,
     showSwipeHint: Boolean,
-    secondaryOpen: Boolean,
+    pageScope: PageTransitionScope,
     userScrollEnabled: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -63,8 +64,7 @@ internal fun TopLevelPagerContent(
         ) { pageIndex ->
             val page = TopLevelPage.entries[pageIndex]
             // 卡片流云只跟随页面可见性，不跟随歌曲播放或暂停状态。
-            val isPageFlowCloudActive = !secondaryOpen &&
-                pagerState.currentPage == pageIndex
+            val isPageFlowCloudActive = pagerState.currentPage == pageIndex
             when (page) {
                 TopLevelPage.Home -> HomeScreen(
                     pagerState = pagerState,
@@ -78,7 +78,7 @@ internal fun TopLevelPagerContent(
                     playlistSongEntries = playlistSongEntries,
                     onSongClick = onSongClick,
                     onOpenPlaylist = onOpenPlaylist,
-                    visible = !secondaryOpen,
+                    pageScope = pageScope,
                     flowCloudSpeed = flowCloudSpeed,
                     isFlowCloudPlaying = isPageFlowCloudActive,
                     drawBackground = false,
@@ -91,7 +91,7 @@ internal fun TopLevelPagerContent(
                     likedSongCount = likedSongCount,
                     onOpenLocalLibrary = onOpenLocalLibrary,
                     onOpenPlaylist = onOpenPlaylist,
-                    visible = !secondaryOpen,
+                    pageScope = pageScope,
                     flowCloudSpeed = flowCloudSpeed,
                     isFlowCloudPlaying = isPageFlowCloudActive,
                     playlistController = libraryPlaylistController,
@@ -103,7 +103,7 @@ internal fun TopLevelPagerContent(
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout,
                     onOpenListeningRecords = onOpenListeningRecords,
-                    secondaryOpen = secondaryOpen,
+                    pageScope = pageScope,
                     modifier = Modifier.fillMaxSize()
                 )
             }

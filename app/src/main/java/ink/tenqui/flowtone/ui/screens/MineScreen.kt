@@ -32,7 +32,8 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.listening.formatListeningDuration
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
-import ink.tenqui.flowtone.ui.components.StaggeredPageElement
+import ink.tenqui.flowtone.ui.components.PageTransitionElement
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 private val MineListeningRecordCardHeight = 164.dp
 
@@ -42,7 +43,7 @@ internal fun MineScreen(
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenListeningRecords: (ListeningRecordTab) -> Unit,
-    secondaryOpen: Boolean,
+    pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
     val todayTopSource = listeningStats.today.topSource?.displayName?.takeIf { it.isNotBlank() }
@@ -53,16 +54,18 @@ internal fun MineScreen(
             .fillMaxSize()
             .padding(start = 24.dp, top = 48.dp, end = 24.dp, bottom = 16.dp)
     ) {
-        StaggeredPageElement(
-            visible = !secondaryOpen,
-            animationIndex = 0
+        PageTransitionElement(
+            scope = pageScope,
+            order = 0,
+            orderCount = 4
         ) {
             FlowtonePageHeaderPlaceholder()
         }
         Spacer(modifier = Modifier.height(30.dp))
-        StaggeredPageElement(
-            visible = !secondaryOpen,
-            animationIndex = 4
+        PageTransitionElement(
+            scope = pageScope,
+            order = 1,
+            orderCount = 4
         ) {
             Row(
                 modifier = Modifier
@@ -92,16 +95,16 @@ internal fun MineScreen(
         MineMenuItem(
             title = "\u8bbe\u7f6e",
             icon = Icons.Rounded.Settings,
-            visible = !secondaryOpen,
-            animationIndex = 8,
+            scope = pageScope,
+            order = 2,
             onClick = onOpenSettings,
             modifier = Modifier.padding(top = 16.dp)
         )
         MineMenuItem(
             title = "\u5173\u4e8e",
             icon = Icons.Rounded.Info,
-            visible = !secondaryOpen,
-            animationIndex = 12,
+            scope = pageScope,
+            order = 3,
             onClick = onOpenAbout,
             modifier = Modifier.padding(top = 12.dp)
         )
@@ -175,14 +178,15 @@ private fun MineListeningRecordCard(
 private fun MineMenuItem(
     title: String,
     icon: ImageVector,
-    visible: Boolean,
-    animationIndex: Int,
+    scope: PageTransitionScope,
+    order: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    StaggeredPageElement(
-        visible = visible,
-        animationIndex = animationIndex,
+    PageTransitionElement(
+        scope = scope,
+        order = order,
+        orderCount = 4,
         modifier = modifier
     ) {
         Row(

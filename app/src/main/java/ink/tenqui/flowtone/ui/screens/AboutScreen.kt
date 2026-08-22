@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.R
 import ink.tenqui.flowtone.ui.components.FlowtoneAboutCard
 import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rememberFlowtoneVersionName
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 
@@ -41,12 +42,15 @@ private const val GITHUB_URL = "https://github.com/FlowtoneApp/Flowtone"
 private const val GPL_URL = "https://opensource.org/license/gpl-3-0"
 
 @Composable
-fun AboutScreen(
+internal fun AboutScreen(
     onOpenSource: () -> Unit,
     onBack: () -> Unit,
-    elementModifier: (Int) -> Modifier,
+    pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
+    fun elementModifier(order: Int): Modifier {
+        return pageScope.elementModifier(order, orderCount = 2)
+    }
     val context = LocalContext.current
     val versionName = rememberFlowtoneVersionName()
 

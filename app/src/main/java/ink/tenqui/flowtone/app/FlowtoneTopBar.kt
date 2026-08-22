@@ -46,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -77,14 +76,12 @@ internal fun FlowtoneTopBar(
     pagerState: PagerState,
     secondaryPage: SecondaryPage?,
     additionalPathSegments: List<String>,
-    backgroundAlpha: Float,
     titleVisible: Boolean,
     songSelectionState: PlaylistSelectionTopBarState?,
     hideBackButton: Boolean,
     searchActive: Boolean,
     searchQuery: String,
     searchColors: TopLevelSearchColors,
-    secondaryBackgroundAlpha: Float,
     searchFocusRequest: Int,
     searchKeyboardDismissRequest: Int,
     searchReentryProgress: Float,
@@ -149,21 +146,9 @@ internal fun FlowtoneTopBar(
     val titleEndPadding = if (searchAvailable) 84.dp else 24.dp
     val titleExitDistancePx = with(density) { 12.dp.toPx() }
     val actionButtonMotionDistancePx = with(density) { 16.dp.roundToPx() }
-    val topBarBackgroundAlpha = backgroundAlpha
-    val topBarBaseBackground = Color.Transparent
-    val rootTopBarBackgroundAlpha = topBarBackgroundAlpha
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(topBarBaseBackground)
-            .background(
-                MaterialTheme.colorScheme.background.copy(
-                    alpha = secondaryBackgroundAlpha.coerceIn(0f, 1f)
-                )
-            )
-            .background(
-                MaterialTheme.colorScheme.surfaceContainer.copy(alpha = rootTopBarBackgroundAlpha)
-            )
             .statusBarsPadding()
             .height(FlowtoneTopBarContentHeight)
             .clipToBounds(),

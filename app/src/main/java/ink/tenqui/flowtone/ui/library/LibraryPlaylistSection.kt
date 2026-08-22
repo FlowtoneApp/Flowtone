@@ -65,6 +65,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.PlaylistCardContentColors
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
@@ -116,15 +117,18 @@ internal fun LibraryCollectionMenu(
                     text = "歌单",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(
                     onClick = onCreatePlaylist,
                     modifier = Modifier.size(40.dp)
                 ) {
+                    val appliedIconTint = MaterialTheme.colorScheme.onSurface
                     Icon(
                         imageVector = Icons.Rounded.Add,
-                        contentDescription = "新建歌单"
+                        contentDescription = "新建歌单",
+                        tint = appliedIconTint
                     )
                 }
             }
@@ -506,7 +510,9 @@ private fun RowScope.PlaylistListText(
 }
 
 private fun libraryPlaylistItemProgress(globalProgress: Float, itemIndex: Int): Float {
-    val delayMillis = FlowtoneMotion.staggerDelayMillis(itemIndex).toFloat()
-    val durationMillis = FlowtoneMotion.staggerDurationMillis(itemIndex).coerceAtLeast(1).toFloat()
-    return ((globalProgress.coerceIn(0f, 1f) * FlowtoneMotion.DurationMillis - delayMillis) / durationMillis).coerceIn(0f, 1f)
+    return PageMotion.elementProgress(
+        pageProgress = globalProgress,
+        order = itemIndex,
+        orderCount = PageMotion.DefaultOrderCount
+    )
 }

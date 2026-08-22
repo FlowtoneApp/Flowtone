@@ -4,10 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,23 +36,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.OptionGroup
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionHost
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 
 @Composable
-fun OpenSourceScreen(
+internal fun OpenSourceScreen(
     onBack: () -> Unit,
     onBackActionChange: ((() -> Unit)?) -> Unit,
     onPathSegmentsChange: (List<String>) -> Unit,
-    elementModifier: (Int) -> Modifier,
+    pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
-    val staggerOffsetPx = with(LocalDensity.current) { FlowtoneMotion.StaggerOffset.roundToPx() }
     var selectedComponentId by rememberSaveable { mutableStateOf<String?>(null) }
     var showingLicense by rememberSaveable { mutableStateOf(false) }
     val selectedComponent = openSourceComponents.firstOrNull {
@@ -102,22 +96,25 @@ fun OpenSourceScreen(
     }
     BackHandler(onBack = handleBack)
 
-    AnimatedContent(
+    PageTransitionHost(
         targetState = when {
             showingLicense && selectedComponent != null -> OpenSourceView.License
             selectedComponent != null -> OpenSourceView.Detail
             else -> OpenSourceView.List
         },
-        transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
-        label = "OpenSourceContent",
+        parentScope = pageScope,
         modifier = modifier
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
     ) { view ->
+        val localScope = this
+        val elementCount = when (view) {
+            OpenSourceView.List -> ComponentCategory.entries.size + 1
+            OpenSourceView.Detail,
+            OpenSourceView.License -> 2
+        }
         fun viewElementModifier(index: Int): Modifier {
-            return elementModifier(index).then(
-                staggeredPageElementModifier(index, offsetPx = staggerOffsetPx)
-            )
+            return localScope.elementModifier(index, elementCount)
         }
 
         when (view) {

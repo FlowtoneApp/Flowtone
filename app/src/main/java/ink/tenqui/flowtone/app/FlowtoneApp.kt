@@ -99,22 +99,14 @@ fun FlowtoneApp(
     var audioPermissionGranted by remember(context) {
         mutableStateOf(hasAudioPermission(context))
     }
-    var mainTabsVisible by remember {
-        mutableStateOf(audioPermissionGranted)
-    }
-    var hasShownPermissionGate by remember {
-        mutableStateOf(!audioPermissionGranted)
-    }
     var permissionRequestResultVersion by remember { mutableStateOf(0) }
     var pendingSongDeletion by remember { mutableStateOf<PendingSongDeletion?>(null) }
-
     val pagerState = rememberPagerState(
         initialPage = defaultStartPage.index,
         pageCount = { TopLevelPage.entries.size }
     )
     val selectedTopLevelPage = TopLevelPage.entries[pagerState.currentPage]
     val rootPage = flowtoneRootPage(appState.artistRootPageArtistName)
-    val secondaryOpen = appState.secondaryPage != null
     val liveSearchColors = topLevelSearchColorsForPager(pagerState)
     val frozenSearchColors = searchColorSnapshotOrNull(appState)?.toColors()
     val activeSearchColors = frozenSearchColors ?: liveSearchColors
@@ -310,14 +302,6 @@ fun FlowtoneApp(
         musicViewModel.setPermissionStatus(audioPermissionGranted)
         if (audioPermissionGranted) {
             musicViewModel.scanSongs()
-            if (hasShownPermissionGate) {
-                mainTabsVisible = false
-                withFrameNanos { }
-                mainTabsVisible = true
-            }
-        } else {
-            hasShownPermissionGate = true
-            mainTabsVisible = false
         }
     }
 
@@ -668,7 +652,6 @@ fun FlowtoneApp(
             )
         } else {
             FlowtoneScaffold(
-            mainTabsVisible = mainTabsVisible,
             state = flowtoneAppScaffoldState(
             appState = appState,
             uiState = uiState,
@@ -679,7 +662,6 @@ fun FlowtoneApp(
             pagerState = pagerState,
             selectedTopLevelPage = selectedTopLevelPage,
             rootPage = rootPage,
-            secondaryOpen = secondaryOpen,
             topBarBackgroundAlpha = activeTopBarBackgroundAlpha,
             topBarScrollConnection = topBarScrollConnection,
             backgroundBlurRadius = backgroundBlurRadius,

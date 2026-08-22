@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.togetherWith
@@ -44,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.staggeredPageElementModifier
 
 @Composable
 internal fun LicenseDescription(
