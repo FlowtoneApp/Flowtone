@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import ink.tenqui.flowtone.ui.library.ArtistDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
+import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
@@ -31,6 +33,32 @@ import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
+
+internal class PlaylistDetailDestination(
+    val playlistId: String?,
+    initialMetadata: PlaylistDetailMetadata
+) {
+    var metadata by mutableStateOf(initialMetadata)
+        private set
+
+    fun updateMetadata(updatedMetadata: PlaylistDetailMetadata) {
+        if (metadata != updatedMetadata) {
+            metadata = updatedMetadata
+        }
+    }
+
+    fun updateDescription(description: String?): Boolean {
+        if (metadata.description == description) return false
+        updateMetadata(metadata.copy(description = description))
+        return true
+    }
+
+    override fun equals(other: Any?): Boolean {
+        return other is PlaylistDetailDestination && playlistId == other.playlistId
+    }
+
+    override fun hashCode(): Int = playlistId?.hashCode() ?: 0
+}
 
 @Composable
 internal fun SecondaryPageHost(
@@ -67,13 +95,14 @@ internal fun SecondaryPageHost(
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
-    selectedPlaylistId: String?,
-    selectedPlaylistTitle: String?,
+    playlistDetailDestination: PlaylistDetailDestination?,
     selectedArtistName: String?,
     listeningRecordInitialTab: ListeningRecordTab,
     likedSongKeys: List<String>,
     playlistSongEntries: List<PlaylistSongEntry>,
     playlistBatchActions: PlaylistBatchActions,
+    onUpdatePlaylistDescription: (String, String?) -> Unit,
+    onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -108,19 +137,7 @@ internal fun SecondaryPageHost(
             onCloseSecondaryPage()
         }
     }
-    var retainedPlaylistId by remember { mutableStateOf<String?>(null) }
-    var retainedPlaylistTitle by remember { mutableStateOf<String?>(null) }
     var retainedArtistName by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(secondaryPage, selectedPlaylistId) {
-        if (secondaryPage == SecondaryPage.Playlist && selectedPlaylistId != null) {
-            retainedPlaylistId = selectedPlaylistId
-        }
-    }
-    LaunchedEffect(secondaryPage, selectedPlaylistTitle) {
-        if (secondaryPage == SecondaryPage.Playlist && selectedPlaylistTitle != null) {
-            retainedPlaylistTitle = selectedPlaylistTitle
-        }
-    }
     LaunchedEffect(secondaryPage, selectedArtistName) {
         if (secondaryPage == SecondaryPage.Artist && selectedArtistName != null) {
             retainedArtistName = selectedArtistName
@@ -219,20 +236,10 @@ internal fun SecondaryPageHost(
             )
 
             SecondaryPage.Playlist -> {
-                val activePlaylistId = if (secondaryPage == SecondaryPage.Playlist) {
-                    selectedPlaylistId
-                } else {
-                    retainedPlaylistId
-                }
-                val activePlaylistTitle = if (secondaryPage == SecondaryPage.Playlist) {
-                    selectedPlaylistTitle
-                } else {
-                    retainedPlaylistTitle
-                }
-                val playlistTitle = activePlaylistTitle ?: SecondaryPage.Playlist.title
-                if (activePlaylistId == LikedSongsPlaylistId) {
+                val destination = playlistDetailDestination ?: return@Box
+                if (destination.playlistId == LikedSongsPlaylistId) {
                     LikedSongsPlaylistScreen(
-                        playlistTitle = playlistTitle,
+                        metadata = destination.metadata,
                         allSongs = uiState.songs,
                         likedTracks = uiState.likedTracks,
                         currentSong = currentSong,
@@ -259,8 +266,8 @@ internal fun SecondaryPageHost(
                     )
                 } else {
                     PlaylistDetailScreen(
-                        playlistId = activePlaylistId,
-                        playlistTitle = playlistTitle,
+                        playlistId = destination.playlistId,
+                        metadata = destination.metadata,
                         allSongs = uiState.songs,
                         playlistSongEntries = playlistSongEntries,
                         currentSong = currentSong,
@@ -271,8 +278,8 @@ internal fun SecondaryPageHost(
                                 tracks,
                                 index,
                                 PlaybackSource.userPlaylist(
-                                    playlistId = activePlaylistId.orEmpty(),
-                                    displayName = activePlaylistTitle.orEmpty()
+                                    playlistId = destination.playlistId.orEmpty(),
+                                    displayName = destination.metadata.title
                                 )
                             )
                         },

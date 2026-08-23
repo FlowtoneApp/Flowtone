@@ -49,6 +49,12 @@ class PlaylistStorage(context: Context) {
                             updatedAt = item.optLong(UPDATED_AT_KEY, createdAt),
                             customArtworkUri = item.optString(CUSTOM_ARTWORK_URI_KEY)
                                 .trim()
+                                .ifBlank { null },
+                            creatorName = item.optString(CREATOR_NAME_KEY)
+                                .trim()
+                                .ifBlank { null },
+                            description = item.optString(DESCRIPTION_KEY)
+                                .trim()
                                 .ifBlank { null }
                         )
                     )
@@ -77,6 +83,8 @@ class PlaylistStorage(context: Context) {
                         .put(CREATED_AT_KEY, playlist.createdAt)
                         .put(UPDATED_AT_KEY, playlist.updatedAt)
                         .put(CUSTOM_ARTWORK_URI_KEY, playlist.customArtworkUri)
+                        .put(CREATOR_NAME_KEY, playlist.creatorName)
+                        .put(DESCRIPTION_KEY, playlist.description)
                 )
             }
 
@@ -122,6 +130,8 @@ class PlaylistStorage(context: Context) {
         const val CREATED_AT_KEY = "createdAt"
         const val UPDATED_AT_KEY = "updatedAt"
         const val CUSTOM_ARTWORK_URI_KEY = "customArtworkUri"
+        const val CREATOR_NAME_KEY = "creatorName"
+        const val DESCRIPTION_KEY = "description"
         const val DEFAULT_SUBTITLE = "0 首歌曲"
         const val ENTRY_ID_KEY = "id"
         const val ENTRY_PLAYLIST_ID_KEY = "playlistId"
@@ -146,6 +156,8 @@ private fun List<Playlist>.toPlaylistJsonArray(): JSONArray {
                     .put("createdAt", playlist.createdAt)
                     .put("updatedAt", playlist.updatedAt)
                     .put("customArtworkUri", playlist.customArtworkUri)
+                    .put("creatorName", playlist.creatorName)
+                    .put("description", playlist.description)
             )
         }
     return jsonArray

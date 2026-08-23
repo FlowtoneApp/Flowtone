@@ -16,7 +16,9 @@ data class LibraryPlaylistCard(
         playlistAppearanceColorKeyForStableId(id)
     },
     /** Provider 或用户指定的封面；为空时由展示层回退到第一首歌曲的封面。 */
-    val customArtworkUri: Uri? = null
+    val customArtworkUri: Uri? = null,
+    val creatorName: String? = null,
+    val description: String? = null
 )
 
 const val LikedSongsPlaylistId = "system_liked_songs"

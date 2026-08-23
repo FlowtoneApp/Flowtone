@@ -1,11 +1,13 @@
 package ink.tenqui.flowtone.app
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
@@ -74,6 +76,7 @@ internal fun FlowtoneScaffold(
     var songSelectionTopBarState by remember {
         mutableStateOf<PlaylistSelectionTopBarState?>(null)
     }
+    var playlistBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
@@ -139,11 +142,24 @@ internal fun FlowtoneScaffold(
     )
     val playlistEditingBlurRadius =
         LibraryPlaylistEditingBlurRadius * playlistEditingProgress
+    LaunchedEffect(playlistEditingProgress, libraryPlaylistController.editingPlaylistId) {
+        if (
+            libraryPlaylistController.editingPlaylistId == null &&
+            playlistEditingProgress <= 0.001f
+        ) {
+            libraryPlaylistController.clearVisualPlaylistEditing()
+        }
+    }
     val scaffoldBlurRadius = if (playlistEditingBlurRadius > state.backgroundBlurRadius) {
         playlistEditingBlurRadius
     } else {
         state.backgroundBlurRadius
     }
+    val descriptionBlurRadius by animateDpAsState(
+        targetValue = if (playlistBackAction != null) 8.dp else 0.dp,
+        animationSpec = tween(180, easing = FlowtoneMotion.Easing),
+        label = "PlaylistDescriptionFocusBlur"
+    )
 
     val libraryPlaylistSyncKey = remember(libraryPlaylistController.playlists) {
         libraryPlaylistController.playlists.map(LibraryPlaylistCard::repositorySyncKey)
@@ -284,7 +300,9 @@ internal fun FlowtoneScaffold(
                     detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
                     songSelectionState = songSelectionTopBarState,
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
-                    playlistSortProgress = playlistSortProgress
+                    playlistBackAction = playlistBackAction,
+                    playlistSortProgress = playlistSortProgress,
+                    descriptionBlurRadius = descriptionBlurRadius
                 )
             }
         ) { innerPadding ->
@@ -303,6 +321,25 @@ internal fun FlowtoneScaffold(
                 playlistSongEntries = playlistSongEntries,
                 playlistBatchActions = playlistBatchActions,
                 likedSongCount = likedSongCount,
+                descriptionBlurRadius = descriptionBlurRadius,
+                onUpdatePlaylistDescription = { playlistId, description ->
+                    Log.d(
+                        "FlowtonePlaylistDebug",
+                        "DESCRIPTION_REPOSITORY_UPDATE length=${description?.length ?: 0}"
+                    )
+                    coroutineScope.launch {
+                        val result = playlistRepository.updatePlaylistDescription(
+                            id = playlistId,
+                            description = description
+                        )
+                        if (result is PlaylistMutationResult.Success) {
+                            refreshLibraryPlaylistsFromRepository()
+                        }
+                    }
+                },
+                onPlaylistBackActionChange = { action ->
+                    playlistBackAction = action
+                },
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,
                 playlistSongSort = playlistSongSort,
@@ -351,13 +388,27 @@ internal fun FlowtoneScaffold(
                 progress = playlistSortProgress,
                 sort = playlistSongSort,
                 onSortChange = { playlistSongSort = it },
-                onVisibleChange = { playlistSortPanelOpen = it },
+                onVisibleChange = { visible ->
+                    if (playlistBackAction != null) {
+                        playlistBackAction?.invoke()
+                    } else {
+                        playlistSortPanelOpen = visible
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()
                     // 排序入口位于 Scaffold 外的独立覆盖层，需要显式继承页面的模糊效果。
-                    .blur(scaffoldBlurRadius)
-                    .rightSwipeBackGesture { playlistSortPanelOpen = false }
+                    .blur(scaffoldBlurRadius + descriptionBlurRadius)
+                    .then(
+                        if (playlistSortPanelOpen || playlistSortProgress > 0f) {
+                            Modifier.rightSwipeBackGesture {
+                                playlistSortPanelOpen = false
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
             )
         }
         FlowtoneScaffoldOverlays(
@@ -388,7 +439,9 @@ private data class LibraryPlaylistRepositorySyncKey(
     val title: String,
     val subtitle: String,
     val order: Int,
-    val customArtworkUri: String?
+    val customArtworkUri: String?,
+    val creatorName: String?,
+    val description: String?
 )
 
 private fun LibraryPlaylistCard.repositorySyncKey(): LibraryPlaylistRepositorySyncKey {
@@ -397,6 +450,8 @@ private fun LibraryPlaylistCard.repositorySyncKey(): LibraryPlaylistRepositorySy
         title = title,
         subtitle = subtitle,
         order = order,
-        customArtworkUri = customArtworkUri?.toString()
+        customArtworkUri = customArtworkUri?.toString(),
+        creatorName = creatorName,
+        description = description
     )
 }

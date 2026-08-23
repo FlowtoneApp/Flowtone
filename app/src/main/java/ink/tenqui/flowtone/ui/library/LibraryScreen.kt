@@ -1,12 +1,16 @@
 package ink.tenqui.flowtone.ui.library
 
 import android.net.Uri
+import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +84,8 @@ internal class LibraryPlaylistController internal constructor(
     var dialogPlaylist by mutableStateOf<LibraryPlaylistCard?>(null)
     var dialogLocked by mutableStateOf(false)
     var editingPlaylistId by mutableStateOf<String?>(null)
+        private set
+    var visualEditingPlaylistId by mutableStateOf<String?>(null)
         private set
     var editingPlaylistBounds by mutableStateOf<Rect?>(null)
         private set
@@ -199,6 +206,7 @@ internal class LibraryPlaylistController internal constructor(
             candidate.id == playlist.id && !candidate.isSystem
         } ?: return
         editingPlaylistId = editablePlaylist.id
+        visualEditingPlaylistId = editablePlaylist.id
         editingPlaylistBounds = editablePlaylistBounds[editablePlaylist.id]
     }
 
@@ -240,6 +248,10 @@ internal class LibraryPlaylistController internal constructor(
     fun clearPlaylistEditing() {
         editingPlaylistId = null
         editingPlaylistBounds = null
+    }
+
+    fun clearVisualPlaylistEditing() {
+        visualEditingPlaylistId = null
     }
 
     fun updateLibraryViewportBounds(bounds: Rect) {
@@ -296,13 +308,18 @@ internal class LibraryPlaylistController internal constructor(
                     subtitle = "$songCount \u9996\u6b4c\u66f2",
                     order = playlist.order,
                     appearanceColorKey = playlist.appearanceColorKey,
-                    customArtworkUri = playlist.customArtworkUri?.let(Uri::parse)
+                    customArtworkUri = playlist.customArtworkUri?.let(Uri::parse),
+                    creatorName = playlist.creatorName,
+                    description = playlist.description
                 )
             }
         val activePlaylistIds = playlists.mapTo(mutableSetOf()) { playlist -> playlist.id }
         editablePlaylistBounds.keys.retainAll(activePlaylistIds)
         editingPlaylistId = editingPlaylistId?.takeIf { editingId ->
             playlists.any { playlist -> playlist.id == editingId && !playlist.isSystem }
+        }
+        visualEditingPlaylistId = visualEditingPlaylistId?.takeIf { visualId ->
+            playlists.any { playlist -> playlist.id == visualId && !playlist.isSystem }
         }
         if (editingPlaylistId == null) {
             editingPlaylistBounds = null
@@ -445,7 +462,7 @@ internal fun LibraryScreen(
         flowCloudSpeed = flowCloudSpeed,
         isFlowCloudPlaying = isFlowCloudPlaying,
         listState = playlistController.listState,
-        editingPlaylistId = playlistController.editingPlaylistId,
+        editingPlaylistId = playlistController.visualEditingPlaylistId,
         newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,
         exitingPlaylistId = playlistController.exitingPlaylistId,
         onOpenLocalLibrary = {
@@ -599,7 +616,7 @@ internal fun LocalLibraryScreen(
 @Composable
 internal fun PlaylistDetailScreen(
     playlistId: String?,
-    playlistTitle: String,
+    metadata: PlaylistDetailMetadata,
     allSongs: List<Song>,
     playlistSongEntries: List<PlaylistSongEntry>,
     currentSong: Song?,
@@ -640,10 +657,33 @@ internal fun PlaylistDetailScreen(
                 .sortedForPlaylist(songSort)
         }
     }
-
+    LaunchedEffect(
+        playlistId,
+        pageTransition.phase,
+        playlistSongs.size,
+        playlistSongEntries.size
+    ) {
+        val source = when (pageTransition.phase) {
+            PageTransitionPhase.Current -> "current"
+            PageTransitionPhase.Outgoing -> "outgoing"
+            PageTransitionPhase.Incoming -> "incoming"
+        }
+        Log.d(
+            "FlowtonePlaylistDebug",
+            "PLAYLIST_DETAIL_COMPOSE id=${playlistId ?: "null"} " +
+                "source=$source songs=${playlistSongs.size} " +
+                "entrySource=${playlistSongEntries.size}"
+        )
+    }
+    val playlistArtworkUri = remember(metadata.customArtworkUri, playlistSongs) {
+        metadata.customArtworkUri ?: playlistSongs
+            .asSequence()
+            .mapNotNull { song -> song.song.artworkUri }
+            .firstOrNull()
+    }
     if (playlistSongs.isEmpty()) {
         PlaylistDetailCollapsingHeaderScaffold(
-            title = playlistTitle,
+            title = metadata.title,
             listState = null,
             showContentHeader = false,
             onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -651,16 +691,24 @@ internal fun PlaylistDetailScreen(
             contentModifier = contentModifier,
             modifier = modifier
         ) {
-            EmptyPlaylistState(
-                visible = !suppressEmptyState,
-                modifier = Modifier.fillMaxSize()
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    songCount = playlistSongs.size,
+                    artworkUri = playlistArtworkUri,
+                    modifier = pageTransition.elementModifier(0)
+                )
+                EmptyPlaylistState(
+                    visible = !suppressEmptyState,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
         return
     }
 
     PlaylistDetailCollapsingHeaderScaffold(
-        title = playlistTitle,
+        title = metadata.title,
         listState = listState,
         showContentHeader = false,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -671,7 +719,7 @@ internal fun PlaylistDetailScreen(
         SelectablePlaylistSongList(
             sourceKey = playlistId.orEmpty(),
             source = PlaylistSelectionSource.UserPlaylist,
-            playlistTitle = playlistTitle,
+            playlistTitle = metadata.title,
             entries = playlistSongs,
             listState = listState,
             currentSong = currentSong,
@@ -695,6 +743,14 @@ internal fun PlaylistDetailScreen(
             reorderAnimationKey = songSort,
             pageTransition = pageTransition,
             itemModifier = itemModifier,
+            headerContent = {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    songCount = playlistSongs.size,
+                    artworkUri = playlistArtworkUri,
+                    modifier = pageTransition.elementModifier(0)
+                )
+            },
             modifier = Modifier.fillMaxSize()
         )
     }

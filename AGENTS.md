@@ -1,71 +1,499 @@
 # AGENTS.md
 
-## Project
+## 项目
 
-Flowtone is an Android music player written in Kotlin and Jetpack Compose.
+Flowtone 是一款使用 Kotlin 与 Jetpack Compose 开发的 Android 音乐播放器。
 
-## Language
+项目已经不是早期 MVP。
 
-- User-facing text should be Simplified Chinese.
-- Code comments may use Chinese when helpful.
+修改现有功能时，应优先理解并延续当前架构、状态语义、交互行为和动画设计，
+不要因为另一种实现“看起来更干净”就擅自建立平行架构或重写已有系统。
 
-## Architecture
+除非任务明确要求，否则保持请求范围之外的行为不变。
 
-- Use Kotlin.
-- Use Jetpack Compose.
-- Use Material Design 3.
-- Use MVVM.
-- Keep UI, playback, data scanning, and permission handling separated.
-- Do not put ExoPlayer logic directly inside Composable functions.
-- Prefer small files and clear package structure.
 
-## Package layout
+## 语言
 
-Suggested structure:
+- 面向用户的文本默认使用简体中文。
+- 代码注释可以使用中文。
+- 注释应解释意图、约束、生命周期或不明显的实现原因。
+- 不要添加只是重复代码含义的注释。
 
-- ui/
-- ui/screens/
-- ui/components/
-- playback/
-- data/
-- model/
-- permissions/
 
-## Playback
+## 技术栈
 
-- Use AndroidX Media3 ExoPlayer.
-- Playback state should be exposed through ViewModel state.
-- MiniPlayer and NowPlaying screen should share the same playback state.
+项目主要使用：
 
-## Milestone 0.1
+- Kotlin
+- Jetpack Compose
+- Material Design 3
+- AndroidX Media3
+- MVVM
 
-The first milestone should only implement:
+现有 minSdk、SDK 配置和依赖版本属于项目约束。
 
-- Request audio permission.
-- Scan local audio files.
-- Display local songs in a list.
-- Tap a song to play it.
-- Play / pause from a mini player.
-- Show current song info.
+除非任务明确要求，不要：
 
-Do not implement online music services, account system, lyrics, plugin system, or complex playlist features before local playback works.
+- 擅自提高 minSdk；
+- 擅自升级主要依赖；
+- 擅自更换基础技术栈。
 
-## Rules for Codex
 
-- Make a plan before large changes.
-- Keep the app buildable after each milestone.
-- Run Gradle build after code changes when possible.
-- Avoid over-engineering.
-- 
-## Maintainability
+## 总体架构
 
-This project must be maintainable by the project owner, who is still learning Android development.
+保持以下职责分离：
 
-Rules:
-- Prefer simple, explicit code over clever abstractions.
-- Do not introduce complex architecture unless clearly necessary.
-- After adding a new file or concept, explain why it exists.
-- Keep each file small and focused.
-- Avoid dependency injection frameworks for now.
-- Avoid advanced patterns before the basic player works.
-- Every implementation step should be understandable to a beginner-intermediate Android learner.
+- UI
+- 播放
+- 持久化
+- 本地媒体扫描
+- 权限与 Android 平台能力
+- 在线音乐与 Provider
+
+不要为了方便实现某个局部功能而跨越已有边界。
+
+
+## 播放架构
+
+当前预期的播放依赖方向为：
+
+Composable
+→ MusicViewModel
+→ PlaybackController
+→ MediaController
+→ FlowtoneMediaSessionService
+→ ExoPlayer
+
+规则：
+
+- `FlowtoneMediaSessionService` 是 ExoPlayer 和 MediaSession 的唯一所有者。
+- 不要在 Composable 中创建、持有或直接操作 ExoPlayer。
+- 不要把 MediaController / MediaSession 的编排逻辑放进 UI 组件。
+- UI 所使用的播放状态应通过 ViewModel / 应用状态暴露。
+- MiniPlayer、展开播放器、系统媒体控件等应共享同一套播放事实，
+  不要维护相互独立的播放真值。
+
+
+## UI 与状态
+
+Composable 主要负责：
+
+- 根据状态渲染 UI；
+- 发出用户意图；
+- 在合适时持有短生命周期、纯 UI 状态。
+
+不要把以下职责塞进 Composable：
+
+- Repository 持久化；
+- 播放控制核心逻辑；
+- 文件系统或数据库 I/O；
+- MediaStore 查询；
+- Provider 网络请求。
+
+状态应由能够正确覆盖其生命周期的最窄层级持有。
+
+
+## Compose
+
+处理 Compose 状态时：
+
+- Lazy 列表必须尽量使用稳定 key。
+- 避免在每次重组时重新构造大型 List / Map / Set。
+- 对真正昂贵的派生数据，可以使用 `remember` 或 `derivedStateOf`。
+- 不要机械地添加 `remember`。
+- `remember` 的 key 必须覆盖所有影响结果的输入。
+- 不要用 `remember` 掩盖陈旧状态或生命周期错误。
+- 不要在 composition 过程中执行副作用。
+- `LaunchedEffect`、`DisposableEffect` 等只用于确实需要相应生命周期语义的场景。
+- 谨慎处理被保存到状态中的 callback，避免捕获陈旧数据。
+- 不要从 `onDispose` 写入持久化业务数据。
+
+如果性能问题来自明显的算法复杂度，应优先修复算法，
+不要仅仅把同样昂贵的计算搬到后台线程。
+
+
+## 大列表与性能
+
+歌曲、歌单等集合可能达到数千甚至更多条目。
+
+规则：
+
+- UI 列表优先使用 Compose Lazy 容器。
+- 使用稳定 item key。
+- 页面动画尽量只处理当前可见或必要的 viewport item。
+- 不要在每一帧或每次重组时遍历完整歌曲列表。
+- 大型派生集合应仅在真实输入变化时重新计算。
+- 避免明显的 O(n²) 查找。
+
+例如：
+
+如果需要为大量 `PlaylistEntry` 查找对应的本地 `Song`，
+不要为每个 entry 都对完整 Song List 执行 `firstOrNull`。
+
+应优先建立合适的索引，例如：
+
+`Map<SongId, Song>`
+
+不要过早优化微小的常量开销，
+但发现会随数千首歌曲明显放大的问题时应及时处理。
+
+
+## 数据层
+
+Repository 和持久化层负责 Flowtone 自己拥有的长期数据。
+
+UI 不应依赖具体存储格式。
+
+修改持久化实现时：
+
+- 尽量保持 Repository 层的业务语义稳定；
+- 不要把数据库或文件格式细节泄漏到 UI；
+- 修改已有存储格式时必须考虑已有用户数据；
+- 不要静默丢弃已有数据。
+
+
+## 持久化技术
+
+不要默认所有新数据都必须使用某一种持久化技术。
+
+当以下需求实际存在时，可以考虑 Room：
+
+- 关系查询；
+- 条件查询；
+- 局部更新；
+- 索引；
+- 事务；
+- 数据量已经使整表读取 / 整文件重写明显不合适。
+
+引入 Room 或把现有数据迁移到 Room 属于架构级修改。
+
+在引入 Room 前必须：
+
+1. 检查现有 Repository 与存储格式；
+2. 明确数据所有权；
+3. 说明为什么 Room 对当前问题有实际收益；
+4. 设计已有用户数据的迁移方式；
+5. 评估 Repository API 是否需要变化。
+
+除非用户的任务已经明确要求迁移，
+否则提出方案后等待用户明确批准，再开始引入 Room。
+
+不要把 Room 作为无关功能或普通性能修复中的“顺手重构”。
+
+
+## 本地音乐
+
+Android MediaStore 默认仍然是设备本地音乐的权威来源。
+
+除非任务明确改变这一设计：
+
+- 不要把完整 MediaStore 曲库无意义地复制进应用数据库；
+- Flowtone 自己的持久化数据可以通过稳定身份引用本地歌曲；
+- 本地曲库扫描与应用自己的歌单数据应保持职责分离。
+
+
+## 在线音乐与 Provider
+
+在线音乐支持必须与核心 UI 和播放层保持合理隔离。
+
+应保存：
+
+- 稳定的歌曲身份；
+- 稳定的来源身份；
+- 必要的缓存元数据。
+
+不要持久化：
+
+- Provider runtime 对象；
+- 临时连接实例；
+- 只在当前进程有效的引用。
+
+Provider 特有逻辑应留在对应的在线 / Provider 抽象之后。
+
+不要让通用歌单 UI 或播放 UI 直接依赖某一家在线服务。
+
+
+## 导航与页面动画
+
+Flowtone 使用自定义页面切换和共享视觉层。
+
+以下内容属于架构敏感区域：
+
+- 页面 identity；
+- 页面 composition 生命周期；
+- Incoming / Current / Outgoing 状态；
+- 页面 transition progress；
+- shared visual layer。
+
+修改导航或页面动画前，必须先阅读现有实现。
+
+规则：
+
+- 不要让仍在活动的 Incoming / Outgoing composition 依赖的数据提前失效。
+- 保留活动页面视觉仍然需要的状态，直到该状态不再参与绘制。
+- 不要把可变展示 metadata 当作页面 identity。
+- 不要用任意 delay 掩盖生命周期问题。
+- 不要用缺乏原因说明的 zIndex / alpha 特判掩盖视觉断层。
+- 优先使用连续、状态驱动的动画，而不是 dispose / recreate 技巧。
+
+如果当前任务与页面动画无关：
+
+不要修改 `PageTransitionHost` 或其状态机。
+
+
+## 动画
+
+保持 Flowtone 已有的运动语言，除非任务明确要求重新设计。
+
+优先复用现有：
+
+- duration；
+- easing；
+- transition helper；
+- element transition helper。
+
+本来属于同一连续视觉过程的元素，
+通常应该共享同一 transition 状态。
+
+不要仅仅为了掩盖同步问题而创建第二套独立动画时钟。
+
+独立动画本身并不被禁止，
+但必须具有明确的独立视觉语义。
+
+动画必须能够安全面对：
+
+- recomposition；
+- 状态变化；
+- 页面进入 / 退出；
+- 中途目标变化。
+
+避免：
+
+- 突然 snap；
+- 闪白；
+- 不必要的内容销毁与重建。
+
+
+## Material Design
+
+Material Design 3 是组件和主题基础，
+但 Flowtone 已经建立的视觉设计优先于机械套用 Material 默认外观。
+
+例如：
+
+如果页面明确使用连续背景、共享云层或自定义视觉背景，
+不要仅仅因为 Material 默认组件通常拥有 surface，
+就额外覆盖一个不需要的不透明 Material surface。
+
+优先复用项目已有的：
+
+- typography；
+- color；
+- shape；
+- spacing；
+- motion helper。
+
+
+## 文件与包结构
+
+优先遵循当前仓库已有结构。
+
+主要区域包括：
+
+- `app/`
+- `ui/`
+- `ui/screens/`
+- `ui/components/`
+- `ui/library/`
+- `ui/player/`
+- `playback/`
+- `data/`
+- `core/model/`
+- 在线 / Provider 相关包
+
+不要为了匹配某个理论上的“标准 Android 项目结构”而无意义移动文件。
+
+新建文件应满足至少一个目的：
+
+- 给一个明确概念提供独立职责；
+- 显著降低已有文件复杂度；
+- 建立真实的架构边界。
+
+不要创建只负责转发一次调用的无意义：
+
+- Manager；
+- Coordinator；
+- UseCase；
+- Interface；
+- Wrapper。
+
+除非它确实建立了有价值的边界。
+
+
+## 可维护性
+
+代码应优先让状态流、数据流和生命周期容易理解。
+
+规则：
+
+- 优先简单、明确的代码，而不是聪明但隐晦的抽象。
+- 优先复用已有抽象。
+- 新抽象必须解决真实重复或建立真实边界。
+- 保持函数和文件职责集中。
+- 修复局部问题时不要进行大范围无关重构。
+- Feature / Bugfix 不要混入无关 cleanup。
+- 请求范围之外的行为默认保持不变。
+- 看到看似奇怪的已有代码时，先确认它为什么存在，再考虑简化。
+
+不要因为“代码更漂亮”就改变已有行为。
+
+
+## 现有行为与兼容性
+
+默认把已有行为视为有意设计，除非已有证据说明它是错误或回归。
+
+修复回归时：
+
+优先恢复预期行为，并采用最小、能够解释清楚的修改。
+
+不要因为一个局部 Bug 就重新设计整个相关系统。
+
+临时诊断修改不应自动成为最终实现。
+
+如果使用 A/B 修改定位问题：
+
+- 明确它只是诊断；
+- 根据结果确认或排除假设；
+- 定位结束后再设计正式修复。
+
+
+## 依赖
+
+添加第三方依赖前：
+
+1. 检查 AndroidX、Kotlin 或项目现有依赖是否已经能够解决问题；
+2. 说明新依赖提供的实际价值；
+3. 控制依赖影响范围。
+
+不要未经明确请求引入：
+
+- Hilt；
+- Koin；
+- 其他依赖注入框架。
+
+如果未来确实需要 DI 框架，应作为单独的架构决策处理。
+
+
+## 工作方式
+
+### 小范围修改
+
+通常按以下顺序：
+
+1. 阅读相关代码；
+2. 找到最小正确修改；
+3. 实现；
+4. 编译；
+5. 汇报实际修改内容。
+
+
+### 架构、持久化、导航或跨模块修改
+
+必须先：
+
+1. 阅读当前实现；
+2. 说明当前数据流 / 状态流 / 控制流；
+3. 提出具体方案；
+4. 指出迁移风险和回归风险。
+
+只有在：
+
+- 用户原始任务已经明确要求实现；
+- 或用户看过方案后明确批准；
+
+才继续实施。
+
+
+### 调查 / 诊断任务
+
+如果用户要求：
+
+- 调查；
+- 分析；
+- 定位；
+- 审计；
+- 先汇报；
+- 只读检查；
+
+则不要修改文件，直到用户明确要求实施。
+
+调试时：
+
+- 先建立可复现差异；
+- 必要时进行受控 A/B；
+- 一次验证一个结构性假设；
+- 已经被实验否定的假设应视为排除，不要反复尝试；
+- 日志必须回答一个明确问题。
+
+不要无目的地不断增加日志。
+
+
+## 构建
+
+修改 Kotlin 源码后，通常运行：
+
+`.\gradlew.bat :app:compileDebugKotlin`
+
+只有任务确实需要时才运行更广泛的 Gradle task。
+
+不要为了当前任务之外的已有 warning 花费大量时间，
+除非它阻塞当前修改。
+
+每一个完整修改步骤之后，应尽量保持项目能够编译。
+
+
+## Git
+
+除非用户明确要求，否则不要执行：
+
+- `git add`
+- `git commit`
+- `git push`
+- destructive `git reset`
+- 删除 branch
+- 强制覆盖工作区
+
+不要丢弃、覆盖或顺手整理与当前任务无关的本地修改。
+
+工作区存在未提交修改时，
+如果当前任务可能覆盖相关文件，应先检查对应 diff。
+
+
+## 范围控制
+
+不要顺手重新设计无关系统。
+
+例如：
+
+- 修改歌单 UI 时，不要重写播放系统；
+- 修改播放时，不要重写导航；
+- 修改持久化时，不要顺带重新设计 UI；
+- 修改动画时，不要改变数据语义，除非已经证明它是问题原因。
+
+如果发现真实但超出当前任务范围的问题：
+
+单独汇报，不要顺手修复。
+
+
+## 最终汇报
+
+完成修改后说明：
+
+- 修改了什么；
+- 修改了哪些文件；
+- 为什么采用这种实现；
+- 哪些已有行为被明确保留；
+- 编译 / 测试结果；
+- 尚未解决的风险或后续事项。
+
+不要在没有相应验证的情况下声称 Bug 已经修复。

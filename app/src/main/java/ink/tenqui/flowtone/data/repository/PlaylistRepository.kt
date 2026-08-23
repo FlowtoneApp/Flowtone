@@ -5,6 +5,7 @@ import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistCardStyle
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.LocalPlaylistCreatorName
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.toPersistentTrack
@@ -55,7 +56,9 @@ class PlaylistRepository(
                         order = index,
                         createdAt = now,
                         updatedAt = now,
-                        customArtworkUri = card.customArtworkUri?.toString()
+                        customArtworkUri = card.customArtworkUri?.toString(),
+                        creatorName = card.creatorName ?: LocalPlaylistCreatorName,
+                        description = card.description
                     )
                 } else {
                     existing.copy(
@@ -66,6 +69,8 @@ class PlaylistRepository(
                         order = index,
                         customArtworkUri = card.customArtworkUri?.toString()
                             ?: existing.customArtworkUri,
+                        creatorName = card.creatorName ?: existing.creatorName,
+                        description = card.description ?: existing.description,
                         updatedAt = if (
                             existing.title != card.title ||
                             existing.subtitle != card.subtitle ||
@@ -73,6 +78,10 @@ class PlaylistRepository(
                                 card.appearanceColorKey != null &&
                                     existing.appearanceColorKey != card.appearanceColorKey
                             ) ||
+                            (card.creatorName != null &&
+                                existing.creatorName != card.creatorName) ||
+                            (card.description != null &&
+                                existing.description != card.description) ||
                             existing.order != index
                         ) {
                             now
@@ -135,7 +144,8 @@ class PlaylistRepository(
                 ),
                 order = (currentPlaylists.maxOfOrNull { item -> item.order } ?: -1) + 1,
                 createdAt = now,
-                updatedAt = now
+                updatedAt = now,
+                creatorName = LocalPlaylistCreatorName
             )
             val nextPlaylists = normalizePlaylistOrder(currentPlaylists + playlist)
 
@@ -486,6 +496,40 @@ class PlaylistRepository(
             if (playlist.id == id) {
                 playlist.copy(
                     customArtworkUri = normalizedArtworkUri,
+                    updatedAt = now
+                )
+            } else {
+                playlist
+            }
+        }
+        commitMutation(
+            previousPlaylists = currentPlaylists,
+            previousEntries = _playlistSongEntries.value,
+            nextPlaylists = nextPlaylists,
+            nextEntries = _playlistSongEntries.value,
+            successValue = Unit
+        )
+    }
+
+    suspend fun updatePlaylistDescription(
+        id: String,
+        description: String?
+    ): PlaylistMutationResult<Unit> = playlistMutex.withLock {
+        val currentPlaylists = _playlists.value
+        val currentPlaylist = currentPlaylists.firstOrNull { playlist -> playlist.id == id }
+            ?: return@withLock PlaylistMutationResult.Failure(
+                PlaylistMutationError.NotFound
+            )
+        val normalizedDescription = description?.trim()?.ifBlank { null }
+        if (currentPlaylist.description == normalizedDescription) {
+            return@withLock PlaylistMutationResult.Success(Unit)
+        }
+
+        val now = System.currentTimeMillis()
+        val nextPlaylists = currentPlaylists.map { playlist ->
+            if (playlist.id == id) {
+                playlist.copy(
+                    description = normalizedDescription,
                     updatedAt = now
                 )
             } else {

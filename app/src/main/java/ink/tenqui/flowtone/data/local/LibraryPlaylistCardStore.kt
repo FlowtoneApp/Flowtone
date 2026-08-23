@@ -49,7 +49,13 @@ class LibraryPlaylistCardStore(context: Context) {
                             customArtworkUri = item.optString(CUSTOM_ARTWORK_URI_KEY)
                                 .trim()
                                 .ifBlank { null }
-                                ?.let(Uri::parse)
+                                ?.let(Uri::parse),
+                            creatorName = item.optString(CREATOR_NAME_KEY)
+                                .trim()
+                                .ifBlank { null },
+                            description = item.optString(DESCRIPTION_KEY)
+                                .trim()
+                                .ifBlank { null }
                         )
                     )
                 }
@@ -94,6 +100,8 @@ class LibraryPlaylistCardStore(context: Context) {
                     )
                     .put(ORDER_KEY, card.order)
                     .put(CUSTOM_ARTWORK_URI_KEY, card.customArtworkUri?.toString())
+                    .put(CREATOR_NAME_KEY, card.creatorName)
+                    .put(DESCRIPTION_KEY, card.description)
             )
         }
 
@@ -130,6 +138,8 @@ class LibraryPlaylistCardStore(context: Context) {
         const val APPEARANCE_COLOR_KEY = "appearanceColorKey"
         const val ORDER_KEY = "order"
         const val CUSTOM_ARTWORK_URI_KEY = "customArtworkUri"
+        const val CREATOR_NAME_KEY = "creatorName"
+        const val DESCRIPTION_KEY = "description"
         const val DEFAULT_SUBTITLE = "0 \u9996\u6b4c\u66f2"
         const val DEFAULT_WIDTH_DP = 320f
         const val DEFAULT_HEIGHT_DP = 236f

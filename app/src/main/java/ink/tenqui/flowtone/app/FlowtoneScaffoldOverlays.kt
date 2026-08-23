@@ -301,8 +301,14 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             playlist.id == editingId && !playlist.isSystem
         }
     }
+    val visualEditingPlaylist = libraryPlaylistController.visualEditingPlaylistId?.let { visualId ->
+        libraryPlaylistController.playlists.firstOrNull { playlist ->
+            playlist.id == visualId && !playlist.isSystem
+        }
+    }
     LibraryPlaylistEditingOverlay(
         playlist = editingPlaylist,
+        visualPlaylist = visualEditingPlaylist,
         cardBounds = libraryPlaylistController.editingPlaylistBounds,
         viewportBounds = libraryPlaylistController.libraryViewportBounds,
         progress = playlistEditingProgress,

@@ -176,9 +176,12 @@ internal fun SelectablePlaylistSongList(
     onRemoveEntries: (Set<String>, (Boolean) -> Unit) -> Unit,
     reorderAnimationKey: Any? = null,
     pageTransition: PageTransitionScope,
+    descriptionEditing: Boolean = false,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier,
+    headerContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val headerItemCount = if (headerContent == null) 0 else 1
     var selectedKeys by rememberSaveable(sourceKey) { mutableStateOf(emptyList<String>()) }
     var busy by remember(sourceKey) { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
@@ -233,10 +236,12 @@ internal fun SelectablePlaylistSongList(
     var frozenTransitionId by remember(sourceKey) { mutableStateOf<Int?>(null) }
     var frozenViewportKeys by remember(sourceKey) { mutableStateOf<List<String>>(emptyList()) }
     var capturedPageProgress by remember(sourceKey) { mutableStateOf(0f) }
-    val visibleSongKeys by remember(listState, renderedEntries) {
+    val visibleSongKeys by remember(listState, renderedEntries, headerItemCount) {
         derivedStateOf {
             listState.layoutInfo.visibleItemsInfo
-                .mapNotNull { item -> renderedEntries.getOrNull(item.index)?.selectionKey }
+                .mapNotNull { item ->
+                    renderedEntries.getOrNull(item.index - headerItemCount)?.selectionKey
+                }
                 .distinct()
         }
     }
@@ -347,7 +352,7 @@ internal fun SelectablePlaylistSongList(
         ) {
             return null
         }
-        return latestEntries.getOrNull(visibleItem.index)
+        return latestEntries.getOrNull(visibleItem.index - headerItemCount)
     }
 
     fun toggleSelectionAt(y: Float, force: Boolean = false) {
@@ -490,7 +495,7 @@ internal fun SelectablePlaylistSongList(
             userScrollEnabled = !selectionGestureActive && !reorderAnimationActive,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(sourceKey, entryKeys) {
+                .pointerInput(sourceKey, entryKeys, descriptionEditing) {
                     awaitEachGesture {
                         var secondaryPointerId: PointerId? = null
                         var secondaryDragDistance = 0f
@@ -631,7 +636,7 @@ internal fun SelectablePlaylistSongList(
                         secondaryScrollChannel?.close()
                     }
                 }
-                .pointerInput(sourceKey, entryKeys) {
+                .pointerInput(sourceKey, entryKeys, descriptionEditing) {
                     var autoScrollJob: Job? = null
                     var autoScrollDirection = 0
 
@@ -669,7 +674,7 @@ internal fun SelectablePlaylistSongList(
                         }
                     }
 
-                    detectDragGesturesAfterLongPress(
+                    if (!descriptionEditing) detectDragGesturesAfterLongPress(
                         onDragStart = { position ->
                             selectionGestureState.reset(position.y)
                             selectionGestureActive = true
@@ -729,6 +734,11 @@ internal fun SelectablePlaylistSongList(
             ),
             verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                headerContent?.let { header ->
+                    item(key = "playlist-metadata-header") {
+                        header()
+                    }
+                }
                 itemsIndexed(renderedEntries, key = { _, entry -> entry.selectionKey }) { index, entry ->
                 val (viewportOrder, viewportOrderCount) = animationOrderFor(entry.selectionKey)
                 val elapsedMillis = reorderProgress.value * reorderTotalDurationMillis
@@ -812,6 +822,11 @@ internal fun SelectablePlaylistSongList(
                             translationY = -reorderDistancePx * outgoingProgress * 0.35f
                         }
                 ) {
+                    headerContent?.let { header ->
+                        item(key = "sort-outgoing:playlist-metadata-header") {
+                            header()
+                        }
+                    }
                     itemsIndexed(
                         items = previousEntries,
                         key = { _, entry -> "sort-outgoing:${entry.selectionKey}" }

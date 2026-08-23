@@ -71,6 +71,7 @@ import kotlin.math.min
 @Composable
 internal fun LibraryPlaylistEditingOverlay(
     playlist: LibraryPlaylistCard?,
+    visualPlaylist: LibraryPlaylistCard?,
     cardBounds: Rect?,
     viewportBounds: Rect?,
     progress: Float,
@@ -98,9 +99,9 @@ internal fun LibraryPlaylistEditingOverlay(
         }
     }
 
-    LaunchedEffect(playlist, cardBounds, viewportBounds) {
-        if (playlist != null && cardBounds != null) {
-            retainedPlaylist = playlist
+    LaunchedEffect(visualPlaylist, cardBounds, viewportBounds) {
+        if (visualPlaylist != null && cardBounds != null) {
+            retainedPlaylist = visualPlaylist
             retainedCardBounds = cardBounds
             retainedViewportBounds = viewportBounds
         }
@@ -114,11 +115,7 @@ internal fun LibraryPlaylistEditingOverlay(
     }
 
     val activeTargetReady = playlist != null && cardBounds != null
-    val displayedPlaylist = if (activeTargetReady) playlist else if (playlist == null) {
-        retainedPlaylist
-    } else {
-        null
-    }
+    val displayedPlaylist = visualPlaylist ?: retainedPlaylist
     val displayedCardBounds = if (activeTargetReady) cardBounds else if (playlist == null) {
         retainedCardBounds
     } else {
@@ -154,8 +151,7 @@ internal fun LibraryPlaylistEditingOverlay(
 
     if (
         displayedPlaylist == null ||
-        displayedCardBounds == null ||
-        playlist == null && safeProgress <= 0.001f
+        displayedCardBounds == null
     ) {
         return
     }
@@ -207,10 +203,7 @@ internal fun LibraryPlaylistEditingOverlay(
                             }
                         },
                         onLongPress = { position ->
-                            if (
-                                playlist != null &&
-                                onLongPressOtherPlaylist(position + overlayRootTopLeft)
-                            ) {
+                            if (onLongPressOtherPlaylist(position + overlayRootTopLeft)) {
                                 appearancePickerOwnerId = null
                                 hapticFeedback.performHapticFeedback(
                                     HapticFeedbackType.LongPress
@@ -222,16 +215,31 @@ internal fun LibraryPlaylistEditingOverlay(
         )
 
         if (visibleCardBounds.width > 0f && visibleCardBounds.height > 0f) {
-            val visibleWidth = with(density) { visibleCardBounds.width.toDp() }
             val visibleHeight = with(density) { visibleCardBounds.height.toDp() }
             val cardWidth = with(density) { localCardBounds.width.toDp() }
             val cardHeight = with(density) { localCardBounds.height.toDp() }
+            val outlineExpansionPx = with(density) {
+                PlaylistEditCardOutlineExpansion.toPx()
+            }
+            val outlineLeft = max(safeLeftPx, visibleCardBounds.left - outlineExpansionPx)
+            val outlineRight = min(safeRightPx, visibleCardBounds.right + outlineExpansionPx)
+            val outlineWidth = (outlineRight - outlineLeft).coerceAtLeast(0f)
 
             Box(
                 modifier = Modifier
-                    .offsetInParent(visibleCardBounds.left, visibleCardBounds.top)
-                    .requiredSize(visibleWidth, visibleHeight)
+                    .offsetInParent(outlineLeft, visibleCardBounds.top)
+                    .requiredSize(
+                        width = with(density) { outlineWidth.toDp() },
+                        height = visibleHeight
+                    )
                     .clipToBounds()
+                    .border(
+                        width = PlaylistEditCardBorderWidth,
+                        color = MaterialTheme.colorScheme.primary.copy(
+                            alpha = safeProgress
+                        ),
+                        shape = MaterialTheme.shapes.medium
+                    )
             ) {
                 LibraryPlaylistListVisual(
                     playlist = displayedPlaylist,
@@ -242,17 +250,10 @@ internal fun LibraryPlaylistEditingOverlay(
                     isFlowCloudPlaying = false,
                     modifier = Modifier
                         .offsetInParent(
-                            localCardBounds.left - visibleCardBounds.left,
+                            localCardBounds.left - outlineLeft,
                             localCardBounds.top - visibleCardBounds.top
                         )
                         .width(cardWidth)
-                        .border(
-                            width = PlaylistEditCardBorderWidth,
-                            color = MaterialTheme.colorScheme.primary.copy(
-                                alpha = safeProgress
-                            ),
-                            shape = PlaylistEditCardShape
-                        )
                 )
             }
         }
@@ -600,8 +601,8 @@ private fun staggeredPlaylistEditActionProgress(
     return ((overallProgress - delayFraction) / (1f - delayFraction)).coerceIn(0f, 1f)
 }
 
-private val PlaylistEditCardShape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
 private val PlaylistEditOverlaySafeMargin = 12.dp
+private val PlaylistEditCardOutlineExpansion = 8.dp
 private val PlaylistEditCardBorderWidth = 1.5.dp
 private val PlaylistEditActionButtonSize = 52.dp
 private val PlaylistEditActionButtonGap = 10.dp

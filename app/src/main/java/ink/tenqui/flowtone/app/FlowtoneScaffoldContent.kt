@@ -16,14 +16,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
+import ink.tenqui.flowtone.core.model.LocalPlaylistCreatorName
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -34,6 +38,7 @@ import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
+import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
@@ -52,6 +57,9 @@ internal fun FlowtoneScaffoldContent(
     playlistSongEntries: List<PlaylistSongEntry>,
     playlistBatchActions: PlaylistBatchActions,
     likedSongCount: Int,
+    descriptionBlurRadius: Dp,
+    onUpdatePlaylistDescription: (String, String?) -> Unit,
+    onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -157,6 +165,42 @@ internal fun FlowtoneScaffoldContent(
     } else {
         monochromeFlowtoneCloudPalette(mainPageCloudAccent)
     }
+    val playlistDetailDestination = state.selectedPlaylistId?.let { playlistId ->
+        val metadata = if (playlistId == LikedSongsPlaylistId) {
+            PlaylistDetailMetadata(
+                title = state.selectedPlaylistTitle ?: "我喜欢的音乐",
+                creatorName = LocalPlaylistCreatorName
+            )
+        } else {
+            PlaylistDetailMetadata(
+                title = state.selectedPlaylistTitle
+                    ?: selectedPlaylistCard?.title
+                    ?: SecondaryPage.Playlist.title,
+                creatorName = selectedPlaylistCard?.creatorName ?: LocalPlaylistCreatorName,
+                description = selectedPlaylistCard?.description,
+                customArtworkUri = selectedPlaylistCard?.customArtworkUri,
+                isDescriptionEditable = false
+            )
+        }
+        remember(playlistId) {
+            PlaylistDetailDestination(
+                playlistId = playlistId,
+                initialMetadata = metadata
+            )
+        }.also { destination ->
+            SideEffect {
+                destination.updateMetadata(metadata)
+            }
+        }
+    }
+    val targetPage = if (state.secondaryPage == null) {
+        FlowtoneScaffoldPage.MainTabs
+    } else {
+        FlowtoneScaffoldPage.Secondary(
+            page = state.secondaryPage,
+            playlistDetailDestination = playlistDetailDestination
+        )
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         SharedTransitionLayout(
@@ -165,12 +209,10 @@ internal fun FlowtoneScaffoldContent(
                 .nestedScroll(state.topBarScrollConnection)
         ) {
             PageTransitionHost(
-                targetState = if (state.secondaryPage == null) {
-                    FlowtoneScaffoldPage.MainTabs
-                } else {
-                    FlowtoneScaffoldPage.Secondary(state.secondaryPage)
-                },
+                targetState = targetPage,
                 modifier = Modifier.fillMaxSize(),
+                reversibleTransitionKey = ::flowtoneReversibleTransitionKey,
+                isReversibleTransition = ::isFlowtonePlaylistTransition,
             ) { page ->
                 val pageScope = this
                 val pageUsesSharedCloud = when (page) {
@@ -188,6 +230,8 @@ internal fun FlowtoneScaffoldContent(
                     // transparent scroll surface and PageTransitionHost reveals it as one layer.
                     pageScope.phase == PageTransitionPhase.Incoming -> 0f
 
+                    pageUsesSharedCloud -> 0f
+
                     page is FlowtoneScaffoldPage.MainTabs && state.searchActive -> 0f
                     else -> state.topBarBackgroundAlpha
                 }
@@ -197,6 +241,7 @@ internal fun FlowtoneScaffoldContent(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(pageScope.backgroundModifier())
+                                .blur(descriptionBlurRadius)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -297,8 +342,9 @@ internal fun FlowtoneScaffoldContent(
                     onLyricsBackgroundStyleChange = callbacks.onLyricsBackgroundStyleChange,
                     uiState = state.uiState,
                     currentSong = state.playerUiState.currentSong,
-                    selectedPlaylistId = state.selectedPlaylistId,
-                    selectedPlaylistTitle = state.selectedPlaylistTitle,
+                    playlistDetailDestination = page.playlistDetailDestination,
+                    onUpdatePlaylistDescription = onUpdatePlaylistDescription,
+                    onPlaylistBackActionChange = onPlaylistBackActionChange,
                     selectedArtistName = state.selectedArtistName,
                     listeningRecordInitialTab = state.listeningRecordInitialTab,
                     likedSongKeys = state.likedSongKeys,
@@ -340,6 +386,7 @@ internal fun FlowtoneScaffoldContent(
                                     alpha = pageTopBarSurfaceAlpha
                                 )
                             )
+                            .blur(descriptionBlurRadius)
                     )
                 }
             }
@@ -348,7 +395,46 @@ internal fun FlowtoneScaffoldContent(
 
 private sealed interface FlowtoneScaffoldPage {
     data object MainTabs : FlowtoneScaffoldPage
-    data class Secondary(val page: SecondaryPage) : FlowtoneScaffoldPage
+    data class Secondary(
+        val page: SecondaryPage,
+        val playlistDetailDestination: PlaylistDetailDestination? = null
+    ) : FlowtoneScaffoldPage
+}
+
+private sealed interface FlowtoneReversibleTransitionKey {
+    data object MainTabs : FlowtoneReversibleTransitionKey
+    data class Playlist(val playlistId: String) : FlowtoneReversibleTransitionKey
+}
+
+private fun flowtoneReversibleTransitionKey(
+    page: FlowtoneScaffoldPage
+): FlowtoneReversibleTransitionKey? {
+    return when (page) {
+        FlowtoneScaffoldPage.MainTabs -> FlowtoneReversibleTransitionKey.MainTabs
+        is FlowtoneScaffoldPage.Secondary -> {
+            if (page.page == SecondaryPage.Playlist) {
+                page.playlistDetailDestination?.playlistId?.let { playlistId ->
+                    FlowtoneReversibleTransitionKey.Playlist(playlistId)
+                }
+            } else {
+                null
+            }
+        }
+    }
+}
+
+private fun isFlowtonePlaylistTransition(
+    first: FlowtoneScaffoldPage,
+    second: FlowtoneScaffoldPage
+): Boolean {
+    return (first == FlowtoneScaffoldPage.MainTabs && second.isPlaylistPage()) ||
+        (second == FlowtoneScaffoldPage.MainTabs && first.isPlaylistPage())
+}
+
+private fun FlowtoneScaffoldPage.isPlaylistPage(): Boolean {
+    return this is FlowtoneScaffoldPage.Secondary &&
+        page == SecondaryPage.Playlist &&
+        playlistDetailDestination?.playlistId != null
 }
 
 private fun topLevelContinuousPagePosition(
