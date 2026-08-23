@@ -292,32 +292,6 @@ internal fun SecondaryPageHost(
                             onDetailHeaderCollapseProgressStateChange,
                         headerModifier = elementModifier(0),
                         suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
-                        onDescriptionChange = { description ->
-                            if (destination.updateDescription(description)) {
-                                Log.d(
-                                    "FlowtonePlaylistDebug",
-                                    "DESCRIPTION_SNAPSHOT_UPDATED " +
-                                        "length=${description?.length ?: 0}"
-                                )
-                                onUpdatePlaylistDescription(
-                                    destination.playlistId.orEmpty(),
-                                    description
-                                )
-                            }
-                        },
-                        onDescriptionEditEndRequestChange = { request ->
-                            onPlaylistBackActionChange(
-                                request?.let { finish ->
-                                    {
-                                        Log.d(
-                                            "FlowtonePlaylistDebug",
-                                            "DESCRIPTION_OUTSIDE_TAP topBar=true"
-                                        )
-                                        finish()
-                                    }
-                                }
-                            )
-                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .rightSwipeBackGesture(::closeSelectionOrPage)

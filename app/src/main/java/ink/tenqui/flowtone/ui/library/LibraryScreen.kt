@@ -623,8 +623,6 @@ internal fun PlaylistDetailScreen(
     headerModifier: Modifier = Modifier,
     contentModifier: Modifier = Modifier,
     suppressEmptyState: Boolean = false,
-    onDescriptionChange: (String?) -> Unit = {},
-    onDescriptionEditEndRequestChange: ((() -> Unit)?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = remember(playlistId) { LazyListState() }
@@ -673,25 +671,6 @@ internal fun PlaylistDetailScreen(
             .mapNotNull { song -> song.song.artworkUri }
             .firstOrNull()
     }
-    var descriptionEditing by remember(playlistId) { mutableStateOf(false) }
-    val descriptionBlurRadius by animateDpAsState(
-        targetValue = if (descriptionEditing) 8.dp else 0.dp,
-        animationSpec = tween(180, easing = FlowtoneMotion.Easing),
-        label = "PlaylistDescriptionBlur"
-    )
-    var finishDescriptionEditingAction by remember(playlistId) {
-        mutableStateOf<(() -> Unit)?>(null)
-    }
-    val registerDescriptionFinishAction: ((() -> Unit)?) -> Unit = { action ->
-        finishDescriptionEditingAction = action
-        onDescriptionEditEndRequestChange(action)
-    }
-    BackHandler(
-        enabled = descriptionEditing && finishDescriptionEditingAction != null,
-        onBack = {
-            finishDescriptionEditingAction?.invoke()
-        }
-    )
     if (playlistSongs.isEmpty()) {
         PlaylistDetailCollapsingHeaderScaffold(
             title = metadata.title,
@@ -707,19 +686,11 @@ internal fun PlaylistDetailScreen(
                     metadata = metadata,
                     songCount = playlistSongs.size,
                     artworkUri = playlistArtworkUri,
-                    isDescriptionEditing = descriptionEditing,
-                    onDescriptionEditingChange = { editing ->
-                        descriptionEditing = editing
-                    },
-                    onDescriptionChange = onDescriptionChange,
-                    onDescriptionEditEndRequestChange = registerDescriptionFinishAction,
                     modifier = pageTransition.elementModifier(0)
                 )
                 EmptyPlaylistState(
                     visible = !suppressEmptyState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .blur(descriptionBlurRadius)
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -748,14 +719,7 @@ internal fun PlaylistDetailScreen(
             clearSelectionRequest = batchActions.clearSelectionRequest,
             onSelectionModeChange = batchActions.onSelectionModeChange,
             onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
-            onSongClick = { tracks, index ->
-                if (descriptionEditing) {
-                    Log.d("FlowtonePlaylistDebug", "DESCRIPTION_OUTSIDE_TAP")
-                    finishDescriptionEditingAction?.invoke()
-                    return@SelectablePlaylistSongList
-                }
-                onSongClick(tracks, index)
-            },
+            onSongClick = onSongClick,
             externalErrorMessage = playbackErrorMessage,
             externalErrorEventId = playbackErrorEventId,
             onAddSongsNext = batchActions.onAddSongsNext,
@@ -768,22 +732,12 @@ internal fun PlaylistDetailScreen(
             },
             reorderAnimationKey = songSort,
             pageTransition = pageTransition,
-            descriptionEditing = descriptionEditing,
-            itemModifier = { progress, order, orderCount ->
-                itemModifier(progress, order, orderCount)
-                    .blur(descriptionBlurRadius)
-            },
+            itemModifier = itemModifier,
             headerContent = {
                 PlaylistMetadataHeader(
                     metadata = metadata,
                     songCount = playlistSongs.size,
                     artworkUri = playlistArtworkUri,
-                    isDescriptionEditing = descriptionEditing,
-                    onDescriptionEditingChange = { editing ->
-                        descriptionEditing = editing
-                    },
-                    onDescriptionChange = onDescriptionChange,
-                    onDescriptionEditEndRequestChange = registerDescriptionFinishAction,
                     modifier = pageTransition.elementModifier(0)
                 )
             },

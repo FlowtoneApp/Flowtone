@@ -179,7 +179,7 @@ internal fun FlowtoneScaffoldContent(
                 creatorName = selectedPlaylistCard?.creatorName ?: LocalPlaylistCreatorName,
                 description = selectedPlaylistCard?.description,
                 customArtworkUri = selectedPlaylistCard?.customArtworkUri,
-                isDescriptionEditable = true
+                isDescriptionEditable = false
             )
         }
         remember(playlistId) {
@@ -227,6 +227,8 @@ internal fun FlowtoneScaffoldContent(
                     // while that reset animates; every destination starts with its normal
                     // transparent scroll surface and PageTransitionHost reveals it as one layer.
                     pageScope.phase == PageTransitionPhase.Incoming -> 0f
+
+                    pageUsesSharedCloud -> 0f
 
                     page is FlowtoneScaffoldPage.MainTabs && state.searchActive -> 0f
                     else -> state.topBarBackgroundAlpha
