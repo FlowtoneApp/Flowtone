@@ -12,13 +12,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
-import kotlinx.coroutines.flow.first
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 internal enum class PageTransitionPhase {
     Current,
@@ -111,6 +111,8 @@ internal fun <T> PageTransitionHost(
     targetState: T,
     modifier: Modifier = Modifier,
     parentScope: PageTransitionScope? = null,
+    reversibleTransitionKey: ((T) -> Any?)? = null,
+    isReversibleTransition: ((T, T) -> Boolean)? = null,
     content: @Composable PageTransitionScope.(T) -> Unit
 ) {
     // Each slot keeps its identity while it is current and then outgoing.
@@ -120,49 +122,97 @@ internal fun <T> PageTransitionHost(
     var currentSlot by remember { mutableStateOf(PageSlot.First) }
     var transitioning by remember { mutableStateOf(false) }
     var transitionId by remember { mutableStateOf(0) }
-    var queuedTarget by remember { mutableStateOf(targetState) }
     val progress = remember { Animatable(1f) }
     val offsetYPx = with(LocalDensity.current) { PageMotion.Offset.toPx() }
 
-    // Transitions are intentionally non-interruptible, but navigation intent is not dropped.
-    LaunchedEffect(targetState) {
-        queuedTarget = targetState
+    fun pageValue(slot: PageSlot): T {
+        return when (slot) {
+            PageSlot.First -> checkNotNull(firstPage).value
+            PageSlot.Second -> checkNotNull(secondPage).value
+        }
     }
 
-    LaunchedEffect(Unit) {
+    fun samePage(first: T, second: T): Boolean {
+        if (first == second) return true
+        val keyProvider = reversibleTransitionKey ?: return false
+        val firstKey = keyProvider(first) ?: return false
+        val secondKey = keyProvider(second) ?: return false
+        return firstKey == secondKey
+    }
+
+    fun clearPage(slot: PageSlot) {
+        when (slot) {
+            PageSlot.First -> firstPage = null
+            PageSlot.Second -> secondPage = null
+        }
+    }
+
+    suspend fun animateProgressTo(targetValue: Float) {
+        val remainingFraction = abs(targetValue - progress.value)
+        if (remainingFraction <= PageTransitionEndpointThreshold) return
+        progress.animateTo(
+            targetValue = targetValue,
+            animationSpec = tween(
+                durationMillis = maxOf(
+                    1,
+                    (PageMotion.DurationMillis * remainingFraction).roundToInt()
+                ),
+                easing = LinearEasing
+            )
+        )
+    }
+
+    // A new target cancels the current animateTo. Reversible pairs keep both slots and
+    // drive the same master progress toward the endpoint represented by the latest target.
+    LaunchedEffect(targetState) {
+        val requestedTarget = targetState
         while (true) {
-            fun currentPageValue(): T {
-                return when (currentSlot) {
-                    PageSlot.First -> checkNotNull(firstPage).value
-                    PageSlot.Second -> checkNotNull(secondPage).value
+            if (!transitioning) {
+                if (samePage(requestedTarget, pageValue(currentSlot))) {
+                    return@LaunchedEffect
                 }
+
+                val outgoingSlot = currentSlot
+                val incomingSlot = outgoingSlot.other()
+                val incomingPage = PageSnapshot(requestedTarget)
+                when (incomingSlot) {
+                    PageSlot.First -> firstPage = incomingPage
+                    PageSlot.Second -> secondPage = incomingPage
+                }
+                transitionId += 1
+                transitioning = true
+                progress.snapTo(0f)
             }
 
-            val nextState = snapshotFlow { queuedTarget }
-                .first { target -> target != currentPageValue() }
             val outgoingSlot = currentSlot
             val incomingSlot = outgoingSlot.other()
-            val incomingPage = PageSnapshot(nextState)
-            when (incomingSlot) {
-                PageSlot.First -> firstPage = incomingPage
-                PageSlot.Second -> secondPage = incomingPage
+            val outgoingPage = pageValue(outgoingSlot)
+            val incomingPage = pageValue(incomingSlot)
+            val pairIsReversible =
+                isReversibleTransition?.invoke(outgoingPage, incomingPage) == true
+            val targetEndpoint = if (
+                pairIsReversible && samePage(requestedTarget, outgoingPage)
+            ) {
+                0f
+            } else {
+                1f
             }
-            transitionId += 1
-            transitioning = true
-            progress.snapTo(0f)
-            progress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = PageMotion.DurationMillis,
-                    easing = LinearEasing
-                )
-            )
-            when (outgoingSlot) {
-                PageSlot.First -> firstPage = null
-                PageSlot.Second -> secondPage = null
+
+            animateProgressTo(targetEndpoint)
+
+            if (targetEndpoint == 0f) {
+                clearPage(incomingSlot)
+            } else {
+                clearPage(outgoingSlot)
+                currentSlot = incomingSlot
             }
-            currentSlot = incomingSlot
             transitioning = false
+
+            if (samePage(requestedTarget, pageValue(currentSlot))) {
+                return@LaunchedEffect
+            }
+            // A genuinely different third target keeps the previous queued behavior:
+            // finish the current pair first, then establish the next pair from its endpoint.
         }
     }
 
@@ -228,6 +278,8 @@ internal fun <T> PageTransitionHost(
         RenderPageSlot(PageSlot.Second, secondPage, secondPhase)
     }
 }
+
+private const val PageTransitionEndpointThreshold = 0.0001f
 
 @Composable
 internal fun PageTransitionElement(

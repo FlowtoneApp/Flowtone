@@ -203,10 +203,7 @@ internal fun LibraryPlaylistEditingOverlay(
                             }
                         },
                         onLongPress = { position ->
-                            if (
-                                playlist != null &&
-                                onLongPressOtherPlaylist(position + overlayRootTopLeft)
-                            ) {
+                            if (onLongPressOtherPlaylist(position + overlayRootTopLeft)) {
                                 appearancePickerOwnerId = null
                                 hapticFeedback.performHapticFeedback(
                                     HapticFeedbackType.LongPress

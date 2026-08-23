@@ -211,6 +211,8 @@ internal fun FlowtoneScaffoldContent(
             PageTransitionHost(
                 targetState = targetPage,
                 modifier = Modifier.fillMaxSize(),
+                reversibleTransitionKey = ::flowtoneReversibleTransitionKey,
+                isReversibleTransition = ::isFlowtonePlaylistTransition,
             ) { page ->
                 val pageScope = this
                 val pageUsesSharedCloud = when (page) {
@@ -397,6 +399,42 @@ private sealed interface FlowtoneScaffoldPage {
         val page: SecondaryPage,
         val playlistDetailDestination: PlaylistDetailDestination? = null
     ) : FlowtoneScaffoldPage
+}
+
+private sealed interface FlowtoneReversibleTransitionKey {
+    data object MainTabs : FlowtoneReversibleTransitionKey
+    data class Playlist(val playlistId: String) : FlowtoneReversibleTransitionKey
+}
+
+private fun flowtoneReversibleTransitionKey(
+    page: FlowtoneScaffoldPage
+): FlowtoneReversibleTransitionKey? {
+    return when (page) {
+        FlowtoneScaffoldPage.MainTabs -> FlowtoneReversibleTransitionKey.MainTabs
+        is FlowtoneScaffoldPage.Secondary -> {
+            if (page.page == SecondaryPage.Playlist) {
+                page.playlistDetailDestination?.playlistId?.let { playlistId ->
+                    FlowtoneReversibleTransitionKey.Playlist(playlistId)
+                }
+            } else {
+                null
+            }
+        }
+    }
+}
+
+private fun isFlowtonePlaylistTransition(
+    first: FlowtoneScaffoldPage,
+    second: FlowtoneScaffoldPage
+): Boolean {
+    return (first == FlowtoneScaffoldPage.MainTabs && second.isPlaylistPage()) ||
+        (second == FlowtoneScaffoldPage.MainTabs && first.isPlaylistPage())
+}
+
+private fun FlowtoneScaffoldPage.isPlaylistPage(): Boolean {
+    return this is FlowtoneScaffoldPage.Secondary &&
+        page == SecondaryPage.Playlist &&
+        playlistDetailDestination?.playlistId != null
 }
 
 private fun topLevelContinuousPagePosition(
