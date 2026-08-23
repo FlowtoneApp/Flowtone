@@ -47,6 +47,7 @@ internal class FlowtoneAppState(
     artistRootReturnInProgressState: MutableState<Boolean>,
     selectedPlaylistIdState: MutableState<String?>,
     selectedPlaylistTitleState: MutableState<String?>,
+    selectedAlbumIdState: MutableState<Long?>,
     selectedArtistNameState: MutableState<String?>,
     listeningRecordInitialTabState: MutableState<ListeningRecordTab>,
     settingsBackActionState: MutableState<(() -> Unit)?>,
@@ -95,6 +96,7 @@ internal class FlowtoneAppState(
     var artistRootReturnInProgress by artistRootReturnInProgressState
     var selectedPlaylistId by selectedPlaylistIdState
     var selectedPlaylistTitle by selectedPlaylistTitleState
+    var selectedAlbumId by selectedAlbumIdState
     var selectedArtistName by selectedArtistNameState
     var listeningRecordInitialTab by listeningRecordInitialTabState
     var settingsBackAction by settingsBackActionState
@@ -168,6 +170,9 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     }
     val selectedPlaylistTitle = rememberSaveable {
         mutableStateOf<String?>(null)
+    }
+    val selectedAlbumId = rememberSaveable {
+        mutableStateOf<Long?>(null)
     }
     val selectedArtistName = rememberSaveable {
         mutableStateOf<String?>(null)
@@ -286,6 +291,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         artistRootReturnInProgressState = artistRootReturnInProgress,
         selectedPlaylistIdState = selectedPlaylistId,
         selectedPlaylistTitleState = selectedPlaylistTitle,
+        selectedAlbumIdState = selectedAlbumId,
         selectedArtistNameState = selectedArtistName,
         listeningRecordInitialTabState = listeningRecordInitialTab,
         settingsBackActionState = settingsBackAction,
@@ -340,6 +346,7 @@ internal data class FlowtoneAppScaffoldState(
     val secondaryPage: SecondaryPage?,
     val selectedPlaylistId: String?,
     val selectedPlaylistTitle: String?,
+    val selectedAlbumId: Long?,
     val selectedArtistName: String?,
     val listeningRecordInitialTab: ListeningRecordTab,
     val likedSongKeys: List<String>,
@@ -419,6 +426,7 @@ internal fun flowtoneAppScaffoldState(
         secondaryPage = appState.secondaryPage,
         selectedPlaylistId = appState.selectedPlaylistId,
         selectedPlaylistTitle = appState.selectedPlaylistTitle,
+        selectedAlbumId = appState.selectedAlbumId,
         selectedArtistName = appState.selectedArtistName,
         listeningRecordInitialTab = appState.listeningRecordInitialTab,
         likedSongKeys = appState.likedSongKeys,

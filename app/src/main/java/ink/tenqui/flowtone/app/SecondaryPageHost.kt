@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
+import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
@@ -19,6 +20,7 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistDetailScreen
+import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
@@ -60,6 +62,26 @@ internal class PlaylistDetailDestination(
     override fun hashCode(): Int = playlistId?.hashCode() ?: 0
 }
 
+internal class AlbumDetailDestination(
+    val albumId: Long,
+    initialAlbum: LocalAlbum?
+) {
+    var album by mutableStateOf(initialAlbum)
+        private set
+
+    fun updateAlbum(updatedAlbum: LocalAlbum?) {
+        if (updatedAlbum != null && album != updatedAlbum) {
+            album = updatedAlbum
+        }
+    }
+
+    override fun equals(other: Any?): Boolean {
+        return other is AlbumDetailDestination && albumId == other.albumId
+    }
+
+    override fun hashCode(): Int = albumId.hashCode()
+}
+
 @Composable
 internal fun SecondaryPageHost(
     secondaryPage: SecondaryPage,
@@ -96,6 +118,7 @@ internal fun SecondaryPageHost(
     uiState: MusicUiState,
     currentSong: Song?,
     playlistDetailDestination: PlaylistDetailDestination?,
+    albumDetailDestination: AlbumDetailDestination?,
     selectedArtistName: String?,
     listeningRecordInitialTab: ListeningRecordTab,
     likedSongKeys: List<String>,
@@ -297,6 +320,38 @@ internal fun SecondaryPageHost(
                             .rightSwipeBackGesture(::closeSelectionOrPage)
                     )
                 }
+            }
+
+            SecondaryPage.Album -> {
+                val destination = albumDetailDestination ?: return@Box
+                AlbumDetailScreen(
+                    albumId = destination.albumId,
+                    album = destination.album,
+                    currentSong = currentSong,
+                    pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                    songSort = playlistSongSort,
+                    onSongClick = { songs, index ->
+                        onPlaylistSongClick(
+                            songs,
+                            index,
+                            PlaybackSource.album(
+                                albumId = destination.albumId,
+                                displayName = destination.album?.title.orEmpty()
+                            )
+                        )
+                    },
+                    playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                    playbackErrorEventId = uiState.trackPlaybackErrorEventId,
+                    batchActions = activeBatchActions,
+                    pageTransition = pageScope,
+                    itemModifier = ::playlistItemModifier,
+                    onCollapseProgressStateChange =
+                        onDetailHeaderCollapseProgressStateChange,
+                    headerModifier = elementModifier(0),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(::closeSelectionOrPage)
+                )
             }
 
             SecondaryPage.Artist -> ArtistDetailScreen(

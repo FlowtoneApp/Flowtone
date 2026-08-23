@@ -46,6 +46,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenAbout: () -> Unit,
     val onOpenLocalLibrary: () -> Unit,
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    val onOpenAlbum: (Long) -> Unit,
     val onOpenArtistRootPage: (String, ArtistRootNavigationMode) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     val onCloseArtistRootPage: () -> Unit,
@@ -99,6 +100,7 @@ internal fun flowtoneAppCallbacks(
     onOnlineSongClick: (ProviderSong) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
+    onOpenAlbum: (Long) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayPrevious: () -> Unit,
@@ -234,6 +236,7 @@ internal fun flowtoneAppCallbacks(
             appState.secondaryPathSegments = emptyList()
             appState.selectedPlaylistId = null
             appState.selectedPlaylistTitle = null
+            appState.selectedAlbumId = null
             appState.selectedArtistName = null
             Log.d("FlowtonePlaylistDebug", "PLAYLIST_LIVE_SELECTION_CLEARED")
         },
@@ -251,22 +254,26 @@ internal fun flowtoneAppCallbacks(
             appState.secondaryPathSegments = emptyList()
             appState.selectedPlaylistId = null
             appState.selectedPlaylistTitle = null
+            appState.selectedAlbumId = null
             appState.selectedArtistName = null
             appState.secondaryPage = SecondaryPage.LocalLibrary
         },
         onOpenPlaylist = { playlist ->
             appState.selectedPlaylistId = playlist.id
             appState.selectedPlaylistTitle = playlist.title
+            appState.selectedAlbumId = null
             appState.selectedArtistName = null
             appState.secondaryPathSegments = listOf(playlist.title)
             appState.secondaryPage = SecondaryPage.Playlist
         },
+        onOpenAlbum = onOpenAlbum,
         onOpenArtistRootPage = onOpenArtistRootPage,
         onOpenListeningRecords = { initialTab ->
             appState.listeningRecordInitialTab = initialTab
             appState.secondaryPathSegments = emptyList()
             appState.selectedPlaylistId = null
             appState.selectedPlaylistTitle = null
+            appState.selectedAlbumId = null
             appState.selectedArtistName = null
             appState.secondaryPage = SecondaryPage.ListeningRecords
         },

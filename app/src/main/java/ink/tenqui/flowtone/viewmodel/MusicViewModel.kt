@@ -27,6 +27,8 @@ import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.core.model.LocalAlbum
+import ink.tenqui.flowtone.core.model.localAlbumsFrom
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.ProviderSearchCategoryState
 import ink.tenqui.flowtone.data.search.ProviderSearchCoordinator
@@ -71,6 +73,7 @@ data class MusicUiState(
     val hasPermission: Boolean = false,
     val isLoading: Boolean = false,
     val songs: List<Song> = emptyList(),
+    val albums: List<LocalAlbum> = emptyList(),
     val sourceQueue: List<Song> = emptyList(),
     val playbackQueue: List<Song> = emptyList(),
     val currentQueueIndex: Int = -1,
@@ -526,14 +529,15 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    musicRepository.loadLocalSongs()
+                    val songs = musicRepository.loadLocalSongs()
+                    songs to localAlbumsFrom(songs)
                 }
             }
-            val loadedSongs = result.getOrNull()
+            val loadedSongs = result.getOrNull()?.first
 
             _uiState.update { currentState ->
                 result.fold(
-                    onSuccess = { songs ->
+                    onSuccess = { (songs, albums) ->
                         sourceQueue = songs
                         sourceTrackQueue = songs.map { song ->
                             QueueTrackEntry(song.toPersistentTrack(), song)
@@ -545,6 +549,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                         currentState.copy(
                             isLoading = false,
                             songs = songs,
+                            albums = albums,
                             sourceQueue = sourceQueue,
                             playbackQueue = playbackQueue,
                             currentQueueIndex = currentQueueIndex,

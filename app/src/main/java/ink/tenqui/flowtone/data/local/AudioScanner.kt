@@ -75,19 +75,23 @@ class AudioScanner(context: Context) {
     }
 
     private fun queryIndexedSongs(contentUri: Uri): List<IndexedSong>? {
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.DATE_MODIFIED,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.RELATIVE_PATH,
-            MediaStore.MediaColumns.SIZE
-        )
+        val projection = buildList {
+            add(MediaStore.Audio.Media._ID)
+            add(MediaStore.Audio.Media.TITLE)
+            add(MediaStore.Audio.Media.ARTIST)
+            add(MediaStore.Audio.Media.DURATION)
+            add(MediaStore.Audio.Media.ALBUM_ID)
+            add(MediaStore.Audio.Media.ALBUM)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                add(MediaStore.Audio.AudioColumns.ALBUM_ARTIST)
+            }
+            add(MediaStore.Audio.Media.DATE_ADDED)
+            add(MediaStore.Audio.Media.DATE_MODIFIED)
+            add(MediaStore.Audio.Media.DATA)
+            add(MediaStore.MediaColumns.DISPLAY_NAME)
+            add(MediaStore.MediaColumns.RELATIVE_PATH)
+            add(MediaStore.MediaColumns.SIZE)
+        }.toTypedArray()
         val selection =
             "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > ?"
         val cursor = contentResolver.query(
@@ -117,6 +121,12 @@ class AudioScanner(context: Context) {
             mediaStoreArtist = getString(getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)),
             durationMs = getLong(getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)),
             albumId = if (isNull(albumIdColumn)) null else getLong(albumIdColumn),
+            albumTitle = nullableText(MediaStore.Audio.Media.ALBUM),
+            albumArtist = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                nullableText(MediaStore.Audio.AudioColumns.ALBUM_ARTIST)
+            } else {
+                null
+            },
             filePath = nullableText(MediaStore.Audio.Media.DATA),
             displayName = nullableText(MediaStore.MediaColumns.DISPLAY_NAME),
             relativePath = nullableText(MediaStore.MediaColumns.RELATIVE_PATH),
@@ -153,6 +163,8 @@ class AudioScanner(context: Context) {
         val mediaStoreArtist: String?,
         val durationMs: Long,
         val albumId: Long?,
+        val albumTitle: String?,
+        val albumArtist: String?,
         val filePath: String?,
         val displayName: String?,
         val relativePath: String?,
@@ -183,6 +195,8 @@ class AudioScanner(context: Context) {
                 durationMs = metadata.durationMs,
                 uri = uri,
                 albumId = albumId,
+                albumTitle = usableMetadataText(albumTitle),
+                albumArtist = usableMetadataText(albumArtist),
                 artworkUri = albumId?.let {
                     ContentUris.withAppendedId(ALBUM_ART_BASE_URI, it)
                 },

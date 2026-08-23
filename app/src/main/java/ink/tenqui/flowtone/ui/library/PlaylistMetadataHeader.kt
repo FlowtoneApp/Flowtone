@@ -8,6 +8,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -151,46 +152,26 @@ internal fun PlaylistMetadataHeader(
     val countLabel = "$songCount 首歌曲"
     val infoLabel = listOfNotNull(creator, countLabel).joinToString(" · ")
 
-    Row(
+    CollectionMetadataHeader(
+        title = metadata.title,
+        supportingText = infoLabel,
+        artwork = {
+            FlowtoneArtwork(
+                artworkUri = artworkUri,
+                modifier = Modifier.size(PlaylistMetadataArtworkSize)
+            )
+        },
+        rowInteractionModifier = if (isDescriptionEditing) {
+            Modifier.clickable(
+                interactionSource = headerInteractionSource,
+                indication = null,
+                onClick = ::saveDescriptionEditing
+            )
+        } else {
+            Modifier
+        },
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-            .then(
-                if (isDescriptionEditing) {
-                    Modifier.clickable(
-                        interactionSource = headerInteractionSource,
-                        indication = null,
-                        onClick = ::saveDescriptionEditing
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 16.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = metadata.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = infoLabel,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 8.dp)
-            )
             if (metadata.isDescriptionEditable && isDescriptionEditing) {
                 BasicTextField(
                     value = draftDescription,
@@ -285,11 +266,51 @@ internal fun PlaylistMetadataHeader(
                     )
                 }
             }
+    }
+}
+
+@Composable
+internal fun CollectionMetadataHeader(
+    title: String,
+    supportingText: String,
+    artwork: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    rowInteractionModifier: Modifier = Modifier,
+    additionalContent: @Composable ColumnScope.() -> Unit = {}
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .then(rowInteractionModifier),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 16.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = supportingText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            additionalContent()
         }
-        FlowtoneArtwork(
-            artworkUri = artworkUri,
-            modifier = Modifier.size(PlaylistMetadataArtworkSize)
-        )
+        artwork()
     }
 }
 

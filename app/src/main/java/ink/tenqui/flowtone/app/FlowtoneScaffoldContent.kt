@@ -36,6 +36,7 @@ import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
+import ink.tenqui.flowtone.ui.components.rememberAlbumArtworkCloudPalette
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
@@ -69,6 +70,7 @@ internal fun FlowtoneScaffoldContent(
     modifier: Modifier = Modifier
 ) {
     val detailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
+        state.secondaryPage == SecondaryPage.Album ||
         state.secondaryPage == SecondaryPage.LocalLibrary
     val pagePosition = topLevelContinuousPagePosition(
         currentPage = state.pagerState.currentPage,
@@ -95,12 +97,29 @@ internal fun FlowtoneScaffoldContent(
         ?: state.selectedPlaylistId
             ?.takeUnless { playlistId -> playlistId == LikedSongsPlaylistId }
             ?.let(::playlistAppearanceColorKeyForStableId)
+    val selectedAlbum = remember(state.selectedAlbumId, state.uiState.albums) {
+        state.uiState.albums.firstOrNull { album -> album.id == state.selectedAlbumId }
+    }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val defaultAlbumCloudPalette = remember(isDarkTheme, mainPageCloudAccent) {
+        playlistDetailCloudPaletteFor(
+            visualType = PlaylistCardVisualType.Default,
+            appearanceColorKey = null,
+            isDarkTheme = isDarkTheme,
+            fallbackAccent = mainPageCloudAccent
+        )
+    }
+    val albumArtworkCloudPalette = rememberAlbumArtworkCloudPalette(
+        artworkUri = selectedAlbum?.artworkUri,
+        fallbackPalette = defaultAlbumCloudPalette,
+        isDarkTheme = isDarkTheme
+    )
     val targetCloudPalette = remember(
         state.secondaryPage,
         state.selectedPlaylistId,
         selectedPlaylistVisualType,
         selectedPlaylistAppearanceColorKey,
+        albumArtworkCloudPalette,
         isDarkTheme,
         mainPageCloudAccent
     ) {
@@ -118,6 +137,8 @@ internal fun FlowtoneScaffoldContent(
                 isDarkTheme = isDarkTheme,
                 fallbackAccent = mainPageCloudAccent
             )
+
+            SecondaryPage.Album -> albumArtworkCloudPalette
 
             else -> FlowtoneCloudPalette(
                 primary = mainPageCloudAccent,
@@ -193,12 +214,25 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
+    val albumDetailDestination = state.selectedAlbumId?.let { albumId ->
+        remember(albumId) {
+            AlbumDetailDestination(
+                albumId = albumId,
+                initialAlbum = selectedAlbum
+            )
+        }.also { destination ->
+            SideEffect {
+                destination.updateAlbum(selectedAlbum)
+            }
+        }
+    }
     val targetPage = if (state.secondaryPage == null) {
         FlowtoneScaffoldPage.MainTabs
     } else {
         FlowtoneScaffoldPage.Secondary(
             page = state.secondaryPage,
-            playlistDetailDestination = playlistDetailDestination
+            playlistDetailDestination = playlistDetailDestination,
+            albumDetailDestination = albumDetailDestination
         )
     }
 
@@ -212,13 +246,14 @@ internal fun FlowtoneScaffoldContent(
                 targetState = targetPage,
                 modifier = Modifier.fillMaxSize(),
                 reversibleTransitionKey = ::flowtoneReversibleTransitionKey,
-                isReversibleTransition = ::isFlowtonePlaylistTransition,
+                isReversibleTransition = ::isFlowtoneCollectionDetailTransition,
             ) { page ->
                 val pageScope = this
                 val pageUsesSharedCloud = when (page) {
                     FlowtoneScaffoldPage.MainTabs -> true
                     is FlowtoneScaffoldPage.Secondary ->
                         page.page == SecondaryPage.Playlist ||
+                            page.page == SecondaryPage.Album ||
                             page.page == SecondaryPage.LocalLibrary
                 }
                 val pageCloudAlpha = if (pageUsesSharedCloud) 1f else 0f
@@ -343,6 +378,7 @@ internal fun FlowtoneScaffoldContent(
                     uiState = state.uiState,
                     currentSong = state.playerUiState.currentSong,
                     playlistDetailDestination = page.playlistDetailDestination,
+                    albumDetailDestination = page.albumDetailDestination,
                     onUpdatePlaylistDescription = onUpdatePlaylistDescription,
                     onPlaylistBackActionChange = onPlaylistBackActionChange,
                     selectedArtistName = state.selectedArtistName,
@@ -397,13 +433,15 @@ private sealed interface FlowtoneScaffoldPage {
     data object MainTabs : FlowtoneScaffoldPage
     data class Secondary(
         val page: SecondaryPage,
-        val playlistDetailDestination: PlaylistDetailDestination? = null
+        val playlistDetailDestination: PlaylistDetailDestination? = null,
+        val albumDetailDestination: AlbumDetailDestination? = null
     ) : FlowtoneScaffoldPage
 }
 
 private sealed interface FlowtoneReversibleTransitionKey {
     data object MainTabs : FlowtoneReversibleTransitionKey
     data class Playlist(val playlistId: String) : FlowtoneReversibleTransitionKey
+    data class Album(val albumId: Long) : FlowtoneReversibleTransitionKey
 }
 
 private fun flowtoneReversibleTransitionKey(
@@ -416,6 +454,10 @@ private fun flowtoneReversibleTransitionKey(
                 page.playlistDetailDestination?.playlistId?.let { playlistId ->
                     FlowtoneReversibleTransitionKey.Playlist(playlistId)
                 }
+            } else if (page.page == SecondaryPage.Album) {
+                page.albumDetailDestination?.albumId?.let { albumId ->
+                    FlowtoneReversibleTransitionKey.Album(albumId)
+                }
             } else {
                 null
             }
@@ -423,18 +465,21 @@ private fun flowtoneReversibleTransitionKey(
     }
 }
 
-private fun isFlowtonePlaylistTransition(
+private fun isFlowtoneCollectionDetailTransition(
     first: FlowtoneScaffoldPage,
     second: FlowtoneScaffoldPage
 ): Boolean {
-    return (first == FlowtoneScaffoldPage.MainTabs && second.isPlaylistPage()) ||
-        (second == FlowtoneScaffoldPage.MainTabs && first.isPlaylistPage())
+    return (first == FlowtoneScaffoldPage.MainTabs && second.isCollectionDetailPage()) ||
+        (second == FlowtoneScaffoldPage.MainTabs && first.isCollectionDetailPage())
 }
 
-private fun FlowtoneScaffoldPage.isPlaylistPage(): Boolean {
+private fun FlowtoneScaffoldPage.isCollectionDetailPage(): Boolean {
     return this is FlowtoneScaffoldPage.Secondary &&
-        page == SecondaryPage.Playlist &&
-        playlistDetailDestination?.playlistId != null
+        when (page) {
+            SecondaryPage.Playlist -> playlistDetailDestination?.playlistId != null
+            SecondaryPage.Album -> albumDetailDestination != null
+            else -> false
+        }
 }
 
 private fun topLevelContinuousPagePosition(

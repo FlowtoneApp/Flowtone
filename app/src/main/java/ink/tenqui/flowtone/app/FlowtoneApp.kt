@@ -691,6 +691,17 @@ fun FlowtoneApp(
             onPersistentTrackQueueClick = { tracks, startIndex, source ->
                 musicViewModel.playPersistentTrackQueue(tracks, startIndex, source)
             },
+            onOpenAlbum = { albumId ->
+                val album = uiState.albums.firstOrNull { candidate -> candidate.id == albumId }
+                if (album != null) {
+                    appState.selectedPlaylistId = null
+                    appState.selectedPlaylistTitle = null
+                    appState.selectedAlbumId = album.id
+                    appState.selectedArtistName = null
+                    appState.secondaryPathSegments = listOf(album.title)
+                    appState.secondaryPage = SecondaryPage.Album
+                }
+            },
             onCloseArtistRootPage = ::closeArtistRootPage,
             onOpenArtistRootPage = ::openArtistRootPage,
             onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,

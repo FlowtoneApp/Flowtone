@@ -105,6 +105,9 @@ internal fun FlowtoneTopBar(
         SecondaryPage.Playlist -> additionalPathSegments.ifEmpty {
             listOf(SecondaryPage.Playlist.title)
         }
+        SecondaryPage.Album -> additionalPathSegments.ifEmpty {
+            listOf(SecondaryPage.Album.title)
+        }
         SecondaryPage.Artist -> listOf(SecondaryPage.Artist.title) + additionalPathSegments
         SecondaryPage.ListeningRecords -> listOf(SecondaryPage.ListeningRecords.title)
         SecondaryPage.OpenSource -> listOf(

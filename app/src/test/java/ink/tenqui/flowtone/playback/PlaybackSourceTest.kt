@@ -26,4 +26,15 @@ class PlaybackSourceTest {
     fun blankUserPlaylistFallsBackToUnknown() {
         assertEquals(PlaybackSource.Unknown, PlaybackSource.userPlaylist(" ", "空歌单"))
     }
+
+    @Test
+    fun albumKeyUsesStableIdInsteadOfDisplayName() {
+        val first = PlaybackSource.album(42L, "Blue")
+        val renamed = PlaybackSource.album(42L, "Blue (Deluxe)")
+
+        assertEquals("album:42", first.key)
+        assertEquals(first.key, renamed.key)
+        assertEquals("Blue (Deluxe)", renamed.displayName)
+        assertEquals(PlaybackSource.Unknown, PlaybackSource.album(null, "Blue"))
+    }
 }

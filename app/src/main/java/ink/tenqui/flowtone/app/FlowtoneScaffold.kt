@@ -356,7 +356,9 @@ internal fun FlowtoneScaffold(
         val playlistSortAvailable = (
             state.secondaryPage == SecondaryPage.LocalLibrary ||
                 (state.secondaryPage == SecondaryPage.Playlist &&
-                    state.selectedPlaylistId != null)
+                    state.selectedPlaylistId != null) ||
+                (state.secondaryPage == SecondaryPage.Album &&
+                    state.selectedAlbumId != null)
             ) && songSelectionTopBarState == null && !state.searchActive
         if (playlistSortPanelOpen || playlistSortProgress > 0f) {
             androidx.compose.foundation.layout.Box(
