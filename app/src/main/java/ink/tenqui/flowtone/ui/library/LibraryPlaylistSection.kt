@@ -53,7 +53,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -458,10 +457,12 @@ private fun PlaylistListItemSurface(
         verticalAlignment = Alignment.CenterVertically
     ) {
         PlaylistCardSurface(
-            visualType = if (visualType == PlaylistCardVisualType.LikedMusic) {
-                PlaylistCardVisualType.LikedMusic
-            } else {
-                PlaylistCardVisualType.Default
+            visualType = when (visualType) {
+                PlaylistCardVisualType.LikedMusic -> PlaylistCardVisualType.LikedMusic
+                PlaylistCardVisualType.LocalLibrary -> PlaylistCardVisualType.LocalLibrary
+                PlaylistCardVisualType.CreatePlaylist -> PlaylistCardVisualType.CreatePlaylist
+                PlaylistCardVisualType.UserPlaylist -> PlaylistCardVisualType.UserPlaylist
+                PlaylistCardVisualType.Default -> PlaylistCardVisualType.Default
             },
             appearanceColorKey = appearanceColorKey,
             shape = MaterialTheme.shapes.medium,
