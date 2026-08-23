@@ -142,6 +142,14 @@ internal fun FlowtoneScaffold(
     )
     val playlistEditingBlurRadius =
         LibraryPlaylistEditingBlurRadius * playlistEditingProgress
+    LaunchedEffect(playlistEditingProgress, libraryPlaylistController.editingPlaylistId) {
+        if (
+            libraryPlaylistController.editingPlaylistId == null &&
+            playlistEditingProgress <= 0.001f
+        ) {
+            libraryPlaylistController.clearVisualPlaylistEditing()
+        }
+    }
     val scaffoldBlurRadius = if (playlistEditingBlurRadius > state.backgroundBlurRadius) {
         playlistEditingBlurRadius
     } else {

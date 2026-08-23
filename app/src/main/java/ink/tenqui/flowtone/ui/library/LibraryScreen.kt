@@ -85,6 +85,8 @@ internal class LibraryPlaylistController internal constructor(
     var dialogLocked by mutableStateOf(false)
     var editingPlaylistId by mutableStateOf<String?>(null)
         private set
+    var visualEditingPlaylistId by mutableStateOf<String?>(null)
+        private set
     var editingPlaylistBounds by mutableStateOf<Rect?>(null)
         private set
     var libraryViewportBounds by mutableStateOf<Rect?>(null)
@@ -204,6 +206,7 @@ internal class LibraryPlaylistController internal constructor(
             candidate.id == playlist.id && !candidate.isSystem
         } ?: return
         editingPlaylistId = editablePlaylist.id
+        visualEditingPlaylistId = editablePlaylist.id
         editingPlaylistBounds = editablePlaylistBounds[editablePlaylist.id]
     }
 
@@ -245,6 +248,10 @@ internal class LibraryPlaylistController internal constructor(
     fun clearPlaylistEditing() {
         editingPlaylistId = null
         editingPlaylistBounds = null
+    }
+
+    fun clearVisualPlaylistEditing() {
+        visualEditingPlaylistId = null
     }
 
     fun updateLibraryViewportBounds(bounds: Rect) {
@@ -310,6 +317,9 @@ internal class LibraryPlaylistController internal constructor(
         editablePlaylistBounds.keys.retainAll(activePlaylistIds)
         editingPlaylistId = editingPlaylistId?.takeIf { editingId ->
             playlists.any { playlist -> playlist.id == editingId && !playlist.isSystem }
+        }
+        visualEditingPlaylistId = visualEditingPlaylistId?.takeIf { visualId ->
+            playlists.any { playlist -> playlist.id == visualId && !playlist.isSystem }
         }
         if (editingPlaylistId == null) {
             editingPlaylistBounds = null
@@ -452,7 +462,7 @@ internal fun LibraryScreen(
         flowCloudSpeed = flowCloudSpeed,
         isFlowCloudPlaying = isFlowCloudPlaying,
         listState = playlistController.listState,
-        editingPlaylistId = playlistController.editingPlaylistId,
+        editingPlaylistId = playlistController.visualEditingPlaylistId,
         newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,
         exitingPlaylistId = playlistController.exitingPlaylistId,
         onOpenLocalLibrary = {
