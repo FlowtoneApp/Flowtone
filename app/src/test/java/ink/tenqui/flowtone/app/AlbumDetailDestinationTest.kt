@@ -27,6 +27,90 @@ class AlbumDetailDestinationTest {
         assertEquals(destination, renamedDestination)
     }
 
+    @Test
+    fun searchAlbumObscuresSearchWhileDetailIsLive() {
+        assertEquals(
+            true,
+            isSearchObscuredByAlbumDetail(
+                searchActive = true,
+                secondaryPage = SecondaryPage.Album,
+                albumDetailCompositionActive = false
+            )
+        )
+    }
+
+    @Test
+    fun outgoingSearchAlbumRemainsAboveSearchUntilCompositionEnds() {
+        assertEquals(
+            true,
+            isSearchObscuredByAlbumDetail(
+                searchActive = true,
+                secondaryPage = null,
+                albumDetailCompositionActive = true
+            )
+        )
+    }
+
+    @Test
+    fun nonSearchOrNonAlbumDoesNotElevateDetailAboveSearch() {
+        assertEquals(
+            false,
+            isSearchObscuredByAlbumDetail(
+                searchActive = false,
+                secondaryPage = SecondaryPage.Album,
+                albumDetailCompositionActive = true
+            )
+        )
+        assertEquals(
+            false,
+            isSearchObscuredByAlbumDetail(
+                searchActive = true,
+                secondaryPage = SecondaryPage.Playlist,
+                albumDetailCompositionActive = false
+            )
+        )
+    }
+
+    @Test
+    fun searchLayerStaysBetweenMainTabsAndAlbumInBothTransitionDirections() {
+        val mainTabsZIndex = searchAwarePageZIndex(
+            searchActive = true,
+            isMainTabs = true,
+            secondaryPage = null,
+            defaultZIndex = 1f
+        )
+        val albumIncomingZIndex = searchAwarePageZIndex(
+            searchActive = true,
+            isMainTabs = false,
+            secondaryPage = SecondaryPage.Album,
+            defaultZIndex = 1f
+        )
+        val albumOutgoingZIndex = searchAwarePageZIndex(
+            searchActive = true,
+            isMainTabs = false,
+            secondaryPage = SecondaryPage.Album,
+            defaultZIndex = 0f
+        )
+
+        assertEquals(0f, mainTabsZIndex)
+        assertEquals(1f, SearchOverlayPageLayerZIndex)
+        assertEquals(2f, albumIncomingZIndex)
+        assertEquals(2f, albumOutgoingZIndex)
+    }
+
+    @Test
+    fun regularPageTransitionKeepsDefaultZIndex() {
+        assertEquals(
+            1f,
+            searchAwarePageZIndex(
+                searchActive = false,
+                isMainTabs = false,
+                secondaryPage = SecondaryPage.Album,
+                defaultZIndex = 1f
+            )
+        )
+    }
+
     private fun album(id: Long, title: String) = LocalAlbum(
         id = id,
         title = title,

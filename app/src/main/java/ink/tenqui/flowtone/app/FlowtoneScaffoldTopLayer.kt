@@ -41,6 +41,8 @@ internal fun FlowtoneScaffoldTopLayer(
                 onCloseSongSelection
             } else if (state.secondaryPage == SecondaryPage.Playlist) {
                 playlistBackAction ?: callbacks.onCloseSecondaryPage
+            } else if (state.secondaryPage == SecondaryPage.Album) {
+                callbacks.onCloseSecondaryPage
             } else {
                 callbacks.onNavigateBack
             },

@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -113,6 +114,10 @@ internal fun <T> PageTransitionHost(
     parentScope: PageTransitionScope? = null,
     reversibleTransitionKey: ((T) -> Any?)? = null,
     isReversibleTransition: ((T, T) -> Boolean)? = null,
+    pageZIndex: (T, PageTransitionPhase, Float) -> Float = { _, _, defaultZIndex ->
+        defaultZIndex
+    },
+    overlayContent: @Composable BoxScope.() -> Unit = {},
     content: @Composable PageTransitionScope.(T) -> Unit
 ) {
     // Each slot keeps its identity while it is current and then outgoing.
@@ -238,9 +243,10 @@ internal fun <T> PageTransitionHost(
                 transitionId = transitionId
             )
             val scope = parentScope?.combineWith(localScope) ?: localScope
+            val defaultZIndex = if (phase == PageTransitionPhase.Incoming) 1f else 0f
             val pageModifier = Modifier
                 .fillMaxSize()
-                .zIndex(if (phase == PageTransitionPhase.Incoming) 1f else 0f)
+                .zIndex(pageZIndex(snapshot.value, phase, defaultZIndex))
 
             val visualModifier = if (phase == PageTransitionPhase.Outgoing) {
                 pageModifier.blur(
@@ -276,6 +282,7 @@ internal fun <T> PageTransitionHost(
     ) {
         RenderPageSlot(PageSlot.First, firstPage, firstPhase)
         RenderPageSlot(PageSlot.Second, secondPage, secondPhase)
+        overlayContent()
     }
 }
 

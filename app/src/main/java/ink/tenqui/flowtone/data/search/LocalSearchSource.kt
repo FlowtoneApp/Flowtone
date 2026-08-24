@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.search
 
+import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSelectableLocalArtist
@@ -11,13 +12,14 @@ import kotlinx.coroutines.withContext
 
 private const val LocalSongResultLimit = 50
 private const val LocalArtistResultLimit = 30
+private const val LocalAlbumResultLimit = 30
 
 class LocalSearchSource : SearchSource {
     private var index = LocalSearchIndex.Empty
 
-    suspend fun updateSongs(songs: List<Song>) {
+    suspend fun updateLibrary(songs: List<Song>, albums: List<LocalAlbum>) {
         index = withContext(Dispatchers.Default) {
-            LocalSearchIndex.from(songs)
+            LocalSearchIndex.from(songs, albums)
         }
     }
 
@@ -34,7 +36,8 @@ class LocalSearchSource : SearchSource {
 
 private data class LocalSearchIndex(
     val songs: List<IndexedSong>,
-    val artists: List<SearchArtist>
+    val artists: List<SearchArtist>,
+    val albums: List<IndexedAlbum>
 ) {
     fun search(query: SearchQuery): List<SearchResult> {
         val normalizedQuery = query.normalizedText
@@ -74,16 +77,38 @@ private data class LocalSearchIndex(
                 )
             }
 
-        return songResults + artistResults
+        val albumResults = albums
+            .mapNotNull { indexedAlbum ->
+                indexedAlbum.matchRank(normalizedQuery)?.let { rank ->
+                    RankedAlbum(indexedAlbum = indexedAlbum, rank = rank)
+                }
+            }
+            .sortedWith(
+                compareBy<RankedAlbum> { ranked -> ranked.rank }
+                    .thenBy { ranked -> ranked.indexedAlbum.stableOrder }
+            )
+            .take(LocalAlbumResultLimit)
+            .map { ranked ->
+                SearchResult.AlbumResult(
+                    albumId = ranked.indexedAlbum.album.id,
+                    title = ranked.indexedAlbum.album.title,
+                    artist = ranked.indexedAlbum.album.artist,
+                    artworkUri = ranked.indexedAlbum.album.artworkUri,
+                    stableOrder = ranked.indexedAlbum.stableOrder
+                )
+            }
+
+        return songResults + artistResults + albumResults
     }
 
     companion object {
         val Empty = LocalSearchIndex(
             songs = emptyList(),
-            artists = emptyList()
+            artists = emptyList(),
+            albums = emptyList()
         )
 
-        fun from(songs: List<Song>): LocalSearchIndex {
+        fun from(songs: List<Song>, albums: List<LocalAlbum>): LocalSearchIndex {
             val localSongs = songs
                 .withIndex()
                 .filter { indexedSong -> indexedSong.value.sourceType == SourceType.Local }
@@ -129,7 +154,17 @@ private data class LocalSearchIndex(
                         stableOrder = artist.stableOrder,
                         representativeSongTitle = artist.representativeSongTitle
                     )
-                }
+                },
+                albums = albums
+                    .distinctBy { album -> album.id }
+                    .mapIndexed { index, album ->
+                        IndexedAlbum(
+                            album = album,
+                            stableOrder = index,
+                            normalizedTitle = album.title.normalized(),
+                            normalizedArtist = album.artist.normalized()
+                        )
+                    }
             )
         }
     }
@@ -166,6 +201,25 @@ private data class RankedSong(
 
 private data class RankedArtist(
     val artist: SearchArtist,
+    val rank: Int
+)
+
+private data class IndexedAlbum(
+    val album: LocalAlbum,
+    val stableOrder: Int,
+    val normalizedTitle: String,
+    val normalizedArtist: String
+) {
+    fun matchRank(normalizedQuery: String): Int? {
+        return listOfNotNull(
+            matchRank(normalizedTitle, normalizedQuery),
+            matchRank(normalizedArtist, normalizedQuery)
+        ).minOrNull()
+    }
+}
+
+private data class RankedAlbum(
+    val indexedAlbum: IndexedAlbum,
     val rank: Int
 )
 

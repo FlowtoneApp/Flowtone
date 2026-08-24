@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.search
 
 import android.net.testUri
+import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import kotlinx.coroutines.runBlocking
@@ -30,6 +31,7 @@ class SearchRepositoryTest {
 
         assertEquals(emptyList<Song>(), results.songs)
         assertEquals(emptyList<SearchArtist>(), results.artists)
+        assertEquals(emptyList<SearchResult.AlbumResult>(), results.albums)
     }
 
     @Test
@@ -121,11 +123,103 @@ class SearchRepositoryTest {
         assertEquals(1, searchPlaybackQueueStartIndex(songs, songs[1]))
     }
 
+    @Test
+    fun searchesAlbumTitleIgnoringCaseAndSpaces() = runBlocking {
+        val repository = repositoryWithLibrary(
+            albums = listOf(album(id = 42L, title = "Blue Hour", artist = "Aimer"))
+        )
+
+        val results = repository.search(SearchQuery.from("  blue "))
+
+        assertEquals(listOf("Blue Hour"), results.albums.map { it.title })
+    }
+
+    @Test
+    fun searchesAlbumArtist() = runBlocking {
+        val repository = repositoryWithLibrary(
+            albums = listOf(album(id = 42L, title = "Blue Hour", artist = "Aimer"))
+        )
+
+        val results = repository.search(SearchQuery.from("aimer"))
+
+        assertEquals(listOf(42L), results.albums.map { it.albumId })
+    }
+
+    @Test
+    fun deduplicatesAlbumsByStableAlbumId() = runBlocking {
+        val repository = repositoryWithLibrary(
+            albums = listOf(
+                album(id = 42L, title = "Blue Hour", artist = "Aimer"),
+                album(id = 42L, title = "Blue Hour (Deluxe)", artist = "Aimer")
+            )
+        )
+
+        val results = repository.search(SearchQuery.from("blue"))
+
+        assertEquals(listOf(42L), results.albums.map { it.albumId })
+    }
+
+    @Test
+    fun unrelatedQueryDoesNotReturnAlbums() = runBlocking {
+        val repository = repositoryWithLibrary(
+            albums = listOf(album(id = 42L, title = "Blue Hour", artist = "Aimer"))
+        )
+
+        val results = repository.search(SearchQuery.from("ambient"))
+
+        assertTrue(results.albums.isEmpty())
+    }
+
+    @Test
+    fun albumResultMetadataDoesNotReplaceAlbumNavigationIdentity() = runBlocking {
+        val repository = repositoryWithLibrary(
+            albums = listOf(
+                album(
+                    id = 42L,
+                    title = "Blue Hour (Deluxe)",
+                    artist = "Aimer",
+                    artworkUri = testUri("album-artwork")
+                )
+            )
+        )
+
+        val result = repository.search(SearchQuery.from("blue")).albums.single()
+        var openedAlbumId: Long? = null
+        val onOpenAlbum: (Long) -> Unit = { albumId -> openedAlbumId = albumId }
+        onOpenAlbum(result.albumId)
+
+        assertEquals(42L, result.albumId)
+        assertEquals("Blue Hour (Deluxe)", result.title)
+        assertEquals("Aimer", result.artist)
+        assertTrue(result.artworkUri != null)
+        assertEquals(42L, openedAlbumId)
+    }
+
     private suspend fun repositoryWithSongs(songs: List<Song>): SearchRepository {
+        return repositoryWithLibrary(songs = songs)
+    }
+
+    private suspend fun repositoryWithLibrary(
+        songs: List<Song> = emptyList(),
+        albums: List<LocalAlbum> = emptyList()
+    ): SearchRepository {
         val repository = SearchRepository()
-        repository.updateLocalSongs(songs)
+        repository.updateLocalLibrary(songs, albums)
         return repository
     }
+
+    private fun album(
+        id: Long,
+        title: String,
+        artist: String,
+        artworkUri: android.net.Uri? = null
+    ): LocalAlbum = LocalAlbum(
+        id = id,
+        title = title,
+        artist = artist,
+        artworkUri = artworkUri,
+        songs = emptyList()
+    )
 
     private fun song(
         id: Long,

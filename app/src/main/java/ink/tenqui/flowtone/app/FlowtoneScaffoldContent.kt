@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -65,6 +66,8 @@ internal fun FlowtoneScaffoldContent(
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
     onClosePlaylistSortPanel: () -> Unit,
+    onSearchAlbumDetailCompositionActiveChange: (Boolean) -> Unit,
+    searchObscuredByAlbumDetail: Boolean,
     innerPadding: PaddingValues,
     topBarBackgroundHeight: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier
@@ -247,8 +250,35 @@ internal fun FlowtoneScaffoldContent(
                 modifier = Modifier.fillMaxSize(),
                 reversibleTransitionKey = ::flowtoneReversibleTransitionKey,
                 isReversibleTransition = ::isFlowtoneCollectionDetailTransition,
+                pageZIndex = { page, _, defaultZIndex ->
+                    searchAwarePageZIndex(
+                        searchActive = state.searchActive,
+                        isMainTabs = page == FlowtoneScaffoldPage.MainTabs,
+                        secondaryPage = (page as? FlowtoneScaffoldPage.Secondary)?.page,
+                        defaultZIndex = defaultZIndex
+                    )
+                },
+                overlayContent = {
+                    FlowtoneSearchOverlayLayer(
+                        state = state,
+                        callbacks = callbacks,
+                        searchObscuredByAlbumDetail = searchObscuredByAlbumDetail
+                    )
+                }
             ) { page ->
                 val pageScope = this
+                if (
+                    state.searchActive &&
+                    page is FlowtoneScaffoldPage.Secondary &&
+                    page.page == SecondaryPage.Album
+                ) {
+                    DisposableEffect(Unit) {
+                        onSearchAlbumDetailCompositionActiveChange(true)
+                        onDispose {
+                            onSearchAlbumDetailCompositionActiveChange(false)
+                        }
+                    }
+                }
                 val pageUsesSharedCloud = when (page) {
                     FlowtoneScaffoldPage.MainTabs -> true
                     is FlowtoneScaffoldPage.Secondary ->
@@ -480,6 +510,23 @@ private fun FlowtoneScaffoldPage.isCollectionDetailPage(): Boolean {
             SecondaryPage.Album -> albumDetailDestination != null
             else -> false
         }
+}
+
+internal const val SearchOverlayPageLayerZIndex = 1f
+private const val SearchAlbumDetailPageLayerZIndex = 2f
+
+internal fun searchAwarePageZIndex(
+    searchActive: Boolean,
+    isMainTabs: Boolean,
+    secondaryPage: SecondaryPage?,
+    defaultZIndex: Float
+): Float {
+    if (!searchActive) return defaultZIndex
+    return when {
+        isMainTabs -> 0f
+        secondaryPage == SecondaryPage.Album -> SearchAlbumDetailPageLayerZIndex
+        else -> defaultZIndex
+    }
 }
 
 private fun topLevelContinuousPagePosition(

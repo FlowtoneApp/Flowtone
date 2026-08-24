@@ -575,6 +575,7 @@ fun FlowtoneApp(
         searchKeyboardVisible = appState.searchKeyboardVisible,
         searchReturnStage = appState.searchReturnStage,
         onNavigateBack = navigateBack,
+        onCloseSecondaryPage = { closeFlowtoneSecondaryPage(appState) },
         onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,
         onCollapseMiniPlayer = {
             appState.miniPlayerExpanded = false
@@ -694,6 +695,11 @@ fun FlowtoneApp(
             onOpenAlbum = { albumId ->
                 val album = uiState.albums.firstOrNull { candidate -> candidate.id == albumId }
                 if (album != null) {
+                    if (appState.searchActive) {
+                        appState.searchInputFocused = false
+                        appState.searchFocusRequest = 0
+                        appState.searchKeyboardDismissRequest += 1
+                    }
                     appState.selectedPlaylistId = null
                     appState.selectedPlaylistTitle = null
                     appState.selectedAlbumId = album.id

@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.search
 
+import android.net.Uri
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
@@ -18,8 +19,11 @@ sealed interface SearchResult {
     ) : SearchResult
 
     data class AlbumResult(
-        val id: String,
-        val title: String
+        val albumId: Long,
+        val title: String,
+        val artist: String,
+        val artworkUri: Uri?,
+        val stableOrder: Int
     ) : SearchResult
 
     data class PlaylistResult(
@@ -39,7 +43,8 @@ data class SearchArtist(
 
 data class SearchResults(
     val songs: List<Song> = emptyList(),
-    val artists: List<SearchArtist> = emptyList()
+    val artists: List<SearchArtist> = emptyList(),
+    val albums: List<SearchResult.AlbumResult> = emptyList()
 ) {
     companion object {
         val Empty = SearchResults()
@@ -54,6 +59,7 @@ data class GlobalSearchUiState(
     val isSearching: Boolean = false,
     val songResults: List<Song> = emptyList(),
     val artistResults: List<SearchArtist> = emptyList(),
+    val albumResults: List<SearchResult.AlbumResult> = emptyList(),
     val selectedProviderCategory: ProviderSearchCategory = ProviderSearchCategory.Single,
     val providerCategoryStates: Map<ProviderSearchCategory, ProviderSearchCategoryState> =
         ProviderSearchCategory.entries.associateWith { ProviderSearchCategoryState() },
@@ -67,6 +73,7 @@ data class GlobalSearchUiState(
 
     val hasNoResults: Boolean
         get() = !isEmptyQuery && !isSearching && songResults.isEmpty() && artistResults.isEmpty() &&
+            albumResults.isEmpty() &&
             providerCategoryStates.values.all { it.items.isEmpty() }
 }
 

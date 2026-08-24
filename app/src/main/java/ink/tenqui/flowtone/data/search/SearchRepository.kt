@@ -1,13 +1,14 @@
 package ink.tenqui.flowtone.data.search
 
+import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 
 class SearchRepository(
     private val localSearchSource: LocalSearchSource = LocalSearchSource(),
     private val sources: List<SearchSource> = listOf(localSearchSource)
 ) {
-    suspend fun updateLocalSongs(songs: List<Song>) {
-        localSearchSource.updateSongs(songs)
+    suspend fun updateLocalLibrary(songs: List<Song>, albums: List<LocalAlbum>) {
+        localSearchSource.updateLibrary(songs, albums)
     }
 
     suspend fun search(query: SearchQuery): SearchResults {
@@ -22,7 +23,8 @@ class SearchRepository(
                 .map { result -> result.song },
             artists = results
                 .filterIsInstance<SearchResult.ArtistResult>()
-                .map { result -> result.artist }
+                .map { result -> result.artist },
+            albums = results.filterIsInstance<SearchResult.AlbumResult>()
         )
     }
 }

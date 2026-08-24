@@ -301,6 +301,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     isSearching = false,
                     songResults = emptyList(),
                     artistResults = emptyList(),
+                    albumResults = emptyList(),
                     providerCategoryStates = emptyProviderSearchCategoryStates(),
                     searchGeneration = current.searchGeneration + 1
                 )
@@ -315,6 +316,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 isSearching = currentState.scope == SearchScope.All || currentState.scope == SearchScope.Local,
                 songResults = emptyList(),
                 artistResults = emptyList(),
+                albumResults = emptyList(),
                 providerCategoryStates = emptyProviderSearchCategoryStates(),
                 searchGeneration = currentState.searchGeneration + 1
             )
@@ -336,6 +338,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 isSearching = false,
                 songResults = emptyList(),
                 artistResults = emptyList(),
+                albumResults = emptyList(),
                 providerCategoryStates = emptyProviderSearchCategoryStates(),
                 searchGeneration = current.searchGeneration + 1
             )
@@ -370,6 +373,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 scope = validScope,
                 songResults = emptyList(),
                 artistResults = emptyList(),
+                albumResults = emptyList(),
                 providerCategoryStates = emptyProviderSearchCategoryStates(),
                 isSearching = false,
                 searchGeneration = it.searchGeneration + 1
@@ -393,9 +397,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 currentState
             } else {
                 currentState.copy(
-                      isSearching = false,
-                      songResults = results.songs,
-                      artistResults = results.artists
+                    isSearching = false,
+                    songResults = results.songs,
+                    artistResults = results.artists,
+                    albumResults = results.albums
                 )
             }
         }
@@ -414,9 +419,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         providerSearchJob = viewModelScope.launch { providerSearchCoordinator.loadInitial() }
     }
 
-    private fun refreshSearchIndex(songs: List<Song>) {
+    private fun refreshSearchIndex(songs: List<Song>, albums: List<LocalAlbum>) {
         viewModelScope.launch {
-            searchRepository.updateLocalSongs(songs)
+            searchRepository.updateLocalLibrary(songs, albums)
             val currentSearchState = _searchUiState.value
             val query = SearchQuery.from(currentSearchState.queryText)
             if (!query.isBlank) {
@@ -573,7 +578,12 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     likedSongsStore.saveLikedTracks(_likedTracks.value)
                     _uiState.update { it.copy(likedTracks = _likedTracks.value) }
                 }
-                loadedSongs?.let(::refreshSearchIndex)
+                if (loadedSongs != null) {
+                    refreshSearchIndex(
+                        songs = loadedSongs,
+                        albums = result.getOrNull()?.second.orEmpty()
+                    )
+                }
                 reconcileCurrentSongWithLibrary()
                 restoreFromControllerIfPossible()
             }

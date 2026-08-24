@@ -8,12 +8,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -27,8 +26,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import android.widget.Toast
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -54,29 +56,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun BoxScope.FlowtoneScaffoldOverlays(
+internal fun BoxScope.FlowtoneSearchOverlayLayer(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
-    fullscreenHeight: Dp,
-    libraryPlaylistController: LibraryPlaylistController,
-    playlistRepository: PlaylistRepository,
-    coroutineScope: CoroutineScope,
-    displayedLibraryPlaylists: List<LibraryPlaylistCard>,
-    playlistIdsContainingCurrentSong: Set<String>,
-    addToPlaylistDialogBackgroundColor: Color,
-    playlistEditingProgress: Float,
-    playlistEditingBlurRadius: Dp,
-    onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
-    onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
+    searchObscuredByAlbumDetail: Boolean,
+    modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    var playlistAppearanceMutationVersion by remember { mutableIntStateOf(0) }
-    var playlistAppearanceMutationJob by remember { mutableStateOf<Job?>(null) }
     var searchRevealLayerVisible by remember { mutableStateOf(state.searchActive) }
-    val density = LocalDensity.current
-    val searchTopPadding = with(density) {
-        WindowInsets.statusBars.getTop(this).toDp()
-    } + 56.dp
     val searchRevealProgress by animateFloatAsState(
         targetValue = if (state.searchActive) 1f else 0f,
         animationSpec = tween(
@@ -111,7 +97,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     )
     val searchContentBottomPadding =
         state.miniPlayerContentBottomPadding * searchMiniPlayerSpaceProgress
-    val searchInteractionsEnabled = state.searchReturnStage == SearchReturnStage.Idle
+    val searchInteractionsEnabled =
+        !searchObscuredByAlbumDetail && state.searchReturnStage == SearchReturnStage.Idle
     val searchLayerProgress = when (state.searchReturnStage) {
         SearchReturnStage.SearchExitingForArtist,
         SearchReturnStage.SearchReentering -> state.searchReentryProgress
@@ -125,10 +112,27 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         visible = searchRevealLayerVisible,
         enter = EnterTransition.None,
         exit = ExitTransition.None,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            // 搜索内容覆盖普通页面，但始终位于 MiniPlayer 播放层下方。
-            .zIndex(29f)
+            .semantics {
+                if (searchObscuredByAlbumDetail) {
+                    hideFromAccessibility()
+                }
+            }
+            .then(
+                if (searchObscuredByAlbumDetail) {
+                    Modifier.pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitPointerEvent(PointerEventPass.Initial)
+                                .changes
+                                .forEach { change -> change.consume() }
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+            )
+            .zIndex(SearchOverlayPageLayerZIndex)
     ) {
         GlobalSearchOverlay(
             searchUiState = state.searchUiState,
@@ -149,6 +153,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                     ArtistRootNavigationMode.NormalPage
                 )
             },
+            onAlbumClick = callbacks.onOpenAlbum,
             onExitSearch = callbacks.onExitSearch,
             onQueryChange = callbacks.onSearchQueryChange,
             onScopeChange = callbacks.onSearchScopeChange,
@@ -158,11 +163,30 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             interactionsEnabled = searchInteractionsEnabled,
             reentryProgress = searchLayerProgress,
             revealProgress = searchRevealProgress,
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         )
     }
+}
 
+@Composable
+internal fun BoxScope.FlowtoneScaffoldOverlays(
+    state: FlowtoneAppScaffoldState,
+    callbacks: FlowtoneAppCallbacks,
+    fullscreenHeight: Dp,
+    libraryPlaylistController: LibraryPlaylistController,
+    playlistRepository: PlaylistRepository,
+    coroutineScope: CoroutineScope,
+    displayedLibraryPlaylists: List<LibraryPlaylistCard>,
+    playlistIdsContainingCurrentSong: Set<String>,
+    addToPlaylistDialogBackgroundColor: Color,
+    playlistEditingProgress: Float,
+    playlistEditingBlurRadius: Dp,
+    onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
+    onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
+) {
+    val context = LocalContext.current
+    var playlistAppearanceMutationVersion by remember { mutableIntStateOf(0) }
+    var playlistAppearanceMutationJob by remember { mutableStateOf<Job?>(null) }
     if (state.playerUiState.hasCurrentSong && state.backgroundBlurProgress > 0.01f) {
         Box(
             modifier = Modifier

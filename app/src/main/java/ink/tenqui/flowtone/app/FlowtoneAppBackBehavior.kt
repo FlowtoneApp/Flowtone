@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 
@@ -14,6 +15,7 @@ internal fun FlowtoneAppBackHandlers(
     searchKeyboardVisible: Boolean,
     searchReturnStage: SearchReturnStage,
     onNavigateBack: () -> Unit,
+    onCloseSecondaryPage: () -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onCollapseMiniPlayer: () -> Unit,
     onCloseArtistRootPage: () -> Unit,
@@ -38,9 +40,24 @@ internal fun FlowtoneAppBackHandlers(
             onExitSearch()
         }
     }
+    BackHandler(
+        enabled = secondaryPage == SecondaryPage.Album,
+        onBack = onCloseSecondaryPage
+    )
     BackHandler(enabled = rootPage is FlowtoneRootPage.ArtistRootPage) {
         onCloseArtistRootPage()
     }
+}
+
+internal fun closeFlowtoneSecondaryPage(appState: FlowtoneAppState) {
+    Log.d("FlowtonePlaylistDebug", "PLAYLIST_CLOSE_REQUESTED")
+    appState.secondaryPage = null
+    appState.secondaryPathSegments = emptyList()
+    appState.selectedPlaylistId = null
+    appState.selectedPlaylistTitle = null
+    appState.selectedAlbumId = null
+    appState.selectedArtistName = null
+    Log.d("FlowtonePlaylistDebug", "PLAYLIST_LIVE_SELECTION_CLEARED")
 }
 
 internal fun navigateFlowtoneAppBack(appState: FlowtoneAppState) {

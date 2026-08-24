@@ -91,6 +91,7 @@ import ink.tenqui.flowtone.data.online.SearchLandingItem
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
 import ink.tenqui.flowtone.data.search.providerCategoryState
 import ink.tenqui.flowtone.data.search.SearchArtist
+import ink.tenqui.flowtone.data.search.SearchResult
 import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
@@ -115,6 +116,7 @@ internal fun GlobalSearchOverlay(
     onOnlineSongClick: (ProviderSong) -> Unit,
     pendingTrackIdentityKey: String? = null,
     onArtistClick: (SearchArtist) -> Unit,
+    onAlbumClick: (Long) -> Unit,
     onExitSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
     onScopeChange: (SearchScope) -> Unit,
@@ -258,6 +260,7 @@ internal fun GlobalSearchOverlay(
                         onSongClick = onSongClick,
                         onOnlineSongClick = onOnlineSongClick,
                         onArtistClick = onArtistClick,
+                        onAlbumClick = onAlbumClick,
                         category = selectedResultCategory,
                         listState = listState,
                         onLoadMore = onLoadMore,
@@ -424,6 +427,7 @@ private fun SearchResultCategorySelector(
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
+    onAlbumClick: (Long) -> Unit,
     category: SearchResultCategory,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onLoadMore: () -> Unit,
@@ -431,11 +435,12 @@ private fun SearchResultCategorySelector(
 ) {
     val localSongs = if (category == SearchResultCategory.Single) state.songResults else emptyList()
     val localArtists = if (category == SearchResultCategory.User) state.artistResults else emptyList()
+    val localAlbums = if (category == SearchResultCategory.Album) state.albumResults else emptyList()
     val categoryState = state.providerCategoryState(category.providerCategory)
     val onlineResults = categoryState.items
     val isInitialLoading = categoryState.isInitialLoading
     val hasNoResults = !state.query.isBlank && !state.isSearching && !isInitialLoading &&
-        localSongs.isEmpty() && localArtists.isEmpty() && onlineResults.isEmpty()
+        localSongs.isEmpty() && localArtists.isEmpty() && localAlbums.isEmpty() && onlineResults.isEmpty()
     val resultSnapshot = SearchResultSnapshot(
         localSongs = localSongs,
         localArtists = localArtists,
@@ -468,6 +473,9 @@ private fun SearchResultCategorySelector(
         }
         items(localArtists, key = { artist -> "artist:${artist.id}" }) { artist ->
             LocalSearchArtist(artist, onClick = { onArtistClick(artist) }, alpha = 1f)
+        }
+        items(localAlbums, key = { album -> "album:${album.albumId}" }) { album ->
+            LocalSearchAlbum(album, onClick = { onAlbumClick(album.albumId) })
         }
         items(onlineResults, key = { song -> "online:${song.trackRef.extensionId}:${song.trackRef.opaqueId}" }) { song ->
             OnlineSearchSong(song, alpha = 1f, onClick = if (song.searchCategory == ProviderSearchCategory.Single) {
@@ -629,6 +637,42 @@ private fun SearchUserAvatar(
         ExperimentalArtistAvatarImage(
             image = image,
             modifier = Modifier.fillMaxSize().clip(CircleShape)
+        )
+    }
+}
+
+@Composable
+private fun LocalSearchAlbum(album: SearchResult.AlbumResult, onClick: () -> Unit) = Row(
+    modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp),
+    verticalAlignment = Alignment.CenterVertically
+) {
+    if (album.artworkUri != null) {
+        AsyncImage(
+            model = album.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
+        )
+    } else {
+        SearchArtworkPlaceholder(ProviderSearchCategory.Album)
+    }
+    Column(Modifier.padding(start = 12.dp)) {
+        Text(
+            text = album.title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${album.artist} · 专辑",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.66f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
