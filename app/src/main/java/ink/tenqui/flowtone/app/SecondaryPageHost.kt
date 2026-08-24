@@ -117,6 +117,7 @@ internal fun SecondaryPageHost(
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     uiState: MusicUiState,
     currentSong: Song?,
+    isPlaying: Boolean,
     playlistDetailDestination: PlaylistDetailDestination?,
     albumDetailDestination: AlbumDetailDestination?,
     selectedArtistName: String?,
@@ -328,6 +329,7 @@ internal fun SecondaryPageHost(
                     albumId = destination.albumId,
                     album = destination.album,
                     currentSong = currentSong,
+                    isPlaying = isPlaying,
                     pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                     songSort = playlistSongSort,
                     onSongClick = { songs, index ->

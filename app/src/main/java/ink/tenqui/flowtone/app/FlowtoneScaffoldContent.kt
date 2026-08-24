@@ -438,6 +438,7 @@ internal fun FlowtoneScaffoldContent(
                     onLyricsBackgroundStyleChange = callbacks.onLyricsBackgroundStyleChange,
                     uiState = state.uiState,
                     currentSong = state.playerUiState.currentSong,
+                    isPlaying = state.playerUiState.isPlaying,
                     playlistDetailDestination = page.playlistDetailDestination,
                     albumDetailDestination = page.albumDetailDestination,
                     onUpdatePlaylistDescription = onUpdatePlaylistDescription,

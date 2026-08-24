@@ -26,6 +26,7 @@ internal fun AlbumDetailScreen(
     albumId: Long,
     album: LocalAlbum?,
     currentSong: Song?,
+    isPlaying: Boolean,
     pendingTrackIdentityKey: String? = null,
     songSort: PlaylistSongSort = PlaylistSongSort(),
     onSongClick: (List<Song>, Int) -> Unit,
@@ -40,6 +41,7 @@ internal fun AlbumDetailScreen(
     contentModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
+    val vinylMotionActive = currentSong?.albumId == albumId && isPlaying
     val title = album?.title ?: "\u4e13\u8f91"
     val artist = album?.artist ?: "\u672a\u77e5\u827a\u672f\u5bb6"
     val listState = remember(albumId) { LazyListState() }
@@ -73,6 +75,7 @@ internal fun AlbumDetailScreen(
                     artist = artist,
                     songCount = 0,
                     artworkUri = album?.artworkUri,
+                    vinylMotionActive = vinylMotionActive,
                     modifier = pageTransition.elementModifier(0)
                 )
                 Box(
@@ -139,6 +142,7 @@ internal fun AlbumDetailScreen(
                     artist = artist,
                     songCount = albumSongs.size,
                     artworkUri = album?.artworkUri,
+                    vinylMotionActive = vinylMotionActive,
                     modifier = pageTransition.elementModifier(0)
                 )
             },
@@ -153,12 +157,18 @@ private fun AlbumMetadataHeader(
     artist: String,
     songCount: Int,
     artworkUri: android.net.Uri?,
+    vinylMotionActive: Boolean,
     modifier: Modifier = Modifier
 ) {
     CollectionMetadataHeader(
         title = title,
         supportingText = "$artist \u00b7 $songCount \u9996\u6b4c\u66f2",
-        artwork = { AlbumArtwork(artworkUri = artworkUri) },
+        artwork = {
+            AlbumArtwork(
+                artworkUri = artworkUri,
+                vinylMotionActive = vinylMotionActive
+            )
+        },
         modifier = modifier
     )
 }
