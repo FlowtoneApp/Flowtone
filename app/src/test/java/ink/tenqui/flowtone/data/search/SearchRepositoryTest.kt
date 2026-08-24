@@ -178,7 +178,11 @@ class SearchRepositoryTest {
                     id = 42L,
                     title = "Blue Hour (Deluxe)",
                     artist = "Aimer",
-                    artworkUri = testUri("album-artwork")
+                    artworkUri = testUri("album-artwork"),
+                    songs = listOf(
+                        song(id = 101L, title = "First", artist = "Aimer"),
+                        song(id = 102L, title = "Second", artist = "Aimer")
+                    )
                 )
             )
         )
@@ -192,6 +196,7 @@ class SearchRepositoryTest {
         assertEquals("Blue Hour (Deluxe)", result.title)
         assertEquals("Aimer", result.artist)
         assertTrue(result.artworkUri != null)
+        assertEquals(2, result.songCount)
         assertEquals(42L, openedAlbumId)
     }
 
@@ -212,13 +217,14 @@ class SearchRepositoryTest {
         id: Long,
         title: String,
         artist: String,
-        artworkUri: android.net.Uri? = null
+        artworkUri: android.net.Uri? = null,
+        songs: List<Song> = emptyList()
     ): LocalAlbum = LocalAlbum(
         id = id,
         title = title,
         artist = artist,
         artworkUri = artworkUri,
-        songs = emptyList()
+        songs = songs
     )
 
     private fun song(

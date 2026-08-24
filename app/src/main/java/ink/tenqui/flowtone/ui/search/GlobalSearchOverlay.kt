@@ -23,13 +23,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,16 +59,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -96,6 +88,7 @@ import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.SearchBackgroundCloudPlacement
@@ -108,7 +101,7 @@ import ink.tenqui.flowtone.R
 import androidx.compose.ui.res.stringResource
 
 @Composable
-internal fun GlobalSearchOverlay(
+internal fun GlobalSearchContent(
     searchUiState: GlobalSearchUiState,
     currentSong: Song?,
     listState: androidx.compose.foundation.lazy.LazyListState,
@@ -125,14 +118,12 @@ internal fun GlobalSearchOverlay(
     bottomContentPadding: Dp = 0.dp,
     interactionsEnabled: Boolean,
     reentryProgress: Float,
-    revealProgress: Float,
+    pageTransition: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
     @Suppress("UNUSED_VARIABLE")
     val retainedInterfaces = listOf(listState, pendingTrackIdentityKey)
-    val density = LocalDensity.current
-    val revealOriginEndPadding = with(density) { 41.dp.toPx() }
-    val revealOriginY = with(density) { WindowInsets.statusBars.getTop(this).toFloat() + 28.dp.toPx() }
+    val transitionElementCount = 6
     var sourceSwitcherState by remember { mutableStateOf<SearchSourceSwitcherState>(SearchSourceSwitcherState.Collapsed) }
     val selectedResultCategory = SearchResultCategory.from(searchUiState.selectedProviderCategory)
     val sourceSwitcherExpanded = sourceSwitcherState !is SearchSourceSwitcherState.Collapsed
@@ -162,13 +153,6 @@ internal fun GlobalSearchOverlay(
         modifier = modifier
             .fillMaxSize()
             .then(swipeBackModifier)
-            .drawWithContent {
-                val contentScope = this
-                val origin = Offset(size.width - revealOriginEndPadding, revealOriginY)
-                val radius = searchRevealMaxRadius(origin, size.width, size.height) * revealProgress
-                val path = Path().apply { addOval(Rect(origin.x - radius, origin.y - radius, origin.x + radius, origin.y + radius)) }
-                clipPath(path) { contentScope.drawContent() }
-            }
     ) {
         Box(
             modifier = Modifier
@@ -178,6 +162,7 @@ internal fun GlobalSearchOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(pageTransition.backgroundModifier())
                 .topLevelPageBackground(
                     cloudPalette = searchCloudPalette(),
                     cloudPlacement = SearchBackgroundCloudPlacement
@@ -190,6 +175,7 @@ internal fun GlobalSearchOverlay(
                 .height(FlowtoneTopBarContentHeight)
                 .fillMaxWidth()
                 .zIndex(2f)
+                .then(pageTransition.elementModifier(0, transitionElementCount))
         ) {
             IconButton(
                 onClick = {
@@ -233,18 +219,33 @@ internal fun GlobalSearchOverlay(
             SearchInput(
                 query = searchUiState.queryText,
                 onQueryChange = onQueryChange,
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .then(pageTransition.elementModifier(1, transitionElementCount))
             )
             SearchResultCategorySelector(
                 selectedCategory = selectedResultCategory,
                 onCategorySelected = { onCategoryChange(it.providerCategory) },
-                modifier = Modifier.padding(horizontal = 20.dp)
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .then(pageTransition.elementModifier(2, transitionElementCount))
             )
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)
+                    )
+                    .then(pageTransition.elementModifier(3, transitionElementCount))
+            )
             AnimatedContent(
                 targetState = searchUiState.query.isBlank,
                 transitionSpec = { fadeIn(tween(120)) togetherWith fadeOut(tween(90)) },
-                label = "SearchLandingContent"
+                label = "SearchLandingContent",
+                modifier = Modifier.then(
+                    pageTransition.elementModifier(4, transitionElementCount)
+                )
             ) { isLanding ->
                 if (isLanding) {
                     SearchLandingContent(
@@ -305,6 +306,7 @@ internal fun GlobalSearchOverlay(
                     end = 26.dp
                 )
                 .zIndex(4f)
+                .then(pageTransition.elementModifier(5, transitionElementCount))
         )
     }
 }
@@ -668,7 +670,7 @@ private fun LocalSearchAlbum(album: SearchResult.AlbumResult, onClick: () -> Uni
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = "${album.artist} · 专辑",
+            text = "${album.artist} · ${album.songCount} 首歌曲",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.66f),
             maxLines = 1,
@@ -721,4 +723,3 @@ private fun SearchArtwork(artwork: ExtensionImage, loader: coil3.ImageLoader) {
             .alpha(imageAlpha)
     )
 }
-private fun searchRevealMaxRadius(origin: Offset, width: Float, height: Float): Float = listOf(origin.getDistance(), Offset(width, 0f).minus(origin).getDistance(), Offset(0f, height).minus(origin).getDistance(), Offset(width, height).minus(origin).getDistance()).maxOrNull() ?: 0f

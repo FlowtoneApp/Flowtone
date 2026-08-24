@@ -23,6 +23,7 @@ sealed interface SearchResult {
         val title: String,
         val artist: String,
         val artworkUri: Uri?,
+        val songCount: Int,
         val stableOrder: Int
     ) : SearchResult
 

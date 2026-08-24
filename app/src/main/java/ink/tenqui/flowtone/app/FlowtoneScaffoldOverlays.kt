@@ -1,22 +1,13 @@
 package ink.tenqui.flowtone.app
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,11 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.semantics
 import android.widget.Toast
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,7 +26,6 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
-import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
 import ink.tenqui.flowtone.ui.library.CreatePlaylistState
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingOverlay
@@ -49,124 +35,10 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.MiniPlayer
 import ink.tenqui.flowtone.ui.screens.FlowCloudSpeedOverlay
 import ink.tenqui.flowtone.ui.screens.SongRecordThresholdOverlay
-import ink.tenqui.flowtone.ui.search.GlobalSearchOverlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-@Composable
-internal fun BoxScope.FlowtoneSearchOverlayLayer(
-    state: FlowtoneAppScaffoldState,
-    callbacks: FlowtoneAppCallbacks,
-    searchObscuredByAlbumDetail: Boolean,
-    modifier: Modifier = Modifier
-) {
-    var searchRevealLayerVisible by remember { mutableStateOf(state.searchActive) }
-    val searchRevealProgress by animateFloatAsState(
-        targetValue = if (state.searchActive) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtonePageEasing
-        ),
-        label = "SearchRevealProgress"
-    )
-    LaunchedEffect(state.searchActive) {
-        if (state.searchActive) {
-            searchRevealLayerVisible = true
-        } else {
-            delay(FlowtoneMotion.DurationMillis.toLong())
-            searchRevealLayerVisible = false
-        }
-    }
-    val searchMiniPlayerSpaceProgress by animateFloatAsState(
-        targetValue = if (
-            state.searchActive &&
-            state.searchKeyboardVisible &&
-            state.playerUiState.hasCurrentSong
-        ) {
-            0f
-        } else {
-            1f
-        },
-        animationSpec = tween(
-            durationMillis = 360,
-            easing = FastOutSlowInEasing
-        ),
-        label = "SearchMiniPlayerBottomSpaceProgress"
-    )
-    val searchContentBottomPadding =
-        state.miniPlayerContentBottomPadding * searchMiniPlayerSpaceProgress
-    val searchInteractionsEnabled =
-        !searchObscuredByAlbumDetail && state.searchReturnStage == SearchReturnStage.Idle
-    val searchLayerProgress = when (state.searchReturnStage) {
-        SearchReturnStage.SearchExitingForArtist,
-        SearchReturnStage.SearchReentering -> state.searchReentryProgress
-        SearchReturnStage.Idle -> 1f
-        SearchReturnStage.ArtistVisible,
-        SearchReturnStage.ArtistExitingToSearch,
-        SearchReturnStage.SearchPreparing -> 0f
-    }
-
-    AnimatedVisibility(
-        visible = searchRevealLayerVisible,
-        enter = EnterTransition.None,
-        exit = ExitTransition.None,
-        modifier = modifier
-            .fillMaxSize()
-            .semantics {
-                if (searchObscuredByAlbumDetail) {
-                    hideFromAccessibility()
-                }
-            }
-            .then(
-                if (searchObscuredByAlbumDetail) {
-                    Modifier.pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitPointerEvent(PointerEventPass.Initial)
-                                .changes
-                                .forEach { change -> change.consume() }
-                        }
-                    }
-                } else {
-                    Modifier
-                }
-            )
-            .zIndex(SearchOverlayPageLayerZIndex)
-    ) {
-        GlobalSearchOverlay(
-            searchUiState = state.searchUiState,
-            currentSong = state.playerUiState.currentSong,
-            listState = state.searchListState,
-            onSongClick = { songs, index ->
-                callbacks.onPlaylistSongClick(
-                    songs,
-                    index,
-                    PlaybackSource.Search
-                )
-            },
-            onOnlineSongClick = callbacks.onOnlineSongClick,
-            pendingTrackIdentityKey = state.uiState.pendingPlayback?.track?.identityKey,
-            onArtistClick = { artist ->
-                callbacks.onOpenArtistRootPage(
-                    artist.name,
-                    ArtistRootNavigationMode.NormalPage
-                )
-            },
-            onAlbumClick = callbacks.onOpenAlbum,
-            onExitSearch = callbacks.onExitSearch,
-            onQueryChange = callbacks.onSearchQueryChange,
-            onScopeChange = callbacks.onSearchScopeChange,
-            onCategoryChange = callbacks.onSearchCategoryChange,
-            onLoadMore = callbacks.onLoadMoreSearchResults,
-            bottomContentPadding = searchContentBottomPadding,
-            interactionsEnabled = searchInteractionsEnabled,
-            reentryProgress = searchLayerProgress,
-            revealProgress = searchRevealProgress,
-            modifier = Modifier.fillMaxSize()
-        )
-    }
-}
 
 @Composable
 internal fun BoxScope.FlowtoneScaffoldOverlays(

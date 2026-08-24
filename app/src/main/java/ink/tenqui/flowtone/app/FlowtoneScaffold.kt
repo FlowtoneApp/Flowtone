@@ -80,7 +80,6 @@ internal fun FlowtoneScaffold(
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
-    var searchAlbumDetailCompositionActive by remember { mutableStateOf(false) }
     val playlistSortListDismissInteractionSource = remember {
         MutableInteractionSource()
     }
@@ -100,11 +99,6 @@ internal fun FlowtoneScaffold(
     val playlistSortPanelHeight = PlaylistSortPanelCollapsedHeight +
         (PlaylistSortPanelHeight - PlaylistSortPanelCollapsedHeight) *
             playlistSortCharacterSectionProgress
-    val searchObscuredByAlbumDetail = isSearchObscuredByAlbumDetail(
-        searchActive = state.searchActive,
-        secondaryPage = state.secondaryPage,
-        albumDetailCompositionActive = searchAlbumDetailCompositionActive
-    )
     val onDetailHeaderCollapseProgressStateChange = remember {
         { progressState: State<Float>? ->
             detailHeaderCollapseProgressState = progressState
@@ -351,10 +345,6 @@ internal fun FlowtoneScaffold(
                 playlistSongSort = playlistSongSort,
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
-                onSearchAlbumDetailCompositionActiveChange = { active ->
-                    searchAlbumDetailCompositionActive = active
-                },
-                searchObscuredByAlbumDetail = searchObscuredByAlbumDetail,
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
                 modifier = Modifier.blur(
@@ -444,16 +434,6 @@ internal fun FlowtoneScaffold(
         )
         }
     }
-}
-
-internal fun isSearchObscuredByAlbumDetail(
-    searchActive: Boolean,
-    secondaryPage: SecondaryPage?,
-    albumDetailCompositionActive: Boolean
-): Boolean {
-    return searchActive && (
-        secondaryPage == SecondaryPage.Album || albumDetailCompositionActive
-    )
 }
 
 private data class LibraryPlaylistRepositorySyncKey(

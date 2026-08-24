@@ -30,7 +30,7 @@ internal fun FlowtoneAppBackHandlers(
             onCollapseMiniPlayer()
         }
     }
-    BackHandler(enabled = searchActive) {
+    BackHandler(enabled = searchActive && secondaryPage == null) {
         if (isSearchReturnAnimationStage(searchReturnStage)) {
             return@BackHandler
         }

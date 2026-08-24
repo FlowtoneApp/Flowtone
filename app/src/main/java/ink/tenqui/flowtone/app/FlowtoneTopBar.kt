@@ -116,7 +116,6 @@ internal fun FlowtoneTopBar(
         ) + additionalPathSegments
         null -> emptyList()
     }
-    // 搜索展开时顶栏保持原样，由上层扩散覆盖层遮住，而不是自行退出。
     val showBackButton = secondaryPage != null && !hideBackButton
     val backButtonProgress by animateFloatAsState(
         targetValue = if (showBackButton) 1f else 0f,
@@ -146,7 +145,7 @@ internal fun FlowtoneTopBar(
     val navigationShiftPx = with(density) {
         FlowtoneTopBarNavigationTitleShift.toPx()
     } * backButtonProgress
-    val searchAvailable = secondaryPage == null
+    val searchAvailable = secondaryPage == null && !searchActive
     val titleEndPadding = if (searchAvailable) 84.dp else 24.dp
     val titleExitDistancePx = with(density) { 12.dp.toPx() }
     val actionButtonMotionDistancePx = with(density) { 16.dp.roundToPx() }

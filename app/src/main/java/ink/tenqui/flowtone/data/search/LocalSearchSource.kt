@@ -94,6 +94,7 @@ private data class LocalSearchIndex(
                     title = ranked.indexedAlbum.album.title,
                     artist = ranked.indexedAlbum.album.artist,
                     artworkUri = ranked.indexedAlbum.album.artworkUri,
+                    songCount = ranked.indexedAlbum.album.songs.size,
                     stableOrder = ranked.indexedAlbum.stableOrder
                 )
             }
