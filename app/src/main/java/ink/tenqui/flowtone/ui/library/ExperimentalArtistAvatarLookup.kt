@@ -15,6 +15,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.data.online.ExtensionManager
 
 private const val ExperimentalAvatarLogTag = "ExperimentalArtistAvatar"
@@ -32,6 +33,18 @@ internal fun rememberExperimentalArtistAvatarImage(
         image = registry.findArtistAvatar(songTitle, artistName)?.image
     }
     return image
+}
+
+@Composable
+internal fun rememberArtistMetadata(artistName: String): ArtistMetadata? {
+    val context = LocalContext.current
+    val registry = remember(context) { ExtensionManager.get(context).artistMetadataRegistry }
+    var metadata by remember(artistName) { mutableStateOf<ArtistMetadata?>(null) }
+
+    LaunchedEffect(artistName) {
+        metadata = registry.findArtistMetadata(artistName)
+    }
+    return metadata
 }
 
 /** 图片数据保持为 [ExtensionImage]，只经 Flowtone 的专用 Coil Fetcher 取得字节。 */

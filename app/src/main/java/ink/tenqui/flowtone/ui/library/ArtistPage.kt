@@ -87,7 +87,8 @@ private const val ArtistSongsTitleAnimationIndex = 6
 private const val ArtistFirstSongAnimationIndex = 7
 private const val ArtistAlbumsTitleAnimationIndex = 11
 private const val ArtistAlbumCardsAnimationIndex = 12
-private const val ArtistToolbarAnimationIndex = 0
+internal const val ArtistTransitionOrderCount = ArtistAlbumCardsAnimationIndex + 1
+private const val ArtistFirstSongListItemIndex = 2
 
 @Composable
 fun ArtistPage(
@@ -99,7 +100,6 @@ fun ArtistPage(
     onSongClick: (List<Song>, Int) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     itemModifier: (Int) -> Modifier = { Modifier },
-    headerCardModifier: (Int) -> Modifier = itemModifier,
     modifier: Modifier = Modifier
 ) {
     val displayArtist = artistName.trim()
@@ -122,6 +122,7 @@ fun ArtistPage(
         songTitle = avatarLookupSongTitle,
         artistName = displayArtist
     )
+    val artistMetadata = rememberArtistMetadata(displayArtist)
 
     val density = LocalDensity.current
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
@@ -136,7 +137,12 @@ fun ArtistPage(
     val hideToolbarContentThresholdPx = (showToolbarContentThresholdPx - with(density) {
         24.dp.roundToPx()
     }).coerceAtLeast(0)
-    var toolbarContentVisible by remember { mutableStateOf(false) }
+    var toolbarContentVisible by remember {
+        mutableStateOf(
+            listState.firstVisibleItemIndex > 0 ||
+                listState.firstVisibleItemScrollOffset >= showToolbarContentThresholdPx
+        )
+    }
 
     LaunchedEffect(
         listState.firstVisibleItemIndex,
@@ -158,8 +164,16 @@ fun ArtistPage(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
     ) {
+        // The surface stays behind the Header while its large avatar is still in the viewport.
+        // Once the Header leaves, the foreground layer preserves the same toolbar presentation.
+        ArtistToolbarBackground(
+            visible = toolbarContentVisible,
+            height = toolbarHeight,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+        )
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -172,8 +186,9 @@ fun ArtistPage(
                     statistics = artistStatisticsText(artistSongs.size, artistAlbums.size),
                     avatarImage = artistAvatarImage,
                     topPadding = statusBarTop,
+                    alias = artistMetadata?.aliases?.take(3)?.joinToString(" · "),
+                    biography = artistMetadata?.biography,
                     itemModifier = itemModifier,
-                    headerCardModifier = headerCardModifier,
                     onHeightChanged = { headerHeightPx = it },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -236,14 +251,26 @@ fun ArtistPage(
             }
         }
 
-        ArtistToolbar(
+        val headerHasLeftViewport = listState.firstVisibleItemIndex > 0 ||
+            listState.firstVisibleItemScrollOffset >= measuredHeaderHeightPx
+        if (toolbarContentVisible && headerHasLeftViewport) {
+            ArtistToolbarForegroundSurface(
+                height = toolbarHeight,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    .zIndex(1f)
+            )
+        }
+
+        ArtistToolbarContent(
             artistName = displayArtist,
             avatarImage = artistAvatarImage,
             showArtist = toolbarContentVisible,
             height = toolbarHeight,
             topPadding = statusBarTop,
             onBack = onBack,
-            modifier = itemModifier(ArtistToolbarAnimationIndex)
+            modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
                 .zIndex(2f)
@@ -260,7 +287,6 @@ private fun ArtistHeaderCard(
     alias: String? = null,
     biography: String? = null,
     itemModifier: (Int) -> Modifier,
-    headerCardModifier: (Int) -> Modifier,
     onHeightChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -276,9 +302,13 @@ private fun ArtistHeaderCard(
                     bottomEnd = ArtistHeaderCornerRadius
                 )
             )
-            .then(headerCardModifier(ArtistHeaderCardAnimationIndex))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(itemModifier(ArtistHeaderCardAnimationIndex))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        )
         val avatarSize = if (maxWidth < 380.dp) ArtistCompactAvatarSize else ArtistAvatarSize
         Row(
             verticalAlignment = Alignment.Top,
@@ -396,11 +426,49 @@ private fun ArtistAlbumCard(
 }
 
 private fun artistSongAnimationIndex(songIndex: Int, firstVisibleItemIndex: Int): Int {
-    return ArtistFirstSongAnimationIndex + (songIndex - firstVisibleItemIndex).coerceAtLeast(0)
+    val firstVisibleSongIndex = (firstVisibleItemIndex - ArtistFirstSongListItemIndex)
+        .coerceAtLeast(0)
+    return ArtistFirstSongAnimationIndex +
+        (songIndex - firstVisibleSongIndex).coerceAtLeast(0)
 }
 
 @Composable
-private fun ArtistToolbar(
+private fun ArtistToolbarBackground(
+    visible: Boolean,
+    height: Dp,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.height(height).background(Color.Transparent)) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(120)) + slideInVertically(tween(180)) { -it },
+            exit = fadeOut(tween(90, delayMillis = ArtistTitleDelayMillis)) +
+                slideOutVertically(tween(160, delayMillis = ArtistTitleDelayMillis)) { -it },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistToolbarForegroundSurface(
+    height: Dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(height)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+    )
+}
+
+@Composable
+private fun ArtistToolbarContent(
     artistName: String,
     avatarImage: ExtensionImage?,
     showArtist: Boolean,
@@ -413,19 +481,6 @@ private fun ArtistToolbar(
         ArtistToolbarAnimationDistance.roundToPx()
     }
     Box(modifier = modifier.height(height).background(Color.Transparent)) {
-        AnimatedVisibility(
-            visible = showArtist,
-            enter = fadeIn(tween(120)) + slideInVertically(tween(180)) { -it - toolbarAnimationDistancePx },
-            exit = fadeOut(tween(90, delayMillis = ArtistTitleDelayMillis)) +
-                slideOutVertically(tween(160, delayMillis = ArtistTitleDelayMillis)) {
-                    -it - toolbarAnimationDistancePx
-                },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            )
-        }
         Row(
             modifier = Modifier.fillMaxSize().padding(
                 start = ArtistBackButtonStartPadding,

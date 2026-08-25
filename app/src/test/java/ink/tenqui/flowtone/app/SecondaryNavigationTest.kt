@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class SecondaryNavigationTest {
@@ -16,12 +17,14 @@ class SecondaryNavigationTest {
     @Test
     fun artistThenAlbumPopsBackToArtist() {
         val artist = SecondaryDestination.Artist("A")
-        val state = SecondaryNavigationState()
-            .push(artist)
+        val artistState = SecondaryNavigationState().push(artist)
+        val artistEntry = artistState.currentEntry
+        val state = artistState
             .push(SecondaryDestination.Album(1L, "Album"))
             .pop()
 
         assertEquals(artist, state.current)
+        assertEquals(artistEntry, state.currentEntry)
     }
 
     @Test
@@ -47,11 +50,35 @@ class SecondaryNavigationTest {
     @Test
     fun repeatedCurrentArtistIsNotDuplicated() {
         val artist = SecondaryDestination.Artist(" A ")
-        val state = SecondaryNavigationState()
-            .push(artist)
+        val initialState = SecondaryNavigationState().push(artist)
+        val state = initialState
             .push(SecondaryDestination.Artist("a"))
 
         assertEquals(1, state.entries.size)
+        assertEquals(initialState.currentEntry, state.currentEntry)
+    }
+
+    @Test
+    fun reopeningPoppedArtistCreatesNewEntryIdentity() {
+        val firstOpen = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val firstEntryId = firstOpen.currentEntry?.id
+        val secondOpen = firstOpen
+            .pop()
+            .push(SecondaryDestination.Artist("A"))
+
+        assertNotEquals(firstEntryId, secondOpen.currentEntry?.id)
+    }
+
+    @Test
+    fun albumThenArtistPopRestoresOriginalAlbumEntry() {
+        val albumState = SecondaryNavigationState()
+            .push(SecondaryDestination.Album(1L, "Album"))
+        val albumEntry = albumState.currentEntry
+        val restored = albumState
+            .push(SecondaryDestination.Artist("A"))
+            .pop()
+
+        assertEquals(albumEntry, restored.currentEntry)
     }
 
     @Test

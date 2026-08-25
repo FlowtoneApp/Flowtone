@@ -52,8 +52,8 @@ internal fun navigateFlowtoneAppBack(appState: FlowtoneAppState) {
         if (nestedBackAction != null) {
             nestedBackAction()
         } else {
-            appState.secondaryNavigation = SecondaryNavigationState(
-                listOf(SecondaryDestination.Standard(SecondaryPage.About))
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.About)
             )
         }
     } else {

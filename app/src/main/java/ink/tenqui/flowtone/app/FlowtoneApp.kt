@@ -501,11 +501,7 @@ fun FlowtoneApp(
                         appState.searchKeyboardDismissRequest += 1
                     }
                     val destination = SecondaryDestination.Album(album.id, album.title)
-                    appState.secondaryNavigation = if (appState.secondaryNavigation.current == null) {
-                        SecondaryNavigationState(listOf(destination))
-                    } else {
-                        appState.secondaryNavigation.push(destination)
-                    }
+                    appState.secondaryNavigation = appState.secondaryNavigation.push(destination)
                 }
             },
             onOpenArtist = { artistName -> openArtist(artistName) },

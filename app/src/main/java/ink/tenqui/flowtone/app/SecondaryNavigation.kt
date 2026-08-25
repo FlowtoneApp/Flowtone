@@ -43,17 +43,38 @@ internal sealed interface SecondaryDestination {
     }
 }
 
+internal data class SecondaryStackEntry(
+    val id: Long,
+    val destination: SecondaryDestination
+)
+
 internal data class SecondaryNavigationState(
-    val entries: List<SecondaryDestination> = emptyList()
+    val entries: List<SecondaryStackEntry> = emptyList(),
+    private val nextEntryId: Long = 0L
 ) {
-    val current: SecondaryDestination?
+    val currentEntry: SecondaryStackEntry?
         get() = entries.lastOrNull()
 
+    val current: SecondaryDestination?
+        get() = currentEntry?.destination
+
     val previous: SecondaryDestination?
-        get() = entries.getOrNull(entries.lastIndex - 1)
+        get() = entries.getOrNull(entries.lastIndex - 1)?.destination
 
     fun push(destination: SecondaryDestination): SecondaryNavigationState {
-        return if (current == destination) this else copy(entries = entries + destination)
+        if (current == destination) return this
+        return copy(
+            entries = entries + SecondaryStackEntry(nextEntryId, destination),
+            nextEntryId = nextEntryId + 1L
+        )
+    }
+
+    fun replaceWith(destination: SecondaryDestination): SecondaryNavigationState {
+        if (entries.size == 1 && current == destination) return this
+        return copy(
+            entries = listOf(SecondaryStackEntry(nextEntryId, destination)),
+            nextEntryId = nextEntryId + 1L
+        )
     }
 
     fun pop(): SecondaryNavigationState {
@@ -62,13 +83,8 @@ internal data class SecondaryNavigationState(
 }
 
 /** Keeps page-local saveable UI state out of navigation payload and history. */
-internal fun SecondaryDestination.uiStateKey(): String {
-    return when (this) {
-        is SecondaryDestination.Standard -> "standard:${page.name}"
-        is SecondaryDestination.Playlist -> "playlist:$playlistId"
-        is SecondaryDestination.Album -> "album:$albumId"
-        is SecondaryDestination.Artist -> "artist:$stableId"
-    }
+internal fun SecondaryStackEntry.uiStateKey(): String {
+    return "secondary-entry:$id:${destination.page.name}"
 }
 
 internal fun secondaryDestinationBreadcrumbs(

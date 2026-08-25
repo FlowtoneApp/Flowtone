@@ -23,6 +23,7 @@ import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
+import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistMetadataExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptExtensionRuntime
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptMusicProvider
 import ink.tenqui.flowtone.data.search.SearchProviderOption
@@ -49,6 +50,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val gateway = ExtensionNetworkGateway()
     private val avatarResultCache = ExtensionResultCache()
     private val persistentAvatarCache = ArtistAvatarPersistentCache(appContext.filesDir.resolve("extension-data"))
+    private val persistentArtistMetadataCache = ArtistMetadataPersistentCache(
+        appContext.filesDir.resolve("extension-data")
+    )
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val mutex = Mutex()
     private val runtimes = mutableMapOf<String, JavaScriptExtensionRuntime>()
@@ -62,6 +66,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
         resultCache = avatarResultCache,
         persistentCache = persistentAvatarCache
+    )
+    val artistMetadataRegistry = ArtistMetadataExtensionRegistry(
+        persistentCache = persistentArtistMetadataCache
     )
     val extensionImageLoader: ImageLoader by lazy {
         ImageLoader.Builder(appContext)
@@ -243,11 +250,19 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     private suspend fun load(installed: InstalledExtension) {
-        if (!installed.manifest.supportsArtistAvatar && !installed.manifest.supportsMusicProvider) return
+        if (
+            !installed.manifest.supportsArtistAvatar &&
+            !installed.manifest.supportsArtistMetadata &&
+            !installed.manifest.supportsMusicProvider
+        ) return
         val isolate = sandboxHost.createIsolate() ?: return
         val networkClient = gateway.createClientFor(
             extensionId = installed.manifest.id,
-            capability = if (installed.manifest.supportsMusicProvider) "music_provider" else "artist_avatar",
+            capability = when {
+                installed.manifest.supportsMusicProvider -> "music_provider"
+                installed.manifest.supportsArtistMetadata -> "artist_metadata"
+                else -> "artist_avatar"
+            },
             allowedHosts = installed.manifest.networkHosts
         )
         val streamClient = gateway.createStreamClientFor(
@@ -264,6 +279,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 if (installed.manifest.supportsArtistAvatar) {
                     artistAvatarRegistry.install(JavaScriptArtistAvatarExtension(runtime))
                 }
+                if (installed.manifest.supportsArtistMetadata) {
+                    artistMetadataRegistry.install(JavaScriptArtistMetadataExtension(runtime))
+                }
                 if (installed.manifest.supportsMusicProvider) {
                     musicProviders[installed.manifest.id] = JavaScriptMusicProvider(
                         runtime = runtime,
@@ -276,6 +294,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     private fun stop(id: String, clearExtensionData: Boolean = false) {
         artistAvatarRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
+        artistMetadataRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
         runtimes.remove(id)?.close()
         musicProviders.remove(id)
         networkClients.remove(id)

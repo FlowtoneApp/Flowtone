@@ -71,7 +71,12 @@ internal fun OnlineSettingsPage(
                 Column(Modifier.padding(SettingsRowHorizontalPadding, SettingsRowVerticalPadding)) {
                     Text(manifest.name, style = MaterialTheme.typography.titleMedium)
                     Text("${manifest.version} · ${manifest.author}")
-                    Text("能力：${if (manifest.supportsArtistAvatar) "歌手头像" else "当前版本不支持"}")
+                    val capabilities = listOfNotNull(
+                        "歌手头像".takeIf { manifest.supportsArtistAvatar },
+                        "歌手信息".takeIf { manifest.supportsArtistMetadata },
+                        "音乐服务".takeIf { manifest.supportsMusicProvider }
+                    ).joinToString(" · ").ifBlank { "当前版本不支持" }
+                    Text("能力：$capabilities")
                     Text("状态：${if (installed.runtimeAvailable) "已安装" else "运行环境不可用"}")
                     TextButton(onClick = { onUninstall(manifest.id) }) { Text("删除扩展") }
                 }

@@ -75,6 +75,17 @@ internal fun FlowtoneScaffoldContent(
     modifier: Modifier = Modifier
 ) {
     val secondaryPageStateHolder = rememberSaveableStateHolder()
+    val retainedSecondaryStateKeys = remember { mutableSetOf<String>() }
+    val activeSecondaryStateKeys = remember(state.secondaryEntries) {
+        state.secondaryEntries.mapTo(mutableSetOf(), SecondaryStackEntry::uiStateKey)
+    }
+    SideEffect {
+        (retainedSecondaryStateKeys - activeSecondaryStateKeys).forEach(
+            secondaryPageStateHolder::removeState
+        )
+        retainedSecondaryStateKeys.clear()
+        retainedSecondaryStateKeys.addAll(activeSecondaryStateKeys)
+    }
     val detailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
         state.secondaryPage == SecondaryPage.Album ||
         state.secondaryPage == SecondaryPage.LocalLibrary
@@ -236,9 +247,9 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
-    val targetPage = state.secondaryDestination?.let { destination ->
+    val targetPage = state.secondaryEntry?.let { entry ->
         FlowtoneScaffoldPage.Secondary(
-            destination = destination,
+            entry = entry,
             playlistDetailDestination = playlistDetailDestination,
             albumDetailDestination = albumDetailDestination
         )
@@ -401,7 +412,7 @@ internal fun FlowtoneScaffoldContent(
                                 .padding(bottom = state.miniPlayerContentBottomPadding)
                         ) {
                             secondaryPageStateHolder.SaveableStateProvider(
-                                key = page.destination.uiStateKey()
+                                key = page.entry.uiStateKey()
                             ) {
                                 SecondaryPageHost(
                         destination = page.destination,
@@ -557,10 +568,13 @@ internal fun mainTabsContentMode(searchActive: Boolean): MainTabsContentMode {
 private sealed interface FlowtoneScaffoldPage {
     data object MainTabs : FlowtoneScaffoldPage
     data class Secondary(
-        val destination: SecondaryDestination,
+        val entry: SecondaryStackEntry,
         val playlistDetailDestination: PlaylistDetailDestination? = null,
         val albumDetailDestination: AlbumDetailDestination? = null
-    ) : FlowtoneScaffoldPage
+    ) : FlowtoneScaffoldPage {
+        val destination: SecondaryDestination
+            get() = entry.destination
+    }
 }
 
 private sealed interface FlowtoneReversibleTransitionKey {
