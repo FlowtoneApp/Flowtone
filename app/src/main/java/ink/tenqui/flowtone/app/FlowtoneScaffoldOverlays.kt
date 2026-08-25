@@ -72,14 +72,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 )
         )
     }
-    FlowtoneArtistRootLayer(
-        state = state,
-        callbacks = callbacks,
-        hostMode = ArtistRootNavigationMode.MiniPlayer,
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(15f)
-    )
     MiniPlayer(
         playerUiState = state.playerUiState,
         isPendingPlayback = state.uiState.pendingPlayback != null,
@@ -161,11 +153,10 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onPlayArtistSongQueue = callbacks.onPlaylistSongClick,
         likedSongKeys = state.likedSongKeys,
         onToggleSongLiked = callbacks.onToggleSongLiked,
-        onOpenArtistRootPage = { artistName ->
-            callbacks.onOpenArtistRootPage(
-                artistName,
-                ArtistRootNavigationMode.MiniPlayer
-            )
+        onOpenArtist = { artistName ->
+            callbacks.onFullscreenChange(false)
+            callbacks.onExpandedChange(false)
+            callbacks.onOpenArtist(artistName)
         },
         forceHidden = state.searchActive && state.searchKeyboardVisible,
         modifier = Modifier
@@ -184,14 +175,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             strokeWidth = 2.dp
         )
     }
-    FlowtoneArtistRootLayer(
-        state = state,
-        callbacks = callbacks,
-        hostMode = ArtistRootNavigationMode.NormalPage,
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(25f)
-    )
     val editingPlaylist = libraryPlaylistController.editingPlaylistId?.let { editingId ->
         libraryPlaylistController.playlists.firstOrNull { playlist ->
             playlist.id == editingId && !playlist.isSystem

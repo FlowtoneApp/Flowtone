@@ -11,7 +11,6 @@ internal fun FlowtoneAppEffects(
     selectedTopLevelPage: TopLevelPage,
     secondaryPage: SecondaryPage?,
     currentSong: Song?,
-    artistRootReturnInProgress: Boolean,
     openExpandedPlayerRequest: Int,
     hasCurrentSong: Boolean,
     hasScanned: Boolean,
@@ -22,7 +21,6 @@ internal fun FlowtoneAppEffects(
     musicViewModel: MusicViewModel,
     onContentScrollOffsetChange: (Float) -> Unit,
     onClearMiniPlayerState: () -> Unit,
-    onArtistRootReturnCompleted: () -> Unit,
     onOpenExpandedMiniPlayer: () -> Unit,
     onOpenExpandedPlayerRequestConsumed: () -> Unit,
     onHideSwipeHint: () -> Unit
@@ -34,13 +32,6 @@ internal fun FlowtoneAppEffects(
     LaunchedEffect(currentSong) {
         if (currentSong == null) {
             onClearMiniPlayerState()
-        }
-    }
-
-    LaunchedEffect(artistRootReturnInProgress) {
-        if (artistRootReturnInProgress) {
-            delay(MINI_PLAYER_EXPAND_ANIMATION_DURATION_MS.toLong())
-            onArtistRootReturnCompleted()
         }
     }
 

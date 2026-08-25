@@ -12,3 +12,5 @@ interface OnlineExtension {
  * 核心只会通过 [ArtistAvatarProvider] 调用扩展，从而限制扩展可参与的功能边界。
  */
 interface ArtistAvatarExtension : OnlineExtension, ArtistAvatarProvider
+
+interface ArtistMetadataExtension : OnlineExtension, ArtistMetadataProvider

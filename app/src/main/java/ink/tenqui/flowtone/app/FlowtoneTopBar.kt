@@ -85,7 +85,6 @@ internal fun FlowtoneTopBar(
     searchColors: TopLevelSearchColors,
     searchFocusRequest: Int,
     searchKeyboardDismissRequest: Int,
-    searchReentryProgress: Float,
     onBack: () -> Unit,
     onSearchClick: () -> Unit,
     onSearchQueryChange: (String) -> Unit,

@@ -112,12 +112,12 @@ internal class MiniPlayerTransitions(
         artistName: String,
         artistPlaceholderActive: Boolean
     ): String? {
-        val selectedArtistName = artistName.trim()
-        if (!artistPlaceholderActive || selectedArtistName.isBlank()) {
+        val selectedArtist = artistName.trim()
+        if (!artistPlaceholderActive || selectedArtist.isBlank()) {
             return null
         }
         resetFullscreenContentMode()
-        return selectedArtistName
+        return selectedArtist
     }
 
     fun finishArtistPlaceholderProgress(finalValue: Float) {

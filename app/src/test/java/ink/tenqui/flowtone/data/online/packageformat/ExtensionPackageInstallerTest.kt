@@ -26,6 +26,18 @@ class ExtensionPackageInstallerTest {
         assertTrue(combined.supportsArtistAvatar)
     }
 
+    @Test fun artistMetadataCapabilityCanStandAloneOrCoexistWithArtistAvatar() {
+        val metadataOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"artist_metadata\""))
+        val combined = ExtensionManifestParser.parse(
+            manifest(capabilities = "\"artist_avatar\",\"artist_metadata\"")
+        )
+
+        assertTrue(metadataOnly.supportsArtistMetadata)
+        assertTrue(!metadataOnly.supportsArtistAvatar)
+        assertTrue(combined.supportsArtistMetadata)
+        assertTrue(combined.supportsArtistAvatar)
+    }
+
     @Test fun `musicSources 是独立的服务声明 而非网络权限`() {
         val parsed = ExtensionManifestParser.parse(
             manifest(

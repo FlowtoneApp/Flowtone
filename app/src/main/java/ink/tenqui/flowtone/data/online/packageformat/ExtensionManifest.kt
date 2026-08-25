@@ -20,6 +20,7 @@ data class ExtensionManifest(
     val iconColor: String? = null
 ) {
     val supportsArtistAvatar: Boolean get() = "artist_avatar" in capabilities
+    val supportsArtistMetadata: Boolean get() = "artist_metadata" in capabilities
     val supportsMusicProvider: Boolean get() = "music_provider" in capabilities
 }
 

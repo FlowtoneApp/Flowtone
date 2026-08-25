@@ -46,9 +46,8 @@ internal data class FlowtoneAppCallbacks(
     val onOpenLocalLibrary: () -> Unit,
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     val onOpenAlbum: (Long) -> Unit,
-    val onOpenArtistRootPage: (String, ArtistRootNavigationMode) -> Unit,
+    val onOpenArtist: (String) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
-    val onCloseArtistRootPage: () -> Unit,
     val onOpenSource: () -> Unit,
     val onOpenSourceBack: () -> Unit,
     val onRequestPermission: () -> Unit,
@@ -92,8 +91,7 @@ internal fun flowtoneAppCallbacks(
     appPreferences: AppPreferences,
     onThemeModeChange: (AppThemeMode) -> Unit,
     onNavigateBack: () -> Unit,
-    onCloseArtistRootPage: () -> Unit,
-    onOpenArtistRootPage: (String, ArtistRootNavigationMode) -> Unit,
+    onOpenArtist: (String) -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
@@ -232,50 +230,47 @@ internal fun flowtoneAppCallbacks(
         onCloseSecondaryPage = { closeFlowtoneSecondaryPage(appState) },
         onOpenSettings = {
             appState.secondaryPathSegments = emptyList()
-            appState.selectedArtistName = null
-            appState.secondaryPage = SecondaryPage.Settings
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.Settings)
+            )
         },
         onOpenAbout = {
             appState.secondaryPathSegments = emptyList()
-            appState.selectedArtistName = null
-            appState.secondaryPage = SecondaryPage.About
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.About)
+            )
         },
         onOpenLocalLibrary = {
             appState.secondaryPathSegments = emptyList()
-            appState.selectedPlaylistId = null
-            appState.selectedPlaylistTitle = null
-            appState.selectedAlbumId = null
-            appState.selectedArtistName = null
-            appState.secondaryPage = SecondaryPage.LocalLibrary
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.LocalLibrary)
+            )
         },
         onOpenPlaylist = { playlist ->
-            appState.selectedPlaylistId = playlist.id
-            appState.selectedPlaylistTitle = playlist.title
-            appState.selectedAlbumId = null
-            appState.selectedArtistName = null
-            appState.secondaryPathSegments = listOf(playlist.title)
-            appState.secondaryPage = SecondaryPage.Playlist
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Playlist(playlist.id, playlist.title)
+            )
         },
         onOpenAlbum = onOpenAlbum,
-        onOpenArtistRootPage = onOpenArtistRootPage,
+        onOpenArtist = onOpenArtist,
         onOpenListeningRecords = { initialTab ->
             appState.listeningRecordInitialTab = initialTab
             appState.secondaryPathSegments = emptyList()
-            appState.selectedPlaylistId = null
-            appState.selectedPlaylistTitle = null
-            appState.selectedAlbumId = null
-            appState.selectedArtistName = null
-            appState.secondaryPage = SecondaryPage.ListeningRecords
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.ListeningRecords)
+            )
         },
-        onCloseArtistRootPage = onCloseArtistRootPage,
         onOpenSource = {
             appState.secondaryPathSegments = emptyList()
-            appState.selectedArtistName = null
-            appState.secondaryPage = SecondaryPage.OpenSource
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.OpenSource)
+            )
         },
         onOpenSourceBack = {
             appState.secondaryPathSegments = emptyList()
-            appState.secondaryPage = SecondaryPage.About
+            appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                SecondaryDestination.Standard(SecondaryPage.About)
+            )
         },
         onRequestPermission = onRequestPermission,
         onSongClick = onSongClick,

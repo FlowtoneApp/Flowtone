@@ -41,14 +41,7 @@ internal class FlowtoneAppState(
     miniPlayerFullscreenEnteredFromCollapsedState: MutableState<Boolean>,
     miniPlayerMinimizedState: MutableState<Boolean>,
     showSwipeHintState: MutableState<Boolean>,
-    secondaryPageState: MutableState<SecondaryPage?>,
-    artistRootPageArtistNameState: MutableState<String?>,
-    artistRootNavigationModeState: MutableState<ArtistRootNavigationMode?>,
-    artistRootReturnInProgressState: MutableState<Boolean>,
-    selectedPlaylistIdState: MutableState<String?>,
-    selectedPlaylistTitleState: MutableState<String?>,
-    selectedAlbumIdState: MutableState<Long?>,
-    selectedArtistNameState: MutableState<String?>,
+    secondaryNavigationState: MutableState<SecondaryNavigationState>,
     listeningRecordInitialTabState: MutableState<ListeningRecordTab>,
     settingsBackActionState: MutableState<(() -> Unit)?>,
     openSourceBackActionState: MutableState<(() -> Unit)?>,
@@ -79,9 +72,6 @@ internal class FlowtoneAppState(
     searchKeyboardVisibleState: MutableState<Boolean>,
     searchFocusRequestState: MutableState<Int>,
     searchKeyboardDismissRequestState: MutableState<Int>,
-    searchReturnStageState: MutableState<SearchReturnStage>,
-    searchReturnListIndexState: MutableState<Int>,
-    searchReturnListOffsetState: MutableState<Int>,
     val searchListState: LazyListState
 ) {
     var permissionDenied by permissionDeniedState
@@ -90,14 +80,9 @@ internal class FlowtoneAppState(
     var miniPlayerFullscreenEnteredFromCollapsed by miniPlayerFullscreenEnteredFromCollapsedState
     var miniPlayerMinimized by miniPlayerMinimizedState
     var showSwipeHint by showSwipeHintState
-    var secondaryPage by secondaryPageState
-    var artistRootPageArtistName by artistRootPageArtistNameState
-    var artistRootNavigationMode by artistRootNavigationModeState
-    var artistRootReturnInProgress by artistRootReturnInProgressState
-    var selectedPlaylistId by selectedPlaylistIdState
-    var selectedPlaylistTitle by selectedPlaylistTitleState
-    var selectedAlbumId by selectedAlbumIdState
-    var selectedArtistName by selectedArtistNameState
+    var secondaryNavigation by secondaryNavigationState
+    val secondaryPage: SecondaryPage?
+        get() = secondaryNavigation.current?.page
     var listeningRecordInitialTab by listeningRecordInitialTabState
     var settingsBackAction by settingsBackActionState
     var openSourceBackAction by openSourceBackActionState
@@ -128,9 +113,6 @@ internal class FlowtoneAppState(
     var searchKeyboardVisible by searchKeyboardVisibleState
     var searchFocusRequest by searchFocusRequestState
     var searchKeyboardDismissRequest by searchKeyboardDismissRequestState
-    var searchReturnStage by searchReturnStageState
-    var searchReturnListIndex by searchReturnListIndexState
-    var searchReturnListOffset by searchReturnListOffsetState
 }
 
 @Composable
@@ -153,29 +135,8 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val showSwipeHint = rememberSaveable {
         mutableStateOf(true)
     }
-    val secondaryPage = rememberSaveable {
-        mutableStateOf<SecondaryPage?>(null)
-    }
-    val artistRootPageArtistName = rememberSaveable {
-        mutableStateOf<String?>(null)
-    }
-    val artistRootNavigationMode = rememberSaveable {
-        mutableStateOf<ArtistRootNavigationMode?>(null)
-    }
-    val artistRootReturnInProgress = remember {
-        mutableStateOf(false)
-    }
-    val selectedPlaylistId = rememberSaveable {
-        mutableStateOf<String?>(null)
-    }
-    val selectedPlaylistTitle = rememberSaveable {
-        mutableStateOf<String?>(null)
-    }
-    val selectedAlbumId = rememberSaveable {
-        mutableStateOf<Long?>(null)
-    }
-    val selectedArtistName = rememberSaveable {
-        mutableStateOf<String?>(null)
+    val secondaryNavigation = remember {
+        mutableStateOf(SecondaryNavigationState())
     }
     val listeningRecordInitialTab = rememberSaveable {
         mutableStateOf(ListeningRecordTab.Today)
@@ -267,15 +228,6 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val searchKeyboardDismissRequest = remember {
         mutableStateOf(0)
     }
-    val searchReturnStage = rememberSaveable {
-        mutableStateOf(SearchReturnStage.Idle)
-    }
-    val searchReturnListIndex = rememberSaveable {
-        mutableStateOf(0)
-    }
-    val searchReturnListOffset = rememberSaveable {
-        mutableStateOf(0)
-    }
     val searchListState = rememberLazyListState()
 
     return FlowtoneAppState(
@@ -285,14 +237,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         miniPlayerFullscreenEnteredFromCollapsedState = miniPlayerFullscreenEnteredFromCollapsed,
         miniPlayerMinimizedState = miniPlayerMinimized,
         showSwipeHintState = showSwipeHint,
-        secondaryPageState = secondaryPage,
-        artistRootPageArtistNameState = artistRootPageArtistName,
-        artistRootNavigationModeState = artistRootNavigationMode,
-        artistRootReturnInProgressState = artistRootReturnInProgress,
-        selectedPlaylistIdState = selectedPlaylistId,
-        selectedPlaylistTitleState = selectedPlaylistTitle,
-        selectedAlbumIdState = selectedAlbumId,
-        selectedArtistNameState = selectedArtistName,
+        secondaryNavigationState = secondaryNavigation,
         listeningRecordInitialTabState = listeningRecordInitialTab,
         settingsBackActionState = settingsBackAction,
         openSourceBackActionState = openSourceBackAction,
@@ -323,9 +268,6 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         searchKeyboardVisibleState = searchKeyboardVisible,
         searchFocusRequestState = searchFocusRequest,
         searchKeyboardDismissRequestState = searchKeyboardDismissRequest,
-        searchReturnStageState = searchReturnStage,
-        searchReturnListIndexState = searchReturnListIndex,
-        searchReturnListOffsetState = searchReturnListOffset,
         searchListState = searchListState
     )
 }
@@ -341,13 +283,11 @@ internal data class FlowtoneAppScaffoldState(
     val allowScreenOffOnLyricsPage: Boolean,
     val pagerState: PagerState,
     val selectedTopLevelPage: TopLevelPage,
-    val rootPage: FlowtoneRootPage,
-    val artistRootNavigationMode: ArtistRootNavigationMode?,
     val secondaryPage: SecondaryPage?,
-    val selectedPlaylistId: String?,
-    val selectedPlaylistTitle: String?,
-    val selectedAlbumId: Long?,
-    val selectedArtistName: String?,
+    val secondaryEntries: List<SecondaryStackEntry>,
+    val secondaryEntry: SecondaryStackEntry?,
+    val secondaryDestination: SecondaryDestination?,
+    val previousSecondaryDestination: SecondaryDestination?,
     val listeningRecordInitialTab: ListeningRecordTab,
     val likedSongKeys: List<String>,
     val secondaryPathSegments: List<String>,
@@ -366,7 +306,6 @@ internal data class FlowtoneAppScaffoldState(
     val playbackQueueDisplayOrder: QueueDisplayOrder,
     val permissionDenied: Boolean,
     val showSwipeHint: Boolean,
-    val artistRootReturnInProgress: Boolean,
     val topBarBackgroundAlpha: Float,
     val topBarScrollConnection: NestedScrollConnection,
     val backgroundBlurRadius: Dp,
@@ -384,8 +323,6 @@ internal data class FlowtoneAppScaffoldState(
     val searchInputFocused: Boolean,
     val searchFocusRequest: Int,
     val searchKeyboardDismissRequest: Int,
-    val searchReturnStage: SearchReturnStage,
-    val searchReentryProgress: Float,
     val searchListState: LazyListState
 )
 
@@ -398,7 +335,6 @@ internal fun flowtoneAppScaffoldState(
     themeMode: AppThemeMode,
     pagerState: PagerState,
     selectedTopLevelPage: TopLevelPage,
-    rootPage: FlowtoneRootPage,
     topBarBackgroundAlpha: Float,
     topBarScrollConnection: NestedScrollConnection,
     backgroundBlurRadius: Dp,
@@ -407,8 +343,7 @@ internal fun flowtoneAppScaffoldState(
     miniPlayerBottomProtection: Dp,
     noRippleInteractionSource: MutableInteractionSource,
     searchUiState: GlobalSearchUiState,
-    searchColors: TopLevelSearchColors,
-    searchReentryProgress: Float
+    searchColors: TopLevelSearchColors
 ): FlowtoneAppScaffoldState {
     return FlowtoneAppScaffoldState(
         uiState = uiState,
@@ -421,13 +356,11 @@ internal fun flowtoneAppScaffoldState(
         allowScreenOffOnLyricsPage = appState.allowScreenOffOnLyricsPage,
         pagerState = pagerState,
         selectedTopLevelPage = selectedTopLevelPage,
-        rootPage = rootPage,
-        artistRootNavigationMode = appState.artistRootNavigationMode,
         secondaryPage = appState.secondaryPage,
-        selectedPlaylistId = appState.selectedPlaylistId,
-        selectedPlaylistTitle = appState.selectedPlaylistTitle,
-        selectedAlbumId = appState.selectedAlbumId,
-        selectedArtistName = appState.selectedArtistName,
+        secondaryEntries = appState.secondaryNavigation.entries,
+        secondaryEntry = appState.secondaryNavigation.currentEntry,
+        secondaryDestination = appState.secondaryNavigation.current,
+        previousSecondaryDestination = appState.secondaryNavigation.previous,
         listeningRecordInitialTab = appState.listeningRecordInitialTab,
         likedSongKeys = appState.likedSongKeys,
         secondaryPathSegments = appState.secondaryPathSegments,
@@ -446,7 +379,6 @@ internal fun flowtoneAppScaffoldState(
         playbackQueueDisplayOrder = appState.playbackQueueDisplayOrder,
         permissionDenied = appState.permissionDenied,
         showSwipeHint = appState.showSwipeHint,
-        artistRootReturnInProgress = appState.artistRootReturnInProgress,
         topBarBackgroundAlpha = topBarBackgroundAlpha,
         topBarScrollConnection = topBarScrollConnection,
         backgroundBlurRadius = backgroundBlurRadius,
@@ -464,8 +396,6 @@ internal fun flowtoneAppScaffoldState(
         searchInputFocused = appState.searchInputFocused,
         searchFocusRequest = appState.searchFocusRequest,
         searchKeyboardDismissRequest = appState.searchKeyboardDismissRequest,
-        searchReturnStage = appState.searchReturnStage,
-        searchReentryProgress = searchReentryProgress,
         searchListState = appState.searchListState
     )
 }

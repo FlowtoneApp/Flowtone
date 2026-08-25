@@ -12,5 +12,5 @@ internal data class MiniPlayerCallbacks(
     val onPlayQueueSong: (Song) -> Unit,
     val onPlayArtistSongQueue: (List<Song>, Int, PlaybackSource) -> Unit,
     val onToggleSongLiked: (Song) -> Unit,
-    val onOpenArtistRootPage: (String) -> Unit
+    val onOpenArtist: (String) -> Unit
 )
