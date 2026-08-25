@@ -231,15 +231,6 @@ internal fun ArtistPage(
         modifier = modifier
             .fillMaxSize()
     ) {
-        // The surface stays behind the Header while its large avatar is still in the viewport.
-        // Once the Header leaves, the foreground layer preserves the same toolbar presentation.
-        ArtistToolbarBackground(
-            visible = toolbarContentVisible,
-            height = toolbarHeight,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-        )
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -322,17 +313,14 @@ internal fun ArtistPage(
             }
         }
 
-        val headerHasLeftViewport = listState.firstVisibleItemIndex > 0 ||
-            listState.firstVisibleItemScrollOffset >= measuredHeaderHeightPx
-        if (toolbarContentVisible && headerHasLeftViewport) {
-            ArtistToolbarForegroundSurface(
-                height = toolbarHeight,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth()
-                    .zIndex(1f)
-            )
-        }
+        ArtistToolbarForegroundSurface(
+            visible = toolbarContentVisible,
+            height = toolbarHeight,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+                .zIndex(1f)
+        )
 
         ArtistToolbarContent(
             artistName = displayArtist,
@@ -500,17 +488,18 @@ private fun artistSongItemKey(index: Int, song: Song): String =
     "${song.id}-${song.uri}-$index"
 
 @Composable
-private fun ArtistToolbarBackground(
+private fun ArtistToolbarForegroundSurface(
     visible: Boolean,
     height: Dp,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.height(height).background(Color.Transparent)) {
+    Box(modifier = modifier.height(height)) {
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(120)) + slideInVertically(tween(180)) { -it },
-            exit = fadeOut(tween(90, delayMillis = ArtistTitleDelayMillis)) +
-                slideOutVertically(tween(160, delayMillis = ArtistTitleDelayMillis)) { -it },
+            // The toolbar surface moves with the collapse transition but never fades:
+            // every visible portion remains an opaque barrier above scrolling content.
+            enter = slideInVertically(tween(180)) { -it },
+            exit = slideOutVertically(tween(160, delayMillis = ArtistTitleDelayMillis)) { -it },
             modifier = Modifier.fillMaxSize()
         ) {
             Box(
@@ -520,18 +509,6 @@ private fun ArtistToolbarBackground(
             )
         }
     }
-}
-
-@Composable
-private fun ArtistToolbarForegroundSurface(
-    height: Dp,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(height)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-    )
 }
 
 @Composable
