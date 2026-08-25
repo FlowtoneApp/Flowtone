@@ -408,7 +408,17 @@ internal fun FlowtoneScaffoldContent(
                         is FlowtoneScaffoldPage.Secondary -> Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(innerPadding)
+                                .padding(
+                                    if (page.destination.page == SecondaryPage.Artist) {
+                                        // Artist owns its toolbar insets. The returning
+                                        // parent's live TopBar must not move this outgoing slot.
+                                        PaddingValues(
+                                            bottom = innerPadding.calculateBottomPadding()
+                                        )
+                                    } else {
+                                        innerPadding
+                                    }
+                                )
                                 .padding(bottom = state.miniPlayerContentBottomPadding)
                         ) {
                             secondaryPageStateHolder.SaveableStateProvider(

@@ -19,7 +19,6 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
-import ink.tenqui.flowtone.ui.library.ArtistTransitionOrderCount
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
@@ -363,12 +362,8 @@ internal fun SecondaryPageHost(
                         onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
                     },
                     onOpenAlbum = onOpenAlbum,
-                    itemModifier = { index ->
-                        pageScope.elementModifier(
-                            index,
-                            orderCount = ArtistTransitionOrderCount
-                        )
-                    },
+                    pageTransition = pageScope,
+                    itemModifier = ::playlistItemModifier,
                     modifier = Modifier
                         .fillMaxSize()
                         .rightSwipeBackGesture(onCloseSecondaryPage)

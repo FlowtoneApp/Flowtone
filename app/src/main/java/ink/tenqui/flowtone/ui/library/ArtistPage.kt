@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +60,8 @@ import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
 
@@ -91,7 +95,7 @@ internal const val ArtistTransitionOrderCount = ArtistAlbumCardsAnimationIndex +
 private const val ArtistFirstSongListItemIndex = 2
 
 @Composable
-fun ArtistPage(
+internal fun ArtistPage(
     artistName: String,
     allSongs: List<Song>,
     albums: List<LocalAlbum>,
@@ -99,7 +103,9 @@ fun ArtistPage(
     onBack: () -> Unit,
     onSongClick: (List<Song>, Int) -> Unit,
     onOpenAlbum: (Long) -> Unit,
-    itemModifier: (Int) -> Modifier = { Modifier },
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
+        { _, _, _ -> Modifier },
     modifier: Modifier = Modifier
 ) {
     val displayArtist = artistName.trim()
@@ -109,6 +115,9 @@ fun ArtistPage(
     }
     val artistAlbums = remember(displayArtist, albums) {
         artistAlbumsFor(albums, displayArtist)
+    }
+    val artistSongKeys = remember(artistSongs) {
+        artistSongs.mapIndexed(::artistSongItemKey)
     }
     val avatarLookupSongTitle = remember(artistSongs, currentSong) {
         val currentArtistSong = currentSong?.takeIf { playingSong ->
@@ -123,6 +132,63 @@ fun ArtistPage(
         artistName = displayArtist
     )
     val artistMetadata = rememberArtistMetadata(displayArtist)
+
+    val visibleSongKeys by remember(listState, artistSongKeys) {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                artistSongKeys.getOrNull(item.index - ArtistFirstSongListItemIndex)
+            }.distinct()
+        }
+    }
+    var frozenTransitionId by remember(displayArtist) { mutableStateOf<Int?>(null) }
+    var frozenViewportKeys by remember(displayArtist) {
+        mutableStateOf<List<String>>(emptyList())
+    }
+    var capturedPageProgress by remember(displayArtist) { mutableStateOf(0f) }
+
+    LaunchedEffect(
+        pageTransition.transitionId,
+        pageTransition.phase,
+        visibleSongKeys
+    ) {
+        if (pageTransition.phase == PageTransitionPhase.Current) {
+            frozenTransitionId = null
+            frozenViewportKeys = emptyList()
+            capturedPageProgress = 0f
+        } else if (
+            frozenTransitionId != pageTransition.transitionId &&
+            visibleSongKeys.isNotEmpty()
+        ) {
+            frozenTransitionId = pageTransition.transitionId
+            frozenViewportKeys = visibleSongKeys
+            capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
+        }
+    }
+
+    val animationGroupKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
+        visibleSongKeys
+    } else if (pageTransition.phase == PageTransitionPhase.Incoming) {
+        frozenViewportKeys
+    } else {
+        frozenViewportKeys.ifEmpty { visibleSongKeys }
+    }
+    val listProgress = when {
+        pageTransition.phase != PageTransitionPhase.Incoming -> pageTransition.progress
+        frozenViewportKeys.isEmpty() -> 0f
+        else -> {
+            val remaining = (1f - capturedPageProgress).coerceAtLeast(0.0001f)
+            ((pageTransition.progress - capturedPageProgress) / remaining).coerceIn(0f, 1f)
+        }
+    }
+    val enterGroupReady = pageTransition.phase != PageTransitionPhase.Incoming ||
+        frozenViewportKeys.isNotEmpty()
+    val animationOrderByKey = remember(animationGroupKeys) {
+        animationGroupKeys.withIndex().associate { (order, key) -> key to order }
+    }
+
+    fun fixedItemModifier(index: Int): Modifier {
+        return pageTransition.elementModifier(index, ArtistTransitionOrderCount)
+    }
 
     val density = LocalDensity.current
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
@@ -188,7 +254,7 @@ fun ArtistPage(
                     topPadding = statusBarTop,
                     alias = artistMetadata?.aliases?.take(3)?.joinToString(" · "),
                     biography = artistMetadata?.biography,
-                    itemModifier = itemModifier,
+                    itemModifier = ::fixedItemModifier,
                     onHeightChanged = { headerHeightPx = it },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -196,7 +262,7 @@ fun ArtistPage(
             item(key = "artist-songs-title") {
                 ArtistSectionTitle(
                     title = "歌曲",
-                    modifier = itemModifier(ArtistSongsTitleAnimationIndex)
+                    modifier = fixedItemModifier(ArtistSongsTitleAnimationIndex)
                         .padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 8.dp)
                 )
             }
@@ -206,7 +272,7 @@ fun ArtistPage(
                         text = "没有找到该艺术家的歌曲",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = itemModifier(ArtistFirstSongAnimationIndex)
+                        modifier = fixedItemModifier(ArtistFirstSongAnimationIndex)
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp, vertical = 18.dp)
                     )
@@ -214,15 +280,20 @@ fun ArtistPage(
             } else {
                 itemsIndexed(
                     items = artistSongs,
-                    key = { index, song -> "${song.id}-${song.uri}-$index" }
+                    key = ::artistSongItemKey
                 ) { index, song ->
+                    val songKey = artistSongKeys[index]
+                    val viewportOrder = animationOrderByKey[songKey] ?: 0
+                    val viewportOrderCount = animationGroupKeys.size.coerceAtLeast(1)
                     SongListItem(
                         song = song,
                         isCurrentSong = currentSong?.id == song.id || currentSong?.uri == song.uri,
                         onClick = { onSongClick(artistSongs, index) },
-                        modifier = itemModifier(
-                            artistSongAnimationIndex(index, listState.firstVisibleItemIndex)
-                        ).padding(horizontal = 8.dp)
+                        modifier = if (enterGroupReady) {
+                            itemModifier(listProgress, viewportOrder, viewportOrderCount)
+                        } else {
+                            Modifier.graphicsLayer { alpha = 0f }
+                        }.padding(horizontal = 8.dp)
                     )
                 }
             }
@@ -231,7 +302,7 @@ fun ArtistPage(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         ArtistSectionTitle(
                             title = "专辑",
-                            modifier = itemModifier(ArtistAlbumsTitleAnimationIndex)
+                            modifier = fixedItemModifier(ArtistAlbumsTitleAnimationIndex)
                                 .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 12.dp)
                         )
                         LazyRow(
@@ -242,7 +313,7 @@ fun ArtistPage(
                                 ArtistAlbumCard(
                                     album = album,
                                     onClick = { onOpenAlbum(album.id) },
-                                    modifier = itemModifier(ArtistAlbumCardsAnimationIndex)
+                                    modifier = fixedItemModifier(ArtistAlbumCardsAnimationIndex)
                                 )
                             }
                         }
@@ -425,12 +496,8 @@ private fun ArtistAlbumCard(
     }
 }
 
-private fun artistSongAnimationIndex(songIndex: Int, firstVisibleItemIndex: Int): Int {
-    val firstVisibleSongIndex = (firstVisibleItemIndex - ArtistFirstSongListItemIndex)
-        .coerceAtLeast(0)
-    return ArtistFirstSongAnimationIndex +
-        (songIndex - firstVisibleSongIndex).coerceAtLeast(0)
-}
+private fun artistSongItemKey(index: Int, song: Song): String =
+    "${song.id}-${song.uri}-$index"
 
 @Composable
 private fun ArtistToolbarBackground(
