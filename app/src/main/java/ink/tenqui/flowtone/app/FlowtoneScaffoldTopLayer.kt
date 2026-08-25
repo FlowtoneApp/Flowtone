@@ -5,6 +5,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.key
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
@@ -13,6 +14,7 @@ import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 internal fun FlowtoneScaffoldTopLayer(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
+    isArtistToolbarContentVisible: (Long) -> Boolean,
     detailHeaderCollapseProgressState: State<Float>?,
     songSelectionState: PlaylistSelectionTopBarState?,
     onCloseSongSelection: () -> Unit,
@@ -20,18 +22,41 @@ internal fun FlowtoneScaffoldTopLayer(
     playlistSortProgress: Float,
     descriptionBlurRadius: Dp
 ) {
-    if (state.secondaryPage != SecondaryPage.Artist) {
+    val artistTopBarRoute = artistTopBarRoute(state.secondaryEntries)
+    if (artistTopBarRoute != null && songSelectionState == null) {
+        key(artistTopBarRoute.artistEntryId) {
+            val collapsedArtistToolbarVisible =
+                isArtistToolbarContentVisible(artistTopBarRoute.artistEntryId)
+            ArtistIdentityTopBar(
+                artistName = artistTopBarRoute.artistName,
+                destinationTitle = artistTopBarRoute.destinationTitle,
+                identityVisible = artistTopBarRoute.destinationTitle != null ||
+                    collapsedArtistToolbarVisible,
+                artistSurfaceVisible = collapsedArtistToolbarVisible,
+                allSongs = state.uiState.songs,
+                currentSong = state.playerUiState.currentSong,
+                onBack = callbacks.onNavigateBack,
+                playlistSortProgress = playlistSortProgress,
+                modifier = Modifier.blur(descriptionBlurRadius)
+            )
+        }
+    } else if (state.secondaryPage != SecondaryPage.Artist) {
         val titleVisible = state.secondaryPage != null
+        val standardPathSegments = if (artistTopBarRoute != null) {
+            listOfNotNull(artistTopBarRoute.destinationTitle)
+        } else {
+            secondaryDestinationBreadcrumbs(
+                current = state.secondaryDestination,
+                previous = state.previousSecondaryDestination,
+                nestedSegments = state.secondaryPathSegments
+            )
+        }
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,
-            additionalPathSegments = secondaryDestinationBreadcrumbs(
-                current = state.secondaryDestination,
-                previous = state.previousSecondaryDestination,
-                nestedSegments = state.secondaryPathSegments
-            ),
+            additionalPathSegments = standardPathSegments,
             titleVisible = titleVisible,
             songSelectionState = songSelectionState,
             hideBackButton = state.hideSecondaryBackButton,
@@ -59,5 +84,33 @@ internal fun FlowtoneScaffoldTopLayer(
             playlistSortProgress = playlistSortProgress,
             modifier = Modifier.blur(descriptionBlurRadius)
         )
+    }
+}
+
+internal data class ArtistTopBarRoute(
+    val artistEntryId: Long,
+    val artistName: String,
+    val destinationTitle: String?
+)
+
+internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBarRoute? {
+    val currentEntry = entries.lastOrNull() ?: return null
+    return when (val current = currentEntry.destination) {
+        is SecondaryDestination.Artist -> ArtistTopBarRoute(
+            artistEntryId = currentEntry.id,
+            artistName = current.name,
+            destinationTitle = null
+        )
+        is SecondaryDestination.Album -> {
+            val parentEntry = entries.getOrNull(entries.lastIndex - 1) ?: return null
+            val parentArtist = parentEntry.destination as? SecondaryDestination.Artist
+                ?: return null
+            ArtistTopBarRoute(
+                artistEntryId = parentEntry.id,
+                artistName = parentArtist.name,
+                destinationTitle = current.title
+            )
+        }
+        else -> null
     }
 }

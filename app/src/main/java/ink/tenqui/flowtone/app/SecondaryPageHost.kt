@@ -135,6 +135,7 @@ internal fun SecondaryPageHost(
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
+    onArtistToolbarContentVisibleChange: (Boolean) -> Unit,
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -357,7 +358,7 @@ internal fun SecondaryPageHost(
                     allSongs = uiState.songs,
                     albums = uiState.albums,
                     currentSong = currentSong,
-                    onBack = onCloseSecondaryPage,
+                    onToolbarContentVisibleChange = onArtistToolbarContentVisibleChange,
                     onSongClick = { songs, index ->
                         onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
                     },

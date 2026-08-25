@@ -1,13 +1,8 @@
 package ink.tenqui.flowtone.ui.library
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,13 +22,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,7 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
@@ -69,18 +62,12 @@ private val ArtistHeaderMinimumContentHeight = 248.dp
 private val ArtistToolbarHeight = 64.dp
 private val ArtistAvatarSize = 112.dp
 private val ArtistCompactAvatarSize = 104.dp
-private val ArtistSmallAvatarSize = 32.dp
 private val ArtistHeaderCornerRadius = 24.dp
-private val ArtistBackButtonStartPadding = 4.dp
-private val ArtistTitleGap = 10.dp
 private val ArtistHeaderContentTopGap = 16.dp
 private val ArtistHeaderAvatarNameGap = 16.dp
 private val ArtistHeaderStatisticsBottomPadding = 22.dp
 private val ArtistHeaderStatisticsEndPadding = 20.dp
-private val ArtistToolbarAnimationDistance = 14.dp
 private val ArtistAlbumArtworkSize = 140.dp
-private const val ArtistAvatarDelayMillis = 64
-private const val ArtistTitleDelayMillis = 128
 private const val ArtistHeaderCardAnimationIndex = 0
 private const val ArtistHeaderAvatarAnimationIndex = 1
 private const val ArtistHeaderNameAnimationIndex = 2
@@ -93,14 +80,17 @@ private const val ArtistAlbumsTitleAnimationIndex = 11
 private const val ArtistAlbumCardsAnimationIndex = 12
 internal const val ArtistTransitionOrderCount = ArtistAlbumCardsAnimationIndex + 1
 private const val ArtistFirstSongListItemIndex = 2
+private const val ArtistLazyAheadViewportFraction = 0.75f
+private const val ArtistLazyBehindViewportFraction = 0.25f
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ArtistPage(
     artistName: String,
     allSongs: List<Song>,
     albums: List<LocalAlbum>,
     currentSong: Song?,
-    onBack: () -> Unit,
+    onToolbarContentVisibleChange: (Boolean) -> Unit,
     onSongClick: (List<Song>, Int) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     pageTransition: PageTransitionScope,
@@ -109,7 +99,14 @@ internal fun ArtistPage(
     modifier: Modifier = Modifier
 ) {
     val displayArtist = artistName.trim()
-    val listState = rememberLazyListState()
+    val cacheWindow = remember {
+        LazyLayoutCacheWindow(
+            aheadFraction = ArtistLazyAheadViewportFraction,
+            behindFraction = ArtistLazyBehindViewportFraction
+        )
+    }
+    val listState = rememberLazyListState(cacheWindow = cacheWindow)
+    val albumListState = rememberLazyListState(cacheWindow = cacheWindow)
     val artistSongs = remember(displayArtist, allSongs) {
         localSongsForArtist(allSongs, displayArtist)
     }
@@ -226,6 +223,9 @@ internal fun ArtistPage(
             else -> toolbarContentVisible
         }
     }
+    LaunchedEffect(toolbarContentVisible) {
+        onToolbarContentVisibleChange(toolbarContentVisible)
+    }
 
     Box(
         modifier = modifier
@@ -297,6 +297,7 @@ internal fun ArtistPage(
                                 .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 12.dp)
                         )
                         LazyRow(
+                            state = albumListState,
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
@@ -313,27 +314,6 @@ internal fun ArtistPage(
             }
         }
 
-        ArtistToolbarForegroundSurface(
-            visible = toolbarContentVisible,
-            height = toolbarHeight,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .zIndex(1f)
-        )
-
-        ArtistToolbarContent(
-            artistName = displayArtist,
-            avatarImage = artistAvatarImage,
-            showArtist = toolbarContentVisible,
-            height = toolbarHeight,
-            topPadding = statusBarTop,
-            onBack = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .zIndex(2f)
-        )
     }
 }
 
@@ -488,102 +468,7 @@ private fun artistSongItemKey(index: Int, song: Song): String =
     "${song.id}-${song.uri}-$index"
 
 @Composable
-private fun ArtistToolbarForegroundSurface(
-    visible: Boolean,
-    height: Dp,
-    modifier: Modifier = Modifier
-) {
-    Box(modifier = modifier.height(height)) {
-        AnimatedVisibility(
-            visible = visible,
-            // The toolbar surface moves with the collapse transition but never fades:
-            // every visible portion remains an opaque barrier above scrolling content.
-            enter = slideInVertically(tween(180)) { -it },
-            exit = slideOutVertically(tween(160, delayMillis = ArtistTitleDelayMillis)) { -it },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ArtistToolbarContent(
-    artistName: String,
-    avatarImage: ExtensionImage?,
-    showArtist: Boolean,
-    height: Dp,
-    topPadding: Dp,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val toolbarAnimationDistancePx = with(LocalDensity.current) {
-        ArtistToolbarAnimationDistance.roundToPx()
-    }
-    Box(modifier = modifier.height(height).background(Color.Transparent)) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(
-                start = ArtistBackButtonStartPadding,
-                top = topPadding,
-                end = 16.dp
-            ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "返回",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            AnimatedVisibility(
-                visible = showArtist,
-                enter = fadeIn(tween(120, delayMillis = ArtistAvatarDelayMillis)) +
-                    slideInVertically(tween(180, delayMillis = ArtistAvatarDelayMillis)) {
-                        -it - toolbarAnimationDistancePx
-                    },
-                exit = fadeOut(tween(90, delayMillis = ArtistAvatarDelayMillis)) +
-                    slideOutVertically(tween(160, delayMillis = ArtistAvatarDelayMillis)) {
-                        -it - toolbarAnimationDistancePx
-                    }
-            ) {
-                ArtistAvatar(
-                    size = ArtistSmallAvatarSize,
-                    image = avatarImage,
-                    backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                    iconColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            AnimatedVisibility(
-                visible = showArtist,
-                enter = fadeIn(tween(120, delayMillis = ArtistTitleDelayMillis)) +
-                    slideInVertically(tween(180, delayMillis = ArtistTitleDelayMillis)) {
-                        -it - toolbarAnimationDistancePx
-                    },
-                exit = fadeOut(tween(90)) + slideOutVertically(tween(160)) {
-                    -it - toolbarAnimationDistancePx
-                }
-            ) {
-                Text(
-                    text = artistName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = ArtistTitleGap)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtistAvatar(
+internal fun ArtistAvatar(
     size: Dp,
     image: ExtensionImage?,
     backgroundColor: Color,

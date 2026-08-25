@@ -24,9 +24,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +74,13 @@ internal fun FlowtoneScaffold(
     )
     var detailHeaderCollapseProgressState by remember {
         mutableStateOf<State<Float>?>(null)
+    }
+    val artistToolbarVisibilityByEntry = remember { mutableStateMapOf<Long, Boolean>() }
+    val activeSecondaryEntryIds = remember(state.secondaryEntries) {
+        state.secondaryEntries.mapTo(mutableSetOf(), SecondaryStackEntry::id)
+    }
+    SideEffect {
+        artistToolbarVisibilityByEntry.keys.retainAll(activeSecondaryEntryIds)
     }
     var songSelectionTopBarState by remember {
         mutableStateOf<PlaylistSelectionTopBarState?>(null)
@@ -295,6 +304,9 @@ internal fun FlowtoneScaffold(
                 FlowtoneScaffoldTopLayer(
                     state = state,
                     callbacks = callbacks,
+                    isArtistToolbarContentVisible = { entryId ->
+                        artistToolbarVisibilityByEntry[entryId] == true
+                    },
                     detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
                     songSelectionState = songSelectionTopBarState,
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
@@ -340,6 +352,9 @@ internal fun FlowtoneScaffold(
                 },
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,
+                onArtistToolbarContentVisibleChange = { entryId, visible ->
+                    artistToolbarVisibilityByEntry[entryId] = visible
+                },
                 playlistSongSort = playlistSongSort,
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
