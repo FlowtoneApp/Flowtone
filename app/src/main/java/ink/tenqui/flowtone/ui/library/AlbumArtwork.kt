@@ -41,18 +41,19 @@ private data class VinylMeteorArc(
     val sweepAngle: Float,
     val tailAlpha: Float,
     val strokeWidthDp: Float,
-    val degreesPerSecond: Float
+    val degreesPerSecond: Float,
+    val trackIndex: Int = 0
 )
 
 private val VinylMeteorArcPattern = listOf(
-    VinylMeteorArc(0.92f, 128f, 48f, 0.25f, 1.1f, -11.6f),
-    VinylMeteorArc(0.70f, 191f, 24f, 0.18f, 0.9f, -14.0f),
-    VinylMeteorArc(0.46f, 143f, 30f, 0.30f, 1.25f, -9.7f),
-    VinylMeteorArc(0.22f, 169f, 19f, 0.21f, 1.0f, -12.7f)
+    VinylMeteorArc(0.92f, 128f, 48f, 0.28f, 1.1f, -11.6f, trackIndex = 0),
+    VinylMeteorArc(0.82f, 191f, 34f, 0.24f, 0.95f, -14.0f, trackIndex = 1),
+    VinylMeteorArc(0.70f, 143f, 38f, 0.30f, 1.25f, -9.7f, trackIndex = 2),
+    VinylMeteorArc(0.58f, 169f, 30f, 0.25f, 1.05f, -12.7f, trackIndex = 3)
 )
 
 private val VinylMeteorArcs = VinylMeteorArcPattern.flatMap { arc ->
-    listOf(0f, 59f, 119f, 179f, 239f, 299f).map { followerOffset ->
+    listOf(0f, 88f, 178f, 269f).map { followerOffset ->
         arc.copy(startAngle = arc.startAngle + followerOffset)
     }
 }
@@ -61,6 +62,7 @@ private val VinylMeteorArcs = VinylMeteorArcPattern.flatMap { arc ->
 internal fun AlbumArtwork(
     artworkUri: Uri?,
     vinylMotionActive: Boolean = false,
+    vinylSeed: Long = 0L,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -70,6 +72,7 @@ internal fun AlbumArtwork(
     ) {
         VinylDisc(
             motionActive = vinylMotionActive,
+            vinylSeed = vinylSeed,
             modifier = Modifier
                 .size(AlbumVinylDiscSize)
                 .align(Alignment.CenterStart)
@@ -86,10 +89,16 @@ internal fun AlbumArtwork(
 @Composable
 internal fun VinylDisc(
     motionActive: Boolean = false,
+    vinylSeed: Long = 0L,
     modifier: Modifier = Modifier
 ) {
     var travelSeconds by remember { mutableFloatStateOf(0f) }
     var velocityScale by remember { mutableFloatStateOf(0f) }
+    val trackAngleOffsets = remember(vinylSeed) {
+        List(VinylMeteorArcPattern.size) { trackIndex ->
+            vinylTrackAngleOffset(vinylSeed, trackIndex)
+        }
+    }
 
     LaunchedEffect(motionActive) {
         if (!motionActive && velocityScale <= 0f) return@LaunchedEffect
@@ -152,9 +161,30 @@ internal fun VinylDisc(
 
         VinylMeteorArcs.forEach { arc ->
             val radius = diameter * arc.radiusScale / 2f
-            val animatedStartAngle = arc.startAngle + travelSeconds * arc.degreesPerSecond
+            val animatedStartAngle = arc.startAngle + trackAngleOffsets[arc.trackIndex] +
+                travelSeconds * arc.degreesPerSecond
             val tail = vinylArcPoint(center, radius, animatedStartAngle)
             val head = vinylArcPoint(center, radius, animatedStartAngle + arc.sweepAngle)
+            drawArc(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = arc.tailAlpha * 0.22f),
+                        Color.White.copy(alpha = arc.tailAlpha * 0.08f),
+                        Color.White.copy(alpha = 0f)
+                    ),
+                    start = tail,
+                    end = head
+                ),
+                startAngle = animatedStartAngle,
+                sweepAngle = arc.sweepAngle,
+                useCenter = false,
+                topLeft = Offset(center.x - radius, center.y - radius),
+                size = Size(radius * 2f, radius * 2f),
+                style = Stroke(
+                    width = arc.strokeWidthDp.dp.toPx() * 2.6f,
+                    cap = StrokeCap.Round
+                )
+            )
             drawArc(
                 brush = Brush.linearGradient(
                     colors = listOf(
@@ -196,4 +226,12 @@ private fun vinylArcPoint(center: Offset, radius: Float, angleDegrees: Float): O
         x = center.x + radius * cos(angleRadians).toFloat(),
         y = center.y + radius * sin(angleRadians).toFloat()
     )
+}
+
+private fun vinylTrackAngleOffset(seed: Long, trackIndex: Int): Float {
+    var value = seed + (trackIndex + 1L) * 1_234_567_891L
+    value = value xor (value ushr 16)
+    value *= 2_246_822_507L
+    value = value xor (value ushr 13)
+    return Math.floorMod(value, 360L).toFloat()
 }

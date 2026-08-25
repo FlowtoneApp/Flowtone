@@ -71,6 +71,7 @@ internal fun AlbumDetailScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AlbumMetadataHeader(
+                    albumId = albumId,
                     title = title,
                     artist = artist,
                     songCount = 0,
@@ -138,6 +139,7 @@ internal fun AlbumDetailScreen(
             itemModifier = itemModifier,
             headerContent = {
                 AlbumMetadataHeader(
+                    albumId = albumId,
                     title = title,
                     artist = artist,
                     songCount = albumSongs.size,
@@ -153,6 +155,7 @@ internal fun AlbumDetailScreen(
 
 @Composable
 private fun AlbumMetadataHeader(
+    albumId: Long,
     title: String,
     artist: String,
     songCount: Int,
@@ -166,7 +169,8 @@ private fun AlbumMetadataHeader(
         artwork = {
             AlbumArtwork(
                 artworkUri = artworkUri,
-                vinylMotionActive = vinylMotionActive
+                vinylMotionActive = vinylMotionActive,
+                vinylSeed = albumId
             )
         },
         modifier = modifier
