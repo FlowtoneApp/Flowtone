@@ -19,12 +19,6 @@ private const val FLOWTONE_INSETS_TAG = "FlowtoneInsets"
 
 internal val FlowtonePageEasing = FlowtoneMotion.Easing
 
-internal fun flowtoneRootPage(artistRootPageArtistName: String?): FlowtoneRootPage {
-    return artistRootPageArtistName?.let { artistName ->
-        FlowtoneRootPage.ArtistRootPage(artistName)
-    } ?: FlowtoneRootPage.MainTabs
-}
-
 internal fun isMiniPlayerBackgroundBlurActive(
     hasCurrentSong: Boolean,
     miniPlayerExpanded: Boolean,

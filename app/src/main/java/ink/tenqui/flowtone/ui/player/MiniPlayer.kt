@@ -101,7 +101,7 @@ fun MiniPlayer(
     onPlayArtistSongQueue: (List<Song>, Int, PlaybackSource) -> Unit = { _, _, _ -> },
     likedSongKeys: List<String> = emptyList(),
     onToggleSongLiked: (Song) -> Unit = {},
-    onOpenArtistRootPage: (String) -> Unit = {},
+    onOpenArtist: (String) -> Unit = {},
     forceHidden: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -119,7 +119,7 @@ fun MiniPlayer(
         onPlayQueueSong,
         onPlayArtistSongQueue,
         onToggleSongLiked,
-        onOpenArtistRootPage
+        onOpenArtist
     ) {
         MiniPlayerCallbacks(
             onTogglePlayPause = onTogglePlayPause,
@@ -130,7 +130,7 @@ fun MiniPlayer(
             onPlayQueueSong = onPlayQueueSong,
             onPlayArtistSongQueue = onPlayArtistSongQueue,
             onToggleSongLiked = onToggleSongLiked,
-            onOpenArtistRootPage = onOpenArtistRootPage
+            onOpenArtist = onOpenArtist
         )
     }
     val artworkUri = playerUiState.artworkUri

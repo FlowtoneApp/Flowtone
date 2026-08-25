@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,7 +18,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.library.ArtistDetailScreen
+import ink.tenqui.flowtone.ui.library.ArtistPage
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
@@ -84,7 +83,7 @@ internal class AlbumDetailDestination(
 
 @Composable
 internal fun SecondaryPageHost(
-    secondaryPage: SecondaryPage,
+    destination: SecondaryDestination,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
@@ -120,7 +119,6 @@ internal fun SecondaryPageHost(
     isPlaying: Boolean,
     playlistDetailDestination: PlaylistDetailDestination?,
     albumDetailDestination: AlbumDetailDestination?,
-    selectedArtistName: String?,
     listeningRecordInitialTab: ListeningRecordTab,
     likedSongKeys: List<String>,
     playlistSongEntries: List<PlaylistSongEntry>,
@@ -136,6 +134,7 @@ internal fun SecondaryPageHost(
     onSongClick: (Song) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
+    onOpenAlbum: (Long) -> Unit,
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -161,12 +160,7 @@ internal fun SecondaryPageHost(
             onCloseSecondaryPage()
         }
     }
-    var retainedArtistName by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(secondaryPage, selectedArtistName) {
-        if (secondaryPage == SecondaryPage.Artist && selectedArtistName != null) {
-            retainedArtistName = selectedArtistName
-        }
-    }
+    val secondaryPage = destination.page
 
     fun elementModifier(index: Int): Modifier {
         return pageScope.elementModifier(index)
@@ -356,32 +350,25 @@ internal fun SecondaryPageHost(
                 )
             }
 
-            SecondaryPage.Artist -> ArtistDetailScreen(
-                artistName = if (secondaryPage == SecondaryPage.Artist) {
-                    selectedArtistName
-                } else {
-                    retainedArtistName
-                },
-                allSongs = uiState.songs,
-                currentSong = currentSong,
-                onSongClick = { songs, index ->
-                    onPlaylistSongClick(
-                        songs,
-                        index,
-                        PlaybackSource.artist(
-                            if (secondaryPage == SecondaryPage.Artist) {
-                                selectedArtistName.orEmpty()
-                            } else {
-                                retainedArtistName.orEmpty()
-                            }
-                        )
-                    )
-                },
-                itemModifier = ::viewportItemModifier,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .rightSwipeBackGesture(onCloseSecondaryPage)
-            )
+            SecondaryPage.Artist -> {
+                val artist = destination as? SecondaryDestination.Artist ?: return@Box
+                  ArtistPage(
+                    artistName = artist.name,
+                    allSongs = uiState.songs,
+                    albums = uiState.albums,
+                    currentSong = currentSong,
+                    onBack = onCloseSecondaryPage,
+                    onSongClick = { songs, index ->
+                        onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
+                    },
+                    onOpenAlbum = onOpenAlbum,
+                    itemModifier = { index -> pageScope.elementModifier(index, orderCount = 24) },
+                    headerCardModifier = { index -> pageScope.elementModifier(index, orderCount = 4) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(onCloseSecondaryPage)
+                )
+            }
 
             SecondaryPage.ListeningRecords -> ListeningRecordsScreen(
                 listeningStats = uiState.listeningStats,

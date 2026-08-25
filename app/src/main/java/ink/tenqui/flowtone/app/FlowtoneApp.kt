@@ -29,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -57,7 +56,6 @@ import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -106,16 +104,12 @@ fun FlowtoneApp(
         pageCount = { TopLevelPage.entries.size }
     )
     val selectedTopLevelPage = TopLevelPage.entries[pagerState.currentPage]
-    val rootPage = flowtoneRootPage(appState.artistRootPageArtistName)
     val liveSearchColors = topLevelSearchColorsForPager(pagerState)
     val frozenSearchColors = searchColorSnapshotOrNull(appState)?.toColors()
     val activeSearchColors = frozenSearchColors ?: liveSearchColors
     val topBarRevealDistancePx = with(density) { 24.dp.toPx() }
     var mainContentScrollOffsetPx by remember {
         mutableStateOf(0f)
-    }
-    var searchReturnJob by remember {
-        mutableStateOf<Job?>(null)
     }
     val mainTopBarBackgroundAlpha by animateFloatAsState(
         targetValue = (mainContentScrollOffsetPx / topBarRevealDistancePx).coerceIn(0f, 1f),
@@ -142,29 +136,6 @@ fun FlowtoneApp(
     } else {
         mainTopBarBackgroundAlpha
     }
-    val searchReentryProgress by animateFloatAsState(
-        targetValue = when (appState.searchReturnStage) {
-            SearchReturnStage.SearchExitingForArtist,
-            SearchReturnStage.ArtistVisible,
-            SearchReturnStage.ArtistExitingToSearch,
-            SearchReturnStage.SearchPreparing -> 0f
-            SearchReturnStage.Idle,
-            SearchReturnStage.SearchReentering -> 1f
-        },
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "SearchReentryProgress",
-        finishedListener = { finalValue ->
-            if (
-                finalValue == 1f &&
-                appState.searchReturnStage == SearchReturnStage.SearchReentering
-            ) {
-                appState.searchReturnStage = SearchReturnStage.Idle
-            }
-        }
-    )
     val topBarScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(
@@ -172,7 +143,7 @@ fun FlowtoneApp(
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                if (appState.searchActive || appState.artistRootPageArtistName != null) {
+                if (appState.searchActive) {
                     return Offset.Zero
                 }
                 mainContentScrollOffsetPx =
@@ -336,9 +307,6 @@ fun FlowtoneApp(
         if (!appState.searchActive) {
             return
         }
-        if (isSearchReturnAnimationStage(appState.searchReturnStage)) {
-            return
-        }
         val restorePageIndex = appState.searchEnteredPageIndex
             .coerceIn(0, TopLevelPage.entries.lastIndex)
         appState.searchActive = false
@@ -346,11 +314,6 @@ fun FlowtoneApp(
         appState.searchKeyboardVisible = false
         appState.searchFocusRequest = 0
         appState.searchKeyboardDismissRequest = 0
-        searchReturnJob?.cancel()
-        searchReturnJob = null
-        appState.searchReturnStage = SearchReturnStage.Idle
-        appState.searchReturnListIndex = 0
-        appState.searchReturnListOffset = 0
         clearFrozenSearchColors()
         // 保留搜索结果到圆形返回裁切完成，避免 AnimatedContent 先切到空 Landing
         // 而让列表主动渐出或重新排布。
@@ -393,172 +356,19 @@ fun FlowtoneApp(
             appState.miniPlayerFullscreenEnteredFromCollapsed = false
         }
     }
-    fun clearArtistRootPage() {
-        appState.artistRootPageArtistName = null
-        appState.artistRootNavigationMode = null
-        appState.artistRootReturnInProgress = false
-    }
-    fun collapseMiniPlayerToRevealArtistRootPage() {
-        appState.miniPlayerFullscreen = false
-        appState.miniPlayerExpanded = false
-        appState.miniPlayerFullscreenEnteredFromCollapsed = false
-        appState.miniPlayerMinimized = false
-    }
-    suspend fun awaitSearchListPosition(savedPosition: SearchListPosition) {
-        repeat(8) {
-            withFrameNanos { }
-            val firstLaidOutIndex = appState.searchListState
-                .layoutInfo
-                .visibleItemsInfo
-                .firstOrNull()
-                ?.index
-            if (
-                appState.searchListState.firstVisibleItemIndex ==
-                savedPosition.firstVisibleItemIndex &&
-                firstLaidOutIndex == savedPosition.firstVisibleItemIndex
-            ) {
-                return
-            }
-        }
-    }
-    fun openArtistRootPage(
-        artistName: String,
-        navigationMode: ArtistRootNavigationMode
-    ) {
+    fun openArtist(artistName: String) {
         val displayArtist = artistName.trim()
         if (displayArtist.isBlank()) {
             return
         }
-
-        if (navigationMode == ArtistRootNavigationMode.MiniPlayer) {
-            when (
-                miniPlayerArtistOpenDecision(
-                    currentArtistName = appState.artistRootPageArtistName,
-                    targetArtistName = displayArtist,
-                    searchReturnStage = appState.searchReturnStage,
-                    artistRootReturnInProgress = appState.artistRootReturnInProgress
-                )
-            ) {
-                MiniPlayerArtistOpenDecision.CollapseMiniPlayer -> {
-                    collapseMiniPlayerToRevealArtistRootPage()
-                    return
-                }
-                MiniPlayerArtistOpenDecision.Ignore -> return
-                MiniPlayerArtistOpenDecision.OpenArtistPage -> Unit
-            }
-            appState.artistRootReturnInProgress = false
-            appState.artistRootPageArtistName = displayArtist
-            appState.artistRootNavigationMode = navigationMode
-            collapseMiniPlayerToRevealArtistRootPage()
-            return
-        }
-
         if (appState.searchActive) {
-            if (appState.searchReturnStage != SearchReturnStage.Idle) {
-                return
-            }
-            appState.searchReturnListIndex = appState.searchListState.firstVisibleItemIndex
-            appState.searchReturnListOffset = appState.searchListState.firstVisibleItemScrollOffset
             appState.searchInputFocused = false
             appState.searchFocusRequest = 0
             appState.searchKeyboardDismissRequest += 1
-            appState.searchReturnStage = SearchReturnStage.SearchExitingForArtist
-            searchReturnJob?.cancel()
-            searchReturnJob = coroutineScope.launch {
-                delay(FlowtoneMotion.DurationMillis.toLong())
-                if (appState.searchReturnStage != SearchReturnStage.SearchExitingForArtist) {
-                    return@launch
-                }
-                appState.artistRootReturnInProgress = false
-                appState.artistRootPageArtistName = displayArtist
-                appState.artistRootNavigationMode = navigationMode
-                appState.searchReturnStage = SearchReturnStage.ArtistVisible
-            }
-            return
         }
-
-        appState.artistRootReturnInProgress = false
-        appState.artistRootPageArtistName = displayArtist
-        appState.artistRootNavigationMode = navigationMode
-        appState.searchReturnStage = SearchReturnStage.Idle
-    }
-    fun closeArtistRootPageAsNormalPage() {
-        if (
-            appState.artistRootPageArtistName == null ||
-            appState.artistRootReturnInProgress ||
-            isSearchReturnAnimationStage(appState.searchReturnStage)
-        ) {
-            return
-        }
-        if (
-            shouldRestoreSearchAfterArtistClose(
-                searchActive = appState.searchActive,
-                navigationMode = appState.artistRootNavigationMode,
-                currentStage = appState.searchReturnStage
-            )
-        ) {
-            val savedPosition = SearchListPosition(
-                firstVisibleItemIndex = appState.searchReturnListIndex,
-                firstVisibleItemScrollOffset = appState.searchReturnListOffset
-            )
-            searchReturnJob?.cancel()
-            searchReturnJob = coroutineScope.launch {
-                appState.searchReturnStage = SearchReturnStage.ArtistExitingToSearch
-                delay(FlowtoneMotion.DurationMillis.toLong())
-                appState.artistRootPageArtistName = null
-                appState.artistRootNavigationMode = null
-                appState.artistRootReturnInProgress = false
-                appState.searchReturnStage = searchReturnStageAfterArtistExit(
-                    appState.searchReturnStage
-                )
-                runCatching {
-                    appState.searchListState.scrollToItem(
-                        savedPosition.firstVisibleItemIndex,
-                        savedPosition.firstVisibleItemScrollOffset
-                    )
-                }
-                awaitSearchListPosition(savedPosition)
-                appState.searchReturnStage = searchReturnStageAfterPositionRestored(
-                    appState.searchReturnStage
-                )
-            }
-            return
-        }
-        appState.searchReturnStage = SearchReturnStage.ArtistExitingToSearch
-        searchReturnJob?.cancel()
-        searchReturnJob = coroutineScope.launch {
-            delay(FlowtoneMotion.DurationMillis.toLong())
-            clearArtistRootPage()
-            appState.searchReturnStage = SearchReturnStage.Idle
-        }
-    }
-    fun closeArtistRootPageThroughMiniPlayer() {
-        if (appState.artistRootPageArtistName == null || appState.artistRootReturnInProgress) {
-            return
-        }
-        if (!hasCurrentSong) {
-            clearArtistRootPage()
-            return
-        }
-        if (appState.miniPlayerFullscreen) {
-            appState.miniPlayerExpanded = true
-            appState.miniPlayerMinimized = false
-            appState.miniPlayerFullscreenEnteredFromCollapsed = false
-            clearArtistRootPage()
-            return
-        }
-
-        appState.artistRootReturnInProgress = true
-        appState.miniPlayerFullscreenEnteredFromCollapsed = false
-        appState.miniPlayerExpanded = true
-        appState.miniPlayerMinimized = false
-        appState.miniPlayerFullscreen = true
-    }
-    fun closeArtistRootPage() {
-        when (artistRootReturnTarget(appState.artistRootNavigationMode)) {
-            ArtistRootReturnTarget.MiniPlayerFullscreen -> closeArtistRootPageThroughMiniPlayer()
-            ArtistRootReturnTarget.PreviousPage -> closeArtistRootPageAsNormalPage()
-        }
+        appState.secondaryNavigation = appState.secondaryNavigation.push(
+            SecondaryDestination.Artist(displayArtist)
+        )
     }
 
     LaunchedEffect(appState.searchActive, imeVisible) {
@@ -570,17 +380,13 @@ fun FlowtoneApp(
         hasCurrentSong = hasCurrentSong,
         miniPlayerExpanded = appState.miniPlayerExpanded,
         miniPlayerFullscreen = appState.miniPlayerFullscreen,
-        rootPage = rootPage,
         searchActive = appState.searchActive,
         searchKeyboardVisible = appState.searchKeyboardVisible,
-        searchReturnStage = appState.searchReturnStage,
         onNavigateBack = navigateBack,
-        onCloseSecondaryPage = { closeFlowtoneSecondaryPage(appState) },
         onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,
         onCollapseMiniPlayer = {
             appState.miniPlayerExpanded = false
         },
-        onCloseArtistRootPage = ::closeArtistRootPage,
         onDismissSearchKeyboard = {
             appState.searchKeyboardDismissRequest += 1
         },
@@ -591,7 +397,6 @@ fun FlowtoneApp(
         selectedTopLevelPage = selectedTopLevelPage,
         secondaryPage = appState.secondaryPage,
         currentSong = playerUiState.currentSong,
-        artistRootReturnInProgress = appState.artistRootReturnInProgress,
         openExpandedPlayerRequest = openExpandedPlayerRequest,
         hasCurrentSong = hasCurrentSong,
         hasScanned = uiState.hasScanned,
@@ -608,9 +413,6 @@ fun FlowtoneApp(
             appState.miniPlayerFullscreen = false
             appState.miniPlayerFullscreenEnteredFromCollapsed = false
             appState.miniPlayerMinimized = false
-        },
-        onArtistRootReturnCompleted = {
-            clearArtistRootPage()
         },
         onOpenExpandedMiniPlayer = {
             if (appState.openExpandedMiniPlayerOnMediaClick) {
@@ -662,7 +464,6 @@ fun FlowtoneApp(
             themeMode = themeMode,
             pagerState = pagerState,
             selectedTopLevelPage = selectedTopLevelPage,
-            rootPage = rootPage,
             topBarBackgroundAlpha = activeTopBarBackgroundAlpha,
             topBarScrollConnection = topBarScrollConnection,
             backgroundBlurRadius = backgroundBlurRadius,
@@ -671,8 +472,7 @@ fun FlowtoneApp(
             miniPlayerBottomProtection = miniPlayerBottomProtection,
             noRippleInteractionSource = noRippleInteractionSource,
             searchUiState = searchUiState,
-            searchColors = activeSearchColors,
-            searchReentryProgress = searchReentryProgress
+            searchColors = activeSearchColors
             ),
             callbacks = flowtoneAppCallbacks(
             appState = appState,
@@ -700,16 +500,15 @@ fun FlowtoneApp(
                         appState.searchFocusRequest = 0
                         appState.searchKeyboardDismissRequest += 1
                     }
-                    appState.selectedPlaylistId = null
-                    appState.selectedPlaylistTitle = null
-                    appState.selectedAlbumId = album.id
-                    appState.selectedArtistName = null
-                    appState.secondaryPathSegments = listOf(album.title)
-                    appState.secondaryPage = SecondaryPage.Album
+                    val destination = SecondaryDestination.Album(album.id, album.title)
+                    appState.secondaryNavigation = if (appState.secondaryNavigation.current == null) {
+                        SecondaryNavigationState(listOf(destination))
+                    } else {
+                        appState.secondaryNavigation.push(destination)
+                    }
                 }
             },
-            onCloseArtistRootPage = ::closeArtistRootPage,
-            onOpenArtistRootPage = ::openArtistRootPage,
+            onOpenArtist = { artistName -> openArtist(artistName) },
             onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,
             onTogglePlayPause = musicViewModel::togglePlayPause,
             onPlayPrevious = musicViewModel::playPrevious,

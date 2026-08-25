@@ -175,13 +175,11 @@ internal fun FlowtoneScaffold(
     }
 
     LaunchedEffect(
-        state.rootPage,
         state.selectedTopLevelPage,
         state.secondaryPage,
         state.searchActive
     ) {
-        val editingAllowed = state.rootPage == FlowtoneRootPage.MainTabs &&
-            state.selectedTopLevelPage == TopLevelPage.Library &&
+        val editingAllowed = state.selectedTopLevelPage == TopLevelPage.Library &&
             state.secondaryPage == null &&
             !state.searchActive
         if (!editingAllowed) {
@@ -355,10 +353,8 @@ internal fun FlowtoneScaffold(
         }
         val playlistSortAvailable = (
             state.secondaryPage == SecondaryPage.LocalLibrary ||
-                (state.secondaryPage == SecondaryPage.Playlist &&
-                    state.selectedPlaylistId != null) ||
-                (state.secondaryPage == SecondaryPage.Album &&
-                    state.selectedAlbumId != null)
+                state.secondaryDestination is SecondaryDestination.Playlist ||
+                state.secondaryDestination is SecondaryDestination.Album
             ) && songSelectionTopBarState == null && !state.searchActive
         if (playlistSortPanelOpen || playlistSortProgress > 0f) {
             androidx.compose.foundation.layout.Box(

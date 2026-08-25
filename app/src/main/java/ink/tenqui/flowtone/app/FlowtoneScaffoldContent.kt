@@ -21,6 +21,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.luminance
@@ -73,6 +74,7 @@ internal fun FlowtoneScaffoldContent(
     topBarBackgroundHeight: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier
 ) {
+    val secondaryPageStateHolder = rememberSaveableStateHolder()
     val detailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
         state.secondaryPage == SecondaryPage.Album ||
         state.secondaryPage == SecondaryPage.LocalLibrary
@@ -83,26 +85,28 @@ internal fun FlowtoneScaffoldContent(
     val mainPagesCloudPalette = LocalMainPagesCloudPalette.current
     val mainPageCloudAccent = mainPagesCloudPalette.accentAt(pagePosition)
     val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
+    val selectedPlaylistDestination = state.secondaryDestination as? SecondaryDestination.Playlist
+    val selectedAlbumDestination = state.secondaryDestination as? SecondaryDestination.Album
     val selectedPlaylistCard = remember(
-        state.selectedPlaylistId,
+        selectedPlaylistDestination?.playlistId,
         libraryPlaylistController.playlists
     ) {
         libraryPlaylistController.playlists.firstOrNull { playlist ->
-            playlist.id == state.selectedPlaylistId
+            playlist.id == selectedPlaylistDestination?.playlistId
         }
     }
     val selectedPlaylistVisualType = when {
-        state.selectedPlaylistId == LikedSongsPlaylistId -> PlaylistCardVisualType.LikedMusic
+        selectedPlaylistDestination?.playlistId == LikedSongsPlaylistId -> PlaylistCardVisualType.LikedMusic
         selectedPlaylistCard != null -> playlistCardVisualTypeFor(selectedPlaylistCard)
-        state.selectedPlaylistId != null -> PlaylistCardVisualType.UserPlaylist
+        selectedPlaylistDestination != null -> PlaylistCardVisualType.UserPlaylist
         else -> PlaylistCardVisualType.Default
     }
     val selectedPlaylistAppearanceColorKey = selectedPlaylistCard?.appearanceColorKey
-        ?: state.selectedPlaylistId
+        ?: selectedPlaylistDestination?.playlistId
             ?.takeUnless { playlistId -> playlistId == LikedSongsPlaylistId }
             ?.let(::playlistAppearanceColorKeyForStableId)
-    val selectedAlbum = remember(state.selectedAlbumId, state.uiState.albums) {
-        state.uiState.albums.firstOrNull { album -> album.id == state.selectedAlbumId }
+    val selectedAlbum = remember(selectedAlbumDestination?.albumId, state.uiState.albums) {
+        state.uiState.albums.firstOrNull { album -> album.id == selectedAlbumDestination?.albumId }
     }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val defaultAlbumCloudPalette = remember(isDarkTheme, mainPageCloudAccent) {
@@ -120,7 +124,7 @@ internal fun FlowtoneScaffoldContent(
     )
     val targetCloudPalette = remember(
         state.secondaryPage,
-        state.selectedPlaylistId,
+        selectedPlaylistDestination,
         selectedPlaylistVisualType,
         selectedPlaylistAppearanceColorKey,
         albumArtworkCloudPalette,
@@ -190,17 +194,18 @@ internal fun FlowtoneScaffoldContent(
     } else {
         monochromeFlowtoneCloudPalette(mainPageCloudAccent)
     }
-    val playlistDetailDestination = state.selectedPlaylistId?.let { playlistId ->
+    val playlistDetailDestination = selectedPlaylistDestination?.let { selectedDestination ->
+        val playlistId = selectedDestination.playlistId
         val metadata = if (playlistId == LikedSongsPlaylistId) {
             PlaylistDetailMetadata(
-                title = state.selectedPlaylistTitle ?: "我喜欢的音乐",
+                title = selectedDestination.title,
                 creatorName = LocalPlaylistCreatorName
             )
         } else {
             PlaylistDetailMetadata(
-                title = state.selectedPlaylistTitle
-                    ?: selectedPlaylistCard?.title
-                    ?: SecondaryPage.Playlist.title,
+                title = selectedDestination.title.ifBlank {
+                    selectedPlaylistCard?.title ?: SecondaryPage.Playlist.title
+                },
                 creatorName = selectedPlaylistCard?.creatorName ?: LocalPlaylistCreatorName,
                 description = selectedPlaylistCard?.description,
                 customArtworkUri = selectedPlaylistCard?.customArtworkUri,
@@ -218,7 +223,8 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
-    val albumDetailDestination = state.selectedAlbumId?.let { albumId ->
+    val albumDetailDestination = selectedAlbumDestination?.let { selectedDestination ->
+        val albumId = selectedDestination.albumId
         remember(albumId) {
             AlbumDetailDestination(
                 albumId = albumId,
@@ -230,15 +236,13 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
-    val targetPage = if (state.secondaryPage == null) {
-        FlowtoneScaffoldPage.MainTabs
-    } else {
+    val targetPage = state.secondaryDestination?.let { destination ->
         FlowtoneScaffoldPage.Secondary(
-            page = state.secondaryPage,
+            destination = destination,
             playlistDetailDestination = playlistDetailDestination,
             albumDetailDestination = albumDetailDestination
         )
-    }
+    } ?: FlowtoneScaffoldPage.MainTabs
 
     Box(modifier = modifier.fillMaxSize()) {
         SharedTransitionLayout(
@@ -256,9 +260,9 @@ internal fun FlowtoneScaffoldContent(
                 val pageUsesSharedCloud = when (page) {
                     FlowtoneScaffoldPage.MainTabs -> true
                     is FlowtoneScaffoldPage.Secondary ->
-                        page.page == SecondaryPage.Playlist ||
-                            page.page == SecondaryPage.Album ||
-                            page.page == SecondaryPage.LocalLibrary
+                        page.destination.page == SecondaryPage.Playlist ||
+                            page.destination.page == SecondaryPage.Album ||
+                            page.destination.page == SecondaryPage.LocalLibrary
                 }
                 val pageCloudAlpha = if (pageUsesSharedCloud) 1f else 0f
                 val pageSecondaryBackgroundAlpha = if (pageUsesSharedCloud) 0f else 1f
@@ -275,8 +279,7 @@ internal fun FlowtoneScaffoldContent(
                     else -> state.topBarBackgroundAlpha
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
-                    if (state.rootPage == FlowtoneRootPage.MainTabs) {
-                        Box(
+                    Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(pageScope.backgroundModifier())
@@ -313,8 +316,7 @@ internal fun FlowtoneScaffoldContent(
                                 MainTabsContentMode.Normal -> Box(
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    if (state.rootPage == FlowtoneRootPage.MainTabs) {
-                                        Box(
+                                    Box(
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .then(mainModeScope.backgroundModifier())
@@ -323,7 +325,6 @@ internal fun FlowtoneScaffoldContent(
                                                     cloudPlacement = cloudPlacement
                                                 )
                                         )
-                                    }
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -399,8 +400,11 @@ internal fun FlowtoneScaffoldContent(
                                 .padding(innerPadding)
                                 .padding(bottom = state.miniPlayerContentBottomPadding)
                         ) {
-                            SecondaryPageHost(
-                        secondaryPage = page.page,
+                            secondaryPageStateHolder.SaveableStateProvider(
+                                key = page.destination.uiStateKey()
+                            ) {
+                                SecondaryPageHost(
+                        destination = page.destination,
                         pageScope = pageScope,
                         appPreferences = state.appPreferences,
                     themeMode = state.themeMode,
@@ -443,7 +447,6 @@ internal fun FlowtoneScaffoldContent(
                     albumDetailDestination = page.albumDetailDestination,
                     onUpdatePlaylistDescription = onUpdatePlaylistDescription,
                     onPlaylistBackActionChange = onPlaylistBackActionChange,
-                    selectedArtistName = state.selectedArtistName,
                     listeningRecordInitialTab = state.listeningRecordInitialTab,
                     likedSongKeys = state.likedSongKeys,
                     playlistSongEntries = playlistSongEntries,
@@ -458,6 +461,7 @@ internal fun FlowtoneScaffoldContent(
                     onSongClick = callbacks.onSongClick,
                     onPlaylistSongClick = callbacks.onPlaylistSongClick,
                     onPersistentTrackQueueClick = callbacks.onPersistentTrackQueueClick,
+                    onOpenAlbum = callbacks.onOpenAlbum,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
                     onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange,
@@ -465,8 +469,9 @@ internal fun FlowtoneScaffoldContent(
                     onOpenSourceBack = callbacks.onOpenSourceBack,
                     onOpenSourceBackActionChange = callbacks.openSourceBackActionChange,
                     onOpenSourcePathSegmentsChange = callbacks.onOpenSourcePathSegmentsChange,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                     if (page is FlowtoneScaffoldPage.Secondary) {
@@ -490,8 +495,6 @@ internal fun FlowtoneScaffoldContent(
             }
     }
 }
-}
-
 @Composable
 private fun FlowtoneMainTabsSearchContent(
     state: FlowtoneAppScaffoldState,
@@ -515,15 +518,6 @@ private fun FlowtoneMainTabsSearchContent(
         ),
         label = "SearchMiniPlayerBottomSpaceProgress"
     )
-    val searchLayerProgress = when (state.searchReturnStage) {
-        SearchReturnStage.SearchExitingForArtist,
-        SearchReturnStage.SearchReentering -> state.searchReentryProgress
-        SearchReturnStage.Idle -> 1f
-        SearchReturnStage.ArtistVisible,
-        SearchReturnStage.ArtistExitingToSearch,
-        SearchReturnStage.SearchPreparing -> 0f
-    }
-
     GlobalSearchContent(
         searchUiState = state.searchUiState,
         currentSong = state.playerUiState.currentSong,
@@ -534,10 +528,7 @@ private fun FlowtoneMainTabsSearchContent(
         onOnlineSongClick = callbacks.onOnlineSongClick,
         pendingTrackIdentityKey = state.uiState.pendingPlayback?.track?.identityKey,
         onArtistClick = { artist ->
-            callbacks.onOpenArtistRootPage(
-                artist.name,
-                ArtistRootNavigationMode.NormalPage
-            )
+            callbacks.onOpenArtist(artist.name)
         },
         onAlbumClick = callbacks.onOpenAlbum,
         onExitSearch = callbacks.onExitSearch,
@@ -547,8 +538,8 @@ private fun FlowtoneMainTabsSearchContent(
         onLoadMore = callbacks.onLoadMoreSearchResults,
         bottomContentPadding =
             state.miniPlayerContentBottomPadding * miniPlayerSpaceProgress,
-        interactionsEnabled = state.searchReturnStage == SearchReturnStage.Idle,
-        reentryProgress = searchLayerProgress,
+        interactionsEnabled = true,
+        reentryProgress = 1f,
         pageTransition = pageTransition,
         modifier = modifier
     )
@@ -566,7 +557,7 @@ internal fun mainTabsContentMode(searchActive: Boolean): MainTabsContentMode {
 private sealed interface FlowtoneScaffoldPage {
     data object MainTabs : FlowtoneScaffoldPage
     data class Secondary(
-        val page: SecondaryPage,
+        val destination: SecondaryDestination,
         val playlistDetailDestination: PlaylistDetailDestination? = null,
         val albumDetailDestination: AlbumDetailDestination? = null
     ) : FlowtoneScaffoldPage
@@ -584,11 +575,11 @@ private fun flowtoneReversibleTransitionKey(
     return when (page) {
         FlowtoneScaffoldPage.MainTabs -> FlowtoneReversibleTransitionKey.MainTabs
         is FlowtoneScaffoldPage.Secondary -> {
-            if (page.page == SecondaryPage.Playlist) {
+            if (page.destination.page == SecondaryPage.Playlist) {
                 page.playlistDetailDestination?.playlistId?.let { playlistId ->
                     FlowtoneReversibleTransitionKey.Playlist(playlistId)
                 }
-            } else if (page.page == SecondaryPage.Album) {
+            } else if (page.destination.page == SecondaryPage.Album) {
                 page.albumDetailDestination?.albumId?.let { albumId ->
                     FlowtoneReversibleTransitionKey.Album(albumId)
                 }
@@ -609,7 +600,7 @@ private fun isFlowtoneCollectionDetailTransition(
 
 private fun FlowtoneScaffoldPage.isCollectionDetailPage(): Boolean {
     return this is FlowtoneScaffoldPage.Secondary &&
-        when (page) {
+        when (destination.page) {
             SecondaryPage.Playlist -> playlistDetailDestination?.playlistId != null
             SecondaryPage.Album -> albumDetailDestination != null
             else -> false

@@ -20,14 +20,18 @@ internal fun FlowtoneScaffoldTopLayer(
     playlistSortProgress: Float,
     descriptionBlurRadius: Dp
 ) {
-    if (state.rootPage == FlowtoneRootPage.MainTabs) {
+    if (state.secondaryPage != SecondaryPage.Artist) {
         val titleVisible = state.secondaryPage != null
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,
-            additionalPathSegments = state.secondaryPathSegments,
+            additionalPathSegments = secondaryDestinationBreadcrumbs(
+                current = state.secondaryDestination,
+                previous = state.previousSecondaryDestination,
+                nestedSegments = state.secondaryPathSegments
+            ),
             titleVisible = titleVisible,
             songSelectionState = songSelectionState,
             hideBackButton = state.hideSecondaryBackButton,
@@ -36,13 +40,10 @@ internal fun FlowtoneScaffoldTopLayer(
             searchColors = state.searchColors,
             searchFocusRequest = state.searchFocusRequest,
             searchKeyboardDismissRequest = state.searchKeyboardDismissRequest,
-            searchReentryProgress = state.searchReentryProgress,
             onBack = if (songSelectionState != null) {
                 onCloseSongSelection
             } else if (state.secondaryPage == SecondaryPage.Playlist) {
                 playlistBackAction ?: callbacks.onCloseSecondaryPage
-            } else if (state.secondaryPage == SecondaryPage.Album) {
-                callbacks.onCloseSecondaryPage
             } else {
                 callbacks.onNavigateBack
             },

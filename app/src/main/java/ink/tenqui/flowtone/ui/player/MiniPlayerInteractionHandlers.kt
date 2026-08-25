@@ -313,7 +313,7 @@ internal fun handleMiniPlayerArtistHostArtistClick(
     transitions.openArtistDetailFromPlaceholder(
         artistName = artistName,
         artistPlaceholderActive = artistPlaceholderActive
-    )?.let(callbacks.onOpenArtistRootPage)
+    )?.let(callbacks.onOpenArtist)
 }
 
 internal fun handleMiniPlayerOpenSongInfo(
