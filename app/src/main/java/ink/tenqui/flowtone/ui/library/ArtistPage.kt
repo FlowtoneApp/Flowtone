@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,7 +67,6 @@ private val ArtistHeaderCornerRadius = 24.dp
 private val ArtistHeaderContentTopGap = 16.dp
 private val ArtistHeaderAvatarNameGap = 16.dp
 private val ArtistHeaderStatisticsBottomPadding = 22.dp
-private val ArtistHeaderStatisticsEndPadding = 20.dp
 private val ArtistAlbumArtworkSize = 140.dp
 private const val ArtistHeaderCardAnimationIndex = 0
 private const val ArtistHeaderAvatarAnimationIndex = 1
@@ -254,7 +254,7 @@ internal fun ArtistPage(
                 ArtistSectionTitle(
                     title = "歌曲",
                     modifier = fixedItemModifier(ArtistSongsTitleAnimationIndex)
-                        .padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 8.dp)
+                        .padding(start = 20.dp, top = 0.dp, end = 20.dp, bottom = 8.dp)
                 )
             }
             if (artistSongs.isEmpty()) {
@@ -370,6 +370,7 @@ private fun ArtistHeaderCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .height(avatarSize)
                     .padding(start = ArtistHeaderAvatarNameGap)
             ) {
                 Text(
@@ -403,19 +404,17 @@ private fun ArtistHeaderCard(
                             .padding(top = if (displayAlias == null) 12.dp else 10.dp)
                     )
                 }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = statistics,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = itemModifier(ArtistHeaderStatsAnimationIndex)
+                        .align(Alignment.End)
+                        .padding(top = 12.dp)
+                )
             }
         }
-        Text(
-            text = statistics,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = itemModifier(ArtistHeaderStatsAnimationIndex)
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = ArtistHeaderStatisticsEndPadding,
-                    bottom = ArtistHeaderStatisticsBottomPadding
-                )
-        )
     }
 }
 
