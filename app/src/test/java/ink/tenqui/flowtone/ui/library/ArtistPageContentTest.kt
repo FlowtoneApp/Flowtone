@@ -33,7 +33,7 @@ class ArtistPageContentTest {
     @Test
     fun statisticsOmitAlbumCountWhenThereAreNoAlbums() {
         assertEquals("18 首歌曲", artistStatisticsText(songCount = 18, albumCount = 0))
-        assertEquals("18 首歌曲 · 3 张专辑", artistStatisticsText(songCount = 18, albumCount = 3))
+        assertEquals("18 首歌曲\n3 张专辑", artistStatisticsText(songCount = 18, albumCount = 3))
     }
 
 }

@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,14 +60,14 @@ import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
 
-private val ArtistHeaderMinimumContentHeight = 248.dp
+private val ArtistHeaderMinimumContentHeight = 224.dp
 private val ArtistToolbarHeight = 64.dp
 private val ArtistAvatarSize = 112.dp
 private val ArtistCompactAvatarSize = 104.dp
 private val ArtistHeaderCornerRadius = 24.dp
 private val ArtistHeaderContentTopGap = 16.dp
-private val ArtistHeaderAvatarNameGap = 16.dp
-private val ArtistHeaderStatisticsBottomPadding = 22.dp
+private val ArtistHeaderAvatarNameGap = 12.dp
+private val ArtistHeaderBottomPadding = 24.dp
 private val ArtistAlbumArtworkSize = 140.dp
 private const val ArtistHeaderCardAnimationIndex = 0
 private const val ArtistHeaderAvatarAnimationIndex = 1
@@ -357,7 +358,7 @@ private fun ArtistHeaderCard(
                     start = 20.dp,
                     top = topPadding + ArtistToolbarHeight + ArtistHeaderContentTopGap,
                     end = 20.dp,
-                    bottom = ArtistHeaderStatisticsBottomPadding + 26.dp
+                    bottom = ArtistHeaderBottomPadding
                 )
         ) {
             ArtistAvatar(
@@ -409,6 +410,7 @@ private fun ArtistHeaderCard(
                     text = statistics,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
                     modifier = itemModifier(ArtistHeaderStatsAnimationIndex)
                         .align(Alignment.End)
                         .padding(top = 12.dp)

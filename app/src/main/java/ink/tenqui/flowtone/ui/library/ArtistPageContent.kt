@@ -34,5 +34,5 @@ internal fun artistMatchesAlbumSongs(
 
 internal fun artistStatisticsText(songCount: Int, albumCount: Int): String {
     val songs = "$songCount 首歌曲"
-    return if (albumCount > 0) "$songs · $albumCount 张专辑" else songs
+    return if (albumCount > 0) "$songs\n$albumCount 张专辑" else songs
 }
