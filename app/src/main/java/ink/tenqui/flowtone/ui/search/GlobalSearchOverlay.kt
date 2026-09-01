@@ -444,17 +444,13 @@ private fun SearchResultCategorySelector(
     val categoryState = state.providerCategoryState(category.providerCategory)
     val onlineResults = categoryState.items
     val isInitialLoading = categoryState.isInitialLoading
+    val sourceSections = searchResultSourceSections(
+        scope = state.scope,
+        hasLocalResults = localSongs.isNotEmpty() || localArtists.isNotEmpty() || localAlbums.isNotEmpty(),
+        hasOnlineResults = onlineResults.isNotEmpty()
+    )
     val hasNoResults = !state.query.isBlank && !state.isSearching && !isInitialLoading &&
         localSongs.isEmpty() && localArtists.isEmpty() && localAlbums.isEmpty() && onlineResults.isEmpty()
-    val resultSnapshot = SearchResultSnapshot(
-        localSongs = localSongs,
-        localArtists = localArtists,
-        onlineResults = onlineResults,
-        hasNoResults = hasNoResults,
-        isStale = state.isSearching,
-        isLoadingMore = categoryState.isLoadingMore,
-        error = categoryState.error
-    )
     LaunchedEffect(category, state.searchGeneration, categoryState.nextCursor, categoryState.isLoadingMore) {
         snapshotFlow {
             val info = listState.layoutInfo
@@ -468,21 +464,42 @@ private fun SearchResultCategorySelector(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier.padding(horizontal = 8.dp)
     ) {
-        if (state.isSearching || isInitialLoading) item {
+        if (state.scope != SearchScope.All && (state.isSearching || isInitialLoading)) item {
             Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
             }
         }
-        itemsIndexed(localSongs, key = { _, song -> "local:${song.uri}" }) { index, song ->
+        if (SearchResultSourceSection.Local in sourceSections) {
+            item(key = "search-source-local") {
+                SearchResultsSectionTitle("本地")
+            }
+        }
+        itemsIndexed(localSongs, key = { _, song ->
+            localSearchResultItemKey("song", song.uri.toString())
+        }) { index, song ->
             SongListItem(song, currentSong?.uri == song.uri, onClick = { onSongClick(localSongs, index) })
         }
-        items(localArtists, key = { artist -> "artist:${artist.id}" }) { artist ->
+        items(localArtists, key = { artist -> localSearchResultItemKey("artist", artist.id) }) { artist ->
             LocalSearchArtist(artist, onClick = { onArtistClick(artist) }, alpha = 1f)
         }
-        items(localAlbums, key = { album -> "album:${album.albumId}" }) { album ->
+        items(localAlbums, key = { album -> localSearchResultItemKey("album", album.albumId.toString()) }) { album ->
             LocalSearchAlbum(album, onClick = { onAlbumClick(album.albumId) })
         }
-        items(onlineResults, key = { song -> "online:${song.trackRef.extensionId}:${song.trackRef.opaqueId}" }) { song ->
+        if (SearchResultSourceSection.Online in sourceSections) {
+            item(key = "search-source-online") {
+                SearchResultsSectionTitle("在线")
+            }
+        }
+        if (state.scope == SearchScope.All && isInitialLoading && onlineResults.isEmpty()) item(
+            key = "search-source-online-loading"
+        ) {
+            Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+            }
+        }
+        items(onlineResults, key = { song ->
+            providerSearchResultItemKey(song.trackRef.extensionId, song.trackRef.opaqueId)
+        }) { song ->
             OnlineSearchSong(song, alpha = 1f, onClick = if (song.searchCategory == ProviderSearchCategory.Single) {
                 { onOnlineSongClick(song) }
             } else if (song.searchCategory == ProviderSearchCategory.User) {
@@ -508,58 +525,40 @@ private fun SearchResultCategorySelector(
     }
 }
 
-private data class SearchResultSnapshot(
-    val localSongs: List<Song>,
-    val localArtists: List<SearchArtist>,
-    val onlineResults: List<ProviderSong>,
-    val hasNoResults: Boolean,
-    val isStale: Boolean,
-    val isLoadingMore: Boolean,
-    val error: String?
-)
-
 @Composable
-private fun SearchResultRows(
-    snapshot: SearchResultSnapshot,
-    currentSong: Song?,
-    onSongClick: (List<Song>, Int) -> Unit,
-    onOnlineSongClick: (ProviderSong) -> Unit,
-    onArtistClick: (SearchArtist) -> Unit,
-    isLoadingMore: Boolean,
-    onLoadMore: () -> Unit
-) {
-    val staleAlpha = if (snapshot.isStale) 0.48f else 1f
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        snapshot.localSongs.forEachIndexed { index, song ->
-            SongListItem(
-                song,
-                currentSong?.uri == song.uri,
-                onClick = { onSongClick(snapshot.localSongs, index) },
-                modifier = Modifier.alpha(staleAlpha)
-            )
-        }
-        snapshot.localArtists.forEach { artist ->
-            LocalSearchArtist(artist, onClick = { onArtistClick(artist) }, alpha = staleAlpha)
-        }
-        snapshot.onlineResults.forEach { song ->
-            OnlineSearchSong(
-                song,
-                alpha = staleAlpha,
-                onClick = if (song.searchCategory == ProviderSearchCategory.Single) {
-                    { onOnlineSongClick(song) }
-                } else {
-                    null
-                }
-            )
-        }
-        if (isLoadingMore) {
-            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            }
-        }
-        if (snapshot.hasNoResults) LandingMessage("没有找到相关内容")
+private fun SearchResultsSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onPrimaryContainer,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 12.dp, top = 16.dp, end = 12.dp, bottom = 4.dp)
+    )
+}
+
+internal enum class SearchResultSourceSection {
+    Local,
+    Online
+}
+
+internal fun searchResultSourceSections(
+    scope: SearchScope,
+    hasLocalResults: Boolean,
+    hasOnlineResults: Boolean
+): List<SearchResultSourceSection> {
+    if (scope != SearchScope.All) return emptyList()
+    return buildList {
+        if (hasLocalResults) add(SearchResultSourceSection.Local)
+        if (hasOnlineResults) add(SearchResultSourceSection.Online)
     }
 }
+
+internal fun localSearchResultItemKey(kind: String, identity: String): String =
+    "local:${kind.trim()}:${identity.trim()}"
+
+internal fun providerSearchResultItemKey(providerId: String, identity: String): String =
+    "online:${providerId.trim()}:${identity.trim()}"
+
 @Composable
 private fun LocalSearchArtist(artist: SearchArtist, onClick: () -> Unit, alpha: Float) = Row(
     modifier = Modifier.fillMaxWidth().alpha(alpha).clickable(onClick = onClick).padding(16.dp, 12.dp),
