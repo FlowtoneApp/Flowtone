@@ -31,8 +31,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -49,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -81,6 +84,7 @@ import ink.tenqui.flowtone.data.online.SearchLandingAction
 import ink.tenqui.flowtone.data.online.SearchLandingBlock
 import ink.tenqui.flowtone.data.online.SearchLandingItem
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
+import ink.tenqui.flowtone.data.search.ProviderSearchCategoryState
 import ink.tenqui.flowtone.data.search.providerCategoryState
 import ink.tenqui.flowtone.data.search.SearchArtist
 import ink.tenqui.flowtone.data.search.SearchResult
@@ -89,6 +93,9 @@ import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.components.pageElementKeyDiff
+import ink.tenqui.flowtone.ui.components.rememberPageElementExitScope
+import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.components.SearchBackgroundCloudPlacement
@@ -325,6 +332,33 @@ private enum class SearchResultCategory(val label: String, val providerCategory:
     }
 }
 
+private data class SearchResultEntrySessionKey(
+    val generation: Long,
+    val category: SearchResultCategory,
+    val scope: SearchScope
+)
+
+@Composable
+private fun visibleSearchResultKeys(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    resultEntryKeys: List<Any>
+): List<Any> {
+    val resultKeySet = remember(resultEntryKeys) { resultEntryKeys.toSet() }
+    val visibleKeys by remember(listState, resultKeySet) {
+        derivedStateOf {
+            visibleSearchResultKeysFromLayout(listState, resultKeySet)
+        }
+    }
+    return visibleKeys
+}
+
+private fun visibleSearchResultKeysFromLayout(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    resultKeySet: Set<Any>
+): List<Any> = listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+    item.key.takeIf(resultKeySet::contains)
+}
+
 @Composable
 private fun SearchResultCategorySelector(
     selectedCategory: SearchResultCategory,
@@ -442,15 +476,80 @@ private fun SearchResultCategorySelector(
     val localArtists = if (category == SearchResultCategory.User) state.artistResults else emptyList()
     val localAlbums = if (category == SearchResultCategory.Album) state.albumResults else emptyList()
     val categoryState = state.providerCategoryState(category.providerCategory)
-    val onlineResults = categoryState.items
-    val isInitialLoading = categoryState.isInitialLoading
-    val sourceSections = searchResultSourceSections(
-        scope = state.scope,
-        hasLocalResults = localSongs.isNotEmpty() || localArtists.isNotEmpty() || localAlbums.isNotEmpty(),
-        hasOnlineResults = onlineResults.isNotEmpty()
+    val currentSnapshot = remember(
+        state.searchGeneration,
+        state.scope,
+        category,
+        localSongs,
+        localArtists,
+        localAlbums,
+        categoryState.items
+    ) {
+        val sourceSections = searchResultSourceSections(
+            scope = state.scope,
+            hasLocalResults = localSongs.isNotEmpty() || localArtists.isNotEmpty() || localAlbums.isNotEmpty(),
+            hasOnlineResults = categoryState.items.isNotEmpty()
+        )
+        SearchResultSnapshot(
+            sessionKey = SearchResultEntrySessionKey(
+                generation = state.searchGeneration,
+                category = category,
+                scope = state.scope
+            ),
+            scope = state.scope,
+            localSongs = localSongs,
+            localArtists = localArtists,
+            localAlbums = localAlbums,
+            onlineResults = categoryState.items,
+            sourceSections = sourceSections,
+            elementKeys = searchResultElementKeys(
+                sourceSections = sourceSections,
+                localSongs = localSongs,
+                localArtists = localArtists,
+                localAlbums = localAlbums,
+                onlineResults = categoryState.items
+            )
+        )
+    }
+    var displayedSnapshot by remember { mutableStateOf<SearchResultSnapshot?>(null) }
+    var outgoingPresentation by remember { mutableStateOf<SearchResultOutgoingPresentation?>(null) }
+    var nextOutgoingId by remember { mutableStateOf(0L) }
+    var retainedKeysForCurrentSession by remember { mutableStateOf<Set<Any>>(emptySet()) }
+
+    LaunchedEffect(currentSnapshot) {
+        val previousSnapshot = displayedSnapshot
+        val keyDiff = previousSnapshot?.let { previous ->
+            pageElementKeyDiff(previous.elementKeys, currentSnapshot.elementKeys)
+        }
+        retainedKeysForCurrentSession = keyDiff?.retainedKeys.orEmpty()
+        if (previousSnapshot != null && keyDiff?.exitingKeys?.isNotEmpty() == true) {
+            nextOutgoingId += 1
+            outgoingPresentation = SearchResultOutgoingPresentation(
+                id = nextOutgoingId,
+                snapshot = previousSnapshot,
+                exitingKeys = keyDiff.exitingKeys.toSet(),
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+                viewportKeys = visibleSearchResultKeysFromLayout(
+                    listState = listState,
+                    resultKeySet = previousSnapshot.elementKeys.toSet()
+                )
+            )
+        } else if (outgoingPresentation?.exitingKeys?.any(currentSnapshot.elementKeys::contains) == true) {
+            outgoingPresentation = null
+        }
+        displayedSnapshot = currentSnapshot
+    }
+
+    val presentedSnapshot = displayedSnapshot ?: currentSnapshot
+    val visibleCurrentKeys = visibleSearchResultKeys(listState, presentedSnapshot.elementKeys)
+    val resultEnterScope = rememberPageElementEnterScope(
+        sessionKey = presentedSnapshot.sessionKey,
+        elementKeys = presentedSnapshot.elementKeys,
+        viewportKeys = visibleCurrentKeys,
+        awaitViewportKeys = true,
+        initiallyEnteredKeys = retainedKeysForCurrentSession
     )
-    val hasNoResults = !state.query.isBlank && !state.isSearching && !isInitialLoading &&
-        localSongs.isEmpty() && localArtists.isEmpty() && localAlbums.isEmpty() && onlineResults.isEmpty()
     LaunchedEffect(category, state.searchGeneration, categoryState.nextCursor, categoryState.isLoadingMore) {
         snapshotFlow {
             val info = listState.layoutInfo
@@ -459,61 +558,223 @@ private fun SearchResultCategorySelector(
             if (lastVisible != null && totalItems > 0 && lastVisible >= totalItems - 5) onLoadMore()
         }
     }
+    val emptyMessage = searchResultEmptyMessage(
+        scope = state.scope,
+        queryIsBlank = state.query.isBlank,
+        isSearching = state.isSearching,
+        providerState = categoryState,
+        hasCurrentResults = currentSnapshot.elementKeys.isNotEmpty()
+    )
+    Box(modifier = modifier.padding(horizontal = 8.dp)) {
+        SearchResultList(
+            snapshot = presentedSnapshot,
+            currentSong = currentSong,
+            listState = listState,
+            onSongClick = onSongClick,
+            onArtistClick = onArtistClick,
+            onOnlineSongClick = onOnlineSongClick,
+            onProviderArtistClick = onProviderArtistClick,
+            onAlbumClick = onAlbumClick,
+            elementModifier = resultEnterScope::elementModifier,
+            showInitialLoading = state.scope != SearchScope.All &&
+                (state.isSearching || categoryState.isInitialLoading),
+            showOnlineLoading = state.scope == SearchScope.All &&
+                categoryState.isInitialLoading && presentedSnapshot.onlineResults.isEmpty(),
+            showLoadingMore = categoryState.isLoadingMore,
+            error = categoryState.error,
+            nextCursorAvailable = categoryState.nextCursor != null,
+            emptyMessage = emptyMessage,
+            onLoadMore = onLoadMore,
+            interactive = true,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        outgoingPresentation?.let { presentation ->
+            val outgoingListState = androidx.compose.runtime.key(presentation.id) {
+                rememberLazyListState(
+                    initialFirstVisibleItemIndex = presentation.firstVisibleItemIndex,
+                    initialFirstVisibleItemScrollOffset = presentation.firstVisibleItemScrollOffset
+                )
+            }
+            val exitScope = rememberPageElementExitScope(
+                sessionKey = presentation.id,
+                elementKeys = presentation.exitingKeys.toList(),
+                viewportKeys = presentation.viewportKeys,
+                onFinished = {
+                    if (outgoingPresentation?.id == presentation.id) {
+                        outgoingPresentation = null
+                    }
+                }
+            )
+            SearchResultList(
+                snapshot = presentation.snapshot,
+                currentSong = currentSong,
+                listState = outgoingListState,
+                onSongClick = onSongClick,
+                onArtistClick = onArtistClick,
+                onOnlineSongClick = onOnlineSongClick,
+                onProviderArtistClick = onProviderArtistClick,
+                onAlbumClick = onAlbumClick,
+                elementModifier = { key ->
+                    if (key in presentation.exitingKeys) {
+                        exitScope.elementModifier(key)
+                    } else {
+                        exitScope.hiddenModifier()
+                    }
+                },
+                interactive = false,
+                modifier = Modifier.fillMaxSize().zIndex(1f)
+            )
+        }
+    }
+}
+
+private data class SearchResultSnapshot(
+    val sessionKey: SearchResultEntrySessionKey,
+    val scope: SearchScope,
+    val localSongs: List<Song>,
+    val localArtists: List<SearchArtist>,
+    val localAlbums: List<SearchResult.AlbumResult>,
+    val onlineResults: List<ProviderSong>,
+    val sourceSections: List<SearchResultSourceSection>,
+    val elementKeys: List<Any>
+)
+
+private data class SearchResultOutgoingPresentation(
+    val id: Long,
+    val snapshot: SearchResultSnapshot,
+    val exitingKeys: Set<Any>,
+    val firstVisibleItemIndex: Int,
+    val firstVisibleItemScrollOffset: Int,
+    val viewportKeys: List<Any>
+)
+
+private fun searchResultElementKeys(
+    sourceSections: List<SearchResultSourceSection>,
+    localSongs: List<Song>,
+    localArtists: List<SearchArtist>,
+    localAlbums: List<SearchResult.AlbumResult>,
+    onlineResults: List<ProviderSong>
+): List<Any> = buildList {
+    if (SearchResultSourceSection.Local in sourceSections) add("search-source-local")
+    localSongs.forEach { song -> add(localSearchResultItemKey("song", song.uri.toString())) }
+    localArtists.forEach { artist -> add(localSearchResultItemKey("artist", artist.id)) }
+    localAlbums.forEach { album -> add(localSearchResultItemKey("album", album.albumId.toString())) }
+    if (SearchResultSourceSection.Online in sourceSections) add("search-source-online")
+    onlineResults.forEach { result ->
+        add(providerSearchResultItemKey(result.trackRef.extensionId, result.trackRef.opaqueId))
+    }
+}
+
+@Composable
+private fun SearchResultList(
+    snapshot: SearchResultSnapshot,
+    currentSong: Song?,
+    listState: LazyListState,
+    onSongClick: (List<Song>, Int) -> Unit,
+    onOnlineSongClick: (ProviderSong) -> Unit,
+    onArtistClick: (SearchArtist) -> Unit,
+    onProviderArtistClick: (ProviderSong) -> Unit,
+    onAlbumClick: (Long) -> Unit,
+    elementModifier: (Any) -> Modifier,
+    showInitialLoading: Boolean = false,
+    showOnlineLoading: Boolean = false,
+    showLoadingMore: Boolean = false,
+    error: String? = null,
+    nextCursorAvailable: Boolean = false,
+    emptyMessage: String? = null,
+    onLoadMore: () -> Unit = {},
+    interactive: Boolean,
+    modifier: Modifier = Modifier
+) {
     LazyColumn(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = modifier.padding(horizontal = 8.dp)
+        modifier = modifier
     ) {
-        if (state.scope != SearchScope.All && (state.isSearching || isInitialLoading)) item {
+        if (showInitialLoading) item(key = "search-initial-loading") {
             Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
             }
         }
-        if (SearchResultSourceSection.Local in sourceSections) {
+        if (SearchResultSourceSection.Local in snapshot.sourceSections) {
             item(key = "search-source-local") {
-                SearchResultsSectionTitle("本地")
+                SearchResultsSectionTitle(
+                    title = "本地",
+                    modifier = elementModifier("search-source-local")
+                )
             }
         }
-        itemsIndexed(localSongs, key = { _, song ->
+        itemsIndexed(snapshot.localSongs, key = { _, song ->
             localSearchResultItemKey("song", song.uri.toString())
         }) { index, song ->
-            SongListItem(song, currentSong?.uri == song.uri, onClick = { onSongClick(localSongs, index) })
+            SongListItem(
+                song = song,
+                isCurrentSong = currentSong?.uri == song.uri,
+                onClick = if (interactive) {
+                    { onSongClick(snapshot.localSongs, index) }
+                } else {
+                    {}
+                },
+                modifier = elementModifier(localSearchResultItemKey("song", song.uri.toString()))
+            )
         }
-        items(localArtists, key = { artist -> localSearchResultItemKey("artist", artist.id) }) { artist ->
-            LocalSearchArtist(artist, onClick = { onArtistClick(artist) }, alpha = 1f)
+        items(snapshot.localArtists, key = { artist -> localSearchResultItemKey("artist", artist.id) }) { artist ->
+            LocalSearchArtist(
+                artist = artist,
+                onClick = if (interactive) ({ onArtistClick(artist) }) else ({}),
+                alpha = 1f,
+                modifier = elementModifier(localSearchResultItemKey("artist", artist.id))
+            )
         }
-        items(localAlbums, key = { album -> localSearchResultItemKey("album", album.albumId.toString()) }) { album ->
-            LocalSearchAlbum(album, onClick = { onAlbumClick(album.albumId) })
+        items(snapshot.localAlbums, key = { album -> localSearchResultItemKey("album", album.albumId.toString()) }) { album ->
+            LocalSearchAlbum(
+                album = album,
+                onClick = if (interactive) ({ onAlbumClick(album.albumId) }) else ({}),
+                modifier = elementModifier(localSearchResultItemKey("album", album.albumId.toString()))
+            )
         }
-        if (SearchResultSourceSection.Online in sourceSections) {
+        if (SearchResultSourceSection.Online in snapshot.sourceSections) {
             item(key = "search-source-online") {
-                SearchResultsSectionTitle("在线")
+                SearchResultsSectionTitle(
+                    title = "在线",
+                    modifier = elementModifier("search-source-online")
+                )
             }
         }
-        if (state.scope == SearchScope.All && isInitialLoading && onlineResults.isEmpty()) item(
-            key = "search-source-online-loading"
-        ) {
+        if (showOnlineLoading) item(key = "search-source-online-loading") {
             Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
             }
         }
-        items(onlineResults, key = { song ->
+        items(snapshot.onlineResults, key = { song ->
             providerSearchResultItemKey(song.trackRef.extensionId, song.trackRef.opaqueId)
         }) { song ->
-            OnlineSearchSong(song, alpha = 1f, onClick = if (song.searchCategory == ProviderSearchCategory.Single) {
-                { onOnlineSongClick(song) }
-            } else if (song.searchCategory == ProviderSearchCategory.User) {
-                { onProviderArtistClick(song) }
-            } else null)
+            OnlineSearchSong(
+                song = song,
+                alpha = 1f,
+                onClick = if (!interactive) {
+                    null
+                } else if (song.searchCategory == ProviderSearchCategory.Single) {
+                    { onOnlineSongClick(song) }
+                } else if (song.searchCategory == ProviderSearchCategory.User) {
+                    { onProviderArtistClick(song) }
+                } else {
+                    null
+                },
+                modifier = elementModifier(
+                    providerSearchResultItemKey(song.trackRef.extensionId, song.trackRef.opaqueId)
+                )
+            )
         }
-        if (categoryState.isLoadingMore) item {
+        if (showLoadingMore) item(key = "search-loading-more") {
             Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             }
         }
-        if (onlineResults.isNotEmpty() && categoryState.error != null &&
-            !categoryState.isLoadingMore && categoryState.nextCursor != null
-        ) item {
+        if (snapshot.onlineResults.isNotEmpty() && error != null && !showLoadingMore && nextCursorAvailable) item(
+            key = "search-load-more-error"
+        ) {
             Text(
                 text = "加载失败，重试",
                 style = MaterialTheme.typography.bodyMedium,
@@ -521,18 +782,20 @@ private fun SearchResultCategorySelector(
                 modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadMore).padding(16.dp)
             )
         }
-        if (hasNoResults) item { LandingMessage(categoryState.error ?: "没有找到相关内容") }
+        emptyMessage?.let { message ->
+            item(key = "search-empty") { LandingMessage(message) }
+        }
     }
 }
 
 @Composable
-private fun SearchResultsSectionTitle(title: String) {
+private fun SearchResultsSectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onPrimaryContainer,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 12.dp, top = 16.dp, end = 12.dp, bottom = 4.dp)
+        modifier = modifier.padding(start = 12.dp, top = 16.dp, end = 12.dp, bottom = 4.dp)
     )
 }
 
@@ -553,6 +816,32 @@ internal fun searchResultSourceSections(
     }
 }
 
+/**
+ * Provider 结果在请求刚启动时会先清空；此时尚未得到“没有结果”的结论。
+ * [ProviderSearchCategoryState.hasLoaded] 仅在当前请求成功返回后置位，因此能避免
+ * provider/category 切换时把上一代请求的完成状态误用于当前结果集。
+ */
+internal fun searchResultEmptyMessage(
+    scope: SearchScope,
+    queryIsBlank: Boolean,
+    isSearching: Boolean,
+    providerState: ProviderSearchCategoryState,
+    hasCurrentResults: Boolean
+): String? {
+    if (queryIsBlank || isSearching || providerState.isInitialLoading || hasCurrentResults) {
+        return null
+    }
+
+    if (providerState.error != null) {
+        return providerState.error
+    }
+
+    return when (scope) {
+        is SearchScope.Provider -> if (providerState.hasLoaded) "没有找到相关内容" else null
+        else -> "没有找到相关内容"
+    }
+}
+
 internal fun localSearchResultItemKey(kind: String, identity: String): String =
     "local:${kind.trim()}:${identity.trim()}"
 
@@ -560,8 +849,13 @@ internal fun providerSearchResultItemKey(providerId: String, identity: String): 
     "online:${providerId.trim()}:${identity.trim()}"
 
 @Composable
-private fun LocalSearchArtist(artist: SearchArtist, onClick: () -> Unit, alpha: Float) = Row(
-    modifier = Modifier.fillMaxWidth().alpha(alpha).clickable(onClick = onClick).padding(16.dp, 12.dp),
+private fun LocalSearchArtist(
+    artist: SearchArtist,
+    onClick: () -> Unit,
+    alpha: Float,
+    modifier: Modifier = Modifier
+) = Row(
+    modifier = Modifier.fillMaxWidth().then(modifier).alpha(alpha).clickable(onClick = onClick).padding(16.dp, 12.dp),
     verticalAlignment = Alignment.CenterVertically
 ) {
     val avatarImage = rememberExperimentalArtistAvatarImage(
@@ -576,7 +870,12 @@ private fun LocalSearchArtist(artist: SearchArtist, onClick: () -> Unit, alpha: 
 }
 
 @Composable
-private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> Unit)?) {
+private fun OnlineSearchSong(
+    song: ProviderSong,
+    alpha: Float,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
     val loader = ExtensionManager.get(LocalContext.current).extensionImageLoader
     val metadataLabels = ProviderSearchMetadataLabels(
         trackCountSuffix = stringResource(R.string.provider_metadata_track_count_suffix),
@@ -591,7 +890,8 @@ private fun OnlineSearchSong(song: ProviderSong, alpha: Float, onClick: (() -> U
         song.artist
     }
     Row(
-        modifier = Modifier.fillMaxWidth().alpha(alpha).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(12.dp),
+        modifier = Modifier.fillMaxWidth().then(modifier).alpha(alpha)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (song.searchCategory == ProviderSearchCategory.User) {
@@ -648,8 +948,12 @@ private fun SearchUserAvatar(
 }
 
 @Composable
-private fun LocalSearchAlbum(album: SearchResult.AlbumResult, onClick: () -> Unit) = Row(
-    modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(12.dp),
+private fun LocalSearchAlbum(
+    album: SearchResult.AlbumResult,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) = Row(
+    modifier = Modifier.fillMaxWidth().then(modifier).clickable(onClick = onClick).padding(12.dp),
     verticalAlignment = Alignment.CenterVertically
 ) {
     if (album.artworkUri != null) {

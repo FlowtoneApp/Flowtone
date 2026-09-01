@@ -16,6 +16,41 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProviderSearchCoordinatorTest {
+    @Test fun preparedInitialRequestRemainsPendingUntilItsOwnCompletion() = runBlocking {
+        val fake = FakeGateway()
+        val state = kotlinx.coroutines.flow.MutableStateFlow(
+            GlobalSearchUiState(
+                queryText = "miku",
+                scope = SearchScope.Provider("a"),
+                providerCategoryStates = ProviderSearchCategory.entries.associateWith { category ->
+                    if (category == ProviderSearchCategory.Single) {
+                        ProviderSearchCategoryState().startRequest(null)
+                    } else {
+                        ProviderSearchCategoryState()
+                    }
+                },
+                searchGeneration = 1
+            )
+        )
+        val coordinator = ProviderSearchCoordinator(state, fake)
+
+        val request = async { coordinator.loadInitial(acceptPreparedRequest = true) }
+        yield()
+
+        val pending = state.value.providerCategoryState(ProviderSearchCategory.Single)
+        assertTrue(pending.isInitialLoading)
+        assertFalse(pending.hasLoaded)
+        assertTrue(pending.items.isEmpty())
+
+        fake.complete(0, page("miku"))
+        request.await()
+
+        val completed = state.value.providerCategoryState(ProviderSearchCategory.Single)
+        assertFalse(completed.isInitialLoading)
+        assertTrue(completed.hasLoaded)
+        assertEquals(listOf("miku"), completed.items.map { it.id })
+    }
+
     @Test fun switchingToUnloadedAlbumRequestsItsFirstPage() = runBlocking {
         val fake = FakeGateway(); val state = kotlinx.coroutines.flow.MutableStateFlow(GlobalSearchUiState()); val coordinator = ProviderSearchCoordinator(state, fake)
         val initial = async { coordinator.startSearch("miku", SearchScope.Provider("a"), ProviderSearchCategory.Single) }; yield(); fake.complete(0, page("a")); initial.await()

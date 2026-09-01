@@ -130,6 +130,18 @@ private fun searchScopePreferenceValue(scope: SearchScope): String = when (scope
 private fun emptyProviderSearchCategoryStates(): Map<ProviderSearchCategory, ProviderSearchCategoryState> =
     ProviderSearchCategory.entries.associateWith { ProviderSearchCategoryState() }
 
+internal fun providerSearchCategoryStatesForNewQuery(
+    scope: SearchScope,
+    selectedCategory: ProviderSearchCategory
+): Map<ProviderSearchCategory, ProviderSearchCategoryState> =
+    ProviderSearchCategory.entries.associateWith { category ->
+        if (scope is SearchScope.Provider && category == selectedCategory) {
+            ProviderSearchCategoryState().startRequest(cursor = null)
+        } else {
+            ProviderSearchCategoryState()
+        }
+    }
+
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val musicRepository = MusicRepository(
         localMusicRepository = LocalMusicRepository(
@@ -290,6 +302,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     fun updateSearchQuery(queryText: String) {
+        updateSearchQueryForScope(queryText, _searchUiState.value.scope)
+    }
+
+    private fun updateSearchQueryForScope(queryText: String, scope: SearchScope) {
         val query = SearchQuery.from(queryText)
         searchJob?.cancel()
         providerSearchJob?.cancel()
@@ -298,6 +314,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             _searchUiState.update { current ->
                 current.copy(
                     queryText = queryText,
+                    scope = scope,
                     isSearching = false,
                     songResults = emptyList(),
                     artistResults = emptyList(),
@@ -313,19 +330,22 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         _searchUiState.update { currentState ->
             currentState.copy(
                 queryText = queryText,
-                isSearching = currentState.scope == SearchScope.All || currentState.scope == SearchScope.Local,
+                scope = scope,
+                isSearching = scope == SearchScope.All || scope == SearchScope.Local,
                 songResults = emptyList(),
                 artistResults = emptyList(),
                 albumResults = emptyList(),
-                providerCategoryStates = emptyProviderSearchCategoryStates(),
+                providerCategoryStates = providerSearchCategoryStatesForNewQuery(
+                    scope = scope,
+                    selectedCategory = currentState.selectedProviderCategory
+                ),
                 searchGeneration = currentState.searchGeneration + 1
             )
         }
         searchJob = viewModelScope.launch {
             delay(200)
-            val scope = _searchUiState.value.scope
             publishLocalSearchResults(query = query, visibleQueryText = queryText, scope = scope)
-            loadInitialProviderSearchPage()
+            loadInitialProviderSearchPage(acceptPreparedRequest = scope is SearchScope.Provider)
         }
     }
 
@@ -368,20 +388,23 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             else -> scope
         }
         appPreferences.setSearchScopePreference(searchScopePreferenceValue(validScope))
-        _searchUiState.update {
-            it.copy(
-                scope = validScope,
-                songResults = emptyList(),
-                artistResults = emptyList(),
-                albumResults = emptyList(),
-                providerCategoryStates = emptyProviderSearchCategoryStates(),
-                isSearching = false,
-                searchGeneration = it.searchGeneration + 1
-            )
-        }
         val currentQuery = _searchUiState.value.queryText
-        if (SearchQuery.from(currentQuery).isBlank) loadSearchLandingForCurrentScope()
-        else updateSearchQuery(currentQuery)
+        if (SearchQuery.from(currentQuery).isBlank) {
+            _searchUiState.update {
+                it.copy(
+                    scope = validScope,
+                    songResults = emptyList(),
+                    artistResults = emptyList(),
+                    albumResults = emptyList(),
+                    providerCategoryStates = emptyProviderSearchCategoryStates(),
+                    isSearching = false,
+                    searchGeneration = it.searchGeneration + 1
+                )
+            }
+            loadSearchLandingForCurrentScope()
+        } else {
+            updateSearchQueryForScope(currentQuery, validScope)
+        }
     }
 
     private suspend fun publishLocalSearchResults(
@@ -415,8 +438,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         viewModelScope.launch { providerSearchCoordinator.loadMore(category) }
     }
 
-    private fun loadInitialProviderSearchPage() {
-        providerSearchJob = viewModelScope.launch { providerSearchCoordinator.loadInitial() }
+    private fun loadInitialProviderSearchPage(acceptPreparedRequest: Boolean = false) {
+        providerSearchJob = viewModelScope.launch {
+            providerSearchCoordinator.loadInitial(acceptPreparedRequest)
+        }
     }
 
     private fun refreshSearchIndex(songs: List<Song>, albums: List<LocalAlbum>) {

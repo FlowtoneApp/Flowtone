@@ -33,12 +33,14 @@ class ProviderSearchCoordinator(
         state.update { it.copy(selectedProviderCategory = category) }
         loadInitial()
     }
-    suspend fun loadInitial() {
+    suspend fun loadInitial(acceptPreparedRequest: Boolean = false) {
         val current = state.value
         val category = current.selectedProviderCategory
         val categoryState = current.providerCategoryState(category)
-        if (current.query.isBlank || current.scope == SearchScope.Local || categoryState.hasLoaded || categoryState.isInitialLoading) return
-        load(category, null, current.searchGeneration)
+        if (current.query.isBlank || current.scope == SearchScope.Local || categoryState.hasLoaded) return
+        val requestWasPrepared = acceptPreparedRequest && categoryState.isInitialLoading
+        if (categoryState.isInitialLoading && !requestWasPrepared) return
+        load(category, null, current.searchGeneration, requestWasPrepared)
     }
 
     suspend fun loadMore(category: ProviderSearchCategory = state.value.selectedProviderCategory) {
@@ -49,17 +51,24 @@ class ProviderSearchCoordinator(
         load(category, cursor, current.searchGeneration)
     }
 
-    private suspend fun load(category: ProviderSearchCategory, cursor: String?, generation: Long) {
+    private suspend fun load(
+        category: ProviderSearchCategory,
+        cursor: String?,
+        generation: Long,
+        requestWasPrepared: Boolean = false
+    ) {
         val before = state.value
         val keyword = before.query.text
         val scope = before.scope
         if (keyword.isBlank() || scope == SearchScope.Local) return
         val categoryState = before.providerCategoryState(category)
-        if (cursor == null && (categoryState.hasLoaded || categoryState.isInitialLoading)) return
+        if (cursor == null && (categoryState.hasLoaded || (categoryState.isInitialLoading && !requestWasPrepared))) return
         if (cursor != null && (categoryState.isLoadingMore || categoryState.nextCursor != cursor)) return
-        state.update { current ->
-            if (!current.matches(generation, keyword, scope)) current
-            else current.copy(providerCategoryStates = current.providerCategoryStates + (category to categoryState.startRequest(cursor)))
+        if (!requestWasPrepared) {
+            state.update { current ->
+                if (!current.matches(generation, keyword, scope)) current
+                else current.copy(providerCategoryStates = current.providerCategoryStates + (category to categoryState.startRequest(cursor)))
+            }
         }
         val result = gateway.searchPage(scope, ProviderSearchRequest(keyword, category, cursor))
         state.update { current ->
