@@ -37,6 +37,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
@@ -67,6 +68,7 @@ internal fun FlowtoneScaffoldContent(
     onUpdatePlaylistDescription: (String, String?) -> Unit,
     onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
     onArtistProfileBackActionChange: ((() -> Unit)?) -> Unit,
+    onArtistPageTransitionPresentationChange: (Long, PageTransitionPresentation?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     onArtistToolbarContentVisibleChange: (Long, Boolean) -> Unit,
     playlistSongSort: PlaylistSongSort,
@@ -474,6 +476,9 @@ internal fun FlowtoneScaffoldContent(
                     onUpdatePlaylistDescription = onUpdatePlaylistDescription,
                     onPlaylistBackActionChange = onPlaylistBackActionChange,
                     onArtistProfileBackActionChange = onArtistProfileBackActionChange,
+                    onArtistPageTransitionPresentationChange = { presentation ->
+                        onArtistPageTransitionPresentationChange(page.entry.id, presentation)
+                    },
                     listeningRecordInitialTab = state.listeningRecordInitialTab,
                     likedSongKeys = state.likedSongKeys,
                     playlistSongEntries = playlistSongEntries,
@@ -601,6 +606,7 @@ private sealed interface FlowtoneReversibleTransitionKey {
     data object MainTabs : FlowtoneReversibleTransitionKey
     data class Playlist(val playlistId: String) : FlowtoneReversibleTransitionKey
     data class Album(val albumId: Long) : FlowtoneReversibleTransitionKey
+    data class Artist(val stableId: String) : FlowtoneReversibleTransitionKey
 }
 
 private fun flowtoneReversibleTransitionKey(
@@ -616,6 +622,10 @@ private fun flowtoneReversibleTransitionKey(
             } else if (page.destination.page == SecondaryPage.Album) {
                 page.albumDetailDestination?.albumId?.let { albumId ->
                     FlowtoneReversibleTransitionKey.Album(albumId)
+                }
+            } else if (page.destination is SecondaryDestination.Artist) {
+                (page.destination as SecondaryDestination.Artist).let { artist ->
+                    FlowtoneReversibleTransitionKey.Artist(artist.stableId)
                 }
             } else {
                 null
@@ -637,6 +647,7 @@ private fun FlowtoneScaffoldPage.isCollectionDetailPage(): Boolean {
         when (destination.page) {
             SecondaryPage.Playlist -> playlistDetailDestination?.playlistId != null
             SecondaryPage.Album -> albumDetailDestination != null
+            SecondaryPage.Artist -> destination is SecondaryDestination.Artist
             else -> false
         }
 }

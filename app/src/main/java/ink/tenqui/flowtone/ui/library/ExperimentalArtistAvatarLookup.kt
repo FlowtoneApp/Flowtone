@@ -60,6 +60,17 @@ private object ArtistAvatarUiMemoryCache {
     }
 }
 
+internal fun wasArtistExtensionImageLoaded(image: ExtensionImage): Boolean =
+    ArtistAvatarUiMemoryCache.wasLoaded(image)
+
+internal fun rememberArtistExtensionImageLoaded(image: ExtensionImage) {
+    ArtistAvatarUiMemoryCache.rememberLoaded(image)
+}
+
+internal fun forgetArtistExtensionImageLoaded(image: ExtensionImage) {
+    ArtistAvatarUiMemoryCache.forgetLoaded(image)
+}
+
 @Composable
 internal fun rememberExperimentalArtistAvatarImage(
     songTitle: String,
@@ -156,7 +167,7 @@ internal fun ExperimentalArtistAvatarImage(
     val context = LocalContext.current
     val manager = remember(context) { ExtensionManager.get(context) }
     var imageLoaded by remember(image) {
-        mutableStateOf(image != null && ArtistAvatarUiMemoryCache.wasLoaded(image))
+        mutableStateOf(image != null && wasArtistExtensionImageLoaded(image))
     }
     val imageAlpha by animateFloatAsState(
         targetValue = if (imageLoaded) 1f else 0f,
@@ -170,12 +181,12 @@ internal fun ExperimentalArtistAvatarImage(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             onSuccess = {
-                ArtistAvatarUiMemoryCache.rememberLoaded(image)
+                rememberArtistExtensionImageLoaded(image)
                 imageLoaded = true
                 Log.d(ExperimentalAvatarLogTag, "image loaded")
             },
             onError = {
-                ArtistAvatarUiMemoryCache.forgetLoaded(image)
+                forgetArtistExtensionImageLoaded(image)
                 imageLoaded = false
                 Log.d(ExperimentalAvatarLogTag, "image load failed")
             },

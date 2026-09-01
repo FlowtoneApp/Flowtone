@@ -161,9 +161,23 @@ class ArtistPageContentTest {
     }
 
     @Test fun biographyControlsProfileFocusEntry() {
-        assertTrue(canFocusArtistProfile("Biography"))
-        assertFalse(canFocusArtistProfile(null))
-        assertFalse(canFocusArtistProfile("  "))
+        assertTrue(canFocusArtistProfile("Biography", biographyNeedsExpansion = true))
+        assertFalse(canFocusArtistProfile("Biography", biographyNeedsExpansion = false))
+        assertFalse(canFocusArtistProfile(null, biographyNeedsExpansion = true))
+        assertFalse(canFocusArtistProfile("  ", biographyNeedsExpansion = true))
+    }
+
+    @Test fun expandedTextNoLongerOverwritesCollapsedBiographyEligibility() {
+        val collapsedBiographyNeedsExpansion = true
+        val expandedTextHasVisualOverflow = false
+
+        assertFalse(expandedTextHasVisualOverflow)
+        assertTrue(
+            canFocusArtistProfile(
+                biography = "A biography that overflowed its collapsed one-line measurement.",
+                biographyNeedsExpansion = collapsedBiographyNeedsExpansion
+            )
+        )
     }
 
     @Test fun focusedBackCollapsesBeforeNavigation() {
@@ -186,7 +200,7 @@ class ArtistPageContentTest {
     @Test fun collapsedBiographyUsesOneLineAndEmptyBiographyCannotFocus() {
         assertEquals(1, artistBiographyMaxLines(false))
         assertEquals(Int.MAX_VALUE, artistBiographyMaxLines(true))
-        assertFalse(canFocusArtistProfile(null))
+        assertFalse(canFocusArtistProfile(null, biographyNeedsExpansion = false))
     }
 
     @Test fun profileColorModeUsesSingleArtworkColorOrMaterial() {
@@ -213,11 +227,100 @@ class ArtistPageContentTest {
         assertEquals(2, resolutions)
     }
 
-    @Test fun bannerLayerNeverReplacesArtistColorBeforeSuccessfulLoad() {
-        assertFalse(artistBannerLayerActive(true, ArtistBannerLoadState.Loading))
-        assertTrue(artistBannerLayerActive(true, ArtistBannerLoadState.Loaded))
-        assertFalse(artistBannerLayerActive(true, ArtistBannerLoadState.Failed))
-        assertFalse(artistBannerLayerActive(false, ArtistBannerLoadState.Loaded))
+    @Test fun cachedBannerStartsFullyVisibleWithoutArtistColorOnlyRevealState() {
+        val state = initialArtistBannerPresentationState(
+            bannerKnown = true,
+            availableFromCache = true
+        )
+
+        assertEquals(ArtistBannerPresentationState.BannerAvailableFromCache, state)
+        assertEquals(1f, artistBannerTargetAlpha(state))
+        assertEquals(state, artistBannerSuccessState(state))
+    }
+
+    @Test fun bannerColorBecomesBaseOnlyAfterBannerIsAvailable() {
+        assertEquals(
+            ArtistProfileBaseColorSource.ArtistArtwork,
+            artistProfileBaseColorSource(
+                artistArtworkColorAvailable = true,
+                bannerColorAvailable = true,
+                bannerState = ArtistBannerPresentationState.BannerLoadingWithoutCachedImage
+            )
+        )
+        assertEquals(
+            ArtistProfileBaseColorSource.Banner,
+            artistProfileBaseColorSource(
+                artistArtworkColorAvailable = true,
+                bannerColorAvailable = true,
+                bannerState = ArtistBannerPresentationState.BannerLoadedAfterRequest
+            )
+        )
+        assertEquals(
+            ArtistProfileBaseColorSource.ArtistArtwork,
+            artistProfileBaseColorSource(
+                artistArtworkColorAvailable = true,
+                bannerColorAvailable = false,
+                bannerState = ArtistBannerPresentationState.BannerUnavailable
+            )
+        )
+    }
+
+    @Test fun bannerColorUsesSharedArtworkColorCache() {
+        ArtworkPaletteMemoryCache.clearForTest()
+        var resolutions = 0
+        val bannerKey = "ExtensionImage(extensionId=provider, url=https://example.com/banner.jpg)"
+
+        val first = ArtworkPaletteMemoryCache.resolveColorForTest(bannerKey, false) {
+            resolutions += 1
+            Color.Magenta
+        }
+        val second = ArtworkPaletteMemoryCache.resolveColorForTest(bannerKey, false) {
+            resolutions += 1
+            Color.Cyan
+        }
+
+        assertEquals(Color.Magenta, first)
+        assertEquals(Color.Magenta, second)
+        assertEquals(1, resolutions)
+    }
+
+    @Test fun uncachedBannerKeepsArtistColorUntilRequestSuccess() {
+        val loading = initialArtistBannerPresentationState(
+            bannerKnown = true,
+            availableFromCache = false
+        )
+        val loaded = artistBannerSuccessState(loading)
+
+        assertEquals(ArtistBannerPresentationState.BannerLoadingWithoutCachedImage, loading)
+        assertEquals(0f, artistBannerTargetAlpha(loading))
+        assertEquals(ArtistBannerPresentationState.BannerLoadedAfterRequest, loaded)
+        assertEquals(1f, artistBannerTargetAlpha(loaded))
+    }
+
+    @Test fun unavailableAndFailedBannerLeaveArtistColorVisible() {
+        val unavailable = initialArtistBannerPresentationState(
+            bannerKnown = false,
+            availableFromCache = false
+        )
+
+        assertEquals(ArtistBannerPresentationState.BannerUnavailable, unavailable)
+        assertEquals(0f, artistBannerTargetAlpha(unavailable))
+        assertEquals(0f, artistBannerTargetAlpha(ArtistBannerPresentationState.BannerFailed))
+    }
+
+    @Test fun focusGrowthDoesNotIncreaseBannerHeroHeight() {
+        val collapsed = artistProfilePresentationHeights(280.dp, 640.dp, focusProgress = 0f)
+        val focused = artistProfilePresentationHeights(280.dp, 640.dp, focusProgress = 1f)
+
+        assertEquals(280.dp, collapsed.cardHeight)
+        assertEquals(640.dp, focused.cardHeight)
+        assertEquals(280.dp, collapsed.bannerHeroHeight)
+        assertEquals(collapsed.bannerHeroHeight, focused.bannerHeroHeight)
+    }
+
+    @Test fun bannerBottomFadeOccupiesAStablePartOfHero() {
+        assertTrue(ArtistBannerBottomFadeStartFraction > 0f)
+        assertTrue(ArtistBannerBottomFadeStartFraction < 1f)
     }
 
 }
