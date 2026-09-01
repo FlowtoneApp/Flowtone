@@ -7,5 +7,7 @@ data class ArtistMetadata(
     /** null means the provider did not declare a count; zero is a valid declared value. */
     val songCount: Int? = null,
     /** null means the provider did not declare a count; zero is a valid declared value. */
-    val albumCount: Int? = null
+    val albumCount: Int? = null,
+    /** Optional horizontal profile backdrop. It is distinct from the circular artist avatar. */
+    val banner: ExtensionImage? = null
 )

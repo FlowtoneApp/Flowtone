@@ -8,6 +8,15 @@ import org.junit.Test
 
 class SecondaryNavigationTest {
     @Test
+    fun artistProfileFocusBackDoesNotChangeNavigationDestination() {
+        val navigation = SecondaryNavigationState().push(SecondaryDestination.Artist("Artist"))
+        val before = navigation.current
+
+        ink.tenqui.flowtone.ui.library.artistProfileBackResult(true)
+
+        assertEquals(before, navigation.current)
+    }
+    @Test
     fun artistPushThenPopReturnsToEmpty() {
         val state = SecondaryNavigationState()
             .push(SecondaryDestination.Artist("A"))

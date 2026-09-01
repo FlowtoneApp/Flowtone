@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "id": "debug.provider.artist-profile-fixture",
+  "name": "Provider Artist Profile Fixture",
+  "version": "1",
+  "author": "Flowtone Debug",
+  "description": "Debug-only Provider Artist Profile verification fixture.",
+  "entry": "main.js",
+  "capabilities": ["music_provider", "artist_metadata"],
+  "permissions": {
+    "network": {
+      "hosts": ["placehold.co"]
+    }
+  },
+  "color": "#0F766E"
+}

@@ -19,6 +19,7 @@ internal fun FlowtoneScaffoldTopLayer(
     songSelectionState: PlaylistSelectionTopBarState?,
     onCloseSongSelection: () -> Unit,
     playlistBackAction: (() -> Unit)?,
+    artistProfileBackAction: (() -> Unit)?,
     playlistSortProgress: Float,
     descriptionBlurRadius: Dp
 ) {
@@ -37,7 +38,7 @@ internal fun FlowtoneScaffoldTopLayer(
                 artistSurfaceVisible = collapsedArtistToolbarVisible,
                 allSongs = state.uiState.songs,
                 currentSong = state.playerUiState.currentSong,
-                onBack = callbacks.onNavigateBack,
+                onBack = artistProfileBackAction ?: callbacks.onNavigateBack,
                 playlistSortProgress = playlistSortProgress,
                 modifier = Modifier.blur(descriptionBlurRadius)
             )

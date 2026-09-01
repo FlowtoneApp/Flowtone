@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.online
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import android.util.Log
 import androidx.media3.common.MediaItem
@@ -82,6 +83,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     suspend fun initialize() = mutex.withLock {
         if (initialized) return@withLock
+        installBundledDebugExtensions()
         installer.scan().forEach { load(it) }
         initialized = true
     }
@@ -349,6 +351,21 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
     }
 
+    /** Debug APK 将随包携带的 fixture 先走正常安装器安装，再由下方既有扫描流程加载。 */
+    private fun installBundledDebugExtensions() {
+        if (!BuildConfig.DEBUG) return
+        runCatching {
+            appContext.assets.open(BundledDebugArtistProfileFixturePackage).use { input ->
+                installer.install(BundledDebugArtistProfileFixturePackage, input)
+            }
+        }.onFailure { error ->
+            Log.w(
+                LogTag,
+                "extension.debug_fixture.install.failed type=${error.javaClass.simpleName}"
+            )
+        }
+    }
+
     override fun close() {
         runtimes.keys.toList().forEach(::stop)
         privateCache.flushDirty()
@@ -358,6 +375,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     companion object {
         private const val LogTag = "FlowtoneExtension"
+        private const val BundledDebugArtistProfileFixturePackage =
+            "provider-artist-profile-fixture.flowtone"
         @Volatile private var instance: ExtensionManager? = null
         fun get(context: Context): ExtensionManager = instance ?: synchronized(this) {
             instance ?: ExtensionManager(context).also { instance = it }

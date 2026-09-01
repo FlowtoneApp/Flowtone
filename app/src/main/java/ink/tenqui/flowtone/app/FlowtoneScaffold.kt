@@ -86,6 +86,7 @@ internal fun FlowtoneScaffold(
         mutableStateOf<PlaylistSelectionTopBarState?>(null)
     }
     var playlistBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var artistProfileBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
@@ -311,6 +312,7 @@ internal fun FlowtoneScaffold(
                     songSelectionState = songSelectionTopBarState,
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
                     playlistBackAction = playlistBackAction,
+                    artistProfileBackAction = artistProfileBackAction,
                     playlistSortProgress = playlistSortProgress,
                     descriptionBlurRadius = descriptionBlurRadius
                 )
@@ -349,6 +351,9 @@ internal fun FlowtoneScaffold(
                 },
                 onPlaylistBackActionChange = { action ->
                     playlistBackAction = action
+                },
+                onArtistProfileBackActionChange = { action ->
+                    artistProfileBackAction = action
                 },
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,

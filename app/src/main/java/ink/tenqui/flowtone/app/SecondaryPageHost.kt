@@ -125,6 +125,7 @@ internal fun SecondaryPageHost(
     playlistBatchActions: PlaylistBatchActions,
     onUpdatePlaylistDescription: (String, String?) -> Unit,
     onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
+    onArtistProfileBackActionChange: ((() -> Unit)?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -362,15 +363,15 @@ internal fun SecondaryPageHost(
                     albums = uiState.albums,
                     currentSong = currentSong,
                     onToolbarContentVisibleChange = onArtistToolbarContentVisibleChange,
+                    onProfileBackActionChange = onArtistProfileBackActionChange,
+                    onNavigateBack = onCloseSecondaryPage,
                     onSongClick = { songs, index ->
                         onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
                     },
                     onOpenAlbum = onOpenAlbum,
                     pageTransition = pageScope,
                     itemModifier = ::playlistItemModifier,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .rightSwipeBackGesture(onCloseSecondaryPage)
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 

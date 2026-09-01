@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.online
 
 import ink.tenqui.flowtone.core.online.ArtistMetadata
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.local.localArtistStableId
 import java.io.File
 import java.nio.file.Files
@@ -58,8 +59,15 @@ class ArtistMetadataPersistentCache(
                         ?.takeIf(String::isNotEmpty)
                     val songCount = entry.optNonNegativeInt("songCount")
                     val albumCount = entry.optNonNegativeInt("albumCount")
+                    val banner = entry.optJSONObject("banner")?.let { image ->
+                        val imageExtensionId = image.optString("extensionId").trim()
+                        val url = image.optString("url").trim()
+                        if (imageExtensionId == extensionId && url.startsWith("https://")) {
+                            ExtensionImage(imageExtensionId, url)
+                        } else null
+                    }
                     if (key.isNotBlank()) {
-                        ArtistMetadata(aliases, biography, songCount, albumCount)
+                        ArtistMetadata(aliases, biography, songCount, albumCount, banner)
                             .sanitized()
                             ?.let { put(key, it) }
                     }
@@ -83,6 +91,14 @@ class ArtistMetadataPersistentCache(
                             .put("biography", metadata.biography ?: JSONObject.NULL)
                             .put("songCount", metadata.songCount ?: JSONObject.NULL)
                             .put("albumCount", metadata.albumCount ?: JSONObject.NULL)
+                            .put(
+                                "banner",
+                                metadata.banner?.takeIf { it.extensionId == extensionId }?.let { image ->
+                                    JSONObject()
+                                        .put("extensionId", image.extensionId)
+                                        .put("url", image.url)
+                                } ?: JSONObject.NULL
+                            )
                     )
                 }
             })
@@ -135,10 +151,10 @@ internal fun ArtistMetadata.sanitized(): ArtistMetadata? {
     val normalizedBiography = biography?.trim()?.takeIf(String::isNotEmpty)
     val normalizedSongCount = songCount?.takeIf { it >= 0 }
     val normalizedAlbumCount = albumCount?.takeIf { it >= 0 }
-    return ArtistMetadata(normalizedAliases, normalizedBiography, normalizedSongCount, normalizedAlbumCount)
+    return ArtistMetadata(normalizedAliases, normalizedBiography, normalizedSongCount, normalizedAlbumCount, banner)
         .takeIf {
             it.aliases.isNotEmpty() || it.biography != null ||
-                it.songCount != null || it.albumCount != null
+                it.songCount != null || it.albumCount != null || it.banner != null
         }
 }
 
@@ -148,9 +164,9 @@ internal fun ArtistMetadata.sanitizedFor(artistName: String): ArtistMetadata? {
     val aliases = metadata.aliases.filter { alias ->
         canonicalArtistId == null || localArtistStableId(alias) != canonicalArtistId
     }
-    return ArtistMetadata(aliases, metadata.biography, metadata.songCount, metadata.albumCount)
+    return ArtistMetadata(aliases, metadata.biography, metadata.songCount, metadata.albumCount, metadata.banner)
         .takeIf {
             it.aliases.isNotEmpty() || it.biography != null ||
-                it.songCount != null || it.albumCount != null
+                it.songCount != null || it.albumCount != null || it.banner != null
         }
 }
