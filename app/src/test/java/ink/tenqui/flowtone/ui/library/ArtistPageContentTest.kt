@@ -36,4 +36,16 @@ class ArtistPageContentTest {
         assertEquals("18 首歌曲\n3 张专辑", artistStatisticsText(songCount = 18, albumCount = 3))
     }
 
+    @Test
+    fun providerOnlyArtistHidesUnavailableContentInsteadOfShowingEmptyLocalSections() {
+        assertEquals(
+            ArtistPageContentVisibility(
+                showStatistics = false,
+                showSongs = false,
+                showAlbums = false
+            ),
+            artistPageContentVisibility(hasLocalContent = false, hasAlbums = false)
+        )
+    }
+
 }

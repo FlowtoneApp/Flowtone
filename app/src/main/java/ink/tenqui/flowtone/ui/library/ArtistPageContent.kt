@@ -36,3 +36,18 @@ internal fun artistStatisticsText(songCount: Int, albumCount: Int): String {
     val songs = "$songCount 首歌曲"
     return if (albumCount > 0) "$songs\n$albumCount 张专辑" else songs
 }
+
+internal data class ArtistPageContentVisibility(
+    val showStatistics: Boolean,
+    val showSongs: Boolean,
+    val showAlbums: Boolean
+)
+
+internal fun artistPageContentVisibility(
+    hasLocalContent: Boolean,
+    hasAlbums: Boolean
+): ArtistPageContentVisibility = ArtistPageContentVisibility(
+    showStatistics = hasLocalContent,
+    showSongs = hasLocalContent,
+    showAlbums = hasLocalContent && hasAlbums
+)

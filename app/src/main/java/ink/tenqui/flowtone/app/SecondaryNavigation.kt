@@ -1,6 +1,37 @@
 package ink.tenqui.flowtone.app
 
 import ink.tenqui.flowtone.data.local.localArtistStableId
+import ink.tenqui.flowtone.core.online.ExtensionImage
+
+/** Artist destination identity remains source-scoped; local and Provider names are not merged. */
+internal sealed interface ArtistDestinationIdentity {
+    val displayName: String
+    val stableId: String
+    val avatar: ExtensionImage?
+    val hasLocalContent: Boolean
+
+    data class Local(
+        val name: String
+    ) : ArtistDestinationIdentity {
+        override val displayName: String
+            get() = name.trim()
+        override val stableId: String
+            get() = "local:${localArtistStableId(displayName)}"
+        override val avatar: ExtensionImage? = null
+        override val hasLocalContent: Boolean = true
+    }
+
+    data class Provider(
+        val providerId: String,
+        val artistId: String,
+        override val displayName: String,
+        override val avatar: ExtensionImage?
+    ) : ArtistDestinationIdentity {
+        override val stableId: String
+            get() = "provider:${providerId.trim()}\u0000${artistId.trim()}"
+        override val hasLocalContent: Boolean = false
+    }
+}
 
 /**
  * 页面级 Secondary 导航的稳定 payload。页面离场时仍由该值提供 identity，
@@ -28,10 +59,15 @@ internal sealed interface SecondaryDestination {
     }
 
     class Artist(
-        val name: String
+        val identity: ArtistDestinationIdentity
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Artist
-        val stableId: String = localArtistStableId(name)
+        val name: String
+            get() = identity.displayName
+        val stableId: String
+            get() = identity.stableId
+
+        constructor(name: String) : this(ArtistDestinationIdentity.Local(name))
 
         override fun equals(other: Any?): Boolean {
             return other is Artist && stableId == other.stableId
@@ -39,7 +75,7 @@ internal sealed interface SecondaryDestination {
 
         override fun hashCode(): Int = stableId.hashCode()
 
-        override fun toString(): String = "Artist(name=$name)"
+        override fun toString(): String = "Artist(identity=$identity)"
     }
 }
 

@@ -355,6 +355,8 @@ internal fun SecondaryPageHost(
                 val artist = destination as? SecondaryDestination.Artist ?: return@Box
                   ArtistPage(
                     artistName = artist.name,
+                    hasLocalContent = artist.identity.hasLocalContent,
+                    providedAvatar = artist.identity.avatar,
                     allSongs = uiState.songs,
                     albums = uiState.albums,
                     currentSong = currentSong,

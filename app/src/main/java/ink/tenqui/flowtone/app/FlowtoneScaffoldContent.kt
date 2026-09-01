@@ -558,6 +558,7 @@ private fun FlowtoneMainTabsSearchContent(
         onArtistClick = { artist ->
             callbacks.onOpenArtist(artist.name)
         },
+        onProviderArtistClick = callbacks.onOpenProviderArtist,
         onAlbumClick = callbacks.onOpenAlbum,
         onExitSearch = callbacks.onExitSearch,
         onQueryChange = callbacks.onSearchQueryChange,

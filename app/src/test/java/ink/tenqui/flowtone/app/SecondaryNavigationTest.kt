@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -56,6 +57,64 @@ class SecondaryNavigationTest {
 
         assertEquals(1, state.entries.size)
         assertEquals(initialState.currentEntry, state.currentEntry)
+    }
+
+    @Test
+    fun localArtistKeepsLocalStableIdentity() {
+        val destination = SecondaryDestination.Artist(" A ")
+
+        assertEquals("local:a", destination.stableId)
+        assertEquals(true, destination.identity.hasLocalContent)
+    }
+
+    @Test
+    fun sameProviderArtistIsNotDuplicated() {
+        val artist = SecondaryDestination.Artist(
+            ArtistDestinationIdentity.Provider(
+                providerId = "provider-a",
+                artistId = "42",
+                displayName = "Kou!",
+                avatar = null
+            )
+        )
+        val state = SecondaryNavigationState()
+            .push(artist)
+            .push(
+                SecondaryDestination.Artist(
+                    ArtistDestinationIdentity.Provider(
+                        providerId = "provider-a",
+                        artistId = "42",
+                        displayName = "Updated display name",
+                        avatar = null
+                    )
+                )
+            )
+
+        assertEquals(1, state.entries.size)
+        assertEquals(artist, state.current)
+    }
+
+    @Test
+    fun sameArtistNameFromDifferentProvidersHasDifferentIdentity() {
+        val first = SecondaryDestination.Artist(
+            ArtistDestinationIdentity.Provider("provider-a", "42", "Kou!", null)
+        )
+        val second = SecondaryDestination.Artist(
+            ArtistDestinationIdentity.Provider("provider-b", "42", "Kou!", null)
+        )
+
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun providerArtistDestinationRetainsAvatarReference() {
+        val avatar = ExtensionImage("provider-a", "https://example.test/kou.jpg")
+        val destination = SecondaryDestination.Artist(
+            ArtistDestinationIdentity.Provider("provider-a", "42", "Kou!", avatar)
+        )
+
+        assertEquals(avatar, destination.identity.avatar)
+        assertEquals(false, destination.identity.hasLocalContent)
     }
 
     @Test
@@ -128,6 +187,8 @@ class SecondaryNavigationTest {
             ArtistTopBarRoute(
                 artistEntryId = requireNotNull(artistEntryId),
                 artistName = "A",
+                hasLocalContent = true,
+                avatar = null,
                 destinationTitle = "Album"
             ),
             artistTopBarRoute(albumState.entries)

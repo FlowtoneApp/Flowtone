@@ -46,6 +46,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.permissions.openAppPermissionSettings
@@ -371,6 +372,30 @@ fun FlowtoneApp(
         )
     }
 
+    fun openProviderArtist(artist: ProviderSong) {
+        val displayName = artist.title.trim()
+        val providerId = artist.trackRef.extensionId.trim()
+        val artistId = artist.trackRef.opaqueId.trim()
+        if (displayName.isBlank() || providerId.isBlank() || artistId.isBlank()) {
+            return
+        }
+        if (appState.searchActive) {
+            appState.searchInputFocused = false
+            appState.searchFocusRequest = 0
+            appState.searchKeyboardDismissRequest += 1
+        }
+        appState.secondaryNavigation = appState.secondaryNavigation.push(
+            SecondaryDestination.Artist(
+                ArtistDestinationIdentity.Provider(
+                    providerId = providerId,
+                    artistId = artistId,
+                    displayName = displayName,
+                    avatar = artist.artwork ?: artist.largeArtwork
+                )
+            )
+        )
+    }
+
     LaunchedEffect(appState.searchActive, imeVisible) {
         appState.searchKeyboardVisible = appState.searchActive && imeVisible
     }
@@ -505,6 +530,7 @@ fun FlowtoneApp(
                 }
             },
             onOpenArtist = { artistName -> openArtist(artistName) },
+            onOpenProviderArtist = ::openProviderArtist,
             onExitMiniPlayerFullscreen = exitMiniPlayerFullscreen,
             onTogglePlayPause = musicViewModel::togglePlayPause,
             onPlayPrevious = musicViewModel::playPrevious,

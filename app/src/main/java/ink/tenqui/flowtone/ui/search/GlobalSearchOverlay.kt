@@ -109,6 +109,7 @@ internal fun GlobalSearchContent(
     onOnlineSongClick: (ProviderSong) -> Unit,
     pendingTrackIdentityKey: String? = null,
     onArtistClick: (SearchArtist) -> Unit,
+    onProviderArtistClick: (ProviderSong) -> Unit,
     onAlbumClick: (Long) -> Unit,
     onExitSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -261,6 +262,7 @@ internal fun GlobalSearchContent(
                         onSongClick = onSongClick,
                         onOnlineSongClick = onOnlineSongClick,
                         onArtistClick = onArtistClick,
+                        onProviderArtistClick = onProviderArtistClick,
                         onAlbumClick = onAlbumClick,
                         category = selectedResultCategory,
                         listState = listState,
@@ -429,6 +431,7 @@ private fun SearchResultCategorySelector(
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
+    onProviderArtistClick: (ProviderSong) -> Unit,
     onAlbumClick: (Long) -> Unit,
     category: SearchResultCategory,
     listState: androidx.compose.foundation.lazy.LazyListState,
@@ -482,6 +485,8 @@ private fun SearchResultCategorySelector(
         items(onlineResults, key = { song -> "online:${song.trackRef.extensionId}:${song.trackRef.opaqueId}" }) { song ->
             OnlineSearchSong(song, alpha = 1f, onClick = if (song.searchCategory == ProviderSearchCategory.Single) {
                 { onOnlineSongClick(song) }
+            } else if (song.searchCategory == ProviderSearchCategory.User) {
+                { onProviderArtistClick(song) }
             } else null)
         }
         if (categoryState.isLoadingMore) item {

@@ -47,6 +47,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     val onOpenAlbum: (Long) -> Unit,
     val onOpenArtist: (String) -> Unit,
+    val onOpenProviderArtist: (ProviderSong) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     val onOpenSource: () -> Unit,
     val onOpenSourceBack: () -> Unit,
@@ -92,6 +93,7 @@ internal fun flowtoneAppCallbacks(
     onThemeModeChange: (AppThemeMode) -> Unit,
     onNavigateBack: () -> Unit,
     onOpenArtist: (String) -> Unit,
+    onOpenProviderArtist: (ProviderSong) -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
@@ -253,6 +255,7 @@ internal fun flowtoneAppCallbacks(
         },
         onOpenAlbum = onOpenAlbum,
         onOpenArtist = onOpenArtist,
+        onOpenProviderArtist = onOpenProviderArtist,
         onOpenListeningRecords = { initialTab ->
             appState.listeningRecordInitialTab = initialTab
             appState.secondaryPathSegments = emptyList()

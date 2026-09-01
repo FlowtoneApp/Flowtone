@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
@@ -60,6 +61,8 @@ private const val ArtistPathTitleStaggerFraction = 0.18f
 @Composable
 internal fun ArtistIdentityTopBar(
     artistName: String,
+    hasLocalContent: Boolean,
+    providedAvatar: ExtensionImage?,
     destinationTitle: String?,
     identityVisible: Boolean,
     artistSurfaceVisible: Boolean,
@@ -69,8 +72,8 @@ internal fun ArtistIdentityTopBar(
     playlistSortProgress: Float,
     modifier: Modifier = Modifier
 ) {
-    val artistSongs = remember(artistName, allSongs) {
-        localSongsForArtist(allSongs, artistName)
+    val artistSongs = remember(artistName, allSongs, hasLocalContent) {
+        if (hasLocalContent) localSongsForArtist(allSongs, artistName) else emptyList()
     }
     val avatarLookupSongTitle = remember(artistSongs, currentSong) {
         val currentArtistSong = currentSong?.takeIf { playingSong ->
@@ -80,10 +83,15 @@ internal fun ArtistIdentityTopBar(
         }
         (currentArtistSong ?: artistSongs.firstOrNull())?.title.orEmpty()
     }
-    val avatarImage = rememberExperimentalArtistAvatarImage(
-        songTitle = avatarLookupSongTitle,
-        artistName = artistName
-    )
+    val resolvedLocalAvatar = if (hasLocalContent) {
+        rememberExperimentalArtistAvatarImage(
+            songTitle = avatarLookupSongTitle,
+            artistName = artistName
+        )
+    } else {
+        null
+    }
+    val avatarImage = providedAvatar ?: resolvedLocalAvatar
     var retainedDestinationTitle by remember { mutableStateOf(destinationTitle) }
     val pathProgress = remember {
         Animatable(if (destinationTitle == null) 0f else 1f)

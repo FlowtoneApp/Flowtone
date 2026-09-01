@@ -29,6 +29,8 @@ internal fun FlowtoneScaffoldTopLayer(
                 isArtistToolbarContentVisible(artistTopBarRoute.artistEntryId)
             ArtistIdentityTopBar(
                 artistName = artistTopBarRoute.artistName,
+                hasLocalContent = artistTopBarRoute.hasLocalContent,
+                providedAvatar = artistTopBarRoute.avatar,
                 destinationTitle = artistTopBarRoute.destinationTitle,
                 identityVisible = artistTopBarRoute.destinationTitle != null ||
                     collapsedArtistToolbarVisible,
@@ -90,6 +92,8 @@ internal fun FlowtoneScaffoldTopLayer(
 internal data class ArtistTopBarRoute(
     val artistEntryId: Long,
     val artistName: String,
+    val hasLocalContent: Boolean,
+    val avatar: ink.tenqui.flowtone.core.online.ExtensionImage?,
     val destinationTitle: String?
 )
 
@@ -99,6 +103,8 @@ internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBar
         is SecondaryDestination.Artist -> ArtistTopBarRoute(
             artistEntryId = currentEntry.id,
             artistName = current.name,
+            hasLocalContent = current.identity.hasLocalContent,
+            avatar = current.identity.avatar,
             destinationTitle = null
         )
         is SecondaryDestination.Album -> {
@@ -108,6 +114,8 @@ internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBar
             ArtistTopBarRoute(
                 artistEntryId = parentEntry.id,
                 artistName = parentArtist.name,
+                hasLocalContent = parentArtist.identity.hasLocalContent,
+                avatar = parentArtist.identity.avatar,
                 destinationTitle = current.title
             )
         }

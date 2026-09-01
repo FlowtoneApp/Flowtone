@@ -88,6 +88,8 @@ private const val ArtistLazyBehindViewportFraction = 0.25f
 @Composable
 internal fun ArtistPage(
     artistName: String,
+    hasLocalContent: Boolean,
+    providedAvatar: ExtensionImage?,
     allSongs: List<Song>,
     albums: List<LocalAlbum>,
     currentSong: Song?,
@@ -108,11 +110,17 @@ internal fun ArtistPage(
     }
     val listState = rememberLazyListState(cacheWindow = cacheWindow)
     val albumListState = rememberLazyListState(cacheWindow = cacheWindow)
-    val artistSongs = remember(displayArtist, allSongs) {
-        localSongsForArtist(allSongs, displayArtist)
+    val artistSongs = remember(displayArtist, allSongs, hasLocalContent) {
+        if (hasLocalContent) localSongsForArtist(allSongs, displayArtist) else emptyList()
     }
-    val artistAlbums = remember(displayArtist, albums) {
-        artistAlbumsFor(albums, displayArtist)
+    val artistAlbums = remember(displayArtist, albums, hasLocalContent) {
+        if (hasLocalContent) artistAlbumsFor(albums, displayArtist) else emptyList()
+    }
+    val contentVisibility = remember(hasLocalContent, artistAlbums) {
+        artistPageContentVisibility(
+            hasLocalContent = hasLocalContent,
+            hasAlbums = artistAlbums.isNotEmpty()
+        )
     }
     val artistSongKeys = remember(artistSongs) {
         artistSongs.mapIndexed(::artistSongItemKey)
@@ -125,11 +133,16 @@ internal fun ArtistPage(
         }
         (currentArtistSong ?: artistSongs.firstOrNull())?.title.orEmpty()
     }
-    val artistAvatarImage = rememberExperimentalArtistAvatarImage(
-        songTitle = avatarLookupSongTitle,
-        artistName = displayArtist
-    )
-    val artistMetadata = rememberArtistMetadata(displayArtist)
+    val resolvedLocalAvatar = if (hasLocalContent) {
+        rememberExperimentalArtistAvatarImage(
+            songTitle = avatarLookupSongTitle,
+            artistName = displayArtist
+        )
+    } else {
+        null
+    }
+    val artistAvatarImage = providedAvatar ?: resolvedLocalAvatar
+    val artistMetadata = if (hasLocalContent) rememberArtistMetadata(displayArtist) else null
 
     val visibleSongKeys by remember(listState, artistSongKeys) {
         derivedStateOf {
@@ -241,7 +254,11 @@ internal fun ArtistPage(
             item(key = "artist-header") {
                 ArtistHeaderCard(
                     artistName = displayArtist,
-                    statistics = artistStatisticsText(artistSongs.size, artistAlbums.size),
+                    statistics = if (contentVisibility.showStatistics) {
+                        artistStatisticsText(artistSongs.size, artistAlbums.size)
+                    } else {
+                        null
+                    },
                     avatarImage = artistAvatarImage,
                     topPadding = statusBarTop,
                     alias = artistMetadata?.aliases?.take(3)?.joinToString(" · "),
@@ -251,45 +268,47 @@ internal fun ArtistPage(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            item(key = "artist-songs-title") {
-                ArtistSectionTitle(
-                    title = "歌曲",
-                    modifier = fixedItemModifier(ArtistSongsTitleAnimationIndex)
-                        .padding(start = 20.dp, top = 0.dp, end = 20.dp, bottom = 8.dp)
-                )
-            }
-            if (artistSongs.isEmpty()) {
-                item(key = "artist-empty") {
-                    Text(
-                        text = "没有找到该艺术家的歌曲",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = fixedItemModifier(ArtistFirstSongAnimationIndex)
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 18.dp)
+            if (contentVisibility.showSongs) {
+                item(key = "artist-songs-title") {
+                    ArtistSectionTitle(
+                        title = "歌曲",
+                        modifier = fixedItemModifier(ArtistSongsTitleAnimationIndex)
+                            .padding(start = 20.dp, top = 0.dp, end = 20.dp, bottom = 8.dp)
                     )
                 }
-            } else {
-                itemsIndexed(
-                    items = artistSongs,
-                    key = ::artistSongItemKey
-                ) { index, song ->
-                    val songKey = artistSongKeys[index]
-                    val viewportOrder = animationOrderByKey[songKey] ?: 0
-                    val viewportOrderCount = animationGroupKeys.size.coerceAtLeast(1)
-                    SongListItem(
-                        song = song,
-                        isCurrentSong = currentSong?.id == song.id || currentSong?.uri == song.uri,
-                        onClick = { onSongClick(artistSongs, index) },
-                        modifier = if (enterGroupReady) {
-                            itemModifier(listProgress, viewportOrder, viewportOrderCount)
-                        } else {
-                            Modifier.graphicsLayer { alpha = 0f }
-                        }.padding(horizontal = 8.dp)
-                    )
+                if (artistSongs.isEmpty()) {
+                    item(key = "artist-empty") {
+                        Text(
+                            text = "没有找到该艺术家的歌曲",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = fixedItemModifier(ArtistFirstSongAnimationIndex)
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 18.dp)
+                        )
+                    }
+                } else {
+                    itemsIndexed(
+                        items = artistSongs,
+                        key = ::artistSongItemKey
+                    ) { index, song ->
+                        val songKey = artistSongKeys[index]
+                        val viewportOrder = animationOrderByKey[songKey] ?: 0
+                        val viewportOrderCount = animationGroupKeys.size.coerceAtLeast(1)
+                        SongListItem(
+                            song = song,
+                            isCurrentSong = currentSong?.id == song.id || currentSong?.uri == song.uri,
+                            onClick = { onSongClick(artistSongs, index) },
+                            modifier = if (enterGroupReady) {
+                                itemModifier(listProgress, viewportOrder, viewportOrderCount)
+                            } else {
+                                Modifier.graphicsLayer { alpha = 0f }
+                            }.padding(horizontal = 8.dp)
+                        )
+                    }
                 }
             }
-            if (artistAlbums.isNotEmpty()) {
+            if (contentVisibility.showAlbums) {
                 item(key = "artist-albums") {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         ArtistSectionTitle(
@@ -321,7 +340,7 @@ internal fun ArtistPage(
 @Composable
 private fun ArtistHeaderCard(
     artistName: String,
-    statistics: String,
+    statistics: String?,
     avatarImage: ExtensionImage?,
     topPadding: Dp,
     alias: String? = null,
@@ -406,15 +425,17 @@ private fun ArtistHeaderCard(
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = statistics,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.End,
-                    modifier = itemModifier(ArtistHeaderStatsAnimationIndex)
-                        .align(Alignment.End)
-                        .padding(top = 12.dp)
-                )
+                statistics?.let { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.End,
+                        modifier = itemModifier(ArtistHeaderStatsAnimationIndex)
+                            .align(Alignment.End)
+                            .padding(top = 12.dp)
+                    )
+                }
             }
         }
     }
