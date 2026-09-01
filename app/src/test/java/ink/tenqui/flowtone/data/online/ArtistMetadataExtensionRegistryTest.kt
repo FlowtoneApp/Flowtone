@@ -46,6 +46,28 @@ class ArtistMetadataExtensionRegistryTest {
     }
 
     @Test
+    fun partialProviderResultsKeepFirstDeclaredCountsWithoutAddingThem() = runBlocking {
+        val registry = testRegistry().apply {
+            install(extension("first") { ArtistMetadata(songCount = 0) })
+            install(extension("second") { ArtistMetadata(songCount = 12, albumCount = 3) })
+        }
+
+        val metadata = registry.findArtistMetadata("Artist")
+
+        assertEquals(0, metadata?.songCount)
+        assertEquals(3, metadata?.albumCount)
+    }
+
+    @Test
+    fun negativeCountsAreDiscardedAsUnknown() = runBlocking {
+        val metadata = testRegistry().apply {
+            install(extension("invalid") { ArtistMetadata(songCount = -1, albumCount = -2) })
+        }.findArtistMetadata("Artist")
+
+        assertNull(metadata)
+    }
+
+    @Test
     fun blankBiographyBecomesNullAndEmptyResultStaysEmpty() = runBlocking {
         val metadata = testRegistry().apply {
             install(extension("empty") { ArtistMetadata(aliases = listOf(" "), biography = " ") })
@@ -92,7 +114,7 @@ class ArtistMetadataExtensionRegistryTest {
         val calls = AtomicInteger()
         val extension = extension("persistent") {
             calls.incrementAndGet()
-            ArtistMetadata(listOf("Alias"), "Biography")
+            ArtistMetadata(listOf("Alias"), "Biography", songCount = 0, albumCount = 9)
         }
 
         persistentRegistry(root).apply { install(extension) }.findArtistMetadata("Artist")
@@ -101,6 +123,8 @@ class ArtistMetadataExtensionRegistryTest {
 
         assertEquals("Biography", restored?.biography)
         assertEquals(listOf("Alias"), restored?.aliases)
+        assertEquals(0, restored?.songCount)
+        assertEquals(9, restored?.albumCount)
         assertEquals(1, calls.get())
     }
 

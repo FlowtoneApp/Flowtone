@@ -47,6 +47,7 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.sanitizedFor
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.permissions.openAppPermissionSettings
@@ -390,7 +391,8 @@ fun FlowtoneApp(
                     providerId = providerId,
                     artistId = artistId,
                     displayName = displayName,
-                    avatar = artist.artwork ?: artist.largeArtwork
+                    avatar = artist.artwork ?: artist.largeArtwork,
+                    profileMetadata = artist.artistMetadata?.sanitizedFor(displayName)
                 )
             )
         )

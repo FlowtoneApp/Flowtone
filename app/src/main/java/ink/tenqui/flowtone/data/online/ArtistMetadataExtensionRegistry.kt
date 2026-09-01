@@ -46,6 +46,8 @@ class ArtistMetadataExtensionRegistry(
         if (artist.isEmpty()) return null
         val aliases = linkedMapOf<String, String>()
         var biography: String? = null
+        var songCount: Int? = null
+        var albumCount: Int? = null
         installedExtensions().forEach { extension ->
             val key = ArtistMetadataPersistentCache.cacheKey(extension.id, artist)
             val metadata = synchronized(this) { memoryCache[key] }
@@ -76,10 +78,15 @@ class ArtistMetadataExtensionRegistry(
                     aliases.putIfAbsent(alias.stableAliasKey(), alias)
                 }
                 if (biography == null) biography = resolved.biography
+                if (songCount == null) songCount = resolved.songCount
+                if (albumCount == null) albumCount = resolved.albumCount
             }
         }
-        return ArtistMetadata(aliases.values.toList(), biography)
-            .takeIf { it.aliases.isNotEmpty() || it.biography != null }
+        return ArtistMetadata(aliases.values.toList(), biography, songCount, albumCount)
+            .takeIf {
+                it.aliases.isNotEmpty() || it.biography != null ||
+                    it.songCount != null || it.albumCount != null
+            }
     }
 
     private suspend fun findInFlight(

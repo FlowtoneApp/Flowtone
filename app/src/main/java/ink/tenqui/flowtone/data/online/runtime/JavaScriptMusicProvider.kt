@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.online.runtime
 
 import android.util.Log
+import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
@@ -9,7 +10,9 @@ import ink.tenqui.flowtone.data.online.MusicProvider
 import ink.tenqui.flowtone.data.online.ProviderSearchPage
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 import ink.tenqui.flowtone.data.online.ProviderSearchMetadata
+import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.sanitizedFor
 import ink.tenqui.flowtone.data.online.providerSearchCategoryFromWire
 import ink.tenqui.flowtone.data.online.toWireValue
 import ink.tenqui.flowtone.data.online.ProviderSearchLanding
@@ -111,6 +114,7 @@ class JavaScriptMusicProvider internal constructor(
             ?.let { ExtensionImage(runtime.extensionId, it) }
         val persistentId = item.optString("persistentId").trim().takeIf(String::isNotEmpty)
         val sourceHost = boundSourceHost(item)
+        val searchCategory = providerSearchCategoryFromWire(item.optString("category"))
         return ProviderSong(
             trackRef = ExtensionTrackRef(runtime.extensionId, opaqueId),
             title = title,
@@ -120,8 +124,13 @@ class JavaScriptMusicProvider internal constructor(
             largeArtwork = largeArtwork,
             persistentId = persistentId,
             sourceHost = sourceHost,
-            searchCategory = providerSearchCategoryFromWire(item.optString("category")),
-            metadata = parseMetadata(item)
+            searchCategory = searchCategory,
+            metadata = parseMetadata(item),
+            artistMetadata = if (searchCategory == ProviderSearchCategory.User) {
+                providerArtistMetadataFromJson(item, title)
+            } else {
+                null
+            }
         )
     }
 
@@ -238,3 +247,38 @@ class JavaScriptMusicProvider internal constructor(
         const val MaxTextLength = 120
     }
 }
+
+internal fun providerArtistMetadataFromJson(
+    item: JSONObject,
+    displayName: String
+): ArtistMetadata? {
+    val aliases = item.optJSONArray("aliases")?.let { values ->
+        buildList {
+            repeat(values.length().coerceAtMost(MaxProviderArtistAliases)) { index ->
+                add(values.optString(index).take(MaxProviderArtistTextLength))
+            }
+        }
+    }.orEmpty()
+    val biography = item.optString("biography")
+        .trim()
+        .take(MaxProviderArtistBiographyLength)
+        .takeIf(String::isNotEmpty)
+    return ArtistMetadata(
+        aliases = aliases,
+        biography = biography,
+        songCount = item.optNonNegativeInt("songCount"),
+        albumCount = item.optNonNegativeInt("albumCount")
+    ).sanitizedFor(displayName)
+}
+
+private fun JSONObject.optNonNegativeInt(name: String): Int? {
+    val value = opt(name) as? Number ?: return null
+    val number = value.toDouble()
+    return number
+        .takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE && it == it.toInt().toDouble() }
+        ?.toInt()
+}
+
+private const val MaxProviderArtistAliases = 8
+private const val MaxProviderArtistTextLength = 120
+private const val MaxProviderArtistBiographyLength = 4_000

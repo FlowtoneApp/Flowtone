@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
@@ -90,6 +91,7 @@ internal fun ArtistPage(
     artistName: String,
     hasLocalContent: Boolean,
     providedAvatar: ExtensionImage?,
+    providedMetadata: ArtistMetadata?,
     allSongs: List<Song>,
     albums: List<LocalAlbum>,
     currentSong: Song?,
@@ -116,10 +118,29 @@ internal fun ArtistPage(
     val artistAlbums = remember(displayArtist, albums, hasLocalContent) {
         if (hasLocalContent) artistAlbumsFor(albums, displayArtist) else emptyList()
     }
-    val contentVisibility = remember(hasLocalContent, artistAlbums) {
+    val artistMetadata = if (hasLocalContent || providedMetadata == null) {
+        rememberArtistMetadata(displayArtist)
+    } else {
+        providedMetadata
+    }
+    val statistics = remember(
+        hasLocalContent,
+        artistSongs.size,
+        artistAlbums.size,
+        artistMetadata?.songCount,
+        artistMetadata?.albumCount
+    ) {
+        if (hasLocalContent) {
+            artistStatisticsText(artistSongs.size, artistAlbums.size)
+        } else {
+            artistMetadataStatisticsText(artistMetadata?.songCount, artistMetadata?.albumCount)
+        }
+    }
+    val contentVisibility = remember(hasLocalContent, artistAlbums, statistics) {
         artistPageContentVisibility(
             hasLocalContent = hasLocalContent,
-            hasAlbums = artistAlbums.isNotEmpty()
+            hasAlbums = artistAlbums.isNotEmpty(),
+            hasStatistics = statistics != null
         )
     }
     val artistSongKeys = remember(artistSongs) {
@@ -142,7 +163,6 @@ internal fun ArtistPage(
         null
     }
     val artistAvatarImage = providedAvatar ?: resolvedLocalAvatar
-    val artistMetadata = if (hasLocalContent) rememberArtistMetadata(displayArtist) else null
 
     val visibleSongKeys by remember(listState, artistSongKeys) {
         derivedStateOf {
@@ -254,11 +274,7 @@ internal fun ArtistPage(
             item(key = "artist-header") {
                 ArtistHeaderCard(
                     artistName = displayArtist,
-                    statistics = if (contentVisibility.showStatistics) {
-                        artistStatisticsText(artistSongs.size, artistAlbums.size)
-                    } else {
-                        null
-                    },
+                    statistics = statistics.takeIf { contentVisibility.showStatistics },
                     avatarImage = artistAvatarImage,
                     topPadding = statusBarTop,
                     alias = artistMetadata?.aliases?.take(3)?.joinToString(" · "),

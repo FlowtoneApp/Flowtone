@@ -36,7 +36,12 @@ class JavaScriptArtistMetadataExtension private constructor(
             List(array.length()) { array.optString(it) }
         }.orEmpty()
         val biography = result.optString("biography").trim().takeIf(String::isNotEmpty)
-        return ArtistMetadata(aliases = aliases, biography = biography)
+        return ArtistMetadata(
+            aliases = aliases,
+            biography = biography,
+            songCount = result.optNonNegativeInt("songCount"),
+            albumCount = result.optNonNegativeInt("albumCount")
+        )
     }
 
     internal fun bootstrapScript(): String = runtime.bootstrapScript()
@@ -44,4 +49,12 @@ class JavaScriptArtistMetadataExtension private constructor(
     override fun close() {
         if (ownsRuntime) runtime.close()
     }
+}
+
+private fun JSONObject.optNonNegativeInt(name: String): Int? {
+    val value = opt(name) as? Number ?: return null
+    val number = value.toDouble()
+    return number
+        .takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE && it == it.toInt().toDouble() }
+        ?.toInt()
 }

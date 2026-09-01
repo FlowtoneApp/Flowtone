@@ -43,7 +43,7 @@ class ArtistMetadataPersistentCache(
         if (!file.isFile) return linkedMapOf()
         return runCatching {
             val rootJson = JSONObject(file.readText(Charsets.UTF_8))
-            require(rootJson.optInt("format", -1) == FormatVersion)
+            require(rootJson.optInt("format", -1) in 1..FormatVersion)
             require(rootJson.optString("extensionId") == extensionId)
             linkedMapOf<String, ArtistMetadata>().apply {
                 val entries = rootJson.optJSONArray("entries") ?: JSONArray()
@@ -56,8 +56,12 @@ class ArtistMetadataPersistentCache(
                     val biography = (entry.opt("biography") as? String)
                         ?.trim()
                         ?.takeIf(String::isNotEmpty)
+                    val songCount = entry.optNonNegativeInt("songCount")
+                    val albumCount = entry.optNonNegativeInt("albumCount")
                     if (key.isNotBlank()) {
-                        ArtistMetadata(aliases, biography).sanitized()?.let { put(key, it) }
+                        ArtistMetadata(aliases, biography, songCount, albumCount)
+                            .sanitized()
+                            ?.let { put(key, it) }
                     }
                 }
             }
@@ -77,6 +81,8 @@ class ArtistMetadataPersistentCache(
                             .put("cacheKey", key)
                             .put("aliases", JSONArray(metadata.aliases))
                             .put("biography", metadata.biography ?: JSONObject.NULL)
+                            .put("songCount", metadata.songCount ?: JSONObject.NULL)
+                            .put("albumCount", metadata.albumCount ?: JSONObject.NULL)
                     )
                 }
             })
@@ -102,7 +108,7 @@ class ArtistMetadataPersistentCache(
     }
 
     companion object {
-        private const val FormatVersion = 1
+        private const val FormatVersion = 2
         private const val CacheDirectoryName = "artist-metadata-results"
         private const val CacheFileName = "entries.json"
         private val SafeExtensionId = Regex("[a-zA-Z0-9._-]+")
@@ -112,6 +118,14 @@ class ArtistMetadataPersistentCache(
     }
 }
 
+private fun JSONObject.optNonNegativeInt(name: String): Int? {
+    val value = opt(name) as? Number ?: return null
+    val number = value.toDouble()
+    return number
+        .takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE && it == it.toInt().toDouble() }
+        ?.toInt()
+}
+
 internal fun ArtistMetadata.sanitized(): ArtistMetadata? {
     val normalizedAliases = aliases.asSequence()
         .map(String::trim)
@@ -119,8 +133,13 @@ internal fun ArtistMetadata.sanitized(): ArtistMetadata? {
         .distinctBy(::localArtistStableId)
         .toList()
     val normalizedBiography = biography?.trim()?.takeIf(String::isNotEmpty)
-    return ArtistMetadata(normalizedAliases, normalizedBiography)
-        .takeIf { it.aliases.isNotEmpty() || it.biography != null }
+    val normalizedSongCount = songCount?.takeIf { it >= 0 }
+    val normalizedAlbumCount = albumCount?.takeIf { it >= 0 }
+    return ArtistMetadata(normalizedAliases, normalizedBiography, normalizedSongCount, normalizedAlbumCount)
+        .takeIf {
+            it.aliases.isNotEmpty() || it.biography != null ||
+                it.songCount != null || it.albumCount != null
+        }
 }
 
 internal fun ArtistMetadata.sanitizedFor(artistName: String): ArtistMetadata? {
@@ -129,6 +148,9 @@ internal fun ArtistMetadata.sanitizedFor(artistName: String): ArtistMetadata? {
     val aliases = metadata.aliases.filter { alias ->
         canonicalArtistId == null || localArtistStableId(alias) != canonicalArtistId
     }
-    return ArtistMetadata(aliases, metadata.biography)
-        .takeIf { it.aliases.isNotEmpty() || it.biography != null }
+    return ArtistMetadata(aliases, metadata.biography, metadata.songCount, metadata.albumCount)
+        .takeIf {
+            it.aliases.isNotEmpty() || it.biography != null ||
+                it.songCount != null || it.albumCount != null
+        }
 }

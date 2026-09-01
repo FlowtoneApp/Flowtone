@@ -357,6 +357,7 @@ internal fun SecondaryPageHost(
                     artistName = artist.name,
                     hasLocalContent = artist.identity.hasLocalContent,
                     providedAvatar = artist.identity.avatar,
+                    providedMetadata = artist.identity.profileMetadata,
                     allSongs = uiState.songs,
                     albums = uiState.albums,
                     currentSong = currentSong,

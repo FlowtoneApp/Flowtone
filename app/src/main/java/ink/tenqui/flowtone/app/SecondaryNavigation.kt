@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import ink.tenqui.flowtone.data.local.localArtistStableId
+import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
@@ -9,6 +10,8 @@ internal sealed interface ArtistDestinationIdentity {
     val stableId: String
     val avatar: ExtensionImage?
     val hasLocalContent: Boolean
+    val profileMetadata: ArtistMetadata?
+        get() = null
 
     data class Local(
         val name: String
@@ -25,7 +28,8 @@ internal sealed interface ArtistDestinationIdentity {
         val providerId: String,
         val artistId: String,
         override val displayName: String,
-        override val avatar: ExtensionImage?
+        override val avatar: ExtensionImage?,
+        override val profileMetadata: ArtistMetadata? = null
     ) : ArtistDestinationIdentity {
         override val stableId: String
             get() = "provider:${providerId.trim()}\u0000${artistId.trim()}"

@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.core.online.ArtistMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -115,6 +116,17 @@ class SecondaryNavigationTest {
 
         assertEquals(avatar, destination.identity.avatar)
         assertEquals(false, destination.identity.hasLocalContent)
+    }
+
+    @Test
+    fun providerArtistDestinationRetainsProfileMetadataWithoutChangingIdentity() {
+        val metadata = ArtistMetadata(songCount = 11, albumCount = 10)
+        val destination = SecondaryDestination.Artist(
+            ArtistDestinationIdentity.Provider("provider-a", "42", "Kou!", null, metadata)
+        )
+
+        assertEquals("provider:provider-a\u000042", destination.stableId)
+        assertEquals(metadata, destination.identity.profileMetadata)
     }
 
     @Test

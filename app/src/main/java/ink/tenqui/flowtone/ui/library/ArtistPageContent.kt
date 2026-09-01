@@ -37,6 +37,14 @@ internal fun artistStatisticsText(songCount: Int, albumCount: Int): String {
     return if (albumCount > 0) "$songs\n$albumCount 张专辑" else songs
 }
 
+/** Provider counts are profile metadata and do not imply loaded song or album entities. */
+internal fun artistMetadataStatisticsText(songCount: Int?, albumCount: Int?): String? {
+    return listOfNotNull(
+        songCount?.let { "$it 首歌曲" },
+        albumCount?.let { "$it 张专辑" }
+    ).joinToString("\n").takeIf(String::isNotEmpty)
+}
+
 internal data class ArtistPageContentVisibility(
     val showStatistics: Boolean,
     val showSongs: Boolean,
@@ -45,9 +53,10 @@ internal data class ArtistPageContentVisibility(
 
 internal fun artistPageContentVisibility(
     hasLocalContent: Boolean,
-    hasAlbums: Boolean
+    hasAlbums: Boolean,
+    hasStatistics: Boolean = hasLocalContent
 ): ArtistPageContentVisibility = ArtistPageContentVisibility(
-    showStatistics = hasLocalContent,
+    showStatistics = hasStatistics,
     showSongs = hasLocalContent,
     showAlbums = hasLocalContent && hasAlbums
 )
