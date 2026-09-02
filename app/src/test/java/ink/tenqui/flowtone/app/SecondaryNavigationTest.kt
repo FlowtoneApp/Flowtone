@@ -196,31 +196,4 @@ class SecondaryNavigationTest {
         )
     }
 
-    @Test
-    fun artistAlbumTopBarRouteRetainsArtistEntryIdentity() {
-        val artistState = SecondaryNavigationState()
-            .push(SecondaryDestination.Artist("A"))
-        val artistEntryId = artistState.currentEntry?.id
-        val albumState = artistState
-            .push(SecondaryDestination.Album(1L, "Album"))
-
-        assertEquals(
-            ArtistTopBarRoute(
-                artistEntryId = requireNotNull(artistEntryId),
-                artistName = "A",
-                hasLocalContent = true,
-                avatar = null,
-                destinationTitle = "Album"
-            ),
-            artistTopBarRoute(albumState.entries)
-        )
-    }
-
-    @Test
-    fun directAlbumDoesNotCreateArtistTopBarRoute() {
-        val state = SecondaryNavigationState()
-            .push(SecondaryDestination.Album(1L, "Album"))
-
-        assertEquals(null, artistTopBarRoute(state.entries))
-    }
 }

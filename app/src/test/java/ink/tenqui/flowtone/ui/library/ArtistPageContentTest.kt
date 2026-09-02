@@ -241,6 +241,75 @@ class ArtistPageContentTest {
         assertEquals(ArtistProfileBackResult.NavigateBack, artistProfileBackResult(false))
     }
 
+    @Test fun artistHeaderFollowsAnchorBeforeDockThreshold() {
+        val presentation = artistHeaderScrollPresentation(
+            anchorTopPx = 24f,
+            dockedTopPx = 8f,
+            expandedHeightPx = 300f,
+            dockedHeightPx = 80f
+        )
+
+        assertEquals(24f, presentation.topPx)
+        assertEquals(0f, presentation.collapseProgress)
+        assertEquals(300f, presentation.visibleHeightPx)
+    }
+
+    @Test fun artistHeaderPinsAndBecomesDockedAtCollapseDistance() {
+        val presentation = artistHeaderScrollPresentation(
+            anchorTopPx = -212f,
+            dockedTopPx = 8f,
+            expandedHeightPx = 300f,
+            dockedHeightPx = 80f
+        )
+
+        assertEquals(8f, presentation.topPx)
+        assertEquals(1f, presentation.collapseProgress)
+        assertEquals(80f, presentation.visibleHeightPx)
+    }
+
+    @Test fun scrollingFurtherKeepsArtistHeaderPinnedAndDocked() {
+        val presentation = artistHeaderScrollPresentation(
+            anchorTopPx = -640f,
+            dockedTopPx = 8f,
+            expandedHeightPx = 300f,
+            dockedHeightPx = 80f
+        )
+
+        assertEquals(8f, presentation.topPx)
+        assertEquals(1f, presentation.collapseProgress)
+        assertEquals(80f, presentation.visibleHeightPx)
+    }
+
+    @Test fun collapsingViewportDoesNotChangeExpandedHeaderContentHeight() {
+        val presentation = artistHeaderScrollPresentation(
+            anchorTopPx = -102f,
+            dockedTopPx = 8f,
+            expandedHeightPx = 300f,
+            dockedHeightPx = 80f
+        )
+
+        assertEquals(190f, presentation.visibleHeightPx)
+        assertEquals(300f, presentation.expandedContentHeightPx)
+    }
+
+    @Test fun restoredArtistScrollDerivesDockedHeaderWithoutSavedFlag() {
+        val restored = artistHeaderScrollPresentation(
+            anchorTopPx = -500f,
+            dockedTopPx = 0f,
+            expandedHeightPx = 280f,
+            dockedHeightPx = 72f
+        )
+        val newEntry = artistHeaderScrollPresentation(
+            anchorTopPx = 0f,
+            dockedTopPx = 0f,
+            expandedHeightPx = 280f,
+            dockedHeightPx = 72f
+        )
+
+        assertEquals(1f, restored.collapseProgress)
+        assertEquals(0f, newEntry.collapseProgress)
+    }
+
     @Test fun destinationBannerWinsResolverBannerAndNullRemainsValidFallback() {
         val destination = ink.tenqui.flowtone.core.online.ExtensionImage("provider", "https://example.com/destination.jpg")
         val resolver = ink.tenqui.flowtone.core.online.ExtensionImage("provider", "https://example.com/resolver.jpg")

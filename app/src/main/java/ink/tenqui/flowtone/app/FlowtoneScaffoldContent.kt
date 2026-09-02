@@ -37,7 +37,6 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
@@ -67,10 +66,7 @@ internal fun FlowtoneScaffoldContent(
     descriptionBlurRadius: Dp,
     onUpdatePlaylistDescription: (String, String?) -> Unit,
     onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
-    onArtistProfileBackActionChange: ((() -> Unit)?) -> Unit,
-    onArtistPageTransitionPresentationChange: (Long, PageTransitionPresentation?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
-    onArtistToolbarContentVisibleChange: (Long, Boolean) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
     onClosePlaylistSortPanel: () -> Unit,
@@ -475,10 +471,6 @@ internal fun FlowtoneScaffoldContent(
                     albumDetailDestination = page.albumDetailDestination,
                     onUpdatePlaylistDescription = onUpdatePlaylistDescription,
                     onPlaylistBackActionChange = onPlaylistBackActionChange,
-                    onArtistProfileBackActionChange = onArtistProfileBackActionChange,
-                    onArtistPageTransitionPresentationChange = { presentation ->
-                        onArtistPageTransitionPresentationChange(page.entry.id, presentation)
-                    },
                     listeningRecordInitialTab = state.listeningRecordInitialTab,
                     likedSongKeys = state.likedSongKeys,
                     playlistSongEntries = playlistSongEntries,
@@ -494,9 +486,6 @@ internal fun FlowtoneScaffoldContent(
                     onPlaylistSongClick = callbacks.onPlaylistSongClick,
                     onPersistentTrackQueueClick = callbacks.onPersistentTrackQueueClick,
                     onOpenAlbum = callbacks.onOpenAlbum,
-                    onArtistToolbarContentVisibleChange = { visible ->
-                        onArtistToolbarContentVisibleChange(page.entry.id, visible)
-                    },
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
                     onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange,
