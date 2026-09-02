@@ -338,6 +338,32 @@ private data class SearchResultEntrySessionKey(
     val scope: SearchScope
 )
 
+internal data class SearchResultPresentationIdentityUpdate(
+    val currentId: Long,
+    val outgoingId: Long?,
+    val lastAssignedId: Long
+)
+
+internal fun searchResultPresentationIdentityUpdate(
+    currentId: Long,
+    lastAssignedId: Long,
+    hasExitingElements: Boolean
+): SearchResultPresentationIdentityUpdate {
+    if (!hasExitingElements) {
+        return SearchResultPresentationIdentityUpdate(
+            currentId = currentId,
+            outgoingId = null,
+            lastAssignedId = lastAssignedId
+        )
+    }
+    val nextId = lastAssignedId + 1
+    return SearchResultPresentationIdentityUpdate(
+        currentId = nextId,
+        outgoingId = currentId,
+        lastAssignedId = nextId
+    )
+}
+
 @Composable
 private fun visibleSearchResultKeys(
     listState: androidx.compose.foundation.lazy.LazyListState,
@@ -511,22 +537,27 @@ private fun SearchResultCategorySelector(
             )
         )
     }
-    var displayedSnapshot by remember { mutableStateOf<SearchResultSnapshot?>(null) }
+    var displayedPresentation by remember {
+        mutableStateOf(SearchResultPresentation(id = 0L, snapshot = currentSnapshot))
+    }
     var outgoingPresentation by remember { mutableStateOf<SearchResultOutgoingPresentation?>(null) }
-    var nextOutgoingId by remember { mutableStateOf(0L) }
+    var lastAssignedPresentationId by remember { mutableStateOf(0L) }
     var retainedKeysForCurrentSession by remember { mutableStateOf<Set<Any>>(emptySet()) }
 
     LaunchedEffect(currentSnapshot) {
-        val previousSnapshot = displayedSnapshot
-        val keyDiff = previousSnapshot?.let { previous ->
-            pageElementKeyDiff(previous.elementKeys, currentSnapshot.elementKeys)
-        }
-        retainedKeysForCurrentSession = keyDiff?.retainedKeys.orEmpty()
-        if (previousSnapshot != null && keyDiff?.exitingKeys?.isNotEmpty() == true) {
-            nextOutgoingId += 1
+        val previousPresentation = displayedPresentation
+        val previousSnapshot = previousPresentation.snapshot
+        val keyDiff = pageElementKeyDiff(previousSnapshot.elementKeys, currentSnapshot.elementKeys)
+        val identityUpdate = searchResultPresentationIdentityUpdate(
+            currentId = previousPresentation.id,
+            lastAssignedId = lastAssignedPresentationId,
+            hasExitingElements = keyDiff.exitingKeys.isNotEmpty()
+        )
+        retainedKeysForCurrentSession = keyDiff.retainedKeys
+        if (identityUpdate.outgoingId != null) {
+            lastAssignedPresentationId = identityUpdate.lastAssignedId
             outgoingPresentation = SearchResultOutgoingPresentation(
-                id = nextOutgoingId,
-                snapshot = previousSnapshot,
+                presentation = previousPresentation,
                 exitingKeys = keyDiff.exitingKeys.toSet(),
                 firstVisibleItemIndex = listState.firstVisibleItemIndex,
                 firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
@@ -535,13 +566,19 @@ private fun SearchResultCategorySelector(
                     resultKeySet = previousSnapshot.elementKeys.toSet()
                 )
             )
+            displayedPresentation = SearchResultPresentation(
+                id = identityUpdate.currentId,
+                snapshot = currentSnapshot
+            )
         } else if (outgoingPresentation?.exitingKeys?.any(currentSnapshot.elementKeys::contains) == true) {
             outgoingPresentation = null
+            displayedPresentation = previousPresentation.copy(snapshot = currentSnapshot)
+        } else {
+            displayedPresentation = previousPresentation.copy(snapshot = currentSnapshot)
         }
-        displayedSnapshot = currentSnapshot
     }
 
-    val presentedSnapshot = displayedSnapshot ?: currentSnapshot
+    val presentedSnapshot = displayedPresentation.snapshot
     val visibleCurrentKeys = visibleSearchResultKeys(listState, presentedSnapshot.elementKeys)
     val resultEnterScope = rememberPageElementEnterScope(
         sessionKey = presentedSnapshot.sessionKey,
@@ -566,68 +603,84 @@ private fun SearchResultCategorySelector(
         hasCurrentResults = currentSnapshot.elementKeys.isNotEmpty()
     )
     Box(modifier = modifier.padding(horizontal = 8.dp)) {
-        SearchResultList(
-            snapshot = presentedSnapshot,
-            currentSong = currentSong,
-            listState = listState,
-            onSongClick = onSongClick,
-            onArtistClick = onArtistClick,
-            onOnlineSongClick = onOnlineSongClick,
-            onProviderArtistClick = onProviderArtistClick,
-            onAlbumClick = onAlbumClick,
-            elementModifier = resultEnterScope::elementModifier,
-            showInitialLoading = state.scope != SearchScope.All &&
-                (state.isSearching || categoryState.isInitialLoading),
-            showOnlineLoading = state.scope == SearchScope.All &&
-                categoryState.isInitialLoading && presentedSnapshot.onlineResults.isEmpty(),
-            showLoadingMore = categoryState.isLoadingMore,
-            error = categoryState.error,
-            nextCursorAvailable = categoryState.nextCursor != null,
-            emptyMessage = emptyMessage,
-            onLoadMore = onLoadMore,
-            interactive = true,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        outgoingPresentation?.let { presentation ->
-            val outgoingListState = androidx.compose.runtime.key(presentation.id) {
-                rememberLazyListState(
-                    initialFirstVisibleItemIndex = presentation.firstVisibleItemIndex,
-                    initialFirstVisibleItemScrollOffset = presentation.firstVisibleItemScrollOffset
+        val presentationLayers = buildList {
+            add(SearchResultPresentationLayer(displayedPresentation, outgoing = null))
+            outgoingPresentation?.let { outgoing ->
+                add(SearchResultPresentationLayer(outgoing.presentation, outgoing))
+            }
+        }
+        presentationLayers.forEach { layer ->
+            // The old layer keeps the same keyed composition while its role changes from live
+            // to outgoing. Lazy item image painters and their loaded/loading presentation are
+            // therefore not recreated from the model snapshot at the category boundary.
+            androidx.compose.runtime.key(layer.presentation.id) {
+                val outgoing = layer.outgoing
+                val layerListState = if (outgoing == null) {
+                    listState
+                } else {
+                    rememberLazyListState(
+                        initialFirstVisibleItemIndex = outgoing.firstVisibleItemIndex,
+                        initialFirstVisibleItemScrollOffset = outgoing.firstVisibleItemScrollOffset
+                    )
+                }
+                val exitScope = if (outgoing == null) {
+                    null
+                } else {
+                    rememberPageElementExitScope(
+                        sessionKey = outgoing.presentation.id,
+                        elementKeys = outgoing.exitingKeys.toList(),
+                        viewportKeys = outgoing.viewportKeys,
+                        onFinished = {
+                            if (outgoingPresentation?.presentation?.id == outgoing.presentation.id) {
+                                outgoingPresentation = null
+                            }
+                        }
+                    )
+                }
+                SearchResultList(
+                    snapshot = layer.presentation.snapshot,
+                    currentSong = currentSong,
+                    listState = layerListState,
+                    onSongClick = onSongClick,
+                    onArtistClick = onArtistClick,
+                    onOnlineSongClick = onOnlineSongClick,
+                    onProviderArtistClick = onProviderArtistClick,
+                    onAlbumClick = onAlbumClick,
+                    elementModifier = { key ->
+                        when {
+                            outgoing == null -> resultEnterScope.elementModifier(key)
+                            key in outgoing.exitingKeys -> checkNotNull(exitScope).elementModifier(key)
+                            else -> checkNotNull(exitScope).hiddenModifier()
+                        }
+                    },
+                    showInitialLoading = outgoing == null && state.scope != SearchScope.All &&
+                        (state.isSearching || categoryState.isInitialLoading),
+                    showOnlineLoading = outgoing == null && state.scope == SearchScope.All &&
+                        categoryState.isInitialLoading && presentedSnapshot.onlineResults.isEmpty(),
+                    showLoadingMore = outgoing == null && categoryState.isLoadingMore,
+                    error = categoryState.error.takeIf { outgoing == null },
+                    nextCursorAvailable = outgoing == null && categoryState.nextCursor != null,
+                    emptyMessage = emptyMessage.takeIf { outgoing == null },
+                    onLoadMore = onLoadMore,
+                    interactive = outgoing == null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (outgoing != null) Modifier.zIndex(1f) else Modifier)
                 )
             }
-            val exitScope = rememberPageElementExitScope(
-                sessionKey = presentation.id,
-                elementKeys = presentation.exitingKeys.toList(),
-                viewportKeys = presentation.viewportKeys,
-                onFinished = {
-                    if (outgoingPresentation?.id == presentation.id) {
-                        outgoingPresentation = null
-                    }
-                }
-            )
-            SearchResultList(
-                snapshot = presentation.snapshot,
-                currentSong = currentSong,
-                listState = outgoingListState,
-                onSongClick = onSongClick,
-                onArtistClick = onArtistClick,
-                onOnlineSongClick = onOnlineSongClick,
-                onProviderArtistClick = onProviderArtistClick,
-                onAlbumClick = onAlbumClick,
-                elementModifier = { key ->
-                    if (key in presentation.exitingKeys) {
-                        exitScope.elementModifier(key)
-                    } else {
-                        exitScope.hiddenModifier()
-                    }
-                },
-                interactive = false,
-                modifier = Modifier.fillMaxSize().zIndex(1f)
-            )
         }
     }
 }
+
+private data class SearchResultPresentation(
+    val id: Long,
+    val snapshot: SearchResultSnapshot
+)
+
+private data class SearchResultPresentationLayer(
+    val presentation: SearchResultPresentation,
+    val outgoing: SearchResultOutgoingPresentation?
+)
 
 private data class SearchResultSnapshot(
     val sessionKey: SearchResultEntrySessionKey,
@@ -641,8 +694,7 @@ private data class SearchResultSnapshot(
 )
 
 private data class SearchResultOutgoingPresentation(
-    val id: Long,
-    val snapshot: SearchResultSnapshot,
+    val presentation: SearchResultPresentation,
     val exitingKeys: Set<Any>,
     val firstVisibleItemIndex: Int,
     val firstVisibleItemScrollOffset: Int,
@@ -662,7 +714,13 @@ private fun searchResultElementKeys(
     localAlbums.forEach { album -> add(localSearchResultItemKey("album", album.albumId.toString())) }
     if (SearchResultSourceSection.Online in sourceSections) add("search-source-online")
     onlineResults.forEach { result ->
-        add(providerSearchResultItemKey(result.trackRef.extensionId, result.trackRef.opaqueId))
+        add(
+            providerSearchResultItemKey(
+                providerId = result.trackRef.extensionId,
+                category = result.searchCategory,
+                identity = result.trackRef.opaqueId
+            )
+        )
     }
 }
 
@@ -748,7 +806,11 @@ private fun SearchResultList(
             }
         }
         items(snapshot.onlineResults, key = { song ->
-            providerSearchResultItemKey(song.trackRef.extensionId, song.trackRef.opaqueId)
+            providerSearchResultItemKey(
+                providerId = song.trackRef.extensionId,
+                category = song.searchCategory,
+                identity = song.trackRef.opaqueId
+            )
         }) { song ->
             OnlineSearchSong(
                 song = song,
@@ -763,7 +825,11 @@ private fun SearchResultList(
                     null
                 },
                 modifier = elementModifier(
-                    providerSearchResultItemKey(song.trackRef.extensionId, song.trackRef.opaqueId)
+                    providerSearchResultItemKey(
+                        providerId = song.trackRef.extensionId,
+                        category = song.searchCategory,
+                        identity = song.trackRef.opaqueId
+                    )
                 )
             )
         }
@@ -845,8 +911,11 @@ internal fun searchResultEmptyMessage(
 internal fun localSearchResultItemKey(kind: String, identity: String): String =
     "local:${kind.trim()}:${identity.trim()}"
 
-internal fun providerSearchResultItemKey(providerId: String, identity: String): String =
-    "online:${providerId.trim()}:${identity.trim()}"
+internal fun providerSearchResultItemKey(
+    providerId: String,
+    category: ProviderSearchCategory,
+    identity: String
+): String = "online:${providerId.trim()}:${category.name}:${identity.trim()}"
 
 @Composable
 private fun LocalSearchArtist(
