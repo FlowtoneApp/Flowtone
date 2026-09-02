@@ -502,6 +502,11 @@ private fun SearchResultCategorySelector(
     val localArtists = if (category == SearchResultCategory.User) state.artistResults else emptyList()
     val localAlbums = if (category == SearchResultCategory.Album) state.albumResults else emptyList()
     val categoryState = state.providerCategoryState(category.providerCategory)
+    val entrySessionKey = SearchResultEntrySessionKey(
+        generation = state.searchGeneration,
+        category = category,
+        scope = state.scope
+    )
     val currentSnapshot = remember(
         state.searchGeneration,
         state.scope,
@@ -517,11 +522,7 @@ private fun SearchResultCategorySelector(
             hasOnlineResults = categoryState.items.isNotEmpty()
         )
         SearchResultSnapshot(
-            sessionKey = SearchResultEntrySessionKey(
-                generation = state.searchGeneration,
-                category = category,
-                scope = state.scope
-            ),
+            sessionKey = entrySessionKey,
             scope = state.scope,
             localSongs = localSongs,
             localArtists = localArtists,
@@ -529,6 +530,7 @@ private fun SearchResultCategorySelector(
             onlineResults = categoryState.items,
             sourceSections = sourceSections,
             elementKeys = searchResultElementKeys(
+                sessionKey = entrySessionKey,
                 sourceSections = sourceSections,
                 localSongs = localSongs,
                 localArtists = localArtists,
@@ -702,17 +704,22 @@ private data class SearchResultOutgoingPresentation(
 )
 
 private fun searchResultElementKeys(
+    sessionKey: SearchResultEntrySessionKey,
     sourceSections: List<SearchResultSourceSection>,
     localSongs: List<Song>,
     localArtists: List<SearchArtist>,
     localAlbums: List<SearchResult.AlbumResult>,
     onlineResults: List<ProviderSong>
 ): List<Any> = buildList {
-    if (SearchResultSourceSection.Local in sourceSections) add("search-source-local")
+    if (SearchResultSourceSection.Local in sourceSections) {
+        add(searchResultSectionTitleKey(sessionKey, SearchResultSourceSection.Local))
+    }
     localSongs.forEach { song -> add(localSearchResultItemKey("song", song.uri.toString())) }
     localArtists.forEach { artist -> add(localSearchResultItemKey("artist", artist.id)) }
     localAlbums.forEach { album -> add(localSearchResultItemKey("album", album.albumId.toString())) }
-    if (SearchResultSourceSection.Online in sourceSections) add("search-source-online")
+    if (SearchResultSourceSection.Online in sourceSections) {
+        add(searchResultSectionTitleKey(sessionKey, SearchResultSourceSection.Online))
+    }
     onlineResults.forEach { result ->
         add(
             providerSearchResultItemKey(
@@ -756,10 +763,14 @@ private fun SearchResultList(
             }
         }
         if (SearchResultSourceSection.Local in snapshot.sourceSections) {
-            item(key = "search-source-local") {
+            val sectionKey = searchResultSectionTitleKey(
+                snapshot.sessionKey,
+                SearchResultSourceSection.Local
+            )
+            item(key = sectionKey) {
                 SearchResultsSectionTitle(
                     title = "本地",
-                    modifier = elementModifier("search-source-local")
+                    modifier = elementModifier(sectionKey)
                 )
             }
         }
@@ -793,10 +804,14 @@ private fun SearchResultList(
             )
         }
         if (SearchResultSourceSection.Online in snapshot.sourceSections) {
-            item(key = "search-source-online") {
+            val sectionKey = searchResultSectionTitleKey(
+                snapshot.sessionKey,
+                SearchResultSourceSection.Online
+            )
+            item(key = sectionKey) {
                 SearchResultsSectionTitle(
                     title = "在线",
-                    modifier = elementModifier("search-source-online")
+                    modifier = elementModifier(sectionKey)
                 )
             }
         }
@@ -868,6 +883,31 @@ private fun SearchResultsSectionTitle(title: String, modifier: Modifier = Modifi
 internal enum class SearchResultSourceSection {
     Local,
     Online
+}
+
+private fun searchResultSectionTitleKey(
+    sessionKey: SearchResultEntrySessionKey,
+    section: SearchResultSourceSection
+): String = searchResultSectionTitleKey(
+    presentationSessionIdentity = buildString {
+        append(sessionKey.generation)
+        append(':')
+        append(sessionKey.scope.presentationIdentity())
+        append(':')
+        append(sessionKey.category.providerCategory.name)
+    },
+    section = section
+)
+
+internal fun searchResultSectionTitleKey(
+    presentationSessionIdentity: String,
+    section: SearchResultSourceSection
+): String = "search-source:${presentationSessionIdentity}:${section.name.lowercase()}"
+
+private fun SearchScope.presentationIdentity(): String = when (this) {
+    SearchScope.All -> "all"
+    SearchScope.Local -> "local"
+    is SearchScope.Provider -> "provider:${extensionId}"
 }
 
 internal fun searchResultSourceSections(
