@@ -162,24 +162,78 @@ class ArtistPageContentTest {
         assertEquals(1, merged?.albumCount)
     }
 
-    @Test fun biographyControlsProfileFocusEntry() {
-        assertTrue(canFocusArtistProfile("Biography", biographyNeedsExpansion = true))
-        assertFalse(canFocusArtistProfile("Biography", biographyNeedsExpansion = false))
-        assertFalse(canFocusArtistProfile(null, biographyNeedsExpansion = true))
-        assertFalse(canFocusArtistProfile("  ", biographyNeedsExpansion = true))
+    @Test fun nullBiographyCannotFocus() {
+        val overflowingMeasurement = ArtistBiographyMeasurement(
+            fullTextHeightPx = 80,
+            collapsedViewportHeightPx = 20
+        )
+
+        assertFalse(canFocusArtistProfile(null, overflowingMeasurement))
+        assertFalse(canFocusArtistProfile("  ", overflowingMeasurement))
     }
 
-    @Test fun expandedTextNoLongerOverwritesCollapsedBiographyEligibility() {
-        val collapsedBiographyNeedsExpansion = true
-        val expandedTextHasVisualOverflow = false
-
-        assertFalse(expandedTextHasVisualOverflow)
-        assertTrue(
-            canFocusArtistProfile(
-                biography = "A biography that overflowed its collapsed one-line measurement.",
-                biographyNeedsExpansion = collapsedBiographyNeedsExpansion
-            )
+    @Test fun shortBiographyDisablesFocusAndEdgeEffect() {
+        val measurement = ArtistBiographyMeasurement(
+            fullTextHeightPx = 40,
+            collapsedViewportHeightPx = 40
         )
+
+        assertFalse(canFocusArtistProfile("Short biography", measurement))
+        assertFalse(artistBiographyEdgeEffectEnabled("Short biography", measurement))
+    }
+
+    @Test fun longBiographyEnablesFocusAndEdgeEffect() {
+        val measurement = ArtistBiographyMeasurement(
+            fullTextHeightPx = 80,
+            collapsedViewportHeightPx = 40
+        )
+
+        assertTrue(canFocusArtistProfile("Long biography", measurement))
+        assertTrue(artistBiographyEdgeEffectEnabled("Long biography", measurement))
+    }
+
+    @Test fun collapsedBiographyViewportUsesTwoMeasuredLineHeights() {
+        val collapsedViewport = artistBiographyCollapsedViewportHeight(20.dp)
+
+        assertEquals(40.dp, collapsedViewport)
+        assertEquals(20.dp, artistBiographyEdgeBandHeight(collapsedViewport))
+        assertEquals(40.dp, artistBiographyViewportHeight(collapsedViewport, 300.dp, 0f))
+        assertEquals(1f, artistBiographyEdgeStrength(0f))
+    }
+
+    @Test fun focusedBiographyUsesExpandedViewportWithoutRevealEdge() {
+        assertEquals(300.dp, artistBiographyViewportHeight(40.dp, 300.dp, 1f))
+        assertEquals(0f, artistBiographyEdgeStrength(1f))
+    }
+
+    @Test fun biographyViewportInterpolatesContinuouslyAtIntermediateProgress() {
+        val lateEdgeStrength = artistBiographyEdgeStrength(0.8f)
+
+        assertEquals(170.dp, artistBiographyViewportHeight(40.dp, 300.dp, 0.5f))
+        assertEquals(1f, artistBiographyEdgeStrength(0.5f))
+        assertTrue(lateEdgeStrength > 0f)
+        assertTrue(lateEdgeStrength < 1f)
+    }
+
+    @Test fun biographyRevealUsesTheSameProgressInBothDirections() {
+        val entering = listOf(0f, 0.35f, 0.7f, 1f).map { progress ->
+            artistBiographyViewportHeight(40.dp, 300.dp, progress) to
+                artistBiographyEdgeStrength(progress)
+        }
+        val collapsing = listOf(1f, 0.7f, 0.35f, 0f).map { progress ->
+            artistBiographyViewportHeight(40.dp, 300.dp, progress) to
+                artistBiographyEdgeStrength(progress)
+        }
+
+        assertEquals(entering.reversed(), collapsing)
+    }
+
+    @Test fun biographyColorIsAlwaysWhiteAcrossFocusPresentation() {
+        val collapsedColor = ArtistBiographyContentColor
+        val focusedColor = ArtistBiographyContentColor
+
+        assertEquals(Color.White, collapsedColor)
+        assertEquals(collapsedColor, focusedColor)
     }
 
     @Test fun focusedBackCollapsesBeforeNavigation() {
@@ -194,15 +248,26 @@ class ArtistPageContentTest {
         assertEquals(null, mergeArtistMetadata("Artist", ArtistMetadata(biography = "Bio"), null)?.banner)
     }
 
-    @Test fun profileElevationTracksFocusProgress() {
-        assertEquals(0.dp, artistProfileElevation(0f))
-        assertEquals(6.dp, artistProfileElevation(1f))
+    @Test fun contentDrivenFocusHeightStopsAtRequiredBiographyHeight() {
+        val target = artistProfileFocusHeightTarget(
+            collapsedHeight = 280.dp,
+            requiredFocusedHeight = 380.dp,
+            maxAllowedFocusHeight = 640.dp
+        )
+
+        assertEquals(380.dp, target.height)
+        assertFalse(target.biographyScrollRequired)
     }
 
-    @Test fun collapsedBiographyUsesOneLineAndEmptyBiographyCannotFocus() {
-        assertEquals(1, artistBiographyMaxLines(false))
-        assertEquals(Int.MAX_VALUE, artistBiographyMaxLines(true))
-        assertFalse(canFocusArtistProfile(null, biographyNeedsExpansion = false))
+    @Test fun oversizedBiographyUsesMaximumFocusHeightAndInternalScroll() {
+        val target = artistProfileFocusHeightTarget(
+            collapsedHeight = 280.dp,
+            requiredFocusedHeight = 820.dp,
+            maxAllowedFocusHeight = 640.dp
+        )
+
+        assertEquals(640.dp, target.height)
+        assertTrue(target.biographyScrollRequired)
     }
 
     @Test fun profileColorModeUsesSingleArtworkColorOrMaterial() {
@@ -367,13 +432,23 @@ class ArtistPageContentTest {
     }
 
     @Test fun focusGrowthDoesNotIncreaseBannerHeroHeight() {
-        val collapsed = artistProfilePresentationHeights(280.dp, 640.dp, focusProgress = 0f)
-        val focused = artistProfilePresentationHeights(280.dp, 640.dp, focusProgress = 1f)
+        val collapsed = artistProfilePresentationHeights(
+            collapsedHeight = 300.dp,
+            expandedHeight = 420.dp,
+            focusProgress = 0f,
+            bannerHeroHeight = 280.dp
+        )
+        val focused = artistProfilePresentationHeights(
+            collapsedHeight = 300.dp,
+            expandedHeight = 420.dp,
+            focusProgress = 1f,
+            bannerHeroHeight = 280.dp
+        )
         val collapsedOverlay = artistBannerHeroOverlayGeometry(collapsed.bannerHeroHeight)
         val focusedOverlay = artistBannerHeroOverlayGeometry(focused.bannerHeroHeight)
 
-        assertEquals(280.dp, collapsed.cardHeight)
-        assertEquals(640.dp, focused.cardHeight)
+        assertEquals(300.dp, collapsed.cardHeight)
+        assertEquals(420.dp, focused.cardHeight)
         assertEquals(280.dp, collapsed.bannerHeroHeight)
         assertEquals(collapsed.bannerHeroHeight, focused.bannerHeroHeight)
         assertEquals(collapsedOverlay, focusedOverlay)
