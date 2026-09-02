@@ -175,7 +175,7 @@ internal fun SecondaryPageHost(
         order: Int,
         orderCount: Int
     ): Modifier {
-        return pageScope.elementModifierAt(pageProgress, order, orderCount)
+        return pageScope.elementAppearanceModifierAt(pageProgress, order, orderCount)
     }
 
     fun viewportItemModifier(order: Int, orderCount: Int): Modifier {
