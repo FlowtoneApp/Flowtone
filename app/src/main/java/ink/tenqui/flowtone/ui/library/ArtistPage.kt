@@ -68,7 +68,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.boundsInRoot
@@ -120,12 +119,6 @@ private val ArtistBiographyEdgeBlurRadius = 2.5.dp
 private const val ArtistBiographyEdgeFadeOutStartProgress = 0.55f
 internal val ArtistBiographyContentColor = Color.White
 private val ArtistAlbumArtworkSize = 140.dp
-private const val ArtistHeaderCardAnimationIndex = 0
-private const val ArtistHeaderAvatarAnimationIndex = 1
-private const val ArtistHeaderNameAnimationIndex = 2
-private const val ArtistHeaderAliasAnimationIndex = 3
-private const val ArtistHeaderBiographyAnimationIndex = 4
-private const val ArtistHeaderStatsAnimationIndex = 5
 private const val ArtistSongsTitleAnimationIndex = 6
 private const val ArtistFirstSongAnimationIndex = 7
 private const val ArtistAlbumsTitleAnimationIndex = 11
@@ -201,11 +194,6 @@ internal enum class ArtistProfileBackResult { CollapseProfile, NavigateBack }
 internal fun artistProfileBackResult(focused: Boolean): ArtistProfileBackResult =
     if (focused) ArtistProfileBackResult.CollapseProfile else ArtistProfileBackResult.NavigateBack
 
-internal enum class ArtistProfileColorMode { Artwork, Material }
-
-internal fun artistProfileColorMode(hasArtwork: Boolean): ArtistProfileColorMode =
-    if (hasArtwork) ArtistProfileColorMode.Artwork else ArtistProfileColorMode.Material
-
 internal enum class ArtistProfileBaseColorSource { ArtistArtwork, Banner, Material }
 
 internal fun artistProfileBaseColorSource(
@@ -262,13 +250,6 @@ internal fun artistBannerInternalAlpha(
     ArtistBannerPresentationState.BannerLoadedLate -> lateRevealAlpha.coerceIn(0f, 1f)
     else -> 0f
 }
-
-internal fun artistBannerEffectiveAlpha(
-    state: ArtistBannerPresentationState,
-    pageElementAlpha: Float,
-    lateRevealAlpha: Float
-): Float = pageElementAlpha.coerceIn(0f, 1f) *
-    artistBannerInternalAlpha(state, lateRevealAlpha)
 
 internal fun artistBannerDisplayMemoryCacheKey(banner: ExtensionImage): String =
     "artist-profile-banner:${banner.extensionId}:${banner.url}"
@@ -852,7 +833,6 @@ internal fun ArtistPage(
                 },
                 onBiographyMeasurementChanged = { biographyMeasurement = it },
                 onClick = { artistProfileFocused = true },
-                onHeightChanged = {},
                 modifier = Modifier
                     .offset { IntOffset(anchorLeft.toInt(), anchorTop.toInt()) }
                     .width(cardWidth)
@@ -894,7 +874,6 @@ private fun ArtistHeaderCard(
     onBannerError: () -> Unit,
     onBiographyMeasurementChanged: (ArtistBiographyMeasurement) -> Unit,
     onClick: () -> Unit,
-    onHeightChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val displayAlias = alias?.trim()?.takeIf(String::isNotEmpty)
@@ -908,7 +887,6 @@ private fun ArtistHeaderCard(
     Box(
         modifier = modifier
             .heightIn(min = ArtistHeaderMinimumContentHeight + topPadding)
-            .onSizeChanged { size -> onHeightChanged(size.height) }
             .clickable(
                 enabled = canFocus,
                 indication = null,
@@ -1017,7 +995,6 @@ private fun ArtistHeaderCard(
             ArtistHeaderProfileDetails(
                 artistName = artistName,
                 alias = displayAlias,
-                biography = null,
                 statistics = statistics,
                 avatarSize = avatarSize,
                 primaryContentColor = heroPrimaryContentColor,
@@ -1205,7 +1182,6 @@ private fun Modifier.biographyRevealEdge(
 private fun ArtistHeaderProfileDetails(
     artistName: String,
     alias: String?,
-    biography: String?,
     statistics: String?,
     avatarSize: Dp,
     primaryContentColor: Color,
@@ -1231,16 +1207,6 @@ private fun ArtistHeaderProfileDetails(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.layoutId("alias")
-                )
-            }
-            biography?.let { text ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = secondaryContentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.layoutId("biography")
                 )
             }
             statistics?.let { text ->
@@ -1277,15 +1243,9 @@ private fun ArtistHeaderProfileDetails(
 
         val name = measureText("name")
         val alias = measureText("alias", gapBefore = 4.dp.roundToPx())
-        val biography = measureText(
-            "biography",
-            gapBefore = if (alias == null) 12.dp.roundToPx() else 10.dp.roundToPx()
-        )
-
         layout(width, height) {
             name?.let { (y, placeable) -> placeable.placeRelative(0, y) }
             alias?.let { (y, placeable) -> placeable.placeRelative(0, y) }
-            biography?.let { (y, placeable) -> placeable.placeRelative(0, y) }
             statisticsPlaceable?.placeRelative(width - statisticsPlaceable.width, height - statisticsPlaceable.height)
         }
     }

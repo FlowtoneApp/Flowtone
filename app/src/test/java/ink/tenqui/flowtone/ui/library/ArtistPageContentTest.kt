@@ -270,11 +270,6 @@ class ArtistPageContentTest {
         assertTrue(target.biographyScrollRequired)
     }
 
-    @Test fun profileColorModeUsesSingleArtworkColorOrMaterial() {
-        assertEquals(ArtistProfileColorMode.Artwork, artistProfileColorMode(true))
-        assertEquals(ArtistProfileColorMode.Material, artistProfileColorMode(false))
-    }
-
     @Test fun artworkColorCacheReusesSameKeyAndSeparatesTheme() {
         ArtworkPaletteMemoryCache.clearForTest()
         var resolutions = 0
@@ -303,7 +298,6 @@ class ArtistPageContentTest {
         assertEquals(ArtistBannerPresentationState.BannerReadyImmediately, state)
         assertEquals(1f, artistBannerTargetAlpha(state))
         assertFalse(artistBannerUsesLateReveal(state))
-        assertEquals(0.4f, artistBannerEffectiveAlpha(state, 0.4f, 0f))
         assertEquals(state, artistBannerSuccessState(state, pageEnterComplete = false))
     }
 
@@ -348,8 +342,6 @@ class ArtistPageContentTest {
     @Test fun pageEnterReverseKeepsReadyBannerOnCurrentPagePresentation() {
         val state = ArtistBannerPresentationState.BannerReadyImmediately
 
-        assertEquals(0.5f, artistBannerEffectiveAlpha(state, 0.5f, 0f))
-        assertEquals(0.3f, artistBannerEffectiveAlpha(state, 0.3f, 1f))
     }
 
     @Test fun bannerColorCacheHitIsInitialCardBaseColor() {
