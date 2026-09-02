@@ -573,6 +573,7 @@ internal fun ArtistPage(
     val animationOrderByKey = remember(animationGroupKeys) {
         animationGroupKeys.withIndex().associate { (order, key) -> key to order }
     }
+    val firstSongTransitionOrderCount = animationGroupKeys.size.coerceAtLeast(1)
 
     fun fixedItemModifier(index: Int): Modifier {
         return pageTransition.elementModifier(index, ArtistTransitionOrderCount)
@@ -851,9 +852,9 @@ internal fun ArtistPage(
                     .height(presentationHeights.cardHeight)
                     .then(
                         pageTransition.elementAppearanceModifierAt(
-                            pageProgress = pageTransition.progress,
-                            order = 1,
-                            orderCount = 2,
+                            pageProgress = listProgress,
+                            order = 0,
+                            orderCount = firstSongTransitionOrderCount,
                             translationOffsetScale = -0.4f
                         )
                     )
