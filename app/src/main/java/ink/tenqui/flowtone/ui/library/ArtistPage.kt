@@ -114,6 +114,8 @@ private val ArtistHeaderCornerRadius = 24.dp
 private val ArtistHeaderContentTopGap = 16.dp
 private val ArtistHeaderAvatarNameGap = 12.dp
 private val ArtistHeaderBottomPadding = 24.dp
+private val ArtistSectionTitleTopSpacing = 24.dp
+private val ArtistSectionTitleBottomSpacing = 12.dp
 private val ArtistBiographyTopSpacing = 16.dp
 private val ArtistBiographyEdgeBlurRadius = 2.5.dp
 private const val ArtistBiographyEdgeFadeOutStartProgress = 0.55f
@@ -679,7 +681,12 @@ internal fun ArtistPage(
                     ArtistSectionTitle(
                         title = "歌曲",
                         modifier = fixedItemModifier(ArtistSongsTitleAnimationIndex)
-                            .padding(start = 20.dp, top = 0.dp, end = 20.dp, bottom = 8.dp)
+                            .padding(
+                                start = 20.dp,
+                                top = ArtistSectionTitleTopSpacing,
+                                end = 20.dp,
+                                bottom = ArtistSectionTitleBottomSpacing
+                            )
                     )
                 }
                 if (artistSongs.isEmpty()) {
@@ -720,7 +727,12 @@ internal fun ArtistPage(
                         ArtistSectionTitle(
                             title = "专辑",
                             modifier = fixedItemModifier(ArtistAlbumsTitleAnimationIndex)
-                                .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 12.dp)
+                                .padding(
+                                    start = 20.dp,
+                                    top = ArtistSectionTitleTopSpacing,
+                                    end = 20.dp,
+                                    bottom = ArtistSectionTitleBottomSpacing
+                                )
                         )
                         LazyRow(
                             state = albumListState,
