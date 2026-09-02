@@ -23,6 +23,9 @@ import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderEntityCapability
+import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
@@ -85,7 +88,9 @@ data class MusicUiState(
     val trackPlaybackErrorEventId: Long = 0L,
     /** 在线请求尚未被播放器确认；绝不能覆盖 confirmed PlaybackState。 */
     val pendingPlayback: PendingPlayback? = null,
-    val pendingQueueIndex: Int? = null
+    val pendingQueueIndex: Int? = null,
+    val providerSongs: Map<String, List<ProviderSong>> = emptyMap(),
+    val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap()
 )
 
 data class PendingPlayback(
@@ -95,24 +100,6 @@ data class PendingPlayback(
     val phase: Phase
 ) {
     enum class Phase { Resolving, Preparing }
-}
-
-private fun ProviderSong.toOnlineDisplaySong(): Song {
-    val opaqueUri = Uri.Builder()
-        .scheme("flowtone-extension")
-        .authority("track")
-        .appendPath(trackRef.extensionId)
-        .appendPath(trackRef.opaqueId)
-        .build()
-    return Song(
-        id = -((trackRef.extensionId + ":" + trackRef.opaqueId).hashCode().toLong().let { kotlin.math.abs(it) + 1L }),
-        sourceType = SourceType.Online,
-        title = title,
-        artist = artist,
-        durationMs = durationMs ?: 0L,
-        uri = opaqueUri,
-        displayName = title
-    )
 }
 
 private fun searchScopeFromPreference(value: String): SearchScope = when {
@@ -207,6 +194,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var searchLandingGeneration: Long = 0L
     private var playbackOrderModeJob: Job? = null
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
+    private val providerCollectionLoads = mutableSetOf<String>()
 
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
@@ -710,20 +698,26 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     fun playProviderSong(song: ProviderSong) {
         val snapshot = _searchUiState.value.providerCategoryStates[ProviderSearchCategory.Single]
             ?.items.orEmpty()
+            .filterIsInstance<ProviderSong>()
         val queue = snapshot.takeIf { results -> results.any { it.trackRef == song.trackRef } }
             ?: listOf(song)
-        playProviderSongQueue(queue, song)
+        playProviderSongQueue(queue, queue.indexOfFirst { it.trackRef == song.trackRef }, PlaybackSource.Search)
     }
 
-    private fun playProviderSongQueue(queue: List<ProviderSong>, selected: ProviderSong) {
-        val displayQueue = queue.map(ProviderSong::toOnlineDisplaySong)
-        val selectedDisplaySong = selected.toOnlineDisplaySong()
+    fun playProviderSongQueue(
+        queue: List<ProviderSong>,
+        startIndex: Int,
+        source: PlaybackSource
+    ) {
+        val selected = queue.getOrNull(startIndex) ?: return
+        val displayQueue = queue.map(ProviderSong::toPresentationSong)
+        val selectedDisplaySong = selected.toPresentationSong()
         sourceQueue = displayQueue
         sourceTrackQueue = queue.zip(displayQueue) { providerSong, presentation ->
             QueueTrackEntry(providerSong.toPersistentTrack(), presentation, providerSong)
         }
         onlineQueueSongs = queue.associateBy { providerSong ->
-            providerSong.toOnlineDisplaySong().uri.toString()
+            providerSong.toPresentationSong().uri.toString()
         }
         rebuildPlaybackQueueForMode(
             mode = playbackState.value.playbackOrderMode,
@@ -731,7 +725,47 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         )
         val selectedIndex = findSongIndex(playbackQueue, selectedDisplaySong)
         if (selectedIndex == -1) return
-        playSongAt(index = selectedIndex, source = PlaybackSource.Search)
+        playSongAt(index = selectedIndex, source = source)
+    }
+
+    fun loadProviderEntityCollections(providerId: String) {
+        val normalizedProviderId = providerId.trim()
+        if (normalizedProviderId.isEmpty()) return
+        val capabilities = extensionManager.providerEntityCapabilities(normalizedProviderId)
+        if (
+            ProviderEntityCapability.Song in capabilities &&
+            normalizedProviderId !in _uiState.value.providerSongs &&
+            providerCollectionLoads.add("song:$normalizedProviderId")
+        ) {
+            viewModelScope.launch {
+                try {
+                    extensionManager.getProviderSongs(normalizedProviderId)?.let { songs ->
+                        _uiState.update { state ->
+                            state.copy(providerSongs = state.providerSongs + (normalizedProviderId to songs))
+                        }
+                    }
+                } finally {
+                    providerCollectionLoads.remove("song:$normalizedProviderId")
+                }
+            }
+        }
+        if (
+            ProviderEntityCapability.Album in capabilities &&
+            normalizedProviderId !in _uiState.value.providerAlbums &&
+            providerCollectionLoads.add("album:$normalizedProviderId")
+        ) {
+            viewModelScope.launch {
+                try {
+                    extensionManager.getProviderAlbums(normalizedProviderId)?.let { albums ->
+                        _uiState.update { state ->
+                            state.copy(providerAlbums = state.providerAlbums + (normalizedProviderId to albums))
+                        }
+                    }
+                } finally {
+                    providerCollectionLoads.remove("album:$normalizedProviderId")
+                }
+            }
+        }
     }
 
     private fun playOnlineSongAt(

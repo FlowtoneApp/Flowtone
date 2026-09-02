@@ -96,6 +96,11 @@ import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.providerAlbumsForArtist
+import ink.tenqui.flowtone.data.online.providerSongsForArtist
+import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
@@ -321,10 +326,16 @@ internal fun ArtistPage(
     providedMetadata: ArtistMetadata?,
     allSongs: List<Song>,
     albums: List<LocalAlbum>,
+    providerId: String? = null,
+    providerArtistId: String? = null,
+    providerSongs: List<ProviderSong> = emptyList(),
+    providerAlbums: List<ProviderAlbum> = emptyList(),
     currentSong: Song?,
     onNavigateBack: () -> Unit,
     onSongClick: (List<Song>, Int) -> Unit,
+    onProviderSongClick: (List<ProviderSong>, Int) -> Unit = { _, _ -> },
     onOpenAlbum: (Long) -> Unit,
+    onOpenProviderAlbum: (ProviderAlbum) -> Unit = {},
     pageTransition: PageTransitionScope,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
         { _, _, _ -> Modifier },
@@ -345,6 +356,31 @@ internal fun ArtistPage(
     val artistAlbums = remember(displayArtist, albums, hasLocalContent) {
         if (hasLocalContent) artistAlbumsFor(albums, displayArtist) else emptyList()
     }
+    val artistProviderSongs = remember(
+        providerId,
+        providerArtistId,
+        displayArtist,
+        providerSongs,
+        hasLocalContent
+    ) {
+        if (!hasLocalContent && providerId != null && providerArtistId != null) {
+            providerSongsForArtist(providerSongs, providerId, providerArtistId, displayArtist)
+        } else emptyList()
+    }
+    val artistProviderAlbums = remember(
+        providerId,
+        providerArtistId,
+        displayArtist,
+        providerAlbums,
+        hasLocalContent
+    ) {
+        if (!hasLocalContent && providerId != null && providerArtistId != null) {
+            providerAlbumsForArtist(providerAlbums, providerId, providerArtistId, displayArtist)
+        } else emptyList()
+    }
+    val presentedArtistSongs = remember(artistSongs, artistProviderSongs, hasLocalContent) {
+        if (hasLocalContent) artistSongs else artistProviderSongs.map(ProviderSong::toPresentationSong)
+    }
     val artistMetadata = rememberArtistMetadata(
         artistName = displayArtist,
         providedMetadata = providedMetadata?.takeUnless { hasLocalContent }
@@ -362,15 +398,26 @@ internal fun ArtistPage(
             artistMetadataStatisticsText(artistMetadata?.songCount, artistMetadata?.albumCount)
         }
     }
-    val contentVisibility = remember(hasLocalContent, artistAlbums, statistics) {
+    val contentVisibility = remember(
+        hasLocalContent,
+        artistAlbums,
+        artistProviderSongs,
+        artistProviderAlbums,
+        statistics
+    ) {
         artistPageContentVisibility(
             hasLocalContent = hasLocalContent,
-            hasAlbums = artistAlbums.isNotEmpty(),
+            hasSongs = artistProviderSongs.isNotEmpty(),
+            hasAlbums = artistAlbums.isNotEmpty() || artistProviderAlbums.isNotEmpty(),
             hasStatistics = statistics != null
         )
     }
-    val artistSongKeys = remember(artistSongs) {
-        artistSongs.mapIndexed(::artistSongItemKey)
+    val artistSongKeys = remember(presentedArtistSongs, artistProviderSongs, hasLocalContent) {
+        if (hasLocalContent) {
+            presentedArtistSongs.mapIndexed(::artistSongItemKey)
+        } else {
+            artistProviderSongs.map { song -> "provider-song:${song.identity.stableKey}" }
+        }
     }
     val avatarLookupSongTitle = remember(artistSongs, currentSong) {
         val currentArtistSong = currentSong?.takeIf { playingSong ->
@@ -393,7 +440,9 @@ internal fun ArtistPage(
     val density = LocalDensity.current
     val isDarkTheme = isSystemInDarkTheme()
     val banner = artistMetadata?.banner
-    val paletteArtworkData: Any? = artistAvatarImage ?: artistSongs.firstOrNull()?.artworkUri
+    val paletteArtworkData: Any? = artistAvatarImage
+        ?: artistSongs.firstOrNull()?.artworkUri
+        ?: artistProviderSongs.firstOrNull()?.artwork
     val materialBackground = MaterialTheme.colorScheme.surfaceContainerHigh
     val extensionImageLoader = remember(context) { ExtensionManager.get(context).extensionImageLoader }
     val bannerDisplayCacheKey = remember(banner) {
@@ -654,7 +703,7 @@ internal fun ArtistPage(
                             )
                     )
                 }
-                if (artistSongs.isEmpty()) {
+                if (presentedArtistSongs.isEmpty()) {
                     item(key = "artist-empty") {
                         Text(
                             text = "没有找到该艺术家的歌曲",
@@ -667,8 +716,8 @@ internal fun ArtistPage(
                     }
                 } else {
                     itemsIndexed(
-                        items = artistSongs,
-                        key = ::artistSongItemKey
+                        items = presentedArtistSongs,
+                        key = { index, _ -> artistSongKeys[index] }
                     ) { index, song ->
                         val songKey = artistSongKeys[index]
                         val viewportOrder = animationOrderByKey[songKey] ?: 0
@@ -676,7 +725,11 @@ internal fun ArtistPage(
                         SongListItem(
                             song = song,
                             isCurrentSong = currentSong?.id == song.id || currentSong?.uri == song.uri,
-                            onClick = { onSongClick(artistSongs, index) },
+                            onClick = {
+                                if (hasLocalContent) onSongClick(artistSongs, index)
+                                else onProviderSongClick(artistProviderSongs, index)
+                            },
+                            extensionArtwork = artistProviderSongs.getOrNull(index)?.artwork,
                             modifier = if (enterGroupReady) {
                                 itemModifier(listProgress, viewportOrder, viewportOrderCount)
                             } else {
@@ -708,6 +761,16 @@ internal fun ArtistPage(
                                 ArtistAlbumCard(
                                     album = album,
                                     onClick = { onOpenAlbum(album.id) },
+                                    modifier = fixedItemModifier(ArtistAlbumCardsAnimationIndex)
+                                )
+                            }
+                            items(artistProviderAlbums, key = { it.identity.stableKey }) { album ->
+                                ArtistAlbumCard(
+                                    title = album.title,
+                                    supportingText = album.songCount?.let { "$it 首歌曲" }
+                                        ?: album.artist.ifBlank { "未知艺术家" },
+                                    extensionArtwork = album.artwork,
+                                    onClick = { onOpenProviderAlbum(album) },
                                     modifier = fixedItemModifier(ArtistAlbumCardsAnimationIndex)
                                 )
                             }
@@ -1369,17 +1432,36 @@ private fun ArtistAlbumCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    ArtistAlbumCard(
+        title = album.title,
+        supportingText = "${album.songs.size} 首歌曲",
+        artworkUri = album.artworkUri,
+        onClick = onClick,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun ArtistAlbumCard(
+    title: String,
+    supportingText: String,
+    artworkUri: android.net.Uri? = null,
+    extensionArtwork: ExtensionImage? = null,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
             .width(ArtistAlbumArtworkSize)
             .clickable(onClick = onClick)
     ) {
         FlowtoneArtwork(
-            artworkUri = album.artworkUri,
+            artworkUri = artworkUri,
+            extensionArtwork = extensionArtwork,
             modifier = Modifier.size(ArtistAlbumArtworkSize)
         )
         Text(
-            text = album.title,
+            text = title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
@@ -1388,7 +1470,7 @@ private fun ArtistAlbumCard(
             modifier = Modifier.padding(top = 8.dp)
         )
         Text(
-            text = "${album.songs.size} 首歌曲",
+            text = supportingText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

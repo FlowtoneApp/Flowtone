@@ -47,6 +47,7 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.sanitizedFor
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
@@ -373,13 +374,14 @@ fun FlowtoneApp(
         )
     }
 
-    fun openProviderArtist(artist: ProviderSong) {
+    fun openProviderArtist(artist: ProviderArtist) {
         val displayName = artist.title.trim()
-        val providerId = artist.trackRef.extensionId.trim()
-        val artistId = artist.trackRef.opaqueId.trim()
+        val providerId = artist.identity.providerId.trim()
+        val artistId = artist.identity.remoteId.trim()
         if (displayName.isBlank() || providerId.isBlank() || artistId.isBlank()) {
             return
         }
+        musicViewModel.loadProviderEntityCollections(providerId)
         if (appState.searchActive) {
             appState.searchInputFocused = false
             appState.searchFocusRequest = 0
@@ -392,7 +394,7 @@ fun FlowtoneApp(
                     artistId = artistId,
                     displayName = displayName,
                     avatar = artist.artwork ?: artist.largeArtwork,
-                    profileMetadata = artist.artistMetadata?.sanitizedFor(displayName)
+                    profileMetadata = artist.profileMetadata?.sanitizedFor(displayName)
                 )
             )
         )
@@ -513,6 +515,7 @@ fun FlowtoneApp(
                 musicViewModel.playSong(song, PlaybackSource.LocalLibrary)
             },
             onOnlineSongClick = musicViewModel::playProviderSong,
+            onProviderSongQueueClick = musicViewModel::playProviderSongQueue,
             onPlaylistSongClick = { songs, startIndex, source ->
                 musicViewModel.playSongQueue(songs, startIndex, source)
             },
@@ -530,6 +533,12 @@ fun FlowtoneApp(
                     val destination = SecondaryDestination.Album(album.id, album.title)
                     appState.secondaryNavigation = appState.secondaryNavigation.push(destination)
                 }
+            },
+            onOpenProviderAlbum = { album ->
+                musicViewModel.loadProviderEntityCollections(album.providerId)
+                appState.secondaryNavigation = appState.secondaryNavigation.push(
+                    SecondaryDestination.Album(album)
+                )
             },
             onOpenArtist = { artistName -> openArtist(artistName) },
             onOpenProviderArtist = ::openProviderArtist,

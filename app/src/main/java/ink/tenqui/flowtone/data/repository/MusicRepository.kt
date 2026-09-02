@@ -19,6 +19,6 @@ class MusicRepository(
     suspend fun searchOnlineSongs(keyword: String): List<ProviderSong> {
         return musicProvider.searchPage(
             ProviderSearchRequest(keyword = keyword, category = ProviderSearchCategory.Single)
-        ).results
+        ).results.filterIsInstance<ProviderSong>()
     }
 }

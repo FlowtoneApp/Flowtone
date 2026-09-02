@@ -22,23 +22,27 @@ internal fun providerSearchCategoryFromWire(value: String): ProviderSearchCatego
 
 data class ProviderSong(
     val trackRef: ExtensionTrackRef,
-    val title: String,
-    val artist: String,
+    override val title: String,
+    override val artist: String,
     val durationMs: Long? = null,
-    val artwork: ExtensionImage? = null,
+    override val artwork: ExtensionImage? = null,
     val largeArtwork: ExtensionImage? = null,
     val persistentId: String? = null,
     val sourceHost: String? = null,
     /** 由 Provider 声明的搜索展示分类；未声明时保持与旧扩展兼容的单曲。 */
-    val searchCategory: ProviderSearchCategory = ProviderSearchCategory.Single,
+    override val searchCategory: ProviderSearchCategory = ProviderSearchCategory.Single,
     /** null 表示扩展未声明 metadata，emptyList 表示扩展明确隐藏 metadata 行。 */
-    val metadata: List<ProviderSearchMetadata>? = null,
-    /** Optional artist profile data. It does not declare song or album entities. */
-    val artistMetadata: ArtistMetadata? = null
-) {
+    override val metadata: List<ProviderSearchMetadata>? = null,
+    /** Optional artist profile data retained for legacy User search payloads. */
+    val artistMetadata: ArtistMetadata? = null,
+    val artists: List<ProviderArtistRef> = emptyList(),
+    val album: ProviderAlbumRef? = null
+) : ProviderSearchItem {
+    override val identity: ProviderEntityIdentity
+        get() = ProviderEntityIdentity(trackRef.extensionId, trackRef.opaqueId)
     /** 兼容旧展示代码；身份来自 Host 绑定的 trackRef，而非 JS 返回字段。 */
-    val providerId: String get() = trackRef.extensionId
-    val id: String get() = trackRef.opaqueId
+    override val providerId: String get() = trackRef.extensionId
+    override val id: String get() = trackRef.opaqueId
     val nowPlayingArtwork: ExtensionImage? get() = largeArtwork ?: artwork
     val persistentTrackRef: PersistentProviderTrackRef?
         get() = persistentId?.takeIf(String::isNotBlank)?.let { id ->

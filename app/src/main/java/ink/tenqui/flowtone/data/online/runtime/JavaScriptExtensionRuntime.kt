@@ -54,6 +54,11 @@ class JavaScriptExtensionRuntime(
         return evaluateExpression("JSON.stringify(await globalThis.flowtoneExtension.$method(${request}))")
     }
 
+    internal suspend fun invokeJson(method: String): String {
+        require(MethodName.matches(method)) { "非法扩展方法" }
+        return evaluateExpression("JSON.stringify(await globalThis.flowtoneExtension.$method())")
+    }
+
     private fun onMessage(message: Message) {
         if (closed.get() || message.type != Message.TYPE_STRING) return
         val incoming = runCatching { JSONObject(message.string) }.getOrNull() ?: return

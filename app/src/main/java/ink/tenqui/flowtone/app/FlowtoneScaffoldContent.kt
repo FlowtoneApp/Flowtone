@@ -116,8 +116,10 @@ internal fun FlowtoneScaffoldContent(
         ?: selectedPlaylistDestination?.playlistId
             ?.takeUnless { playlistId -> playlistId == LikedSongsPlaylistId }
             ?.let(::playlistAppearanceColorKeyForStableId)
-    val selectedAlbum = remember(selectedAlbumDestination?.albumId, state.uiState.albums) {
-        state.uiState.albums.firstOrNull { album -> album.id == selectedAlbumDestination?.albumId }
+    val selectedLocalAlbumId =
+        (selectedAlbumDestination?.identity as? AlbumDestinationIdentity.Local)?.albumId
+    val selectedAlbum = remember(selectedLocalAlbumId, state.uiState.albums) {
+        state.uiState.albums.firstOrNull { album -> album.id == selectedLocalAlbumId }
     }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val defaultAlbumCloudPalette = remember(isDarkTheme, mainPageCloudAccent) {
@@ -234,8 +236,7 @@ internal fun FlowtoneScaffoldContent(
             }
         }
     }
-    val albumDetailDestination = selectedAlbumDestination?.let { selectedDestination ->
-        val albumId = selectedDestination.albumId
+    val albumDetailDestination = selectedLocalAlbumId?.let { albumId ->
         remember(albumId) {
             AlbumDetailDestination(
                 albumId = albumId,
@@ -485,7 +486,9 @@ internal fun FlowtoneScaffoldContent(
                     onSongClick = callbacks.onSongClick,
                     onPlaylistSongClick = callbacks.onPlaylistSongClick,
                     onPersistentTrackQueueClick = callbacks.onPersistentTrackQueueClick,
+                    onProviderSongQueueClick = callbacks.onProviderSongQueueClick,
                     onOpenAlbum = callbacks.onOpenAlbum,
+                    onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
                     onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange,
@@ -594,7 +597,7 @@ private sealed interface FlowtoneScaffoldPage {
 private sealed interface FlowtoneReversibleTransitionKey {
     data object MainTabs : FlowtoneReversibleTransitionKey
     data class Playlist(val playlistId: String) : FlowtoneReversibleTransitionKey
-    data class Album(val albumId: Long) : FlowtoneReversibleTransitionKey
+    data class Album(val stableId: String) : FlowtoneReversibleTransitionKey
     data class Artist(val stableId: String) : FlowtoneReversibleTransitionKey
 }
 
@@ -609,8 +612,8 @@ private fun flowtoneReversibleTransitionKey(
                     FlowtoneReversibleTransitionKey.Playlist(playlistId)
                 }
             } else if (page.destination.page == SecondaryPage.Album) {
-                page.albumDetailDestination?.albumId?.let { albumId ->
-                    FlowtoneReversibleTransitionKey.Album(albumId)
+                (page.destination as? SecondaryDestination.Album)?.let { album ->
+                    FlowtoneReversibleTransitionKey.Album(album.stableId)
                 }
             } else if (page.destination is SecondaryDestination.Artist) {
                 (page.destination as SecondaryDestination.Artist).let { artist ->
@@ -635,7 +638,7 @@ private fun FlowtoneScaffoldPage.isCollectionDetailPage(): Boolean {
     return this is FlowtoneScaffoldPage.Secondary &&
         when (destination.page) {
             SecondaryPage.Playlist -> playlistDetailDestination?.playlistId != null
-            SecondaryPage.Album -> albumDetailDestination != null
+            SecondaryPage.Album -> destination is SecondaryDestination.Album
             SecondaryPage.Artist -> destination is SecondaryDestination.Artist
             else -> false
         }

@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.app
 import ink.tenqui.flowtone.data.local.localArtistStableId
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ProviderAlbum
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
 internal sealed interface ArtistDestinationIdentity {
@@ -37,6 +38,22 @@ internal sealed interface ArtistDestinationIdentity {
     }
 }
 
+internal sealed interface AlbumDestinationIdentity {
+    val stableId: String
+
+    data class Local(val albumId: Long) : AlbumDestinationIdentity {
+        override val stableId: String = "local:$albumId"
+    }
+
+    data class Provider(
+        val providerId: String,
+        val albumId: String
+    ) : AlbumDestinationIdentity {
+        override val stableId: String
+            get() = "provider:${providerId.trim()}\u0000${albumId.trim()}"
+    }
+}
+
 /**
  * 页面级 Secondary 导航的稳定 payload。页面离场时仍由该值提供 identity，
  * 不依赖会在当前导航改变后更新的选择状态。
@@ -55,11 +72,30 @@ internal sealed interface SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Playlist
     }
 
-    data class Album(
-        val albumId: Long,
-        val title: String
+    class Album(
+        val identity: AlbumDestinationIdentity,
+        val title: String,
+        val providerAlbum: ProviderAlbum? = null
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Album
+        val stableId: String get() = identity.stableId
+
+        constructor(albumId: Long, title: String) : this(
+            identity = AlbumDestinationIdentity.Local(albumId),
+            title = title
+        )
+
+        constructor(album: ProviderAlbum) : this(
+            identity = AlbumDestinationIdentity.Provider(album.providerId, album.id),
+            title = album.title,
+            providerAlbum = album
+        )
+
+        override fun equals(other: Any?): Boolean = other is Album && stableId == other.stableId
+
+        override fun hashCode(): Int = stableId.hashCode()
+
+        override fun toString(): String = "Album(identity=$identity, title=$title)"
     }
 
     class Artist(

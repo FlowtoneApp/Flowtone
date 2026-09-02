@@ -5,8 +5,30 @@ import ink.tenqui.flowtone.core.online.ArtistMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 
 class SecondaryNavigationTest {
+    @Test
+    fun localAlbumDestinationKeepsLongIdentity() {
+        val destination = SecondaryDestination.Album(42L, "Local")
+
+        assertEquals(AlbumDestinationIdentity.Local(42L), destination.identity)
+        assertEquals("local:42", destination.stableId)
+    }
+
+    @Test
+    fun providerAlbumIdentityIncludesProviderAndRemoteId() {
+        val first = SecondaryDestination.Album(
+            ProviderAlbum(ProviderEntityIdentity("provider-a", "1"), "Album")
+        )
+        val second = SecondaryDestination.Album(
+            ProviderAlbum(ProviderEntityIdentity("provider-b", "1"), "Album")
+        )
+
+        assertEquals("provider:provider-a\u00001", first.stableId)
+        assertNotEquals(first, second)
+    }
     @Test
     fun artistProfileFocusBackDoesNotChangeNavigationDestination() {
         val navigation = SecondaryNavigationState().push(SecondaryDestination.Artist("Artist"))

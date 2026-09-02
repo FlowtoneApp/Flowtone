@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.data.online.ProviderEntityCapability
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.R
 
@@ -74,7 +75,13 @@ internal fun OnlineSettingsPage(
                     val capabilities = listOfNotNull(
                         "歌手头像".takeIf { manifest.supportsArtistAvatar },
                         "歌手信息".takeIf { manifest.supportsArtistMetadata },
-                        "音乐服务".takeIf { manifest.supportsMusicProvider }
+                        "音乐服务".takeIf { manifest.supportsMusicProvider },
+                        "歌曲实体".takeIf {
+                            ProviderEntityCapability.Song in manifest.providerEntityCapabilities
+                        },
+                        "专辑实体".takeIf {
+                            ProviderEntityCapability.Album in manifest.providerEntityCapabilities
+                        }
                     ).joinToString(" · ").ifBlank { "当前版本不支持" }
                     Text("能力：$capabilities")
                     Text("状态：${if (installed.runtimeAvailable) "已安装" else "运行环境不可用"}")

@@ -53,10 +53,11 @@ internal data class ArtistPageContentVisibility(
 
 internal fun artistPageContentVisibility(
     hasLocalContent: Boolean,
+    hasSongs: Boolean = false,
     hasAlbums: Boolean,
     hasStatistics: Boolean = hasLocalContent
 ): ArtistPageContentVisibility = ArtistPageContentVisibility(
     showStatistics = hasStatistics,
-    showSongs = hasLocalContent,
-    showAlbums = hasLocalContent && hasAlbums
+    showSongs = hasLocalContent || hasSongs,
+    showAlbums = hasAlbums
 )

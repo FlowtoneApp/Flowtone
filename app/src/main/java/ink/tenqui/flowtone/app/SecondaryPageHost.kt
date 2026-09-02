@@ -15,11 +15,15 @@ import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.providerSongsForAlbum
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
+import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
@@ -134,7 +138,9 @@ internal fun SecondaryPageHost(
     onSongClick: (Song) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
+    onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
+    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -318,40 +324,81 @@ internal fun SecondaryPageHost(
             }
 
             SecondaryPage.Album -> {
-                val destination = albumDetailDestination ?: return@Box
-                AlbumDetailScreen(
-                    albumId = destination.albumId,
-                    album = destination.album,
-                    currentSong = currentSong,
-                    isPlaying = isPlaying,
-                    pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
-                    songSort = playlistSongSort,
-                    onSongClick = { songs, index ->
-                        onPlaylistSongClick(
-                            songs,
-                            index,
-                            PlaybackSource.album(
-                                albumId = destination.albumId,
-                                displayName = destination.album?.title.orEmpty()
-                            )
+                val navigationDestination =
+                    destination as? SecondaryDestination.Album ?: return@Box
+                when (val identity = navigationDestination.identity) {
+                    is AlbumDestinationIdentity.Local -> {
+                        val detail = albumDetailDestination ?: return@Box
+                        AlbumDetailScreen(
+                            albumId = detail.albumId,
+                            album = detail.album,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                            songSort = playlistSongSort,
+                            onSongClick = { songs, index ->
+                                onPlaylistSongClick(
+                                    songs,
+                                    index,
+                                    PlaybackSource.album(
+                                        albumId = detail.albumId,
+                                        displayName = detail.album?.title.orEmpty()
+                                    )
+                                )
+                            },
+                            playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                            playbackErrorEventId = uiState.trackPlaybackErrorEventId,
+                            batchActions = activeBatchActions,
+                            pageTransition = pageScope,
+                            itemModifier = ::playlistItemModifier,
+                            onCollapseProgressStateChange =
+                                onDetailHeaderCollapseProgressStateChange,
+                            headerModifier = elementModifier(0),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .rightSwipeBackGesture(::closeSelectionOrPage)
                         )
-                    },
-                    playbackErrorMessage = uiState.trackPlaybackErrorMessage,
-                    playbackErrorEventId = uiState.trackPlaybackErrorEventId,
-                    batchActions = activeBatchActions,
-                    pageTransition = pageScope,
-                    itemModifier = ::playlistItemModifier,
-                    onCollapseProgressStateChange =
-                        onDetailHeaderCollapseProgressStateChange,
-                    headerModifier = elementModifier(0),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .rightSwipeBackGesture(::closeSelectionOrPage)
-                )
+                    }
+
+                    is AlbumDestinationIdentity.Provider -> {
+                        val album = navigationDestination.providerAlbum ?: return@Box
+                        val songs = providerSongsForAlbum(
+                            uiState.providerSongs[identity.providerId].orEmpty(),
+                            album
+                        )
+                        ProviderAlbumDetailScreen(
+                            album = album,
+                            songs = songs,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                            onSongClick = { queue, index ->
+                                onProviderSongQueueClick(
+                                    queue,
+                                    index,
+                                    PlaybackSource.providerAlbum(
+                                        identity.providerId,
+                                        identity.albumId,
+                                        album.title
+                                    )
+                                )
+                            },
+                            pageTransition = pageScope,
+                            itemModifier = ::playlistItemModifier,
+                            onCollapseProgressStateChange =
+                                onDetailHeaderCollapseProgressStateChange,
+                            headerModifier = elementModifier(0),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .rightSwipeBackGesture(::closeSelectionOrPage)
+                        )
+                    }
+                }
             }
 
             SecondaryPage.Artist -> {
                 val artist = destination as? SecondaryDestination.Artist ?: return@Box
+                val providerIdentity = artist.identity as? ArtistDestinationIdentity.Provider
                   ArtistPage(
                     artistName = artist.name,
                     hasLocalContent = artist.identity.hasLocalContent,
@@ -359,12 +406,32 @@ internal fun SecondaryPageHost(
                     providedMetadata = artist.identity.profileMetadata,
                     allSongs = uiState.songs,
                     albums = uiState.albums,
+                    providerId = providerIdentity?.providerId,
+                    providerArtistId = providerIdentity?.artistId,
+                    providerSongs = providerIdentity?.providerId
+                        ?.let { uiState.providerSongs[it] }.orEmpty(),
+                    providerAlbums = providerIdentity?.providerId
+                        ?.let { uiState.providerAlbums[it] }.orEmpty(),
                     currentSong = currentSong,
                     onNavigateBack = onCloseSecondaryPage,
                     onSongClick = { songs, index ->
                         onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
                     },
+                    onProviderSongClick = { songs, index ->
+                        providerIdentity?.let { identity ->
+                            onProviderSongQueueClick(
+                                songs,
+                                index,
+                                PlaybackSource.providerArtist(
+                                    identity.providerId,
+                                    identity.artistId,
+                                    identity.displayName
+                                )
+                            )
+                        }
+                    },
                     onOpenAlbum = onOpenAlbum,
+                    onOpenProviderAlbum = onOpenProviderAlbum,
                     pageTransition = pageScope,
                     itemModifier = ::playlistItemModifier,
                     modifier = Modifier.fillMaxSize()

@@ -78,6 +78,8 @@ import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSearchLandingState
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ProviderSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchMetadataLabels
 import ink.tenqui.flowtone.data.online.formatProviderSearchMetadataLine
 import ink.tenqui.flowtone.data.online.SearchLandingAction
@@ -116,7 +118,7 @@ internal fun GlobalSearchContent(
     onOnlineSongClick: (ProviderSong) -> Unit,
     pendingTrackIdentityKey: String? = null,
     onArtistClick: (SearchArtist) -> Unit,
-    onProviderArtistClick: (ProviderSong) -> Unit,
+    onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
     onExitSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
@@ -491,7 +493,7 @@ private fun SearchResultCategorySelector(
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
-    onProviderArtistClick: (ProviderSong) -> Unit,
+    onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
     category: SearchResultCategory,
     listState: androidx.compose.foundation.lazy.LazyListState,
@@ -690,7 +692,7 @@ private data class SearchResultSnapshot(
     val localSongs: List<Song>,
     val localArtists: List<SearchArtist>,
     val localAlbums: List<SearchResult.AlbumResult>,
-    val onlineResults: List<ProviderSong>,
+    val onlineResults: List<ProviderSearchItem>,
     val sourceSections: List<SearchResultSourceSection>,
     val elementKeys: List<Any>
 )
@@ -709,7 +711,7 @@ private fun searchResultElementKeys(
     localSongs: List<Song>,
     localArtists: List<SearchArtist>,
     localAlbums: List<SearchResult.AlbumResult>,
-    onlineResults: List<ProviderSong>
+    onlineResults: List<ProviderSearchItem>
 ): List<Any> = buildList {
     if (SearchResultSourceSection.Local in sourceSections) {
         add(searchResultSectionTitleKey(sessionKey, SearchResultSourceSection.Local))
@@ -723,9 +725,9 @@ private fun searchResultElementKeys(
     onlineResults.forEach { result ->
         add(
             providerSearchResultItemKey(
-                providerId = result.trackRef.extensionId,
+                providerId = result.identity.providerId,
                 category = result.searchCategory,
-                identity = result.trackRef.opaqueId
+                identity = result.identity.remoteId
             )
         )
     }
@@ -739,7 +741,7 @@ private fun SearchResultList(
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onArtistClick: (SearchArtist) -> Unit,
-    onProviderArtistClick: (ProviderSong) -> Unit,
+    onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
     elementModifier: (Any) -> Modifier,
     showInitialLoading: Boolean = false,
@@ -822,9 +824,9 @@ private fun SearchResultList(
         }
         items(snapshot.onlineResults, key = { song ->
             providerSearchResultItemKey(
-                providerId = song.trackRef.extensionId,
+                providerId = song.identity.providerId,
                 category = song.searchCategory,
-                identity = song.trackRef.opaqueId
+                identity = song.identity.remoteId
             )
         }) { song ->
             OnlineSearchSong(
@@ -832,18 +834,18 @@ private fun SearchResultList(
                 alpha = 1f,
                 onClick = if (!interactive) {
                     null
-                } else if (song.searchCategory == ProviderSearchCategory.Single) {
+                } else if (song is ProviderSong) {
                     { onOnlineSongClick(song) }
-                } else if (song.searchCategory == ProviderSearchCategory.User) {
+                } else if (song is ProviderArtist) {
                     { onProviderArtistClick(song) }
                 } else {
                     null
                 },
                 modifier = elementModifier(
                     providerSearchResultItemKey(
-                        providerId = song.trackRef.extensionId,
+                        providerId = song.identity.providerId,
                         category = song.searchCategory,
-                        identity = song.trackRef.opaqueId
+                        identity = song.identity.remoteId
                     )
                 )
             )
@@ -980,7 +982,7 @@ private fun LocalSearchArtist(
 
 @Composable
 private fun OnlineSearchSong(
-    song: ProviderSong,
+    song: ProviderSearchItem,
     alpha: Float,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier
@@ -990,10 +992,12 @@ private fun OnlineSearchSong(
         trackCountSuffix = stringResource(R.string.provider_metadata_track_count_suffix),
         playCountSuffix = stringResource(R.string.provider_metadata_play_count_suffix)
     )
+    val metadata = song.metadata
+    val artwork = song.artwork
     val secondaryText = if (song.searchCategory == ProviderSearchCategory.Playlist) {
         when {
-            song.metadata == null -> song.artist
-            else -> formatProviderSearchMetadataLine(song.metadata, metadataLabels)
+            metadata == null -> song.artist
+            else -> formatProviderSearchMetadataLine(metadata, metadataLabels)
         }
     } else {
         song.artist
@@ -1005,10 +1009,10 @@ private fun OnlineSearchSong(
     ) {
         if (song.searchCategory == ProviderSearchCategory.User) {
             // Online User 只使用 Provider 返回的 artwork；绝不回退到本地 Artist Avatar 服务。
-            SearchUserAvatar(image = song.artwork)
+            SearchUserAvatar(image = artwork)
         } else {
-            if (song.artwork != null) {
-                SearchArtwork(song.artwork, loader)
+            if (artwork != null) {
+                SearchArtwork(artwork, loader)
             } else {
                 SearchArtworkPlaceholder(song.searchCategory)
             }

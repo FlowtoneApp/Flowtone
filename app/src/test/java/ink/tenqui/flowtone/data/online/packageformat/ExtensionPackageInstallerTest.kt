@@ -11,6 +11,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExtensionPackageInstallerTest {
+    @Test
+    fun providerEntityCapabilitiesAreOptionalAndExplicit() {
+        val oldProvider = ExtensionManifestParser.parse(manifest(capabilities = "\"music_provider\""))
+        val songsOnly = ExtensionManifestParser.parse(
+            manifest(capabilities = "\"music_provider\",\"song\"")
+        )
+        val albumsOnly = ExtensionManifestParser.parse(
+            manifest(capabilities = "\"music_provider\",\"album\"")
+        )
+        val both = ExtensionManifestParser.parse(
+            manifest(capabilities = "\"music_provider\",\"song\",\"album\"")
+        )
+
+        assertEquals(emptySet<ink.tenqui.flowtone.data.online.ProviderEntityCapability>(), oldProvider.providerEntityCapabilities)
+        assertEquals(setOf(ink.tenqui.flowtone.data.online.ProviderEntityCapability.Song), songsOnly.providerEntityCapabilities)
+        assertEquals(setOf(ink.tenqui.flowtone.data.online.ProviderEntityCapability.Album), albumsOnly.providerEntityCapabilities)
+        assertEquals(ink.tenqui.flowtone.data.online.ProviderEntityCapability.entries.toSet(), both.providerEntityCapabilities)
+    }
     @Test fun `music provider capability can stand alone or coexist with artist avatar`() {
         val avatarOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"artist_avatar\""))
         val musicOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"music_provider\""))

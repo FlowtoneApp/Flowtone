@@ -13,6 +13,32 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 
 class ArtistPageContentTest {
     @Test
+    fun providerCountsWithoutEntitiesDoNotShowSections() {
+        val visibility = artistPageContentVisibility(
+            hasLocalContent = false,
+            hasSongs = false,
+            hasAlbums = false,
+            hasStatistics = true
+        )
+
+        assertEquals(true, visibility.showStatistics)
+        assertEquals(false, visibility.showSongs)
+        assertEquals(false, visibility.showAlbums)
+    }
+
+    @Test
+    fun providerSectionsRequireRealEntities() {
+        val visibility = artistPageContentVisibility(
+            hasLocalContent = false,
+            hasSongs = true,
+            hasAlbums = true,
+            hasStatistics = false
+        )
+
+        assertEquals(true, visibility.showSongs)
+        assertEquals(true, visibility.showAlbums)
+    }
+    @Test
     fun singleArtistSongMakesAlbumBelongToArtist() {
         assertEquals(true, artistMatchesAlbumSongs("A", listOf("A")))
     }

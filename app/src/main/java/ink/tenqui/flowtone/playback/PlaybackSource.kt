@@ -73,6 +73,21 @@ data class PlaybackSource(
             )
         }
 
+        fun providerArtist(
+            providerId: String,
+            artistId: String,
+            displayName: String
+        ): PlaybackSource {
+            val safeProviderId = providerId.trim().ifBlank { return Unknown }
+            val safeArtistId = artistId.trim().ifBlank { return Unknown }
+            return PlaybackSource(
+                type = PlaybackSourceType.Artist,
+                key = "provider_artist:$safeProviderId:$safeArtistId",
+                sourceId = "$safeProviderId:$safeArtistId",
+                displayName = displayName.trim().ifBlank { "艺术家" }
+            )
+        }
+
         fun album(
             albumId: Long?,
             displayName: String
@@ -82,6 +97,21 @@ data class PlaybackSource(
                 type = PlaybackSourceType.Album,
                 key = "album:$safeId",
                 sourceId = safeId,
+                displayName = displayName.trim().ifBlank { "专辑" }
+            )
+        }
+
+        fun providerAlbum(
+            providerId: String,
+            albumId: String,
+            displayName: String
+        ): PlaybackSource {
+            val safeProviderId = providerId.trim().ifBlank { return Unknown }
+            val safeAlbumId = albumId.trim().ifBlank { return Unknown }
+            return PlaybackSource(
+                type = PlaybackSourceType.Album,
+                key = "provider_album:$safeProviderId:$safeAlbumId",
+                sourceId = "$safeProviderId:$safeAlbumId",
                 displayName = displayName.trim().ifBlank { "专辑" }
             )
         }

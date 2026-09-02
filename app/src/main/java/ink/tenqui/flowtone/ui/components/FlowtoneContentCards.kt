@@ -37,6 +37,8 @@ import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 internal val FlowtoneContentCardShape = RoundedCornerShape(8.dp)
@@ -199,6 +201,7 @@ internal fun FlowtoneArtwork(
 @Composable
 internal fun FlowtoneArtwork(
     artworkUri: Uri?,
+    extensionArtwork: ExtensionImage? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -228,7 +231,15 @@ internal fun FlowtoneArtwork(
             tint = iconColor,
             modifier = Modifier.size(24.dp)
         )
-        imageRequest?.let { request ->
+        extensionArtwork?.let { artwork ->
+            AsyncImage(
+                model = artwork,
+                imageLoader = ExtensionManager.get(context).extensionImageLoader,
+                contentDescription = "封面",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } ?: imageRequest?.let { request ->
             AsyncImage(
                 model = request,
                 contentDescription = "封面",

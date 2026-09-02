@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
 import coil3.ImageLoader
 import coil3.svg.SvgDecoder
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 
 /** 安装、扫描、运行和卸载外部脚本扩展的应用级所有者。 */
 class ExtensionManager private constructor(context: Context) : AutoCloseable {
@@ -63,6 +64,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val playbackResources = ExtensionPlaybackResourceStore()
     private val presentationCache = ConcurrentHashMap<String, ProviderSong>()
     private val searchLandingCache = ConcurrentHashMap<String, ProviderSearchLanding>()
+    private val songCollectionCache = ProviderCollectionSessionCache<ProviderSong>()
+    private val albumCollectionCache = ProviderCollectionSessionCache<ProviderAlbum>()
     private var initialized = false
     val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
         resultCache = avatarResultCache,
@@ -240,6 +243,39 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         return provider.getSearchLanding()?.also { searchLandingCache[extensionId] = it }
     }
 
+    internal fun providerEntityCapabilities(extensionId: String): Set<ProviderEntityCapability> =
+        musicProviders[extensionId]?.entityCapabilities.orEmpty()
+
+    internal suspend fun getProviderSongs(extensionId: String): List<ProviderSong>? {
+        val provider = musicProviders[extensionId] ?: return null
+        if (ProviderEntityCapability.Song !in provider.entityCapabilities) return null
+        return try {
+            songCollectionCache.getOrLoad(extensionId) {
+                provider.getSongs()?.let(::dedupeProviderSongs)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.w(LogTag, "extension.music.songs.failed extension=$extensionId type=${error.javaClass.simpleName}")
+            null
+        }
+    }
+
+    internal suspend fun getProviderAlbums(extensionId: String): List<ProviderAlbum>? {
+        val provider = musicProviders[extensionId] ?: return null
+        if (ProviderEntityCapability.Album !in provider.entityCapabilities) return null
+        return try {
+            albumCollectionCache.getOrLoad(extensionId) {
+                provider.getAlbums()?.let(::dedupeProviderAlbums)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.w(LogTag, "extension.music.albums.failed extension=$extensionId type=${error.javaClass.simpleName}")
+            null
+        }
+    }
+
     @UnstableApi
     fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
         val extensionDataSourceFactory = extensionMediaDataSourceFactory()
@@ -287,7 +323,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 if (installed.manifest.supportsMusicProvider) {
                     musicProviders[installed.manifest.id] = JavaScriptMusicProvider(
                         runtime = runtime,
-                        musicSources = installed.manifest.musicSources.toSet()
+                        musicSources = installed.manifest.musicSources.toSet(),
+                        entityCapabilities = installed.manifest.providerEntityCapabilities
                     )
                 }
             }
@@ -304,6 +341,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         playbackResources.clear(id)
         presentationCache.entries.removeIf { (_, song) -> song.trackRef.extensionId == id }
         searchLandingCache.remove(id)
+        songCollectionCache.clear(id)
+        albumCollectionCache.clear(id)
         if (clearExtensionData) privateCache.deleteForUninstall(id)
     }
 
