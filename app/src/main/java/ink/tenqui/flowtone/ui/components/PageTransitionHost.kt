@@ -41,32 +41,29 @@ internal class PageTransitionScope internal constructor(
 ) {
     fun elementModifier(
         order: Int,
-        orderCount: Int = PageMotion.DefaultOrderCount
-    ): Modifier = elementModifierAt(progress, order, orderCount)
+        orderCount: Int = PageMotion.DefaultOrderCount,
+        translationOffsetScale: Float = 1f
+    ): Modifier = elementModifierAt(progress, order, orderCount, translationOffsetScale)
 
     fun elementModifierAt(
         pageProgress: Float,
         order: Int,
-        orderCount: Int = PageMotion.DefaultOrderCount
+        orderCount: Int = PageMotion.DefaultOrderCount,
+        translationOffsetScale: Float = 1f
     ): Modifier {
         val elementProgress = PageMotion.elementProgress(
             pageProgress = pageProgress,
             order = order,
             orderCount = orderCount
         )
-        val alpha = when (phase) {
-            PageTransitionPhase.Outgoing -> 1f - elementProgress
-            PageTransitionPhase.Incoming,
-            PageTransitionPhase.Current -> elementProgress
-        }
-        val translationY = when (phase) {
-            PageTransitionPhase.Outgoing -> offsetYPx * elementProgress
-            PageTransitionPhase.Incoming -> offsetYPx * (1f - elementProgress)
-            PageTransitionPhase.Current -> 0f
-        }
+        val visualState = pageElementVisualState(
+            phase = phase,
+            elementProgress = elementProgress,
+            signedOffsetYPx = offsetYPx * translationOffsetScale
+        )
         return Modifier.graphicsLayer {
-            this.alpha = alpha
-            this.translationY = translationY
+            alpha = visualState.alpha
+            translationY = visualState.translationY
         }
     }
 
@@ -78,19 +75,32 @@ internal class PageTransitionScope internal constructor(
     fun elementEnterModifierAt(
         pageProgress: Float,
         order: Int,
-        orderCount: Int = PageMotion.DefaultOrderCount
-    ): Modifier = elementAppearanceModifierAt(pageProgress, order, orderCount)
+        orderCount: Int = PageMotion.DefaultOrderCount,
+        translationOffsetScale: Float = 1f
+    ): Modifier = elementAppearanceModifierAt(
+        pageProgress,
+        order,
+        orderCount,
+        translationOffsetScale
+    )
 
     fun elementExitModifierAt(
         pageProgress: Float,
         order: Int,
-        orderCount: Int = PageMotion.DefaultOrderCount
-    ): Modifier = elementAppearanceModifierAt(pageProgress, order, orderCount)
+        orderCount: Int = PageMotion.DefaultOrderCount,
+        translationOffsetScale: Float = 1f
+    ): Modifier = elementAppearanceModifierAt(
+        pageProgress,
+        order,
+        orderCount,
+        translationOffsetScale
+    )
 
     fun elementAppearanceModifierAt(
         pageProgress: Float,
         order: Int,
-        orderCount: Int = PageMotion.DefaultOrderCount
+        orderCount: Int = PageMotion.DefaultOrderCount,
+        translationOffsetScale: Float = 1f
     ): Modifier {
         val elementProgress = PageMotion.elementProgress(
             pageProgress = pageProgress,
@@ -102,7 +112,7 @@ internal class PageTransitionScope internal constructor(
             PageTransitionPhase.Outgoing -> elementProgress
             PageTransitionPhase.Current -> 0f
         }
-        return elementModifierAt(pageProgress, order, orderCount)
+        return elementModifierAt(pageProgress, order, orderCount, translationOffsetScale)
             .blur(PageMotion.PageBlurRadius * blurProgress)
     }
 
@@ -136,6 +146,57 @@ internal class PageTransitionScope internal constructor(
         }
     }
 }
+
+internal data class PageElementVisualState(
+    val alpha: Float,
+    val translationY: Float
+)
+
+internal fun pageElementVisualState(
+    phase: PageTransitionPhase,
+    elementProgress: Float,
+    signedOffsetYPx: Float
+): PageElementVisualState {
+    val progress = elementProgress.coerceIn(0f, 1f)
+    return PageElementVisualState(
+        alpha = when (phase) {
+            PageTransitionPhase.Outgoing -> 1f - progress
+            PageTransitionPhase.Incoming,
+            PageTransitionPhase.Current -> progress
+        },
+        translationY = when (phase) {
+            PageTransitionPhase.Outgoing -> signedOffsetYPx * progress
+            PageTransitionPhase.Incoming -> signedOffsetYPx * (1f - progress)
+            PageTransitionPhase.Current -> 0f
+        }
+    )
+}
+
+internal data class PageTransitionPresentation(
+    val phase: PageTransitionPhase,
+    val progress: Float,
+    val transitionId: Int
+) {
+    fun elementAppearanceModifier(
+        offsetYPx: Float,
+        order: Int,
+        orderCount: Int = PageMotion.DefaultOrderCount,
+        translationOffsetScale: Float = 1f
+    ): Modifier = PageTransitionScope(
+        phase = phase,
+        progress = progress,
+        offsetYPx = offsetYPx,
+        transitionId = transitionId
+    ).elementAppearanceModifierAt(
+        pageProgress = progress,
+        order = order,
+        orderCount = orderCount,
+        translationOffsetScale = translationOffsetScale
+    )
+}
+
+internal fun PageTransitionScope.presentation(): PageTransitionPresentation =
+    PageTransitionPresentation(phase, progress, transitionId)
 
 private data class PageSnapshot<T>(val value: T)
 
@@ -191,7 +252,7 @@ internal fun <T> PageTransitionHost(
     }
 
     suspend fun animateProgressTo(targetValue: Float) {
-        val remainingFraction = abs(targetValue - progress.value)
+        val remainingFraction = pageTransitionRemainingFraction(progress.value, targetValue)
         if (remainingFraction <= PageTransitionEndpointThreshold) return
         progress.animateTo(
             targetValue = targetValue,
@@ -321,6 +382,9 @@ internal fun <T> PageTransitionHost(
         RenderPageSlot(PageSlot.Second, secondPage, secondPhase)
     }
 }
+
+internal fun pageTransitionRemainingFraction(currentProgress: Float, targetProgress: Float): Float =
+    abs(targetProgress - currentProgress)
 
 private const val PageTransitionEndpointThreshold = 0.0001f
 

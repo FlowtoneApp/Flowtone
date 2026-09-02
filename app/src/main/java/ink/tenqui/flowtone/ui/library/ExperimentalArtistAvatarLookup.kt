@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.online.ArtistMetadata
+import ink.tenqui.flowtone.data.online.sanitizedFor
 import ink.tenqui.flowtone.data.local.localArtistStableId
 import ink.tenqui.flowtone.data.online.ExtensionManager
 
@@ -59,6 +60,17 @@ private object ArtistAvatarUiMemoryCache {
     }
 }
 
+internal fun wasArtistExtensionImageLoaded(image: ExtensionImage): Boolean =
+    ArtistAvatarUiMemoryCache.wasLoaded(image)
+
+internal fun rememberArtistExtensionImageLoaded(image: ExtensionImage) {
+    ArtistAvatarUiMemoryCache.rememberLoaded(image)
+}
+
+internal fun forgetArtistExtensionImageLoaded(image: ExtensionImage) {
+    ArtistAvatarUiMemoryCache.forgetLoaded(image)
+}
+
 @Composable
 internal fun rememberExperimentalArtistAvatarImage(
     songTitle: String,
@@ -84,15 +96,66 @@ internal fun rememberExperimentalArtistAvatarImage(
 }
 
 @Composable
-internal fun rememberArtistMetadata(artistName: String): ArtistMetadata? {
+internal fun rememberArtistMetadata(
+    artistName: String,
+    providedMetadata: ArtistMetadata? = null
+): ArtistMetadata? {
     val context = LocalContext.current
     val registry = remember(context) { ExtensionManager.get(context).artistMetadataRegistry }
-    var metadata by remember(artistName) { mutableStateOf<ArtistMetadata?>(null) }
-
-    LaunchedEffect(artistName) {
-        metadata = registry.findArtistMetadata(artistName)
+    val normalizedProvidedMetadata = remember(artistName, providedMetadata) {
+        providedMetadata?.sanitizedFor(artistName)
     }
-    return metadata
+    val needsResolver = remember(artistName, normalizedProvidedMetadata) {
+        artistMetadataNeedsResolver(artistName, normalizedProvidedMetadata)
+    }
+    var resolvedMetadata by remember(artistName, needsResolver) {
+        mutableStateOf<ArtistMetadata?>(null)
+    }
+
+    LaunchedEffect(artistName, needsResolver) {
+        resolvedMetadata = if (needsResolver) {
+            registry.findArtistMetadata(artistName)
+        } else {
+            null
+        }
+    }
+    return remember(artistName, normalizedProvidedMetadata, resolvedMetadata) {
+        mergeArtistMetadata(
+            artistName = artistName,
+            destinationMetadata = normalizedProvidedMetadata,
+            resolverMetadata = resolvedMetadata
+        )
+    }
+}
+
+/** Destination 字段完整时不触发额外 Provider 查询；否则允许 resolver 补齐未知字段。 */
+internal fun artistMetadataNeedsResolver(
+    artistName: String,
+    destinationMetadata: ArtistMetadata?
+): Boolean {
+    val metadata = destinationMetadata?.sanitizedFor(artistName)
+    return metadata == null ||
+        metadata.aliases.isEmpty() ||
+        metadata.biography == null ||
+        metadata.songCount == null ||
+        metadata.albumCount == null
+}
+
+/** Destination 保持字段优先级，resolver 仅用于补全；count 不参与加总。 */
+internal fun mergeArtistMetadata(
+    artistName: String,
+    destinationMetadata: ArtistMetadata?,
+    resolverMetadata: ArtistMetadata?
+): ArtistMetadata? {
+    val destination = destinationMetadata?.sanitizedFor(artistName)
+    val resolver = resolverMetadata?.sanitizedFor(artistName)
+    return ArtistMetadata(
+        aliases = destination?.aliases.orEmpty() + resolver?.aliases.orEmpty(),
+        biography = destination?.biography ?: resolver?.biography,
+        songCount = destination?.songCount ?: resolver?.songCount,
+        albumCount = destination?.albumCount ?: resolver?.albumCount,
+        banner = destination?.banner ?: resolver?.banner
+    ).sanitizedFor(artistName)
 }
 
 /** 图片数据保持为 [ExtensionImage]，只经 Flowtone 的专用 Coil Fetcher 取得字节。 */
@@ -104,7 +167,7 @@ internal fun ExperimentalArtistAvatarImage(
     val context = LocalContext.current
     val manager = remember(context) { ExtensionManager.get(context) }
     var imageLoaded by remember(image) {
-        mutableStateOf(image != null && ArtistAvatarUiMemoryCache.wasLoaded(image))
+        mutableStateOf(image != null && wasArtistExtensionImageLoaded(image))
     }
     val imageAlpha by animateFloatAsState(
         targetValue = if (imageLoaded) 1f else 0f,
@@ -118,12 +181,12 @@ internal fun ExperimentalArtistAvatarImage(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             onSuccess = {
-                ArtistAvatarUiMemoryCache.rememberLoaded(image)
+                rememberArtistExtensionImageLoaded(image)
                 imageLoaded = true
                 Log.d(ExperimentalAvatarLogTag, "image loaded")
             },
             onError = {
-                ArtistAvatarUiMemoryCache.forgetLoaded(image)
+                forgetArtistExtensionImageLoaded(image)
                 imageLoaded = false
                 Log.d(ExperimentalAvatarLogTag, "image load failed")
             },

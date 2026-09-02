@@ -47,6 +47,7 @@ import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
@@ -76,6 +77,9 @@ internal fun FlowtoneScaffold(
         mutableStateOf<State<Float>?>(null)
     }
     val artistToolbarVisibilityByEntry = remember { mutableStateMapOf<Long, Boolean>() }
+    val artistPageTransitionByEntry = remember {
+        mutableStateMapOf<Long, PageTransitionPresentation>()
+    }
     val activeSecondaryEntryIds = remember(state.secondaryEntries) {
         state.secondaryEntries.mapTo(mutableSetOf(), SecondaryStackEntry::id)
     }
@@ -86,6 +90,7 @@ internal fun FlowtoneScaffold(
         mutableStateOf<PlaylistSelectionTopBarState?>(null)
     }
     var playlistBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var artistProfileBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
@@ -311,6 +316,10 @@ internal fun FlowtoneScaffold(
                     songSelectionState = songSelectionTopBarState,
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
                     playlistBackAction = playlistBackAction,
+                    artistProfileBackAction = artistProfileBackAction,
+                    artistPageTransitionPresentation = { entryId ->
+                        artistPageTransitionByEntry[entryId]
+                    },
                     playlistSortProgress = playlistSortProgress,
                     descriptionBlurRadius = descriptionBlurRadius
                 )
@@ -349,6 +358,16 @@ internal fun FlowtoneScaffold(
                 },
                 onPlaylistBackActionChange = { action ->
                     playlistBackAction = action
+                },
+                onArtistProfileBackActionChange = { action ->
+                    artistProfileBackAction = action
+                },
+                onArtistPageTransitionPresentationChange = { entryId, presentation ->
+                    if (presentation == null) {
+                        artistPageTransitionByEntry.remove(entryId)
+                    } else {
+                        artistPageTransitionByEntry[entryId] = presentation
+                    }
                 },
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,

@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.search
 
+import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.search.SearchScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -71,7 +72,11 @@ class SearchResultSourceSectionsTest {
     @Test
     fun localAndProviderArtistKeysCannotCollideForTheSameDisplayIdentity() {
         val local = localSearchResultItemKey("artist", "Kou!")
-        val provider = providerSearchResultItemKey("provider-a", "Kou!")
+        val provider = providerSearchResultItemKey(
+            providerId = "provider-a",
+            category = ProviderSearchCategory.User,
+            identity = "Kou!"
+        )
 
         assertNotEquals(local, provider)
     }

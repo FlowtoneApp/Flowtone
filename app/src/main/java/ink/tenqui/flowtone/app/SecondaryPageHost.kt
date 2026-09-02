@@ -17,6 +17,7 @@ import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
@@ -125,6 +126,8 @@ internal fun SecondaryPageHost(
     playlistBatchActions: PlaylistBatchActions,
     onUpdatePlaylistDescription: (String, String?) -> Unit,
     onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
+    onArtistProfileBackActionChange: ((() -> Unit)?) -> Unit,
+    onArtistPageTransitionPresentationChange: (PageTransitionPresentation?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -362,15 +365,17 @@ internal fun SecondaryPageHost(
                     albums = uiState.albums,
                     currentSong = currentSong,
                     onToolbarContentVisibleChange = onArtistToolbarContentVisibleChange,
+                    onProfileBackActionChange = onArtistProfileBackActionChange,
+                    onPageTransitionPresentationChange =
+                        onArtistPageTransitionPresentationChange,
+                    onNavigateBack = onCloseSecondaryPage,
                     onSongClick = { songs, index ->
                         onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
                     },
                     onOpenAlbum = onOpenAlbum,
                     pageTransition = pageScope,
                     itemModifier = ::playlistItemModifier,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .rightSwipeBackGesture(onCloseSecondaryPage)
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 

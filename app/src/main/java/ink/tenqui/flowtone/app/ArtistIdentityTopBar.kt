@@ -45,6 +45,8 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
+import ink.tenqui.flowtone.ui.components.PageMotion
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.library.ArtistAvatar
 import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
@@ -69,6 +71,7 @@ internal fun ArtistIdentityTopBar(
     allSongs: List<Song>,
     currentSong: Song?,
     onBack: () -> Unit,
+    pageTransitionPresentation: PageTransitionPresentation?,
     playlistSortProgress: Float,
     modifier: Modifier = Modifier
 ) {
@@ -126,6 +129,13 @@ internal fun ArtistIdentityTopBar(
     val pathMotionDistancePx = with(density) { ArtistPathMotionDistance.toPx() }
     val pathDirection = if (enteringPath) -1f else 1f
     val sortExitDistancePx = with(density) { 12.dp.toPx() }
+    val pageOffsetYPx = with(density) { PageMotion.Offset.toPx() }
+    val backPageTransitionModifier = pageTransitionPresentation?.elementAppearanceModifier(
+        offsetYPx = pageOffsetYPx,
+        order = 0,
+        orderCount = 2,
+        translationOffsetScale = -1f / 3f
+    ) ?: Modifier
     val artistSurfaceProgress by animateFloatAsState(
         targetValue = if (artistSurfaceVisible) 1f else 0f,
         animationSpec = tween(180, easing = FlowtonePageEasing),
@@ -201,6 +211,7 @@ internal fun ArtistIdentityTopBar(
                 .padding(start = 12.dp)
                 .size(40.dp)
                 .graphicsLayer { alpha = 1f - playlistSortProgress }
+                .then(backPageTransitionModifier)
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,

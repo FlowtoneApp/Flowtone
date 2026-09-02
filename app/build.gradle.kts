@@ -1,11 +1,12 @@
 import java.util.Properties
+import org.gradle.api.tasks.bundling.Zip
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersionName = "0.14.2"
+val appVersionName = "0.14.3"
 
 fun versionCodeFromName(versionName: String): Int {
     val parts = versionName.split(".")
@@ -192,6 +193,24 @@ android {
         buildConfig = true
     }
 
+}
+
+val providerArtistProfileFixturePackage = tasks.register<Zip>("providerArtistProfileFixturePackage") {
+    from("src/debug/provider-artist-profile-fixture")
+    archiveFileName.set("provider-artist-profile-fixture.flowtone")
+    destinationDirectory.set(
+        layout.buildDirectory.dir("generated/assets/providerArtistProfileFixture/debug")
+    )
+}
+
+android.sourceSets.getByName("debug").assets.srcDir(
+    layout.buildDirectory.dir("generated/assets/providerArtistProfileFixture/debug").get().asFile
+)
+
+tasks.configureEach {
+    if (name.contains("Debug", ignoreCase = true) && name.contains("Assets")) {
+        dependsOn(providerArtistProfileFixturePackage)
+    }
 }
 
 dependencies {

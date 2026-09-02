@@ -8,6 +8,21 @@ import org.junit.Test
 
 class ProviderArtistMetadataTransportTest {
     @Test
+    fun legacyPayloadKeepsOptionalBannerNull() {
+        assertNull(providerArtistMetadataFromJson(JSONObject().put("songCount", 1), "Artist")?.banner)
+    }
+
+    @Test
+    fun providerBannerUsesExtensionBoundImageReference() {
+        val metadata = providerArtistMetadataFromJson(
+            JSONObject().put("bannerUrl", "https://example.com/banner.jpg"),
+            "Artist",
+            "provider.fixture"
+        )
+        assertEquals("provider.fixture", metadata?.banner?.extensionId)
+        assertEquals("https://example.com/banner.jpg", metadata?.banner?.url)
+    }
+    @Test
     fun legacyProviderArtistPayloadWithoutProfileFieldsRemainsCompatible() {
         assertNull(providerArtistMetadataFromJson(JSONObject(), "Kou!"))
     }

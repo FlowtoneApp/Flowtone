@@ -127,7 +127,7 @@ class JavaScriptMusicProvider internal constructor(
             searchCategory = searchCategory,
             metadata = parseMetadata(item),
             artistMetadata = if (searchCategory == ProviderSearchCategory.User) {
-                providerArtistMetadataFromJson(item, title)
+                providerArtistMetadataFromJson(item, title, runtime.extensionId)
             } else {
                 null
             }
@@ -250,7 +250,8 @@ class JavaScriptMusicProvider internal constructor(
 
 internal fun providerArtistMetadataFromJson(
     item: JSONObject,
-    displayName: String
+    displayName: String,
+    extensionId: String = ""
 ): ArtistMetadata? {
     val aliases = item.optJSONArray("aliases")?.let { values ->
         buildList {
@@ -267,7 +268,9 @@ internal fun providerArtistMetadataFromJson(
         aliases = aliases,
         biography = biography,
         songCount = item.optNonNegativeInt("songCount"),
-        albumCount = item.optNonNegativeInt("albumCount")
+        albumCount = item.optNonNegativeInt("albumCount"),
+        banner = item.optString("bannerUrl").trim().takeIf { it.startsWith("https://") }
+            ?.takeIf { extensionId.isNotBlank() }?.let { ExtensionImage(extensionId, it) }
     ).sanitizedFor(displayName)
 }
 

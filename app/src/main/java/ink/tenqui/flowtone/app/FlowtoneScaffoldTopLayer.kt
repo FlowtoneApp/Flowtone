@@ -5,8 +5,15 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import ink.tenqui.flowtone.ui.components.flowtoneCollapsingTopBarBackgroundAlpha
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
@@ -19,14 +26,32 @@ internal fun FlowtoneScaffoldTopLayer(
     songSelectionState: PlaylistSelectionTopBarState?,
     onCloseSongSelection: () -> Unit,
     playlistBackAction: (() -> Unit)?,
+    artistProfileBackAction: (() -> Unit)?,
+    artistPageTransitionPresentation: (Long) -> PageTransitionPresentation?,
     playlistSortProgress: Float,
     descriptionBlurRadius: Dp
 ) {
-    val artistTopBarRoute = artistTopBarRoute(state.secondaryEntries)
+    val currentArtistTopBarRoute = artistTopBarRoute(state.secondaryEntries)
+    var retainedArtistTopBarRoute by remember { mutableStateOf<ArtistTopBarRoute?>(null) }
+    if (currentArtistTopBarRoute != null) {
+        SideEffect { retainedArtistTopBarRoute = currentArtistTopBarRoute }
+    }
+    val artistTopBarRoute = currentArtistTopBarRoute ?: retainedArtistTopBarRoute?.takeIf { route ->
+        artistPageTransitionPresentation(route.artistEntryId) != null
+    }
     if (artistTopBarRoute != null && songSelectionState == null) {
         key(artistTopBarRoute.artistEntryId) {
             val collapsedArtistToolbarVisible =
                 isArtistToolbarContentVisible(artistTopBarRoute.artistEntryId)
+            val artistPagePresentation =
+                artistPageTransitionPresentation(artistTopBarRoute.artistEntryId)
+                    ?: if (artistTopBarRoute.destinationTitle == null) {
+                        PageTransitionPresentation(
+                            phase = PageTransitionPhase.Incoming,
+                            progress = 0f,
+                            transitionId = 0
+                        )
+                    } else null
             ArtistIdentityTopBar(
                 artistName = artistTopBarRoute.artistName,
                 hasLocalContent = artistTopBarRoute.hasLocalContent,
@@ -37,7 +62,8 @@ internal fun FlowtoneScaffoldTopLayer(
                 artistSurfaceVisible = collapsedArtistToolbarVisible,
                 allSongs = state.uiState.songs,
                 currentSong = state.playerUiState.currentSong,
-                onBack = callbacks.onNavigateBack,
+                onBack = artistProfileBackAction ?: callbacks.onNavigateBack,
+                pageTransitionPresentation = artistPagePresentation,
                 playlistSortProgress = playlistSortProgress,
                 modifier = Modifier.blur(descriptionBlurRadius)
             )
