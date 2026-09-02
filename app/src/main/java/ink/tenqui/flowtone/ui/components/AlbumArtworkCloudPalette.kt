@@ -17,6 +17,7 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.toBitmap
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.player.CloudColorPath
 import ink.tenqui.flowtone.ui.player.extractMaterialYouSeedColors
 import ink.tenqui.flowtone.ui.player.materialYouCloudColors
@@ -33,6 +34,11 @@ internal data class ArtworkPaletteCacheKey(
     val artworkUri: String,
     val isDarkTheme: Boolean
 )
+
+internal fun artworkPaletteCacheIdentity(artworkData: Any): String = when (artworkData) {
+    is ExtensionImage -> "extension-image:${artworkData.extensionId}:${artworkData.url}"
+    else -> artworkData.toString()
+}
 
 internal object ArtworkPaletteMemoryCache {
     private val palettes = LinkedHashMap<ArtworkPaletteCacheKey, FlowtoneCloudPalette>(16, 0.75f, true)
@@ -96,7 +102,7 @@ internal fun rememberArtworkCloudPalette(
     val cacheKey = remember(artworkData, isDarkTheme) {
         artworkData?.let { data ->
             ArtworkPaletteCacheKey(
-                artworkUri = data.toString(),
+                artworkUri = artworkPaletteCacheIdentity(data),
                 isDarkTheme = isDarkTheme
             )
         }
@@ -177,7 +183,9 @@ internal fun rememberArtworkBackgroundColor(
 ): Color? {
     val context = LocalContext.current
     val cacheKey = remember(artworkData, isDarkTheme) {
-        artworkData?.let { ArtworkPaletteCacheKey(it.toString(), isDarkTheme) }
+        artworkData?.let {
+            ArtworkPaletteCacheKey(artworkPaletteCacheIdentity(it), isDarkTheme)
+        }
     }
     var resolvedColor by remember(cacheKey) {
         mutableStateOf(cacheKey?.let(ArtworkPaletteMemoryCache::color))

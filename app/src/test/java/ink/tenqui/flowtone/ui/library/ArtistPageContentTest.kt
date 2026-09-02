@@ -8,6 +8,8 @@ import org.junit.Test
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import ink.tenqui.flowtone.ui.components.ArtworkPaletteMemoryCache
+import ink.tenqui.flowtone.ui.components.artworkPaletteCacheIdentity
+import ink.tenqui.flowtone.core.online.ExtensionImage
 
 class ArtistPageContentTest {
     @Test
@@ -227,40 +229,93 @@ class ArtistPageContentTest {
         assertEquals(2, resolutions)
     }
 
-    @Test fun cachedBannerStartsFullyVisibleWithoutArtistColorOnlyRevealState() {
+    @Test fun bannerReadyAtPageEnterUsesPageAlphaWithoutIndependentReveal() {
         val state = initialArtistBannerPresentationState(
             bannerKnown = true,
-            availableFromCache = true
+            drawableReadyImmediately = true
         )
 
-        assertEquals(ArtistBannerPresentationState.BannerAvailableFromCache, state)
+        assertEquals(ArtistBannerPresentationState.BannerReadyImmediately, state)
         assertEquals(1f, artistBannerTargetAlpha(state))
-        assertEquals(state, artistBannerSuccessState(state))
+        assertFalse(artistBannerUsesLateReveal(state))
+        assertEquals(0.4f, artistBannerEffectiveAlpha(state, 0.4f, 0f))
+        assertEquals(state, artistBannerSuccessState(state, pageEnterComplete = false))
     }
 
-    @Test fun bannerColorBecomesBaseOnlyAfterBannerIsAvailable() {
+    @Test fun bannerLoadingAtPageEnterKeepsArtistColorVisible() {
+        val state = initialArtistBannerPresentationState(
+            bannerKnown = true,
+            drawableReadyImmediately = false
+        )
+
+        assertEquals(ArtistBannerPresentationState.BannerLoading, state)
+        assertEquals(0f, artistBannerInternalAlpha(state, lateRevealAlpha = 1f))
         assertEquals(
             ArtistProfileBaseColorSource.ArtistArtwork,
             artistProfileBaseColorSource(
                 artistArtworkColorAvailable = true,
                 bannerColorAvailable = true,
-                bannerState = ArtistBannerPresentationState.BannerLoadingWithoutCachedImage
+                bannerState = state
             )
         )
+    }
+
+    @Test fun bannerSuccessAfterPageEnterAllowsOneLateReveal() {
+        val loading = initialArtistBannerPresentationState(
+            bannerKnown = true,
+            drawableReadyImmediately = false
+        )
+        val successDuringEnter = artistBannerSuccessState(
+            current = loading,
+            pageEnterComplete = false
+        )
+        val successAfterEnter = artistBannerSuccessState(
+            current = successDuringEnter,
+            pageEnterComplete = true
+        )
+
+        assertEquals(ArtistBannerPresentationState.BannerLoading, successDuringEnter)
+        assertEquals(ArtistBannerPresentationState.BannerLoadedLate, successAfterEnter)
+        assertTrue(artistBannerUsesLateReveal(successAfterEnter))
+        assertEquals(0.35f, artistBannerInternalAlpha(successAfterEnter, 0.35f))
+    }
+
+    @Test fun pageEnterReverseKeepsReadyBannerOnCurrentPagePresentation() {
+        val state = ArtistBannerPresentationState.BannerReadyImmediately
+
+        assertEquals(0.5f, artistBannerEffectiveAlpha(state, 0.5f, 0f))
+        assertEquals(0.3f, artistBannerEffectiveAlpha(state, 0.3f, 1f))
+    }
+
+    @Test fun bannerColorCacheHitIsInitialCardBaseColor() {
         assertEquals(
             ArtistProfileBaseColorSource.Banner,
             artistProfileBaseColorSource(
                 artistArtworkColorAvailable = true,
                 bannerColorAvailable = true,
-                bannerState = ArtistBannerPresentationState.BannerLoadedAfterRequest
+                bannerState = ArtistBannerPresentationState.BannerReadyImmediately
             )
         )
+    }
+
+    @Test fun bannerColorMissKeepsArtistColorUntilResolved() {
         assertEquals(
             ArtistProfileBaseColorSource.ArtistArtwork,
             artistProfileBaseColorSource(
                 artistArtworkColorAvailable = true,
                 bannerColorAvailable = false,
-                bannerState = ArtistBannerPresentationState.BannerUnavailable
+                bannerState = ArtistBannerPresentationState.BannerReadyImmediately
+            )
+        )
+    }
+
+    @Test fun resolvedBannerColorBecomesFinalCardBase() {
+        assertEquals(
+            ArtistProfileBaseColorSource.Banner,
+            artistProfileBaseColorSource(
+                artistArtworkColorAvailable = true,
+                bannerColorAvailable = true,
+                bannerState = ArtistBannerPresentationState.BannerLoadedLate
             )
         )
     }
@@ -268,7 +323,8 @@ class ArtistPageContentTest {
     @Test fun bannerColorUsesSharedArtworkColorCache() {
         ArtworkPaletteMemoryCache.clearForTest()
         var resolutions = 0
-        val bannerKey = "ExtensionImage(extensionId=provider, url=https://example.com/banner.jpg)"
+        val banner = ExtensionImage("provider", "https://example.com/banner.jpg")
+        val bannerKey = artworkPaletteCacheIdentity(banner)
 
         val first = ArtworkPaletteMemoryCache.resolveColorForTest(bannerKey, false) {
             resolutions += 1
@@ -284,23 +340,25 @@ class ArtistPageContentTest {
         assertEquals(1, resolutions)
     }
 
-    @Test fun uncachedBannerKeepsArtistColorUntilRequestSuccess() {
-        val loading = initialArtistBannerPresentationState(
-            bannerKnown = true,
-            availableFromCache = false
-        )
-        val loaded = artistBannerSuccessState(loading)
+    @Test fun bannerImageAndPaletteKeysIncludeProviderAndUrlIdentity() {
+        val first = ExtensionImage("provider-a", "https://example.com/banner.jpg")
+        val second = ExtensionImage("provider-b", "https://example.com/banner.jpg")
 
-        assertEquals(ArtistBannerPresentationState.BannerLoadingWithoutCachedImage, loading)
-        assertEquals(0f, artistBannerTargetAlpha(loading))
-        assertEquals(ArtistBannerPresentationState.BannerLoadedAfterRequest, loaded)
-        assertEquals(1f, artistBannerTargetAlpha(loaded))
+        assertEquals(
+            "artist-profile-banner:provider-a:https://example.com/banner.jpg",
+            artistBannerDisplayMemoryCacheKey(first)
+        )
+        assertEquals(
+            "extension-image:provider-a:https://example.com/banner.jpg",
+            artworkPaletteCacheIdentity(first)
+        )
+        assertFalse(artistBannerDisplayMemoryCacheKey(first) == artistBannerDisplayMemoryCacheKey(second))
     }
 
     @Test fun unavailableAndFailedBannerLeaveArtistColorVisible() {
         val unavailable = initialArtistBannerPresentationState(
             bannerKnown = false,
-            availableFromCache = false
+            drawableReadyImmediately = false
         )
 
         assertEquals(ArtistBannerPresentationState.BannerUnavailable, unavailable)
@@ -311,16 +369,31 @@ class ArtistPageContentTest {
     @Test fun focusGrowthDoesNotIncreaseBannerHeroHeight() {
         val collapsed = artistProfilePresentationHeights(280.dp, 640.dp, focusProgress = 0f)
         val focused = artistProfilePresentationHeights(280.dp, 640.dp, focusProgress = 1f)
+        val collapsedOverlay = artistBannerHeroOverlayGeometry(collapsed.bannerHeroHeight)
+        val focusedOverlay = artistBannerHeroOverlayGeometry(focused.bannerHeroHeight)
 
         assertEquals(280.dp, collapsed.cardHeight)
         assertEquals(640.dp, focused.cardHeight)
         assertEquals(280.dp, collapsed.bannerHeroHeight)
         assertEquals(collapsed.bannerHeroHeight, focused.bannerHeroHeight)
+        assertEquals(collapsedOverlay, focusedOverlay)
     }
 
-    @Test fun bannerBottomFadeOccupiesAStablePartOfHero() {
-        assertTrue(ArtistBannerBottomFadeStartFraction > 0f)
-        assertTrue(ArtistBannerBottomFadeStartFraction < 1f)
+    @Test fun bannerBottomBlendFinishesAtTheExactCardBaseColor() {
+        val bannerColor = Color(0xff315b68)
+
+        assertEquals(bannerColor, artistBannerBottomBlendFinalColor(bannerColor))
+        assertTrue(ArtistBannerBottomFadeStartFraction in 0.45f..0.55f)
+    }
+
+    @Test fun darkScrimAndBottomBlendAreConfinedToFixedHeroGeometry() {
+        val geometry = artistBannerHeroOverlayGeometry(280.dp)
+
+        assertEquals(280.dp, geometry.heroHeight)
+        assertEquals(geometry.heroHeight, geometry.darkScrimHeight)
+        assertEquals(geometry.heroHeight, geometry.bottomBlendHeight)
+        assertTrue(ArtistBannerDarkScrimAlpha > 0f)
+        assertTrue(ArtistBannerDarkScrimAlpha < 0.5f)
     }
 
 }

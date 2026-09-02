@@ -81,6 +81,9 @@ import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.graphics.lerp as lerpColor
 import coil3.compose.AsyncImage
+import coil3.memory.MemoryCache
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ArtistMetadata
@@ -153,34 +156,75 @@ internal fun artistProfileBaseColorSource(
 
 internal enum class ArtistBannerPresentationState {
     BannerUnavailable,
-    BannerLoadingWithoutCachedImage,
-    BannerAvailableFromCache,
-    BannerLoadedAfterRequest,
+    BannerLoading,
+    BannerReadyImmediately,
+    BannerLoadedLate,
     BannerFailed
 }
 
 internal fun initialArtistBannerPresentationState(
     bannerKnown: Boolean,
-    availableFromCache: Boolean
+    drawableReadyImmediately: Boolean
 ): ArtistBannerPresentationState = when {
     !bannerKnown -> ArtistBannerPresentationState.BannerUnavailable
-    availableFromCache -> ArtistBannerPresentationState.BannerAvailableFromCache
-    else -> ArtistBannerPresentationState.BannerLoadingWithoutCachedImage
+    drawableReadyImmediately -> ArtistBannerPresentationState.BannerReadyImmediately
+    else -> ArtistBannerPresentationState.BannerLoading
 }
 
 internal fun artistBannerTargetAlpha(state: ArtistBannerPresentationState): Float = when (state) {
-    ArtistBannerPresentationState.BannerAvailableFromCache,
-    ArtistBannerPresentationState.BannerLoadedAfterRequest -> 1f
+    ArtistBannerPresentationState.BannerReadyImmediately,
+    ArtistBannerPresentationState.BannerLoadedLate -> 1f
     else -> 0f
 }
 
 internal fun artistBannerSuccessState(
-    current: ArtistBannerPresentationState
-): ArtistBannerPresentationState = if (
-    current == ArtistBannerPresentationState.BannerAvailableFromCache
-) current else ArtistBannerPresentationState.BannerLoadedAfterRequest
+    current: ArtistBannerPresentationState,
+    pageEnterComplete: Boolean
+): ArtistBannerPresentationState = when {
+    current == ArtistBannerPresentationState.BannerReadyImmediately -> current
+    pageEnterComplete -> ArtistBannerPresentationState.BannerLoadedLate
+    else -> ArtistBannerPresentationState.BannerLoading
+}
 
-internal const val ArtistBannerBottomFadeStartFraction = 0.58f
+internal fun artistBannerUsesLateReveal(state: ArtistBannerPresentationState): Boolean =
+    state == ArtistBannerPresentationState.BannerLoadedLate
+
+internal fun artistBannerInternalAlpha(
+    state: ArtistBannerPresentationState,
+    lateRevealAlpha: Float
+): Float = when (state) {
+    ArtistBannerPresentationState.BannerReadyImmediately -> 1f
+    ArtistBannerPresentationState.BannerLoadedLate -> lateRevealAlpha.coerceIn(0f, 1f)
+    else -> 0f
+}
+
+internal fun artistBannerEffectiveAlpha(
+    state: ArtistBannerPresentationState,
+    pageElementAlpha: Float,
+    lateRevealAlpha: Float
+): Float = pageElementAlpha.coerceIn(0f, 1f) *
+    artistBannerInternalAlpha(state, lateRevealAlpha)
+
+internal fun artistBannerDisplayMemoryCacheKey(banner: ExtensionImage): String =
+    "artist-profile-banner:${banner.extensionId}:${banner.url}"
+
+internal const val ArtistBannerBottomFadeStartFraction = 0.48f
+internal const val ArtistBannerDarkScrimAlpha = 0.30f
+
+internal data class ArtistBannerHeroOverlayGeometry(
+    val heroHeight: Dp,
+    val darkScrimHeight: Dp,
+    val bottomBlendHeight: Dp
+)
+
+internal fun artistBannerHeroOverlayGeometry(heroHeight: Dp): ArtistBannerHeroOverlayGeometry =
+    ArtistBannerHeroOverlayGeometry(
+        heroHeight = heroHeight,
+        darkScrimHeight = heroHeight,
+        bottomBlendHeight = heroHeight
+    )
+
+internal fun artistBannerBottomBlendFinalColor(cardBaseColor: Color): Color = cardBaseColor
 
 internal data class ArtistProfilePresentationHeights(
     val cardHeight: Dp,
@@ -287,19 +331,72 @@ internal fun ArtistPage(
     val paletteArtworkData: Any? = artistAvatarImage ?: artistSongs.firstOrNull()?.artworkUri
     val materialBackground = MaterialTheme.colorScheme.surfaceContainerHigh
     val extensionImageLoader = remember(context) { ExtensionManager.get(context).extensionImageLoader }
-    var bannerPresentationState by remember(banner) {
+    val bannerDisplayCacheKey = remember(banner) {
+        banner?.let(::artistBannerDisplayMemoryCacheKey)
+    }
+    val cachedBannerImage = remember(bannerDisplayCacheKey, extensionImageLoader) {
+        bannerDisplayCacheKey?.let { cacheKey ->
+            extensionImageLoader.memoryCache?.get(MemoryCache.Key(cacheKey))?.image
+        }
+    }
+    val bannerReadyAtPageEnterKey = remember(displayArtist) {
+        bannerDisplayCacheKey?.takeIf { cachedBannerImage != null }
+    }
+    val bannerImageRequest = remember(
+        banner,
+        bannerDisplayCacheKey,
+        cachedBannerImage,
+        context
+    ) {
+        if (banner == null || bannerDisplayCacheKey == null) {
+            null
+        } else {
+            ImageRequest.Builder(context)
+                .data(banner)
+                .memoryCacheKey(bannerDisplayCacheKey)
+                .placeholderMemoryCacheKey(bannerDisplayCacheKey)
+                .apply {
+                    cachedBannerImage?.let { cachedImage ->
+                        placeholder(cachedImage)
+                        error(cachedImage)
+                    }
+                }
+                .crossfade(false)
+                .build()
+        }
+    }
+    var bannerRequestSucceeded by remember(bannerDisplayCacheKey) { mutableStateOf(false) }
+    var bannerPresentationState by remember(bannerDisplayCacheKey, bannerReadyAtPageEnterKey) {
         mutableStateOf(
             initialArtistBannerPresentationState(
                 bannerKnown = banner != null,
-                availableFromCache = banner?.let(::wasArtistExtensionImageLoaded) == true
+                drawableReadyImmediately = bannerDisplayCacheKey != null &&
+                    bannerDisplayCacheKey == bannerReadyAtPageEnterKey
             )
         )
     }
-    val bannerAlpha by animateFloatAsState(
-        targetValue = artistBannerTargetAlpha(bannerPresentationState),
+    val lateBannerRevealAlpha by animateFloatAsState(
+        targetValue = if (artistBannerUsesLateReveal(bannerPresentationState)) 1f else 0f,
         animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
-        label = "ArtistProfileBannerAlpha"
+        label = "ArtistProfileLateBannerRevealAlpha"
     )
+    val bannerAlpha = artistBannerInternalAlpha(
+        state = bannerPresentationState,
+        lateRevealAlpha = lateBannerRevealAlpha
+    )
+    LaunchedEffect(
+        bannerDisplayCacheKey,
+        bannerRequestSucceeded,
+        pageTransition.phase
+    ) {
+        if (
+            bannerRequestSucceeded &&
+            bannerPresentationState == ArtistBannerPresentationState.BannerLoading &&
+            pageTransition.phase == PageTransitionPhase.Current
+        ) {
+            bannerPresentationState = ArtistBannerPresentationState.BannerLoadedLate
+        }
+    }
     val resolvedArtistArtworkColor = rememberArtworkBackgroundColor(
         artworkData = paletteArtworkData,
         imageLoader = if (artistAvatarImage != null) {
@@ -331,7 +428,6 @@ internal fun ArtistPage(
         animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
         label = "ArtistProfileBackgroundColor"
     )
-    val colorMode = artistProfileColorMode(baseColorSource != ArtistProfileBaseColorSource.Material)
     val biography = artistMetadata?.biography?.trim()?.takeIf(String::isNotEmpty)
     var collapsedBiographyNeedsExpansion by remember(biography) { mutableStateOf(false) }
     var artistProfileFocused by remember(displayArtist) { mutableStateOf(false) }
@@ -599,9 +695,8 @@ internal fun ArtistPage(
                 topPadding = statusBarTop,
                 alias = artistMetadata?.aliases?.take(3)?.joinToString(" · "),
                 biography = biography,
-                banner = banner,
+                bannerImageRequest = bannerImageRequest,
                 artistColor = artistColor,
-                colorMode = colorMode,
                 focused = focusPresentationActive,
                 focusProgress = focusProgress,
                 canFocus = canFocusArtistProfile(biography, collapsedBiographyNeedsExpansion),
@@ -609,20 +704,27 @@ internal fun ArtistPage(
                 bannerAlpha = bannerAlpha,
                 onBannerLoading = {
                     if (
-                        bannerPresentationState !=
-                        ArtistBannerPresentationState.BannerAvailableFromCache
+                        bannerPresentationState != ArtistBannerPresentationState.BannerReadyImmediately &&
+                        bannerPresentationState != ArtistBannerPresentationState.BannerLoadedLate
                     ) {
-                        bannerPresentationState =
-                            ArtistBannerPresentationState.BannerLoadingWithoutCachedImage
+                        bannerPresentationState = ArtistBannerPresentationState.BannerLoading
                     }
                 },
                 onBannerSuccess = {
-                    banner?.let(::rememberArtistExtensionImageLoaded)
-                    bannerPresentationState = artistBannerSuccessState(bannerPresentationState)
+                    bannerRequestSucceeded = true
+                    bannerPresentationState = artistBannerSuccessState(
+                        current = bannerPresentationState,
+                        pageEnterComplete = pageTransition.phase == PageTransitionPhase.Current
+                    )
                 },
                 onBannerError = {
-                    banner?.let(::forgetArtistExtensionImageLoaded)
-                    bannerPresentationState = ArtistBannerPresentationState.BannerFailed
+                    bannerRequestSucceeded = false
+                    if (
+                        bannerPresentationState !=
+                        ArtistBannerPresentationState.BannerReadyImmediately
+                    ) {
+                        bannerPresentationState = ArtistBannerPresentationState.BannerFailed
+                    }
                 },
                 onCollapsedBiographyExpansionChanged = {
                     collapsedBiographyNeedsExpansion = it
@@ -655,9 +757,8 @@ private fun ArtistHeaderCard(
     topPadding: Dp,
     alias: String? = null,
     biography: String? = null,
-    banner: ExtensionImage? = null,
+    bannerImageRequest: ImageRequest? = null,
     artistColor: Color,
-    colorMode: ArtistProfileColorMode,
     focused: Boolean,
     focusProgress: Float,
     canFocus: Boolean,
@@ -702,31 +803,32 @@ private fun ArtistHeaderCard(
             )
     ) {
         val profileCardWidth = maxWidth
+        val heroPrimaryContentColor = lerpColor(
+            MaterialTheme.colorScheme.onSurface,
+            Color.White.copy(alpha = 0.94f),
+            bannerAlpha
+        )
+        val heroSecondaryContentColor = lerpColor(
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            Color.White.copy(alpha = 0.80f),
+            bannerAlpha
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .background(artistColor)
         )
-        val bottomArtistColor = if (colorMode == ArtistProfileColorMode.Artwork) {
-            lerpColor(artistColor, MaterialTheme.colorScheme.surfaceContainerHigh, 0.28f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(listOf(artistColor, bottomArtistColor))
-            )
-        )
-        banner?.let { image ->
+        bannerImageRequest?.let { request ->
+            val overlayGeometry = artistBannerHeroOverlayGeometry(bannerHeroHeight)
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(bannerHeroHeight)
+                    .height(overlayGeometry.heroHeight)
                     .clipToBounds()
                     .graphicsLayer { alpha = bannerAlpha }
             ) {
                 AsyncImage(
-                    model = image,
+                    model = request,
                     imageLoader = bannerImageLoader,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
@@ -737,15 +839,36 @@ private fun ArtistHeaderCard(
                 )
                 Box(
                     Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
+                        .height(overlayGeometry.darkScrimHeight)
                         .background(
                             Brush.verticalGradient(
                                 colorStops = arrayOf(
-                                    0f to MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.52f),
-                                    0.44f to MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.24f),
-                                    ArtistBannerBottomFadeStartFraction to artistColor.copy(alpha = 0.18f),
-                                    0.78f to artistColor.copy(alpha = 0.72f),
-                                    1f to artistColor
+                                    0f to Color.Black.copy(alpha = ArtistBannerDarkScrimAlpha),
+                                    0.44f to Color.Black.copy(
+                                        alpha = ArtistBannerDarkScrimAlpha * 0.86f
+                                    ),
+                                    0.68f to Color.Black.copy(
+                                        alpha = ArtistBannerDarkScrimAlpha * 0.46f
+                                    ),
+                                    0.88f to Color.Transparent,
+                                    1f to Color.Transparent
+                                )
+                            )
+                        )
+                )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(overlayGeometry.bottomBlendHeight)
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.Transparent,
+                                    ArtistBannerBottomFadeStartFraction to Color.Transparent,
+                                    0.70f to artistColor.copy(alpha = 0.35f),
+                                    0.86f to artistColor.copy(alpha = 0.80f),
+                                    1f to artistBannerBottomBlendFinalColor(artistColor)
                                 )
                             )
                         )
@@ -777,6 +900,8 @@ private fun ArtistHeaderCard(
                 biography = null,
                 statistics = statistics,
                 avatarSize = avatarSize,
+                primaryContentColor = heroPrimaryContentColor,
+                secondaryContentColor = heroSecondaryContentColor,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = ArtistHeaderAvatarNameGap)
@@ -808,7 +933,11 @@ private fun ArtistHeaderCard(
               Text(
                   text = text,
                   style = biographyStyle,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  color = lerpColor(
+                      heroSecondaryContentColor,
+                      MaterialTheme.colorScheme.onSurfaceVariant,
+                      focusProgress
+                  ),
                   maxLines = artistBiographyMaxLines(focused),
                   overflow = TextOverflow.Ellipsis,
                   modifier = Modifier.fillMaxWidth()
@@ -830,6 +959,8 @@ private fun ArtistHeaderProfileDetails(
     biography: String?,
     statistics: String?,
     avatarSize: Dp,
+    primaryContentColor: Color,
+    secondaryContentColor: Color,
     modifier: Modifier = Modifier
 ) {
     Layout(
@@ -837,7 +968,7 @@ private fun ArtistHeaderProfileDetails(
             Text(
                 text = artistName,
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = primaryContentColor,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -847,7 +978,7 @@ private fun ArtistHeaderProfileDetails(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondaryContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.layoutId("alias")
@@ -857,7 +988,7 @@ private fun ArtistHeaderProfileDetails(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondaryContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.layoutId("biography")
@@ -867,7 +998,7 @@ private fun ArtistHeaderProfileDetails(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondaryContentColor,
                     textAlign = TextAlign.End,
                     modifier = Modifier.layoutId("statistics")
                 )
