@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.library
 
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.data.local.localArtistStableId
+import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.player.parseArtistCandidates
 
 internal fun artistAlbumsFor(
@@ -51,13 +52,65 @@ internal data class ArtistPageContentVisibility(
     val showAlbums: Boolean
 )
 
+internal enum class ArtistPrimaryContentPresentation {
+    Loading,
+    Ready,
+    Empty
+}
+
+internal const val ArtistLoadingSkeletonCount = 7
+internal const val ArtistPrimaryContentTimingOrder = 0
+
+internal fun artistPrimaryContentPresentation(
+    hasLocalContent: Boolean,
+    providerSongsLoaded: Boolean,
+    hasSongs: Boolean
+): ArtistPrimaryContentPresentation = when {
+    !hasLocalContent && !providerSongsLoaded -> ArtistPrimaryContentPresentation.Loading
+    hasSongs -> ArtistPrimaryContentPresentation.Ready
+    else -> ArtistPrimaryContentPresentation.Empty
+}
+
+internal fun artistPrimaryContentPresentationKeys(
+    presentation: ArtistPrimaryContentPresentation,
+    readySongKeys: List<String>,
+    skeletonCount: Int = ArtistLoadingSkeletonCount
+): List<String> = when (presentation) {
+    ArtistPrimaryContentPresentation.Loading -> List(skeletonCount.coerceAtLeast(0)) { index ->
+        "artist-loading-skeleton-$index"
+    }
+    ArtistPrimaryContentPresentation.Ready -> readySongKeys
+    ArtistPrimaryContentPresentation.Empty -> emptyList()
+}
+
+internal fun artistPrimaryContentPresentationProgress(pageProgress: Float): Float =
+    PageMotion.elementProgress(
+        pageProgress = pageProgress,
+        order = ArtistPrimaryContentTimingOrder,
+        orderCount = ArtistLoadingSkeletonCount
+    )
+
+internal data class ArtistSkeletonAnimationChannels(
+    val pagePresentationProgress: Float,
+    val breathingProgress: Float
+)
+
+internal fun artistSkeletonAnimationChannels(
+    pagePresentationProgress: Float,
+    breathingProgress: Float
+): ArtistSkeletonAnimationChannels = ArtistSkeletonAnimationChannels(
+    pagePresentationProgress = pagePresentationProgress.coerceIn(0f, 1f),
+    breathingProgress = breathingProgress.coerceIn(0f, 1f)
+)
+
 internal fun artistPageContentVisibility(
     hasLocalContent: Boolean,
     hasSongs: Boolean = false,
+    songsLoading: Boolean = false,
     hasAlbums: Boolean,
     hasStatistics: Boolean = hasLocalContent
 ): ArtistPageContentVisibility = ArtistPageContentVisibility(
     showStatistics = hasStatistics,
-    showSongs = hasLocalContent || hasSongs,
+    showSongs = hasLocalContent || hasSongs || songsLoading,
     showAlbums = hasAlbums
 )

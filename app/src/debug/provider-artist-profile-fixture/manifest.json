@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "id": "debug.provider.ui-regression-fixture",
+  "name": "Flowtone UI Test",
+  "version": "1",
+  "author": "Flowtone Debug",
+  "description": "Debug-only deterministic Artist and Provider UI regression fixture.",
+  "entry": "main.js",
+  "capabilities": ["music_provider", "artist_metadata", "song", "album"],
+  "permissions": {
+    "network": {
+      "hosts": ["placehold.co"]
+    }
+  },
+  "color": "#0F766E"
+}

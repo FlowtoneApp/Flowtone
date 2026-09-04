@@ -530,14 +530,26 @@ fun FlowtoneApp(
                         appState.searchFocusRequest = 0
                         appState.searchKeyboardDismissRequest += 1
                     }
-                    val destination = SecondaryDestination.Album(album.id, album.title)
+                    val parentArtist = (
+                        appState.secondaryNavigation.current as? SecondaryDestination.Artist
+                        )?.identity
+                    val destination = SecondaryDestination.Album(
+                        album.id,
+                        album.title,
+                        parentArtist
+                    )
                     appState.secondaryNavigation = appState.secondaryNavigation.push(destination)
                 }
             },
             onOpenProviderAlbum = { album ->
                 musicViewModel.loadProviderEntityCollections(album.providerId)
                 appState.secondaryNavigation = appState.secondaryNavigation.push(
-                    SecondaryDestination.Album(album)
+                    SecondaryDestination.Album(
+                        album,
+                        parentArtist = (
+                            appState.secondaryNavigation.current as? SecondaryDestination.Artist
+                            )?.identity
+                    )
                 )
             },
             onOpenArtist = { artistName -> openArtist(artistName) },

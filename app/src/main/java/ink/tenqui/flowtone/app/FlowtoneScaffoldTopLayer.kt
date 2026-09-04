@@ -16,9 +16,12 @@ internal fun FlowtoneScaffoldTopLayer(
     onCloseSongSelection: () -> Unit,
     playlistBackAction: (() -> Unit)?,
     playlistSortProgress: Float,
-    descriptionBlurRadius: Dp
+    descriptionBlurRadius: Dp,
+    onFullTitleRequest: (String) -> Unit
 ) {
-    if (state.secondaryPage != SecondaryPage.Artist) {
+    val artistHeaderOwnsTopBar = secondaryTopPresentationOwner(state.secondaryDestination) ==
+        SecondaryTopPresentationOwner.ArtistHeader
+    if (!artistHeaderOwnsTopBar) {
         val titleVisible = state.secondaryPage != null
         val standardPathSegments = secondaryDestinationBreadcrumbs(
             current = state.secondaryDestination,
@@ -55,6 +58,7 @@ internal fun FlowtoneScaffoldTopLayer(
                 callbacks.onSearchKeyboardDismissRequestConsumed,
             onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
             onSearchImeAction = callbacks.onSearchImeAction,
+            onFullTitleRequest = onFullTitleRequest,
             playlistSortProgress = playlistSortProgress,
             modifier = Modifier.blur(descriptionBlurRadius)
         )

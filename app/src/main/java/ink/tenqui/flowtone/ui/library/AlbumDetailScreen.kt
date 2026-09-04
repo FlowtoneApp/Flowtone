@@ -11,10 +11,17 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PersistentTrack
@@ -25,7 +32,25 @@ import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
+
+internal data class AlbumSongAnimationOrder(
+    val order: Int,
+    val orderCount: Int
+)
+
+internal fun albumSongAnimationOrder(
+    songKey: String,
+    animationGroupKeys: List<String>
+): AlbumSongAnimationOrder {
+    val orderCount = animationGroupKeys.size.coerceAtLeast(1)
+    return AlbumSongAnimationOrder(
+        order = animationGroupKeys.indexOf(songKey).takeIf { it >= 0 } ?: orderCount - 1,
+        orderCount = orderCount
+    )
+}
 
 // Header、content 与页面根层分别参与现有转场和折叠布局，不能合并为单一 Modifier。
 @SuppressLint("ModifierParameter")
@@ -166,6 +191,7 @@ internal fun AlbumDetailScreen(
 internal fun ProviderAlbumDetailScreen(
     album: ProviderAlbum,
     songs: List<ProviderSong>,
+    presentationSessionKey: String,
     currentSong: Song?,
     isPlaying: Boolean,
     pendingTrackIdentityKey: String? = null,
@@ -179,8 +205,67 @@ internal fun ProviderAlbumDetailScreen(
 ) {
     val listState = remember(album.identity) { LazyListState() }
     val presentedSongs = remember(songs) { songs.map(ProviderSong::toPresentationSong) }
+    val songKeys = remember(songs) { songs.map { it.identity.stableKey } }
     val currentUri = currentSong?.uri
     val vinylMotionActive = isPlaying && presentedSongs.any { it.uri == currentUri }
+    val visibleSongKeys by remember(listState, songKeys) {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                songKeys.getOrNull(item.index - 1)
+            }.distinct()
+        }
+    }
+    var frozenTransitionId by remember(presentationSessionKey) { mutableStateOf<Int?>(null) }
+    var frozenViewportKeys by remember(presentationSessionKey) {
+        mutableStateOf<List<String>>(emptyList())
+    }
+    var capturedPageProgress by remember(presentationSessionKey) { mutableStateOf(0f) }
+    LaunchedEffect(pageTransition.transitionId, pageTransition.phase, visibleSongKeys) {
+        if (pageTransition.phase == PageTransitionPhase.Current) {
+            frozenTransitionId = null
+            frozenViewportKeys = emptyList()
+            capturedPageProgress = 0f
+        } else if (
+            frozenTransitionId != pageTransition.transitionId &&
+            visibleSongKeys.isNotEmpty()
+        ) {
+            frozenTransitionId = pageTransition.transitionId
+            frozenViewportKeys = visibleSongKeys
+            capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
+        }
+    }
+    val animationGroupKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
+        visibleSongKeys
+    } else if (pageTransition.phase == PageTransitionPhase.Incoming) {
+        frozenViewportKeys
+    } else {
+        frozenViewportKeys.ifEmpty { visibleSongKeys }
+    }
+    val listProgress = when {
+        pageTransition.phase != PageTransitionPhase.Incoming -> pageTransition.progress
+        frozenViewportKeys.isEmpty() -> 0f
+        else -> {
+            val remaining = (1f - capturedPageProgress).coerceAtLeast(0.0001f)
+            ((pageTransition.progress - capturedPageProgress) / remaining).coerceIn(0f, 1f)
+        }
+    }
+    val enterGroupReady = pageTransition.phase != PageTransitionPhase.Incoming ||
+        frozenViewportKeys.isNotEmpty()
+    val initialSongKeys = remember(presentationSessionKey) { songKeys.toSet() }
+    val dynamicEnterScope = rememberPageElementEnterScope(
+        sessionKey = presentationSessionKey,
+        elementKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
+            songKeys
+        } else {
+            emptyList()
+        },
+        viewportKeys = visibleSongKeys,
+        awaitViewportKeys = true,
+        initiallyEnteredKeys = initialSongKeys
+    )
+    if (pageTransition.phase != PageTransitionPhase.Current && songKeys.isNotEmpty()) {
+        SideEffect { dynamicEnterScope.markEntered(songKeys) }
+    }
 
     PlaylistDetailCollapsingHeaderScaffold(
         title = album.title,
@@ -217,6 +302,17 @@ internal fun ProviderAlbumDetailScreen(
                     items = presentedSongs,
                     key = { index, _ -> songs[index].identity.stableKey }
                 ) { index, song ->
+                    val songKey = songKeys[index]
+                    val animationOrder = albumSongAnimationOrder(songKey, animationGroupKeys)
+                    val pageItemModifier = if (enterGroupReady) {
+                        itemModifier(
+                            listProgress,
+                            animationOrder.order,
+                            animationOrder.orderCount
+                        )
+                    } else {
+                        Modifier.graphicsLayer { alpha = 0f }
+                    }
                     SongListItem(
                         song = song,
                         isCurrentSong = currentUri == song.uri,
@@ -226,7 +322,11 @@ internal fun ProviderAlbumDetailScreen(
                             },
                         extensionArtwork = songs[index].artwork,
                         onClick = { onSongClick(songs, index) },
-                        modifier = itemModifier(1f, index, presentedSongs.size)
+                        modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
+                            dynamicEnterScope.elementModifier(songKey)
+                        } else {
+                            pageItemModifier
+                        }
                             .padding(horizontal = 8.dp)
                     )
                 }

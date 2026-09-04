@@ -487,6 +487,13 @@ internal class PageElementEnterScope internal constructor(
     private val activeBatchesByKey: SnapshotStateMap<Any, PageElementEnterBatch>,
     private val offsetYPx: Float
 ) {
+    fun markEntered(keys: Collection<Any>) {
+        keys.forEach { key ->
+            activeBatchesByKey.remove(key)
+            enteredKeys[key] = Unit
+        }
+    }
+
     fun elementModifier(key: Any): Modifier {
         if (key in enteredKeys) return Modifier
 

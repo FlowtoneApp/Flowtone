@@ -3,6 +3,9 @@ package ink.tenqui.flowtone.app
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -10,6 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
@@ -22,6 +27,8 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
+import ink.tenqui.flowtone.ui.library.ArtistHeaderPresentationHostState
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
@@ -88,6 +95,7 @@ internal class AlbumDetailDestination(
 @Composable
 internal fun SecondaryPageHost(
     destination: SecondaryDestination,
+    navigationEntryKey: String,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
@@ -141,6 +149,9 @@ internal fun SecondaryPageHost(
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    artistHeaderPresentationHostState: ArtistHeaderPresentationHostState,
+    artistAlbumTransitionSnapshot: ArtistAlbumHeaderSnapshot? = null,
+    onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -326,6 +337,18 @@ internal fun SecondaryPageHost(
             SecondaryPage.Album -> {
                 val navigationDestination =
                     destination as? SecondaryDestination.Album ?: return@Box
+                val parentArtist = navigationDestination.parentArtist
+                val artistAlbumTopInset = if (parentArtist == null) {
+                    0.dp
+                } else {
+                    with(LocalDensity.current) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + FlowtoneTopBarContentHeight
+                }
+                val albumContentModifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = artistAlbumTopInset)
+                    .rightSwipeBackGesture(::closeSelectionOrPage)
                 when (val identity = navigationDestination.identity) {
                     is AlbumDestinationIdentity.Local -> {
                         val detail = albumDetailDestination ?: return@Box
@@ -354,9 +377,7 @@ internal fun SecondaryPageHost(
                             onCollapseProgressStateChange =
                                 onDetailHeaderCollapseProgressStateChange,
                             headerModifier = elementModifier(0),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .rightSwipeBackGesture(::closeSelectionOrPage)
+                            modifier = albumContentModifier
                         )
                     }
 
@@ -369,6 +390,7 @@ internal fun SecondaryPageHost(
                         ProviderAlbumDetailScreen(
                             album = album,
                             songs = songs,
+                            presentationSessionKey = navigationEntryKey,
                             currentSong = currentSong,
                             isPlaying = isPlaying,
                             pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
@@ -388,9 +410,7 @@ internal fun SecondaryPageHost(
                             onCollapseProgressStateChange =
                                 onDetailHeaderCollapseProgressStateChange,
                             headerModifier = elementModifier(0),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .rightSwipeBackGesture(::closeSelectionOrPage)
+                            modifier = albumContentModifier
                         )
                     }
                 }
@@ -400,6 +420,8 @@ internal fun SecondaryPageHost(
                 val artist = destination as? SecondaryDestination.Artist ?: return@Box
                 val providerIdentity = artist.identity as? ArtistDestinationIdentity.Provider
                   ArtistPage(
+                    headerOwnerKey = navigationEntryKey,
+                    headerPresentationHostState = artistHeaderPresentationHostState,
                     artistName = artist.name,
                     hasLocalContent = artist.identity.hasLocalContent,
                     providedAvatar = artist.identity.avatar,
@@ -412,6 +434,8 @@ internal fun SecondaryPageHost(
                         ?.let { uiState.providerSongs[it] }.orEmpty(),
                     providerAlbums = providerIdentity?.providerId
                         ?.let { uiState.providerAlbums[it] }.orEmpty(),
+                    providerSongsLoaded = providerIdentity?.providerId
+                        ?.let(uiState.providerSongs::containsKey) ?: true,
                     currentSong = currentSong,
                     onNavigateBack = onCloseSecondaryPage,
                     onSongClick = { songs, index ->
@@ -432,6 +456,8 @@ internal fun SecondaryPageHost(
                     },
                     onOpenAlbum = onOpenAlbum,
                     onOpenProviderAlbum = onOpenProviderAlbum,
+                    albumTransitionSnapshot = artistAlbumTransitionSnapshot,
+                    onFullTitleRequest = onFullTitleRequest,
                     pageTransition = pageScope,
                     itemModifier = ::playlistItemModifier,
                     modifier = Modifier.fillMaxSize()

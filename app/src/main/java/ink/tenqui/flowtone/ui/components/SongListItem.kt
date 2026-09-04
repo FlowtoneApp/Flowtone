@@ -2,9 +2,12 @@ package ink.tenqui.flowtone.ui.components
 
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
@@ -332,6 +335,79 @@ fun SongListItem(
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
+        }
+    }
+}
+
+/**
+ * Keeps the same outer row, artwork, text and duration geometry as [SongListItem].
+ * Its breathing channel only changes the neutral placeholder alpha; page motion belongs to
+ * the caller's modifier so loading never becomes a second page-transition clock.
+ */
+@Composable
+internal fun SongListItemSkeleton(
+    modifier: Modifier = Modifier
+) {
+    val breathingTransition = rememberInfiniteTransition(label = "SongListItemSkeleton")
+    val breathingProgress by breathingTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1_600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "SongListItemSkeletonBreathing"
+    )
+    val placeholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+        alpha = 0.18f + 0.08f * breathingProgress
+    )
+    val placeholderShape = RoundedCornerShape(percent = 50)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .background(placeholderColor)
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp, end = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.78f)
+                    .heightIn(min = 16.dp)
+                    .clip(placeholderShape)
+                    .background(placeholderColor)
+            )
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth(0.52f)
+                    .heightIn(min = 12.dp)
+                    .clip(placeholderShape)
+                    .background(placeholderColor.copy(alpha = placeholderColor.alpha * 0.82f))
+            )
+        }
+        Box(
+            modifier = Modifier.width(96.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(38.dp)
+                    .heightIn(min = 12.dp)
+                    .clip(placeholderShape)
+                    .background(placeholderColor.copy(alpha = placeholderColor.alpha * 0.82f))
+            )
         }
     }
 }

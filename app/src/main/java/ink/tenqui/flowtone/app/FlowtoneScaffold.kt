@@ -45,6 +45,7 @@ import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.FullTitleOverlay
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
@@ -150,7 +151,7 @@ internal fun FlowtoneScaffold(
             libraryPlaylistController.clearVisualPlaylistEditing()
         }
     }
-    val scaffoldBlurRadius = if (playlistEditingBlurRadius > state.backgroundBlurRadius) {
+    val baseScaffoldBlurRadius = if (playlistEditingBlurRadius > state.backgroundBlurRadius) {
         playlistEditingBlurRadius
     } else {
         state.backgroundBlurRadius
@@ -160,6 +161,28 @@ internal fun FlowtoneScaffold(
         animationSpec = tween(180, easing = FlowtoneMotion.Easing),
         label = "PlaylistDescriptionFocusBlur"
     )
+    var fullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
+    var retainedFullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
+    val fullTitleOverlayProgress by animateFloatAsState(
+        targetValue = if (fullTitleOverlayTitle != null) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        finishedListener = { progress ->
+            if (progress <= 0.001f && fullTitleOverlayTitle == null) {
+                retainedFullTitleOverlayTitle = null
+            }
+        },
+        label = "FullTitleOverlayProgress"
+    )
+    val fullTitleOverlayBlurRadius = 14.dp * fullTitleOverlayProgress
+    val scaffoldBlurRadius = maxOf(baseScaffoldBlurRadius, fullTitleOverlayBlurRadius)
+    val showFullTitle: (String) -> Unit = { title ->
+        retainedFullTitleOverlayTitle = title
+        fullTitleOverlayTitle = title
+    }
+    val dismissFullTitle = { fullTitleOverlayTitle = null }
 
     val libraryPlaylistSyncKey = remember(libraryPlaylistController.playlists) {
         libraryPlaylistController.playlists.map(LibraryPlaylistCard::repositorySyncKey)
@@ -300,7 +323,8 @@ internal fun FlowtoneScaffold(
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
                     playlistBackAction = playlistBackAction,
                     playlistSortProgress = playlistSortProgress,
-                    descriptionBlurRadius = descriptionBlurRadius
+                    descriptionBlurRadius = descriptionBlurRadius,
+                    onFullTitleRequest = showFullTitle
                 )
             }
         ) { innerPadding ->
@@ -343,6 +367,7 @@ internal fun FlowtoneScaffold(
                 playlistSongSort = playlistSongSort,
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
+                onFullTitleRequest = showFullTitle,
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
                 modifier = Modifier.blur(
@@ -428,6 +453,14 @@ internal fun FlowtoneScaffold(
                 refreshLibraryPlaylistsFromRepository(createdPlaylistId)
             }
         )
+        retainedFullTitleOverlayTitle?.let { title ->
+            FullTitleOverlay(
+                title = title,
+                progress = fullTitleOverlayProgress,
+                onDismiss = dismissFullTitle,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         }
     }
 }

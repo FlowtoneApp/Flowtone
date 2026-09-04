@@ -75,20 +75,30 @@ internal sealed interface SecondaryDestination {
     class Album(
         val identity: AlbumDestinationIdentity,
         val title: String,
-        val providerAlbum: ProviderAlbum? = null
+        val providerAlbum: ProviderAlbum? = null,
+        val parentArtist: ArtistDestinationIdentity? = null
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Album
         val stableId: String get() = identity.stableId
 
-        constructor(albumId: Long, title: String) : this(
+        constructor(
+            albumId: Long,
+            title: String,
+            parentArtist: ArtistDestinationIdentity? = null
+        ) : this(
             identity = AlbumDestinationIdentity.Local(albumId),
-            title = title
+            title = title,
+            parentArtist = parentArtist
         )
 
-        constructor(album: ProviderAlbum) : this(
+        constructor(
+            album: ProviderAlbum,
+            parentArtist: ArtistDestinationIdentity? = null
+        ) : this(
             identity = AlbumDestinationIdentity.Provider(album.providerId, album.id),
             title = album.title,
-            providerAlbum = album
+            providerAlbum = album,
+            parentArtist = parentArtist
         )
 
         override fun equals(other: Any?): Boolean = other is Album && stableId == other.stableId
@@ -119,9 +129,30 @@ internal sealed interface SecondaryDestination {
     }
 }
 
+internal enum class SecondaryTopPresentationOwner { ArtistHeader, StandardTopBar }
+
+internal fun secondaryTopPresentationOwner(
+    destination: SecondaryDestination?
+): SecondaryTopPresentationOwner = when (destination) {
+    is SecondaryDestination.Artist -> SecondaryTopPresentationOwner.ArtistHeader
+    is SecondaryDestination.Album -> if (destination.parentArtist != null) {
+        SecondaryTopPresentationOwner.ArtistHeader
+    } else {
+        SecondaryTopPresentationOwner.StandardTopBar
+    }
+    else -> SecondaryTopPresentationOwner.StandardTopBar
+}
+
 internal data class SecondaryStackEntry(
     val id: Long,
     val destination: SecondaryDestination
+)
+
+internal data class ArtistAlbumHeaderSnapshot(
+    val artistEntryKey: String,
+    val albumEntryKey: String,
+    val parentArtist: ArtistDestinationIdentity,
+    val albumTitle: String
 )
 
 internal data class SecondaryNavigationState(
@@ -163,6 +194,36 @@ internal fun SecondaryStackEntry.uiStateKey(): String {
     return "secondary-entry:$id:${destination.page.name}"
 }
 
+/** PageTransition slots must distinguish repeated pushes of the same entity. */
+internal fun SecondaryStackEntry.transitionIdentityKey(): Long = id
+
+internal fun artistAlbumHeaderSnapshot(
+    entries: List<SecondaryStackEntry>
+): ArtistAlbumHeaderSnapshot? {
+    val albumEntry = entries.lastOrNull() ?: return null
+    val album = albumEntry.destination as? SecondaryDestination.Album ?: return null
+    val parentArtist = album.parentArtist ?: return null
+    val artistEntry = entries.dropLast(1).lastOrNull { entry ->
+        (entry.destination as? SecondaryDestination.Artist)
+            ?.identity?.stableId == parentArtist.stableId
+    } ?: return null
+    return ArtistAlbumHeaderSnapshot(
+        artistEntryKey = artistEntry.uiStateKey(),
+        albumEntryKey = albumEntry.uiStateKey(),
+        parentArtist = parentArtist,
+        albumTitle = album.title
+    )
+}
+
+internal fun artistHeaderSessionKey(entries: List<SecondaryStackEntry>): String? {
+    val currentEntry = entries.lastOrNull() ?: return null
+    return when (currentEntry.destination) {
+        is SecondaryDestination.Artist -> currentEntry.uiStateKey()
+        is SecondaryDestination.Album -> artistAlbumHeaderSnapshot(entries)?.artistEntryKey
+        else -> null
+    }
+}
+
 internal fun secondaryDestinationBreadcrumbs(
     current: SecondaryDestination?,
     previous: SecondaryDestination?,
@@ -170,7 +231,8 @@ internal fun secondaryDestinationBreadcrumbs(
 ): List<String> {
     return when (current) {
         is SecondaryDestination.Album -> listOfNotNull(
-            (previous as? SecondaryDestination.Artist)?.name,
+            current.parentArtist?.displayName
+                ?: (previous as? SecondaryDestination.Artist)?.name,
             current.title
         )
         is SecondaryDestination.Playlist -> listOf(current.title)
