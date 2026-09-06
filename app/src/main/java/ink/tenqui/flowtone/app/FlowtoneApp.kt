@@ -48,7 +48,6 @@ import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderArtist
-import ink.tenqui.flowtone.data.online.sanitizedFor
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.permissions.openAppPermissionSettings
@@ -375,29 +374,15 @@ fun FlowtoneApp(
     }
 
     fun openProviderArtist(artist: ProviderArtist) {
-        val displayName = artist.title.trim()
-        val providerId = artist.identity.providerId.trim()
-        val artistId = artist.identity.remoteId.trim()
-        if (displayName.isBlank() || providerId.isBlank() || artistId.isBlank()) {
-            return
-        }
-        musicViewModel.loadProviderEntityCollections(providerId)
+        val destination = providerArtistDestination(artist) ?: return
+        val providerIdentity = destination.identity as ArtistDestinationIdentity.Provider
+        musicViewModel.loadProviderEntityCollections(providerIdentity.providerId)
         if (appState.searchActive) {
             appState.searchInputFocused = false
             appState.searchFocusRequest = 0
             appState.searchKeyboardDismissRequest += 1
         }
-        appState.secondaryNavigation = appState.secondaryNavigation.push(
-            SecondaryDestination.Artist(
-                ArtistDestinationIdentity.Provider(
-                    providerId = providerId,
-                    artistId = artistId,
-                    displayName = displayName,
-                    avatar = artist.artwork ?: artist.largeArtwork,
-                    profileMetadata = artist.profileMetadata?.sanitizedFor(displayName)
-                )
-            )
-        )
+        appState.secondaryNavigation = appState.secondaryNavigation.push(destination)
     }
 
     LaunchedEffect(appState.searchActive, imeVisible) {

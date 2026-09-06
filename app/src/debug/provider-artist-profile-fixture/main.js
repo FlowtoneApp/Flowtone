@@ -19,7 +19,7 @@ const artists = [
     title: 'No Banner Cloud Test',
     artworkUrl: image(256, 256, '4338CA', 'Cloud'),
     aliases: ['Cloud Fixture', 'No Hero Image'],
-    biography: 'This artist intentionally has no banner URL. Its songs and albums make the cloud-style Artist Header, collapse, docked identity, and Album transition easy to verify.',
+    biography: 'This artist intentionally has no banner URL.\nThe cloud must remain visible behind the expanded identity and Biography Focus presentation.\nThis third short line guarantees Focus without turning the fixture into an internal-scroll test.',
     songCount: 5,
     albumCount: 1
   },

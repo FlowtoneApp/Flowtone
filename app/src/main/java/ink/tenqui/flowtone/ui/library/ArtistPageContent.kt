@@ -59,7 +59,43 @@ internal enum class ArtistPrimaryContentPresentation {
 }
 
 internal const val ArtistLoadingSkeletonCount = 7
-internal const val ArtistPrimaryContentTimingOrder = 0
+internal const val ArtistHeaderTimingOrder = 0
+
+internal fun artistLoadingContentIdentity(entryKey: String): String =
+    "$entryKey:artist-loading-content"
+
+internal fun artistRealContentIdentity(entryKey: String): String =
+    "$entryKey:artist-real-content"
+
+internal data class ArtistScrollPosition(
+    val firstVisibleItemIndex: Int = 0,
+    val firstVisibleItemScrollOffset: Int = 0
+)
+
+internal class ArtistScrollStateOwner internal constructor(
+    val entryKey: String
+) {
+    var position: ArtistScrollPosition = ArtistScrollPosition()
+        private set
+
+    fun update(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int) {
+        position = ArtistScrollPosition(
+            firstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
+            firstVisibleItemScrollOffset = firstVisibleItemScrollOffset.coerceAtLeast(0)
+        )
+    }
+}
+
+internal class ArtistScrollStateStore {
+    private val owners = mutableMapOf<String, ArtistScrollStateOwner>()
+
+    fun ownerFor(entryKey: String): ArtistScrollStateOwner =
+        owners.getOrPut(entryKey) { ArtistScrollStateOwner(entryKey) }
+
+    fun retainEntries(entryKeys: Set<String>) {
+        owners.keys.retainAll(entryKeys)
+    }
+}
 
 internal fun artistPrimaryContentPresentation(
     hasLocalContent: Boolean,
@@ -71,37 +107,18 @@ internal fun artistPrimaryContentPresentation(
     else -> ArtistPrimaryContentPresentation.Empty
 }
 
-internal fun artistPrimaryContentPresentationKeys(
-    presentation: ArtistPrimaryContentPresentation,
-    readySongKeys: List<String>,
+internal fun artistLoadingSkeletonKeys(
     skeletonCount: Int = ArtistLoadingSkeletonCount
-): List<String> = when (presentation) {
-    ArtistPrimaryContentPresentation.Loading -> List(skeletonCount.coerceAtLeast(0)) { index ->
+): List<String> = List(skeletonCount.coerceAtLeast(0)) { index ->
         "artist-loading-skeleton-$index"
-    }
-    ArtistPrimaryContentPresentation.Ready -> readySongKeys
-    ArtistPrimaryContentPresentation.Empty -> emptyList()
 }
 
-internal fun artistPrimaryContentPresentationProgress(pageProgress: Float): Float =
+internal fun artistHeaderTimingProgress(pageProgress: Float): Float =
     PageMotion.elementProgress(
         pageProgress = pageProgress,
-        order = ArtistPrimaryContentTimingOrder,
-        orderCount = ArtistLoadingSkeletonCount
+        order = ArtistHeaderTimingOrder,
+        orderCount = ArtistTransitionOrderCount
     )
-
-internal data class ArtistSkeletonAnimationChannels(
-    val pagePresentationProgress: Float,
-    val breathingProgress: Float
-)
-
-internal fun artistSkeletonAnimationChannels(
-    pagePresentationProgress: Float,
-    breathingProgress: Float
-): ArtistSkeletonAnimationChannels = ArtistSkeletonAnimationChannels(
-    pagePresentationProgress = pagePresentationProgress.coerceIn(0f, 1f),
-    breathingProgress = breathingProgress.coerceIn(0f, 1f)
-)
 
 internal fun artistPageContentVisibility(
     hasLocalContent: Boolean,

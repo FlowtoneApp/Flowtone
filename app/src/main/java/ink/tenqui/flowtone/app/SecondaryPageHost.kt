@@ -27,7 +27,8 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
-import ink.tenqui.flowtone.ui.library.ArtistHeaderPresentationHostState
+import ink.tenqui.flowtone.ui.library.ArtistHeaderStateOwner
+import ink.tenqui.flowtone.ui.library.ArtistScrollStateOwner
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
@@ -96,6 +97,8 @@ internal class AlbumDetailDestination(
 internal fun SecondaryPageHost(
     destination: SecondaryDestination,
     navigationEntryKey: String,
+    artistScrollStateOwner: ArtistScrollStateOwner? = null,
+    artistHeaderStateOwner: ArtistHeaderStateOwner? = null,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
@@ -149,8 +152,8 @@ internal fun SecondaryPageHost(
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
-    artistHeaderPresentationHostState: ArtistHeaderPresentationHostState,
     artistAlbumTransitionSnapshot: ArtistAlbumHeaderSnapshot? = null,
+    artistAlbumTargetVisible: Boolean = artistAlbumTransitionSnapshot != null,
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
@@ -189,6 +192,14 @@ internal fun SecondaryPageHost(
         orderCount: Int
     ): Modifier {
         return pageScope.elementAppearanceModifierAt(pageProgress, order, orderCount)
+    }
+
+    fun songItemMotionModifier(
+        pageProgress: Float,
+        order: Int,
+        orderCount: Int
+    ): Modifier {
+        return pageScope.elementModifierAt(pageProgress, order, orderCount)
     }
 
     fun viewportItemModifier(order: Int, orderCount: Int): Modifier {
@@ -373,7 +384,7 @@ internal fun SecondaryPageHost(
                             playbackErrorEventId = uiState.trackPlaybackErrorEventId,
                             batchActions = activeBatchActions,
                             pageTransition = pageScope,
-                            itemModifier = ::playlistItemModifier,
+                            itemModifier = ::songItemMotionModifier,
                             onCollapseProgressStateChange =
                                 onDetailHeaderCollapseProgressStateChange,
                             headerModifier = elementModifier(0),
@@ -406,7 +417,7 @@ internal fun SecondaryPageHost(
                                 )
                             },
                             pageTransition = pageScope,
-                            itemModifier = ::playlistItemModifier,
+                            itemModifier = ::songItemMotionModifier,
                             onCollapseProgressStateChange =
                                 onDetailHeaderCollapseProgressStateChange,
                             headerModifier = elementModifier(0),
@@ -421,7 +432,8 @@ internal fun SecondaryPageHost(
                 val providerIdentity = artist.identity as? ArtistDestinationIdentity.Provider
                   ArtistPage(
                     headerOwnerKey = navigationEntryKey,
-                    headerPresentationHostState = artistHeaderPresentationHostState,
+                    scrollStateOwner = checkNotNull(artistScrollStateOwner),
+                    headerStateOwner = checkNotNull(artistHeaderStateOwner),
                     artistName = artist.name,
                     hasLocalContent = artist.identity.hasLocalContent,
                     providedAvatar = artist.identity.avatar,
@@ -457,9 +469,9 @@ internal fun SecondaryPageHost(
                     onOpenAlbum = onOpenAlbum,
                     onOpenProviderAlbum = onOpenProviderAlbum,
                     albumTransitionSnapshot = artistAlbumTransitionSnapshot,
+                    albumTransitionTargetVisible = artistAlbumTargetVisible,
                     onFullTitleRequest = onFullTitleRequest,
                     pageTransition = pageScope,
-                    itemModifier = ::playlistItemModifier,
                     modifier = Modifier.fillMaxSize()
                 )
             }

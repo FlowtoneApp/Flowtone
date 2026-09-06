@@ -14,6 +14,7 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
 
 class ArtistPageContentTest {
     @Test
@@ -568,7 +569,7 @@ class ArtistPageContentTest {
             providerSongsLoaded = false,
             hasSongs = false
         )
-        val keys = artistPrimaryContentPresentationKeys(presentation, emptyList())
+        val keys = artistLoadingSkeletonKeys()
 
         assertEquals(ArtistPrimaryContentPresentation.Loading, presentation)
         assertEquals(7, ArtistLoadingSkeletonCount)
@@ -577,30 +578,28 @@ class ArtistPageContentTest {
     }
 
     @Test fun readySongsNeverReuseSkeletonLayoutOrElementIdentity() {
-        val loadingKeys = artistPrimaryContentPresentationKeys(
-            ArtistPrimaryContentPresentation.Loading,
-            emptyList()
-        )
-        val readyKeys = artistPrimaryContentPresentationKeys(
-            ArtistPrimaryContentPresentation.Ready,
-            listOf("real-first", "real-second")
-        )
+        val loadingKeys = artistLoadingSkeletonKeys()
+        val readyKeys = listOf("real-first", "real-second")
 
         assertTrue(loadingKeys.toSet().intersect(readyKeys.toSet()).isEmpty())
         assertEquals("real-first", readyKeys.first())
         assertEquals("real-second", readyKeys[1])
+        assertNotEquals(
+            artistLoadingContentIdentity("artist"),
+            artistRealContentIdentity("artist")
+        )
     }
 
     @Test fun headerPrimaryTimingIsIndependentFromSkeletonAndSongKeys() {
-        val beforeReplacement = artistPrimaryContentPresentationProgress(0.42f)
-        val afterReplacement = artistPrimaryContentPresentationProgress(0.42f)
+        val beforeReplacement = artistHeaderTimingProgress(0.42f)
+        val afterReplacement = artistHeaderTimingProgress(0.42f)
 
         assertEquals(beforeReplacement, afterReplacement)
         assertEquals(
             PageMotion.elementProgress(
                 pageProgress = 0.42f,
-                order = ArtistPrimaryContentTimingOrder,
-                orderCount = ArtistLoadingSkeletonCount
+                order = ArtistHeaderTimingOrder,
+                orderCount = ArtistTransitionOrderCount
             ),
             beforeReplacement
         )
@@ -614,7 +613,7 @@ class ArtistPageContentTest {
         )
 
         assertEquals(ArtistPrimaryContentPresentation.Empty, presentation)
-        assertTrue(artistPrimaryContentPresentationKeys(presentation, emptyList()).isEmpty())
+        assertTrue(presentation != ArtistPrimaryContentPresentation.Loading)
         assertFalse(
             artistPageContentVisibility(
                 hasLocalContent = false,
@@ -625,19 +624,8 @@ class ArtistPageContentTest {
         )
     }
 
-    @Test fun skeletonBreathingDoesNotChangePagePresentationProgress() {
-        val first = artistSkeletonAnimationChannels(0.42f, 0f)
-        val second = artistSkeletonAnimationChannels(0.42f, 1f)
-
-        assertEquals(first.pagePresentationProgress, second.pagePresentationProgress)
-        assertNotEquals(first.breathingProgress, second.breathingProgress)
-    }
-
     @Test fun sevenSkeletonRowsUseStableKeysAndCanonicalStaggerProgress() {
-        val keys = artistPrimaryContentPresentationKeys(
-            ArtistPrimaryContentPresentation.Loading,
-            readySongKeys = emptyList()
-        )
+        val keys = artistLoadingSkeletonKeys()
         val firstProgress = PageMotion.elementProgress(0.4f, 0, keys.size)
         val secondProgress = PageMotion.elementProgress(0.4f, 1, keys.size)
 
@@ -645,6 +633,7 @@ class ArtistPageContentTest {
         assertEquals("artist-loading-skeleton-0", keys.first())
         assertTrue(firstProgress > secondProgress)
         assertEquals(FlowtoneMotion.DurationMillis, PageMotion.DurationMillis)
+        assertEquals(240, FlowtoneMotion.ShortDurationMillis)
     }
 
     @Test fun bannerPresenceSelectsHeaderVariant() {
@@ -658,7 +647,7 @@ class ArtistPageContentTest {
         assertEquals(-240f, artistExpandedContentOffsetPx(320f, 80f))
     }
 
-    @Test fun noBannerCloudBelongsToPageWhileBothHeadersKeepRoundedBiographyEdge() {
+    @Test fun noBannerCloudBelongsToPageWhileExpandedAndFocusSurfacesStayTransparent() {
         assertEquals(
             ArtistCloudBackgroundOwner.None,
             artistCloudBackgroundOwner(ArtistHeaderVariant.Banner)
@@ -667,33 +656,41 @@ class ArtistPageContentTest {
             ArtistCloudBackgroundOwner.Page,
             artistCloudBackgroundOwner(ArtistHeaderVariant.Cloud)
         )
-        assertEquals(0.5f, ArtistPageTopCloudPlacement.cloudCenterWidthFraction)
-        assertEquals(0f, ArtistPageTopCloudPlacement.cloudCenterRadiusOffsetXFactor)
-        assertTrue(ArtistPageTopCloudPlacement.cloudCenterRadiusOffsetYFactor < 0f)
-        assertTrue(ArtistPageTopCloudPlacement.cloudCenterRadiusOffsetYFactor > -1f)
+        assertEquals(HomeBackgroundCloudPlacement, ArtistPageTopCloudPlacement)
+        assertEquals(1f, artistFocusCloudEffects().alpha)
+        assertEquals(0f, artistFocusCloudEffects().blurRadiusDp)
+        assertTrue(artistFocusContentAlpha(1f) < artistFocusContentAlpha(0f))
         assertTrue(artistHeaderUsesRoundedBiographyEdge(ArtistHeaderVariant.Banner))
         assertTrue(artistHeaderUsesRoundedBiographyEdge(ArtistHeaderVariant.Cloud))
-        assertEquals(1f, artistCloudHeaderSurfaceAlpha(0f, 1f))
+        assertEquals(
+            ArtistExpandedHeaderSurface.TransparentOverCloud,
+            artistExpandedHeaderSurface(ArtistHeaderVariant.Cloud)
+        )
+        assertEquals(0f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Cloud, 0f))
+        assertEquals(0.5f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Cloud, 0.5f))
+        assertEquals(1f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Cloud, 1f))
+        assertEquals(1f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Banner, 0f))
     }
 
-    @Test fun stackOwnedSessionCleanupCannotClearANewerArtistEntry() {
-        val host = ArtistHeaderPresentationHostState()
-        host.publish("secondary-entry:1:Artist") {}
-        host.publish("secondary-entry:2:Artist") {}
+    @Test fun stackOwnedHeaderCleanupCannotClearANewerArtistEntry() {
+        val store = ArtistHeaderStateStore()
+        val first = store.ownerFor("secondary-entry:1:Artist", "Artist", null, null)
+        val second = store.ownerFor("secondary-entry:2:Artist", "Artist", null, null)
 
-        host.retainSessions(setOf("secondary-entry:2:Artist"))
+        store.retainEntries(setOf(second.entryKey))
 
-        assertFalse(host.hasPresentation("secondary-entry:1:Artist"))
-        assertTrue(host.hasPresentation("secondary-entry:2:Artist"))
+        assertEquals(null, store.owner(first.entryKey))
+        assertTrue(store.owner(second.entryKey) === second)
+        assertEquals(null, second.renderModel)
     }
 
-    @Test fun artistAlbumBackKeepsTheSameEntrySessionPublished() {
-        val host = ArtistHeaderPresentationHostState()
-        host.publish("secondary-entry:7:Artist") {}
+    @Test fun artistAlbumBackKeepsTheSameEntryHeaderOwner() {
+        val store = ArtistHeaderStateStore()
+        val owner = store.ownerFor("secondary-entry:7:Artist", "Artist", null, null)
 
-        host.retainSessions(setOf("secondary-entry:7:Artist", "secondary-entry:8:Album"))
+        store.retainEntries(setOf("secondary-entry:7:Artist", "secondary-entry:8:Album"))
 
-        assertTrue(host.hasPresentation("secondary-entry:7:Artist"))
+        assertTrue(store.owner(owner.entryKey) === owner)
     }
 
     @Test fun longDockedTitleDropsAvatarBeforeEllipsizing() {
@@ -707,17 +704,16 @@ class ArtistPageContentTest {
         assertTrue(overflows.currentTitleUsesEllipsis)
     }
 
-    @Test fun artistAndAlbumTitlesRemainSeparateAcrossTheWholeTransition() {
-        val start = artistHeaderTitleTransition(0f)
-        val middle = artistHeaderTitleTransition(0.5f)
-        val end = artistHeaderTitleTransition(1f)
+    @Test fun normalAlbumKeepsArtistAnchorStableAndMovesSuffixFromTheRight() {
+        val start = artistAlbumSuffixTransition(0f)
+        val middle = artistAlbumSuffixTransition(0.5f)
+        val end = artistAlbumSuffixTransition(1f)
 
-        assertEquals(1f, start.artistAlpha)
-        assertEquals(0f, start.albumSuffixAlpha)
-        assertEquals(1f, middle.artistAlpha)
-        assertEquals(0.5f, middle.albumSuffixAlpha)
-        assertEquals(1f, end.artistAlpha)
-        assertEquals(1f, end.albumSuffixAlpha)
+        assertEquals(0f, start.alpha)
+        assertEquals(1f, start.translationXFraction)
+        assertEquals(0.5f, middle.alpha)
+        assertEquals(1f, end.alpha)
+        assertEquals(0f, end.translationXFraction)
     }
 
     @Test fun albumSuffixIsHiddenOnThePreTransitionCurrentFrame() {
@@ -728,7 +724,99 @@ class ArtistPageContentTest {
         )
 
         assertEquals(0f, progress)
-        assertEquals(0f, artistHeaderTitleTransition(progress).albumSuffixAlpha)
+        val suffix = artistAlbumSuffixTransition(progress)
+        assertEquals(0f, suffix.alpha)
+        assertEquals(1f, suffix.translationXFraction)
+    }
+
+    @Test fun normalAlbumSuffixExitsRightAcrossTheFullReverseProgress() {
+        val start = artistAlbumSuffixTransition(1f)
+        val end = artistAlbumSuffixTransition(0f)
+
+        assertEquals(1f, start.alpha)
+        assertEquals(0f, start.translationXFraction, 0.0001f)
+        assertEquals(0f, end.alpha)
+        assertEquals(1f, end.translationXFraction)
+    }
+
+    @Test fun normalAlbumBreadcrumbStaggersSeparatorBeforeTitleAndReversesExactly() {
+        val separatorForward = artistAlbumBreadcrumbElementProgress(
+            PageTransitionPhase.Outgoing,
+            pageProgress = 0.35f,
+            order = ArtistAlbumSeparatorOrder,
+            albumBridgeActive = true
+        )
+        val titleForward = artistAlbumBreadcrumbElementProgress(
+            PageTransitionPhase.Outgoing,
+            pageProgress = 0.35f,
+            order = ArtistAlbumTitleOrder,
+            albumBridgeActive = true
+        )
+        val separatorReverse = artistAlbumBreadcrumbElementProgress(
+            PageTransitionPhase.Incoming,
+            pageProgress = 0.65f,
+            order = ArtistAlbumSeparatorOrder,
+            albumBridgeActive = true
+        )
+        val titleReverse = artistAlbumBreadcrumbElementProgress(
+            PageTransitionPhase.Incoming,
+            pageProgress = 0.65f,
+            order = ArtistAlbumTitleOrder,
+            albumBridgeActive = true
+        )
+
+        assertTrue(separatorForward > titleForward)
+        assertEquals(separatorForward, separatorReverse, 0.0001f)
+        assertEquals(titleForward, titleReverse, 0.0001f)
+    }
+
+    @Test fun normalAlbumReverseDropsTitleBeforeSeparator() {
+        val separator = artistAlbumBreadcrumbElementProgress(
+            PageTransitionPhase.Outgoing,
+            pageProgress = 0.8f,
+            order = ArtistAlbumSeparatorOrder,
+            albumBridgeActive = true
+        )
+        val title = artistAlbumBreadcrumbElementProgress(
+            PageTransitionPhase.Outgoing,
+            pageProgress = 0.8f,
+            order = ArtistAlbumTitleOrder,
+            albumBridgeActive = true
+        )
+
+        assertTrue(title < separator)
+    }
+
+    @Test fun artistScrollOwnerSurvivesChildAndNewEntryStartsAtTop() {
+        val store = ArtistScrollStateStore()
+        val firstEntry = store.ownerFor("secondary-entry:1:Artist")
+        firstEntry.update(8, 37)
+
+        store.retainEntries(setOf(firstEntry.entryKey))
+        val afterAlbumBack = store.ownerFor(firstEntry.entryKey)
+        assertTrue(firstEntry === afterAlbumBack)
+        assertEquals(ArtistScrollPosition(8, 37), afterAlbumBack.position)
+
+        store.retainEntries(emptySet())
+        val secondEntry = store.ownerFor("secondary-entry:2:Artist")
+        assertEquals(ArtistScrollPosition(), secondEntry.position)
+    }
+
+    @Test fun requestedHeaderExistsBeforeItsArtistPageComposition() {
+        val first = "secondary-entry:1:Artist"
+        val second = "secondary-entry:2:Artist"
+        val store = ArtistHeaderStateStore()
+        store.ownerFor(first, "Artist", null, null)
+        val secondOwner = store.ownerFor(second, "Artist", null, null)
+
+        assertTrue(store.owner(second) === secondOwner)
+        assertEquals(null, secondOwner.renderModel)
+        assertEquals(1f, secondOwner.diagnosticPresentationAlpha())
+        secondOwner.updateMeasuredSize(widthPx = 1080, heightPx = 320)
+        assertTrue(secondOwner.measuredWidthPx > 0)
+        assertTrue(secondOwner.measuredHeightPx > 0)
+        store.retainEntries(setOf(second))
+        assertTrue(store.owner(second) === secondOwner)
     }
 
     @Test fun longAlbumFallsBackToBackAndAlbumOnlyTitle() {
@@ -740,6 +828,20 @@ class ArtistPageContentTest {
             ArtistDockedAlbumTitleLayout.AlbumOnly,
             artistDockedAlbumTitleLayout(420f, 280f)
         )
+    }
+
+    @Test fun longAlbumReplacementMovesOldUpAndNewInFromBelowSymmetrically() {
+        val artist = artistAlbumReplacementTransition(0f)
+        val album = artistAlbumReplacementTransition(1f)
+
+        assertEquals(1f, artist.artistAlpha)
+        assertEquals(0f, artist.artistTranslationYFraction, 0.0001f)
+        assertEquals(0f, artist.albumAlpha)
+        assertEquals(1f, artist.albumTranslationYFraction)
+        assertEquals(0f, album.artistAlpha)
+        assertEquals(-1f, album.artistTranslationYFraction)
+        assertEquals(1f, album.albumAlpha)
+        assertEquals(0f, album.albumTranslationYFraction)
     }
 
     @Test fun collapsedSoftMaskLeavesTheHeaderCompletelyAtProgressOne() {
@@ -858,8 +960,10 @@ class ArtistPageContentTest {
         assertTrue(headerProgress > 0.42f)
     }
 
-    @Test fun headerSwitchAndPageElementsShareCanonicalDurationAndEasing() {
+    @Test fun shortHeaderAndContentSwitchUsesTheEstablishedFastMotionToken() {
         assertEquals(FlowtoneMotion.DurationMillis, PageMotion.DurationMillis)
+        assertEquals(240, FlowtoneMotion.ShortDurationMillis)
+        assertTrue(FlowtoneMotion.ShortDurationMillis < PageMotion.DurationMillis)
         assertEquals(
             FlowtoneMotion.Easing.transform(0.42f),
             PageMotion.Easing.transform(0.42f)

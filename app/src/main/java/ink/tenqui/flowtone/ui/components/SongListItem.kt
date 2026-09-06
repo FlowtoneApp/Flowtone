@@ -340,9 +340,8 @@ fun SongListItem(
 }
 
 /**
- * Keeps the same outer row, artwork, text and duration geometry as [SongListItem].
- * Its breathing channel only changes the neutral placeholder alpha; page motion belongs to
- * the caller's modifier so loading never becomes a second page-transition clock.
+ * A standalone loading visual. It owns no real-song identity, state, placement or geometry;
+ * the caller supplies only the LoadingContent presentation modifier.
  */
 @Composable
 internal fun SongListItemSkeleton(

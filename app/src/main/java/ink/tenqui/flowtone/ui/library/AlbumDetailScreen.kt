@@ -323,7 +323,7 @@ internal fun ProviderAlbumDetailScreen(
                         extensionArtwork = songs[index].artwork,
                         onClick = { onSongClick(songs, index) },
                         modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
-                            dynamicEnterScope.elementModifier(songKey)
+                            dynamicEnterScope.elementMotionModifier(songKey)
                         } else {
                             pageItemModifier
                         }

@@ -311,15 +311,101 @@ class SecondaryNavigationTest {
     }
 
     @Test
-    fun artistHeaderSessionComesFromTheActualStackEntryRatherThanArtistIdentity() {
+    fun artistHeaderOwnerComesFromTheActualStackEntryRatherThanArtistIdentity() {
         val artist = SecondaryDestination.Artist("A")
         val firstOpen = SecondaryNavigationState().push(artist)
         val secondOpen = firstOpen.pop().push(artist)
 
         assertNotEquals(
-            artistHeaderSessionKey(firstOpen.entries),
-            artistHeaderSessionKey(secondOpen.entries)
+            artistHeaderOwnerKey(firstOpen.entries),
+            artistHeaderOwnerKey(secondOpen.entries)
         )
+    }
+
+    @Test
+    fun newlyPushedArtistImmediatelyOverridesTheRetiredOutgoingHeader() {
+        val artist = SecondaryDestination.Artist("A")
+        val firstOpen = SecondaryNavigationState().push(artist)
+        val secondOpen = firstOpen.pop().push(artist)
+        val firstEntry = checkNotNull(firstOpen.currentEntry)
+        val secondEntry = checkNotNull(secondOpen.currentEntry)
+        listOf(0.3f, 0.5f, 1f).forEach { oldProgress ->
+            val selectedBeforeSlotReplacement = activeArtistHeaderSelection(
+                entries = secondOpen.entries,
+                transitionSlots = SecondaryHeaderTransitionSlots(
+                    outgoing = firstEntry,
+                    progress = oldProgress
+                )
+            )
+            val selectedAfterSlotReplacement = activeArtistHeaderSelection(
+                entries = secondOpen.entries,
+                transitionSlots = SecondaryHeaderTransitionSlots(
+                    outgoing = firstEntry,
+                    incoming = secondEntry,
+                    progress = oldProgress
+                )
+            )
+
+            assertTrue(selectedBeforeSlotReplacement.exists)
+            assertEquals(secondEntry.uiStateKey(), selectedBeforeSlotReplacement.entryKey)
+            assertEquals(secondEntry.uiStateKey(), selectedAfterSlotReplacement.entryKey)
+        }
+    }
+
+    @Test
+    fun retiredArtistCleanupCannotChangeTheNewActiveHeader() {
+        val artist = SecondaryDestination.Artist("A")
+        val firstOpen = SecondaryNavigationState().push(artist)
+        val secondOpen = firstOpen.pop().push(artist)
+        val secondEntry = checkNotNull(secondOpen.currentEntry)
+
+        val afterCleanup = activeArtistHeaderSelection(
+            entries = secondOpen.entries,
+            transitionSlots = SecondaryHeaderTransitionSlots(current = secondEntry)
+        )
+
+        assertTrue(afterCleanup.exists)
+        assertEquals(secondEntry.uiStateKey(), afterCleanup.entryKey)
+    }
+
+    @Test
+    fun artistHeaderCanOpenAgainAfterThePreviousTransitionFullyCleanedUp() {
+        val artist = SecondaryDestination.Artist("A")
+        val firstOpen = SecondaryNavigationState().push(artist)
+        val secondOpen = firstOpen.pop().push(artist)
+        val thirdOpen = secondOpen.pop().push(artist)
+        val thirdEntry = checkNotNull(thirdOpen.currentEntry)
+
+        val selected = activeArtistHeaderSelection(
+            entries = thirdOpen.entries,
+            transitionSlots = SecondaryHeaderTransitionSlots(current = thirdEntry)
+        )
+
+        assertTrue(selected.exists)
+        assertEquals(thirdEntry.uiStateKey(), selected.entryKey)
+        assertNotEquals(firstOpen.currentEntry?.id, thirdEntry.id)
+        assertNotEquals(secondOpen.currentEntry?.id, thirdEntry.id)
+    }
+
+    @Test
+    fun outgoingArtistHeaderRemainsUntilItsPopTransitionCompletes() {
+        val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val artistEntry = checkNotNull(artistState.currentEntry)
+
+        val leaving = activeArtistHeaderSelection(
+            entries = emptyList(),
+            transitionSlots = SecondaryHeaderTransitionSlots(
+                outgoing = artistEntry,
+                progress = 0.6f
+            )
+        )
+        val completed = activeArtistHeaderSelection(
+            entries = emptyList(),
+            transitionSlots = SecondaryHeaderTransitionSlots()
+        )
+
+        assertEquals(artistEntry.uiStateKey(), leaving.entryKey)
+        assertFalse(completed.exists)
     }
 
     @Test
@@ -334,11 +420,42 @@ class SecondaryNavigationTest {
         assertEquals(artistState.currentEntry?.uiStateKey(), snapshot.artistEntryKey)
         assertEquals(albumState.currentEntry?.uiStateKey(), snapshot.albumEntryKey)
         assertEquals("A Very Long Album", snapshot.albumTitle)
-        assertEquals(snapshot.artistEntryKey, artistHeaderSessionKey(albumState.entries))
+        assertEquals(snapshot.artistEntryKey, artistHeaderOwnerKey(albumState.entries))
         assertEquals(
             artistState.currentEntry?.uiStateKey(),
-            artistHeaderSessionKey(albumState.pop().entries)
+            artistHeaderOwnerKey(albumState.pop().entries)
         )
+    }
+
+    @Test
+    fun albumHeaderSnapshotSurvivesTheWholeReverseTransition() {
+        val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val albumState = artistState.push(
+            SecondaryDestination.Album(7L, "Album", artistState.current.let {
+                (it as SecondaryDestination.Artist).identity
+            })
+        )
+        val snapshot = checkNotNull(artistAlbumHeaderSnapshot(albumState.entries))
+        val artistEntry = checkNotNull(artistState.currentEntry)
+        val albumEntry = checkNotNull(albumState.currentEntry)
+
+        val reversing = artistAlbumHeaderPresentationSnapshot(
+            selectedSnapshot = null,
+            retainedSnapshot = snapshot,
+            transitionSlots = SecondaryHeaderTransitionSlots(
+                outgoing = albumEntry,
+                incoming = artistEntry,
+                progress = 0.65f
+            )
+        )
+        val completed = artistAlbumHeaderPresentationSnapshot(
+            selectedSnapshot = null,
+            retainedSnapshot = snapshot,
+            transitionSlots = SecondaryHeaderTransitionSlots(current = artistEntry)
+        )
+
+        assertEquals(snapshot, reversing)
+        assertEquals(null, completed)
     }
 
 }

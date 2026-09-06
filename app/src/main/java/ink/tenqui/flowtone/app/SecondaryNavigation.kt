@@ -4,6 +4,8 @@ import ink.tenqui.flowtone.data.local.localArtistStableId
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.sanitizedFor
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
 internal sealed interface ArtistDestinationIdentity {
@@ -215,13 +217,86 @@ internal fun artistAlbumHeaderSnapshot(
     )
 }
 
-internal fun artistHeaderSessionKey(entries: List<SecondaryStackEntry>): String? {
+internal fun artistHeaderOwnerKey(entries: List<SecondaryStackEntry>): String? {
     val currentEntry = entries.lastOrNull() ?: return null
     return when (currentEntry.destination) {
         is SecondaryDestination.Artist -> currentEntry.uiStateKey()
         is SecondaryDestination.Album -> artistAlbumHeaderSnapshot(entries)?.artistEntryKey
         else -> null
     }
+}
+
+internal fun providerArtistDestination(artist: ProviderArtist): SecondaryDestination.Artist? {
+    val displayName = artist.title.trim()
+    val providerId = artist.identity.providerId.trim()
+    val artistId = artist.identity.remoteId.trim()
+    if (displayName.isBlank() || providerId.isBlank() || artistId.isBlank()) return null
+    return SecondaryDestination.Artist(
+        ArtistDestinationIdentity.Provider(
+            providerId = providerId,
+            artistId = artistId,
+            displayName = displayName,
+            avatar = artist.artwork ?: artist.largeArtwork,
+            profileMetadata = artist.profileMetadata?.sanitizedFor(displayName)
+        )
+    )
+}
+
+internal data class SecondaryHeaderTransitionSlots(
+    val current: SecondaryStackEntry? = null,
+    val outgoing: SecondaryStackEntry? = null,
+    val incoming: SecondaryStackEntry? = null,
+    val progress: Float = 1f
+)
+
+internal data class ActiveArtistHeaderSelection(
+    val entryKey: String?,
+    val exists: Boolean = entryKey != null
+)
+
+/**
+ * The live navigation stack owns the active Header. Transition slots are only a fallback while
+ * that owner is leaving, so a retired Artist entry can never override a newly pushed entry.
+ */
+internal fun activeArtistHeaderSelection(
+    entries: List<SecondaryStackEntry>,
+    transitionSlots: SecondaryHeaderTransitionSlots
+): ActiveArtistHeaderSelection {
+    artistHeaderOwnerKey(entries)?.let { entryKey ->
+        return ActiveArtistHeaderSelection(entryKey)
+    }
+
+    val transitionEntries = listOfNotNull(
+        transitionSlots.incoming,
+        transitionSlots.current,
+        transitionSlots.outgoing
+    )
+    val knownEntries = (entries + transitionEntries).distinctBy(SecondaryStackEntry::id)
+    val fallbackKey = transitionEntries.firstNotNullOfOrNull { entry ->
+        when (entry.destination) {
+            is SecondaryDestination.Artist -> entry.uiStateKey()
+            is SecondaryDestination.Album -> artistHeaderOwnerKey(
+                knownEntries.takeWhile { candidate -> candidate.id != entry.id } + entry
+            )
+            else -> null
+        }
+    }
+    return ActiveArtistHeaderSelection(fallbackKey)
+}
+
+internal fun artistAlbumHeaderPresentationSnapshot(
+    selectedSnapshot: ArtistAlbumHeaderSnapshot?,
+    retainedSnapshot: ArtistAlbumHeaderSnapshot?,
+    transitionSlots: SecondaryHeaderTransitionSlots
+): ArtistAlbumHeaderSnapshot? {
+    selectedSnapshot?.let { return it }
+    val snapshot = retainedSnapshot ?: return null
+    val presentedEntryKeys = listOfNotNull(
+        transitionSlots.current,
+        transitionSlots.outgoing,
+        transitionSlots.incoming
+    ).mapTo(mutableSetOf(), SecondaryStackEntry::uiStateKey)
+    return snapshot.takeIf { it.albumEntryKey in presentedEntryKeys }
 }
 
 internal fun secondaryDestinationBreadcrumbs(
