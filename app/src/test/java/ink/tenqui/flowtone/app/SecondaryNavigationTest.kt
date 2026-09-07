@@ -12,7 +12,7 @@ import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.ui.components.FullTitleOverlayBackResult
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 import ink.tenqui.flowtone.ui.components.fullTitleOverlayBackResult
-import ink.tenqui.flowtone.ui.library.ArtistHeaderVariant
+import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 
 class SecondaryNavigationTest {
     @Test
@@ -34,15 +34,6 @@ class SecondaryNavigationTest {
 
         assertEquals("provider:provider-a\u00001", first.stableId)
         assertNotEquals(first, second)
-    }
-    @Test
-    fun artistProfileFocusBackDoesNotChangeNavigationDestination() {
-        val navigation = SecondaryNavigationState().push(SecondaryDestination.Artist("Artist"))
-        val before = navigation.current
-
-        ink.tenqui.flowtone.ui.library.artistProfileBackResult(true)
-
-        assertEquals(before, navigation.current)
     }
     @Test
     fun artistPushThenPopReturnsToEmpty() {
@@ -360,14 +351,14 @@ class SecondaryNavigationTest {
     }
 
     @Test
-    fun bannerAndCloudUseOneTopBarWithOnlySurfaceTreatmentDifferent() {
+    fun bannerAndCloudTopBarsNeverDrawAHeroDerivedSurface() {
         assertEquals(
-            ArtistTopBarSurfaceTreatment.ArtistColor,
-            artistTopBarSurfaceTreatment(ArtistHeaderVariant.Banner)
+            ArtistTopBarSurfaceTreatment.Transparent,
+            artistTopBarSurfaceTreatment(ArtistHeroBackgroundKind.Banner)
         )
         assertEquals(
             ArtistTopBarSurfaceTreatment.Transparent,
-            artistTopBarSurfaceTreatment(ArtistHeaderVariant.Cloud)
+            artistTopBarSurfaceTreatment(ArtistHeroBackgroundKind.Cloud)
         )
     }
 

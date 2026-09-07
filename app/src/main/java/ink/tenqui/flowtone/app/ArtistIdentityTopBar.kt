@@ -4,10 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -39,7 +37,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
-import ink.tenqui.flowtone.ui.library.ArtistHeaderVariant
+import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 import ink.tenqui.flowtone.ui.library.ArtistIdentityTopBarRow
 
 private val ArtistTopBarIdentityMotionDistance = 8.dp
@@ -48,14 +46,11 @@ private const val ArtistTopBarIdentityElementDurationMillis =
     FlowtoneMotion.ShortDurationMillis - ArtistTopBarIdentityStaggerMillis
 private const val ArtistTopBarPathStaggerFraction = 0.18f
 
-internal enum class ArtistTopBarSurfaceTreatment { Transparent, ArtistColor }
+internal enum class ArtistTopBarSurfaceTreatment { Transparent }
 
 internal fun artistTopBarSurfaceTreatment(
-    variant: ArtistHeaderVariant
-): ArtistTopBarSurfaceTreatment = when (variant) {
-    ArtistHeaderVariant.Banner -> ArtistTopBarSurfaceTreatment.ArtistColor
-    ArtistHeaderVariant.Cloud -> ArtistTopBarSurfaceTreatment.Transparent
-}
+    backgroundKind: ArtistHeroBackgroundKind
+): ArtistTopBarSurfaceTreatment = ArtistTopBarSurfaceTreatment.Transparent
 
 internal data class ArtistTopBarPathElementProgress(
     val separator: Float,
@@ -82,8 +77,7 @@ internal fun artistTopBarPathElementProgress(
 internal fun ArtistIdentityTopBar(
     artistName: String,
     avatarImage: ExtensionImage?,
-    variant: ArtistHeaderVariant,
-    artistColor: Color,
+    backgroundKind: ArtistHeroBackgroundKind,
     identityVisible: Boolean,
     albumEntryKey: String?,
     albumTitle: String?,
@@ -127,15 +121,6 @@ internal fun ArtistIdentityTopBar(
         targetState = identityVisible,
         label = "ArtistTopBarIdentity"
     )
-    val surfaceProgress by identityTransition.animateFloat(
-        transitionSpec = {
-            tween(
-                durationMillis = FlowtoneMotion.ShortDurationMillis,
-                easing = FlowtoneMotion.Easing
-            )
-        },
-        label = "ArtistTopBarSurfaceProgress"
-    ) { shown -> if (shown) 1f else 0f }
     val avatarProgress by identityTransition.animateFloat(
         transitionSpec = {
             tween(
@@ -159,7 +144,9 @@ internal fun ArtistIdentityTopBar(
     val density = LocalDensity.current
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     val identityMotionDistancePx = with(density) { ArtistTopBarIdentityMotionDistance.toPx() }
-    val contentColor = if (variant == ArtistHeaderVariant.Banner) {
+    val contentColor = if (
+        backgroundKind == ArtistHeroBackgroundKind.Banner && !identityVisible
+    ) {
         Color.White.copy(alpha = 0.94f)
     } else {
         MaterialTheme.colorScheme.onSurface
@@ -172,14 +159,6 @@ internal fun ArtistIdentityTopBar(
             .clipToBounds(),
         contentAlignment = Alignment.CenterStart
     ) {
-        if (artistTopBarSurfaceTreatment(variant) == ArtistTopBarSurfaceTreatment.ArtistColor) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = surfaceProgress }
-                    .background(artistColor)
-            )
-        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()

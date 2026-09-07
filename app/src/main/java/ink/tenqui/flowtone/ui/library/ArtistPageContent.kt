@@ -2,7 +2,6 @@ package ink.tenqui.flowtone.ui.library
 
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.data.local.localArtistStableId
-import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.player.parseArtistCandidates
 
 internal fun artistAlbumsFor(
@@ -35,7 +34,7 @@ internal fun artistMatchesAlbumSongs(
 
 internal fun artistStatisticsText(songCount: Int, albumCount: Int): String {
     val songs = "$songCount 首歌曲"
-    return if (albumCount > 0) "$songs\n$albumCount 张专辑" else songs
+    return if (albumCount > 0) "$songs · $albumCount 张专辑" else songs
 }
 
 /** Provider counts are profile metadata and do not imply loaded song or album entities. */
@@ -43,7 +42,7 @@ internal fun artistMetadataStatisticsText(songCount: Int?, albumCount: Int?): St
     return listOfNotNull(
         songCount?.let { "$it 首歌曲" },
         albumCount?.let { "$it 张专辑" }
-    ).joinToString("\n").takeIf(String::isNotEmpty)
+    ).joinToString(" · ").takeIf(String::isNotEmpty)
 }
 
 internal data class ArtistPageContentVisibility(
@@ -59,7 +58,6 @@ internal enum class ArtistPrimaryContentPresentation {
 }
 
 internal const val ArtistLoadingSkeletonCount = 7
-internal const val ArtistHeaderTimingOrder = 0
 
 internal fun artistLoadingContentIdentity(entryKey: String): String =
     "$entryKey:artist-loading-content"
@@ -112,13 +110,6 @@ internal fun artistLoadingSkeletonKeys(
 ): List<String> = List(skeletonCount.coerceAtLeast(0)) { index ->
         "artist-loading-skeleton-$index"
 }
-
-internal fun artistHeaderTimingProgress(pageProgress: Float): Float =
-    PageMotion.elementProgress(
-        pageProgress = pageProgress,
-        order = ArtistHeaderTimingOrder,
-        orderCount = ArtistTransitionOrderCount
-    )
 
 internal fun artistPageContentVisibility(
     hasLocalContent: Boolean,

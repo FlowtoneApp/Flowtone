@@ -27,7 +27,7 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
-import ink.tenqui.flowtone.ui.library.ArtistHeaderStateOwner
+import ink.tenqui.flowtone.ui.library.ArtistHeroStateOwner
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateOwner
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateOwner
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
@@ -99,7 +99,7 @@ internal fun SecondaryPageHost(
     destination: SecondaryDestination,
     navigationEntryKey: String,
     artistScrollStateOwner: ArtistScrollStateOwner? = null,
-    artistHeaderStateOwner: ArtistHeaderStateOwner? = null,
+    artistHeroStateOwner: ArtistHeroStateOwner? = null,
     artistTopBarStateOwner: ArtistTopBarStateOwner? = null,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
@@ -431,9 +431,9 @@ internal fun SecondaryPageHost(
                 val artist = destination as? SecondaryDestination.Artist ?: return@Box
                 val providerIdentity = artist.identity as? ArtistDestinationIdentity.Provider
                   ArtistPage(
-                    headerOwnerKey = navigationEntryKey,
+                    entryKey = navigationEntryKey,
                     scrollStateOwner = checkNotNull(artistScrollStateOwner),
-                    headerStateOwner = checkNotNull(artistHeaderStateOwner),
+                    heroStateOwner = checkNotNull(artistHeroStateOwner),
                     artistTopBarStateOwner = checkNotNull(artistTopBarStateOwner),
                     artistName = artist.name,
                     hasLocalContent = artist.identity.hasLocalContent,

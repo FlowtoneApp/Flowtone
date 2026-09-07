@@ -11,11 +11,11 @@ internal data class ArtistTopBarThresholds(
 )
 
 internal fun artistTopBarThresholds(
-    headerHeightPx: Int,
+    heroHeightPx: Int,
     topBarHeightPx: Int,
     hysteresisPx: Int
 ): ArtistTopBarThresholds {
-    val show = (headerHeightPx - topBarHeightPx).coerceAtLeast(0)
+    val show = (heroHeightPx - topBarHeightPx).coerceAtLeast(0)
     return ArtistTopBarThresholds(
         showPx = show,
         hidePx = (show - hysteresisPx.coerceAtLeast(0)).coerceAtLeast(0)

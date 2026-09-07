@@ -45,6 +45,8 @@ class ProviderUiRegressionFixtureTest {
         )
         assertArtist(source, "long-biography", "Long Biography Test")
         assertArtist(source, "exactly-two-line-bio", "Exactly Two Line Biography Test")
+        assertArtist(source, "exactly-three-line-bio", "Exactly Three Line Biography Test")
+        assertArtist(source, "no-biography", "No Biography Test")
         assertArtist(source, "slow-loading-banner", "Slow Loading / 7 Skeleton Test")
         assertTrue(source.contains("async searchPage(request)"))
         assertTrue(source.contains("request.category !== 'user'"))
@@ -64,6 +66,8 @@ class ProviderUiRegressionFixtureTest {
             "long-artist-title",
             "long-biography",
             "exactly-two-line-bio",
+            "exactly-three-line-bio",
+            "no-biography",
             "slow-loading-banner"
         ).forEach { artistId ->
             assertTrue(source.contains("id: '$artistId'"))
@@ -83,12 +87,22 @@ class ProviderUiRegressionFixtureTest {
             ?.groupValues
             ?.get(1)
         assertEquals(2, checkNotNull(cloudBiography).windowed(2).count { it == "\\n" })
-        assertTrue(cloudBiography.contains("Biography Focus presentation"))
+        assertTrue(cloudBiography.contains("original page Cloud"))
         val twoLineArtist = source.between(
             "id: 'exactly-two-line-bio'",
-            "id: 'slow-loading-banner'"
+            "id: 'exactly-three-line-bio'"
         )
         assertFalse(twoLineArtist.contains("third short line"))
+        val threeLineArtist = source.between(
+            "id: 'exactly-three-line-bio'",
+            "id: 'no-biography'"
+        )
+        assertEquals(2, threeLineArtist.windowed(2).count { it == "\\n" })
+        val noBiographyArtist = source.between(
+            "id: 'no-biography'",
+            "id: 'slow-loading-banner'"
+        )
+        assertFalse(noBiographyArtist.contains("biography:"))
         assertTrue(source.contains("'long-album-title'"))
         assertTrue(source.contains("An Extremely Long Album Title Created Specifically"))
         assertTrue(source.contains("addTracks('banner-scroll', 'banner-many-tracks', 15"))
@@ -129,6 +143,8 @@ class ProviderUiRegressionFixtureTest {
                 "This Is An Extremely Long Artist Name Used To Verify Top Bar Ellipsis Behaviour",
             "long-biography" to "Long Biography Test",
             "exactly-two-line-bio" to "Exactly Two Line Biography Test",
+            "exactly-three-line-bio" to "Exactly Three Line Biography Test",
+            "no-biography" to "No Biography Test",
             "slow-loading-banner" to "Slow Loading / 7 Skeleton Test"
         )
 

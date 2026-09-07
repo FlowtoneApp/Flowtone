@@ -46,7 +46,7 @@ import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FullTitleOverlay
-import ink.tenqui.flowtone.ui.library.ArtistHeaderStateStore
+import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
@@ -70,7 +70,7 @@ internal fun FlowtoneScaffold(
     val coroutineScope = rememberCoroutineScope()
     val homeScrollState = rememberScrollState()
     val libraryPlaylistController = rememberLibraryPlaylistController()
-    val artistHeaderStateStore = remember { ArtistHeaderStateStore() }
+    val artistHeroStateStore = remember { ArtistHeroStateStore() }
     val artistScrollStateStore = remember { ArtistScrollStateStore() }
     val artistTopBarStateStore = remember { ArtistTopBarStateStore() }
     val topLevelPageCollapseProgress = rememberTopLevelPageCollapseProgress(
@@ -331,7 +331,7 @@ internal fun FlowtoneScaffold(
                     playlistSortProgress = playlistSortProgress,
                     descriptionBlurRadius = descriptionBlurRadius,
                     onFullTitleRequest = showFullTitle,
-                    artistHeaderStateStore = artistHeaderStateStore,
+                    artistHeroStateStore = artistHeroStateStore,
                     artistScrollStateStore = artistScrollStateStore,
                     artistTopBarStateStore = artistTopBarStateStore
                 )
@@ -379,7 +379,7 @@ internal fun FlowtoneScaffold(
                 onFullTitleRequest = showFullTitle,
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
-                artistHeaderStateStore = artistHeaderStateStore,
+                artistHeroStateStore = artistHeroStateStore,
                 artistScrollStateStore = artistScrollStateStore,
                 artistTopBarStateStore = artistTopBarStateStore,
                 modifier = Modifier.blur(

@@ -6,11 +6,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.key
-import androidx.compose.ui.graphics.Color
-import ink.tenqui.flowtone.ui.library.ArtistHeaderStateStore
+import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
+import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
-import ink.tenqui.flowtone.ui.library.artistHeaderVariant
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 
 @Composable
@@ -24,7 +23,7 @@ internal fun FlowtoneScaffoldTopLayer(
     playlistSortProgress: Float,
     descriptionBlurRadius: Dp,
     onFullTitleRequest: (String) -> Unit,
-    artistHeaderStateStore: ArtistHeaderStateStore,
+    artistHeroStateStore: ArtistHeroStateStore,
     artistScrollStateStore: ArtistScrollStateStore,
     artistTopBarStateStore: ArtistTopBarStateStore
 ) {
@@ -36,23 +35,23 @@ internal fun FlowtoneScaffoldTopLayer(
                 artistRoute.artistEntryKey
             ).position
         )
-        val headerOwner = artistHeaderStateStore.ownerFor(
+        val heroOwner = artistHeroStateStore.ownerFor(
             entryKey = artistRoute.artistEntryKey,
-            artistName = artistRoute.artist.name,
-            avatarImage = artistRoute.artist.identity.avatar,
-            profileMetadata = artistRoute.artist.identity.profileMetadata
+            initialAvatar = artistRoute.artist.identity.avatar,
+            initialBackgroundKind = if (
+                artistRoute.artist.identity.profileMetadata?.banner != null
+            ) {
+                ArtistHeroBackgroundKind.Banner
+            } else {
+                ArtistHeroBackgroundKind.Cloud
+            }
         )
         key(artistRoute.artistEntryKey) {
-            val headerModel = headerOwner.renderModel
             ArtistIdentityTopBar(
                 artistName = artistRoute.artist.name,
-                avatarImage = headerModel?.avatarImage
-                    ?: headerOwner.avatarImage
+                avatarImage = heroOwner.resolvedAvatar
                     ?: artistRoute.artist.identity.avatar,
-                variant = headerModel?.variant ?: artistHeaderVariant(
-                    artistRoute.artist.identity.profileMetadata?.banner != null
-                ),
-                artistColor = headerModel?.artistColor ?: Color.Transparent,
+                backgroundKind = heroOwner.backgroundKind,
                 identityVisible = artistTopBarIdentityVisible(
                     route = artistRoute,
                     scrollIdentityVisible = topBarStateOwner.visible
@@ -60,8 +59,8 @@ internal fun FlowtoneScaffoldTopLayer(
                 albumEntryKey = artistRoute.albumEntryKey,
                 albumTitle = artistRoute.albumTitle,
                 onBack = {
-                    if (headerOwner.focusRequested) {
-                        headerOwner.focusRequested = false
+                    if (heroOwner.focusRequested) {
+                        heroOwner.focusRequested = false
                     } else {
                         callbacks.onCloseSecondaryPage()
                     }

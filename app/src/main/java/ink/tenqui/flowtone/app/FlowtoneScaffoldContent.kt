@@ -46,7 +46,8 @@ import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.components.rememberAlbumArtworkCloudPalette
-import ink.tenqui.flowtone.ui.library.ArtistHeaderStateStore
+import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
+import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
@@ -81,7 +82,7 @@ internal fun FlowtoneScaffoldContent(
     onFullTitleRequest: (String) -> Unit,
     innerPadding: PaddingValues,
     topBarBackgroundHeight: androidx.compose.ui.unit.Dp,
-    artistHeaderStateStore: ArtistHeaderStateStore,
+    artistHeroStateStore: ArtistHeroStateStore,
     artistScrollStateStore: ArtistScrollStateStore,
     artistTopBarStateStore: ArtistTopBarStateStore,
     modifier: Modifier = Modifier
@@ -477,12 +478,17 @@ internal fun FlowtoneScaffoldContent(
                                 }
                                 val artistDestination =
                                     page.destination as? SecondaryDestination.Artist
-                                val artistHeaderStateOwner = if (artistDestination != null) {
-                                    artistHeaderStateStore.ownerFor(
+                                val artistHeroStateOwner = if (artistDestination != null) {
+                                    artistHeroStateStore.ownerFor(
                                         entryKey = page.entry.uiStateKey(),
-                                        artistName = artistDestination.name,
-                                        avatarImage = artistDestination.identity.avatar,
-                                        profileMetadata = artistDestination.identity.profileMetadata
+                                        initialAvatar = artistDestination.identity.avatar,
+                                        initialBackgroundKind = if (
+                                            artistDestination.identity.profileMetadata?.banner != null
+                                        ) {
+                                            ArtistHeroBackgroundKind.Banner
+                                        } else {
+                                            ArtistHeroBackgroundKind.Cloud
+                                        }
                                     )
                                 } else {
                                     null
@@ -502,7 +508,7 @@ internal fun FlowtoneScaffoldContent(
                         destination = page.destination,
                         navigationEntryKey = page.entry.uiStateKey(),
                         artistScrollStateOwner = artistScrollStateOwner,
-                        artistHeaderStateOwner = artistHeaderStateOwner,
+                        artistHeroStateOwner = artistHeroStateOwner,
                         artistTopBarStateOwner = artistTopBarStateOwner,
                         pageScope = pageScope,
                         appPreferences = state.appPreferences,
@@ -596,7 +602,7 @@ internal fun FlowtoneScaffoldContent(
                 }
             }
             SideEffect {
-                artistHeaderStateStore.retainEntries(activeArtistEntryKeys)
+                artistHeroStateStore.retainEntries(activeArtistEntryKeys)
             }
         }
 }

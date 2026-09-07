@@ -9,8 +9,8 @@ const artists = [
     title: 'Banner Scroll Test',
     artworkUrl: image(256, 256, '0F766E', 'Banner'),
     bannerUrl: image(1600, 620, '0F766E', 'Banner+Scroll'),
-    aliases: ['Docked Horizon', 'Banner Fixture'],
-    biography: 'A deterministic medium-length biography for observing the expanded banner header, its collapsed content handoff, and its docked identity. It intentionally occupies more than two compact lines without becoming long enough to require focused internal scrolling.',
+    aliases: ['Full Width Hero', 'Banner Fixture'],
+    biography: 'A deterministic medium-length biography for observing the full-width Banner, centered avatar, compact Artist Info Card, and three-line biography preview. It is long enough to expose the explicit expand action without requiring a large first viewport.',
     songCount: 25,
     albumCount: 4
   },
@@ -19,7 +19,7 @@ const artists = [
     title: 'No Banner Cloud Test',
     artworkUrl: image(256, 256, '4338CA', 'Cloud'),
     aliases: ['Cloud Fixture', 'No Hero Image'],
-    biography: 'This artist intentionally has no banner URL.\nThe cloud must remain visible behind the expanded identity and Biography Focus presentation.\nThis third short line guarantees Focus without turning the fixture into an internal-scroll test.',
+    biography: 'This artist intentionally has no banner URL.\nThe original page Cloud remains the only Hero background.\nThe third line verifies the shared Banner and Cloud layout.',
     songCount: 5,
     albumCount: 1
   },
@@ -28,7 +28,7 @@ const artists = [
     title: 'This Is An Extremely Long Artist Name Used To Verify Top Bar Ellipsis Behaviour',
     artworkUrl: image(256, 256, '9A3412', 'Long+Name'),
     aliases: ['Long Title Fixture'],
-    biography: 'A compact profile used to verify that a docked title yields its avatar before it ellipsizes and exposes the full-title overlay.',
+    biography: 'A compact profile used to verify centered wrapping in the Hero and ellipsis in the independent TopBar.',
     songCount: 18,
     albumCount: 1
   },
@@ -37,7 +37,7 @@ const artists = [
     title: 'Long Biography Test',
     artworkUrl: image(256, 256, '7C3AED', 'Biography'),
     aliases: ['Focus Fixture', 'Scrollable Biography'],
-    biography: 'This original fixture biography is deliberately long. It begins with a calm description of a fictional recording project built for visual regression work. Each paragraph adds enough distinct material to exceed the focused profile viewport on a phone-sized display. The compact state should reveal only the intended short excerpt before the focused presentation expands.\n\nIn the focused state, this text must remain readable while the surrounding Artist page stays stable. The internal biography viewport should become scrollable without changing the provider identity, Artist counts, Album associations, or page navigation entry. The words are intentionally ordinary and self-contained so the fixture does not depend on copyrighted artist notes or remote metadata.\n\nA final paragraph provides additional vertical length for reliable regression coverage. It mentions slow afternoons, synthetic clouds, carefully labelled tracks, and a test bench where every title, identifier, and ordering value remains fixed between builds. The purpose is not musical realism; it is a predictable focused biography that can be expanded, scrolled, dismissed, and revisited during UI verification.',
+    biography: 'This original fixture biography is deliberately long. It begins with a calm description of a fictional recording project built for visual regression work. Each paragraph adds enough distinct material to exceed the focused profile viewport on a phone-sized display. The Artist Info Card should show only its three-line preview before the focused presentation opens.\n\nIn the focused state, this text must remain readable while the surrounding Artist page stays stable. The internal biography viewport should become scrollable without changing the provider identity, Artist counts, Album associations, or page navigation entry. The words are intentionally ordinary and self-contained so the fixture does not depend on copyrighted artist notes or remote metadata.\n\nA final paragraph provides additional vertical length for reliable regression coverage. It mentions slow afternoons, synthetic clouds, carefully labelled tracks, and a test bench where every title, identifier, and ordering value remains fixed between builds. The purpose is not musical realism; it is a predictable focused biography that can be expanded, scrolled, dismissed, and revisited during UI verification.',
     songCount: 4,
     albumCount: 1
   },
@@ -48,6 +48,23 @@ const artists = [
     aliases: ['No Reveal Fixture'],
     biography: 'First clear fixture line.\nSecond clear fixture line.',
     songCount: 3,
+    albumCount: 1
+  },
+  {
+    id: 'exactly-three-line-bio',
+    title: 'Exactly Three Line Biography Test',
+    artworkUrl: image(256, 256, '166534', 'Three+Lines'),
+    aliases: ['Preview Boundary Fixture'],
+    biography: 'First fixed preview line.\nSecond fixed preview line.\nThird fixed preview line.',
+    songCount: 3,
+    albumCount: 1
+  },
+  {
+    id: 'no-biography',
+    title: 'No Biography Test',
+    artworkUrl: image(256, 256, '334155', 'No+Bio'),
+    aliases: ['No Biography Fixture'],
+    songCount: 2,
     albumCount: 1
   },
   {
@@ -76,6 +93,8 @@ const albums = [
   album('long-title-record', 'A Reasonably Titled Record', 'long-artist-title', 18),
   album('biography-notes', 'Biography Notes', 'long-biography', 4),
   album('two-line-notes', 'Two Line Notes', 'exactly-two-line-bio', 3),
+  album('three-line-notes', 'Three Line Notes', 'exactly-three-line-bio', 3),
+  album('no-biography-record', 'No Biography Record', 'no-biography', 2),
   album('slow-arrival', 'Slow Arrival', 'slow-loading-banner', 4)
 ];
 
@@ -94,6 +113,8 @@ addTracks('no-banner-cloud', 'cloud-archive', 5, 'Cloud Archive Track');
 addTracks('long-artist-title', 'long-title-record', 18, 'Long Artist Track');
 addTracks('long-biography', 'biography-notes', 4, 'Biography Note');
 addTracks('exactly-two-line-bio', 'two-line-notes', 3, 'Two Line Note');
+addTracks('exactly-three-line-bio', 'three-line-notes', 3, 'Three Line Note');
+addTracks('no-biography', 'no-biography-record', 2, 'No Biography Track');
 addTracks('slow-loading-banner', 'slow-arrival', 4, 'Slow Arrival Track');
 
 let collectionDelayDeadline = 0;

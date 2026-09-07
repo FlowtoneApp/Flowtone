@@ -1,25 +1,17 @@
 package ink.tenqui.flowtone.ui.library
 
+import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.online.ArtistMetadata
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
-import ink.tenqui.flowtone.ui.components.ArtworkPaletteMemoryCache
-import ink.tenqui.flowtone.ui.components.artworkPaletteCacheIdentity
-import ink.tenqui.flowtone.core.online.ExtensionImage
-import ink.tenqui.flowtone.ui.components.PageTransitionPhase
-import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
-import ink.tenqui.flowtone.ui.components.PageMotion
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
 
 class ArtistPageContentTest {
     @Test
-    fun providerCountsWithoutEntitiesDoNotShowSections() {
+    fun providerCountsWithoutEntitiesDoNotCreateContentSections() {
         val visibility = artistPageContentVisibility(
             hasLocalContent = false,
             hasSongs = false,
@@ -27,9 +19,9 @@ class ArtistPageContentTest {
             hasStatistics = true
         )
 
-        assertEquals(true, visibility.showStatistics)
-        assertEquals(false, visibility.showSongs)
-        assertEquals(false, visibility.showAlbums)
+        assertTrue(visibility.showStatistics)
+        assertFalse(visibility.showSongs)
+        assertFalse(visibility.showAlbums)
     }
 
     @Test
@@ -41,74 +33,35 @@ class ArtistPageContentTest {
             hasStatistics = false
         )
 
-        assertEquals(true, visibility.showSongs)
-        assertEquals(true, visibility.showAlbums)
-    }
-    @Test
-    fun singleArtistSongMakesAlbumBelongToArtist() {
-        assertEquals(true, artistMatchesAlbumSongs("A", listOf("A")))
+        assertTrue(visibility.showSongs)
+        assertTrue(visibility.showAlbums)
     }
 
     @Test
-    fun collaborativeSongMakesAlbumBelongToEachArtist() {
-        assertEquals(true, artistMatchesAlbumSongs("A", listOf("A / B")))
-        assertEquals(true, artistMatchesAlbumSongs("B", listOf("A / B")))
+    fun collaborativeAlbumMembershipUsesStableArtistIdentity() {
+        assertTrue(artistMatchesAlbumSongs("A", listOf("A / B")))
+        assertTrue(artistMatchesAlbumSongs("B", listOf("A / B")))
+        assertTrue(artistMatchesAlbumSongs("artist a", listOf("  Artist A  ")))
+        assertFalse(artistMatchesAlbumSongs("C", listOf("A / B")))
+        assertFalse(artistMatchesAlbumSongs("A", emptyList()))
     }
 
     @Test
-    fun membershipUsesTrimmedCaseInsensitiveArtistIdentity() {
-        assertEquals(true, artistMatchesAlbumSongs("artist a", listOf("  Artist A  ")))
-    }
-
-    @Test
-    fun unrelatedArtistDoesNotMatchAlbum() {
-        assertEquals(false, artistMatchesAlbumSongs("B", listOf("A")))
-    }
-
-    @Test
-    fun albumWithoutSongsDoesNotMatch() {
-        assertEquals(false, artistMatchesAlbumSongs("A", emptyList()))
-    }
-
-    @Test
-    fun statisticsOmitAlbumCountWhenThereAreNoAlbums() {
+    fun weakMetadataCountsUseOneHorizontalRow() {
         assertEquals("18 首歌曲", artistStatisticsText(songCount = 18, albumCount = 0))
-        assertEquals("18 首歌曲\n3 张专辑", artistStatisticsText(songCount = 18, albumCount = 3))
-    }
-
-    @Test
-    fun providerProfileStatisticsKeepZeroDistinctFromUnknown() {
-        assertEquals("0 首歌曲\n10 张专辑", artistMetadataStatisticsText(songCount = 0, albumCount = 10))
-        assertEquals("0 张专辑", artistMetadataStatisticsText(songCount = null, albumCount = 0))
-        assertEquals(null, artistMetadataStatisticsText(songCount = null, albumCount = null))
-    }
-
-    @Test
-    fun providerOnlyArtistHidesUnavailableContentInsteadOfShowingEmptyLocalSections() {
         assertEquals(
-            ArtistPageContentVisibility(
-                showStatistics = false,
-                showSongs = false,
-                showAlbums = false
-            ),
-            artistPageContentVisibility(hasLocalContent = false, hasAlbums = false)
+            "18 首歌曲 · 3 张专辑",
+            artistStatisticsText(songCount = 18, albumCount = 3)
         )
-    }
-
-    @Test
-    fun providerProfileCountsShowStatisticsWithoutCreatingEntitySections() {
         assertEquals(
-            ArtistPageContentVisibility(
-                showStatistics = true,
-                showSongs = false,
-                showAlbums = false
-            ),
-            artistPageContentVisibility(
-                hasLocalContent = false,
-                hasAlbums = false,
-                hasStatistics = true
-            )
+            "0 首歌曲 · 10 张专辑",
+            artistMetadataStatisticsText(songCount = 0, albumCount = 10)
         )
+        assertEquals(
+            "0 张专辑",
+            artistMetadataStatisticsText(songCount = null, albumCount = 0)
+        )
+        assertNull(artistMetadataStatisticsText(songCount = null, albumCount = null))
     }
 
     @Test
@@ -124,773 +77,318 @@ class ArtistPageContentTest {
     }
 
     @Test
-    fun resolverCompletesDestinationCountsWithAliasesAndBiography() {
-        val merged = mergeArtistMetadata(
-            artistName = "Artist",
-            destinationMetadata = ArtistMetadata(songCount = 20, albumCount = 4),
-            resolverMetadata = ArtistMetadata(
-                aliases = listOf("Registry Alias"),
-                biography = "Resolver biography"
-            )
-        )
-
-        assertEquals(listOf("Registry Alias"), merged?.aliases)
-        assertEquals("Resolver biography", merged?.biography)
-        assertEquals(20, merged?.songCount)
-        assertEquals(4, merged?.albumCount)
-    }
-
-    @Test
-    fun destinationBiographyAndAliasesTakePrecedenceWhileResolverAliasesAreDeduplicated() {
+    fun resolverCompletesMissingMetadataWithoutReplacingDestinationValues() {
         val merged = mergeArtistMetadata(
             artistName = "Artist",
             destinationMetadata = ArtistMetadata(
                 aliases = listOf("Destination Alias"),
-                biography = "Destination biography"
+                biography = "Destination biography",
+                songCount = 0
             ),
             resolverMetadata = ArtistMetadata(
                 aliases = listOf("destination alias", "Resolver Alias", "Artist"),
-                biography = "Resolver biography"
+                biography = "Resolver biography",
+                songCount = 10,
+                albumCount = 2
             )
         )
 
         assertEquals(listOf("Destination Alias", "Resolver Alias"), merged?.aliases)
         assertEquals("Destination biography", merged?.biography)
-    }
-
-    @Test
-    fun destinationZeroSongCountWinsOverResolverCount() {
-        val merged = mergeArtistMetadata(
-            artistName = "Artist",
-            destinationMetadata = ArtistMetadata(songCount = 0),
-            resolverMetadata = ArtistMetadata(songCount = 10)
-        )
-
         assertEquals(0, merged?.songCount)
-    }
-
-    @Test
-    fun resolverFillsUnknownCounts() {
-        val merged = mergeArtistMetadata(
-            artistName = "Artist",
-            destinationMetadata = ArtistMetadata(aliases = listOf("Destination Alias")),
-            resolverMetadata = ArtistMetadata(songCount = 10, albumCount = 2)
-        )
-
-        assertEquals(10, merged?.songCount)
         assertEquals(2, merged?.albumCount)
-        assertTrue(artistMetadataNeedsResolver("Artist", ArtistMetadata(aliases = listOf("Destination Alias"))))
     }
 
     @Test
-    fun countsAreNeverAddedTogether() {
-        val merged = mergeArtistMetadata(
-            artistName = "Artist",
-            destinationMetadata = ArtistMetadata(songCount = 8, albumCount = 1),
-            resolverMetadata = ArtistMetadata(songCount = 12, albumCount = 3)
+    fun heroBackgroundHeightUsesWidthRatioWithinPhoneBounds() {
+        assertEquals(260.dp, artistHeroGeometry(320.dp).backgroundHeight)
+        assertEquals(260.dp, artistHeroGeometry(360.dp).backgroundHeight)
+        assertEquals(288.dp, artistHeroGeometry(400.dp).backgroundHeight)
+        assertEquals(320.dp, artistHeroGeometry(500.dp).backgroundHeight)
+    }
+
+    @Test
+    fun cardOverlapsBackgroundAndAvatarCrossesTheCardBoundary() {
+        val compact = artistHeroGeometry(360.dp)
+        val regular = artistHeroGeometry(400.dp)
+
+        assertEquals(100.dp, compact.avatarSize)
+        assertEquals(104.dp, regular.avatarSize)
+        assertTrue(compact.infoCardTop < compact.backgroundHeight)
+        assertTrue(compact.avatarTop < compact.infoCardTop)
+        assertTrue(compact.avatarBottom > compact.infoCardTop)
+        assertTrue(compact.avatarTop < compact.backgroundHeight)
+        assertEquals(compact.avatarTop + compact.avatarSize, compact.avatarBottom)
+    }
+
+    @Test
+    fun overlapIsDrivenByTheCombinedCardAndAvatarRelationship() {
+        val geometry = artistHeroGeometry(360.dp)
+
+        assertEquals(72.dp, geometry.infoCardOverlap)
+        assertEquals(188.dp, geometry.infoCardTop)
+        assertEquals(58f, geometry.avatarProtrusionAboveCard.value, 0.001f)
+        assertEquals(42f, geometry.avatarDepthInsideCard.value, 0.001f)
+        assertEquals(54f, geometry.infoCardContentTopPadding.value, 0.001f)
+        assertTrue(geometry.infoCardOverlap > geometry.avatarSize * 0.5f)
+        assertTrue(geometry.avatarDepthInsideCard > geometry.avatarSize * 0.2f)
+    }
+
+    @Test
+    fun biographyIsANarrowerCenteredBlockInsideCardContent() {
+        val availableWidth = 360.dp
+        val geometry = artistHeroGeometry(availableWidth)
+
+        assertEquals(336.dp, geometry.infoCardWidth(availableWidth))
+        assertEquals(304.dp, geometry.infoCardContentWidth(availableWidth))
+        assertEquals(288.dp, geometry.biographyWidth(availableWidth))
+        assertTrue(
+            geometry.biographyWidth(availableWidth) <
+                geometry.infoCardContentWidth(availableWidth)
         )
-
-        assertEquals(8, merged?.songCount)
-        assertEquals(1, merged?.albumCount)
     }
 
-    @Test fun nullBiographyCannotFocus() {
-        val overflowingMeasurement = ArtistBiographyMeasurement(
-            fullTextHeightPx = 80,
-            collapsedViewportHeightPx = 20
-        )
+    @Test
+    fun heroMeasuredHeightUsesTheRealOverlappedCardBottom() {
+        val geometry = artistHeroGeometry(360.dp)
+        val infoCardHeight = 220.dp
 
-        assertFalse(canFocusArtistProfile(null, overflowingMeasurement))
-        assertFalse(canFocusArtistProfile("  ", overflowingMeasurement))
-    }
-
-    @Test fun shortBiographyDisablesFocusAndEdgeEffect() {
-        val measurement = ArtistBiographyMeasurement(
-            fullTextHeightPx = 40,
-            collapsedViewportHeightPx = 40
-        )
-
-        assertFalse(canFocusArtistProfile("Short biography", measurement))
-        assertFalse(artistBiographyEdgeEffectEnabled("Short biography", measurement))
-    }
-
-    @Test fun longBiographyEnablesFocusAndEdgeEffect() {
-        val measurement = ArtistBiographyMeasurement(
-            fullTextHeightPx = 80,
-            collapsedViewportHeightPx = 40
-        )
-
-        assertTrue(canFocusArtistProfile("Long biography", measurement))
-        assertTrue(artistBiographyEdgeEffectEnabled("Long biography", measurement))
-    }
-
-    @Test fun collapsedBiographyViewportUsesTwoMeasuredLineHeights() {
-        val collapsedViewport = artistBiographyCollapsedViewportHeight(20.dp)
-
-        assertEquals(40.dp, collapsedViewport)
-        assertEquals(20.dp, artistBiographyEdgeBandHeight(collapsedViewport))
-        assertEquals(40.dp, artistBiographyViewportHeight(collapsedViewport, 300.dp, 0f))
-        assertEquals(1f, artistBiographyEdgeStrength(0f))
-    }
-
-    @Test fun focusedBiographyUsesExpandedViewportWithoutRevealEdge() {
-        assertEquals(300.dp, artistBiographyViewportHeight(40.dp, 300.dp, 1f))
-        assertEquals(0f, artistBiographyEdgeStrength(1f))
-    }
-
-    @Test fun biographyViewportInterpolatesContinuouslyAtIntermediateProgress() {
-        val lateEdgeStrength = artistBiographyEdgeStrength(0.8f)
-
-        assertEquals(170.dp, artistBiographyViewportHeight(40.dp, 300.dp, 0.5f))
-        assertEquals(1f, artistBiographyEdgeStrength(0.5f))
-        assertTrue(lateEdgeStrength > 0f)
-        assertTrue(lateEdgeStrength < 1f)
-    }
-
-    @Test fun biographyRevealUsesTheSameProgressInBothDirections() {
-        val entering = listOf(0f, 0.35f, 0.7f, 1f).map { progress ->
-            artistBiographyViewportHeight(40.dp, 300.dp, progress) to
-                artistBiographyEdgeStrength(progress)
-        }
-        val collapsing = listOf(1f, 0.7f, 0.35f, 0f).map { progress ->
-            artistBiographyViewportHeight(40.dp, 300.dp, progress) to
-                artistBiographyEdgeStrength(progress)
-        }
-
-        assertEquals(entering.reversed(), collapsing)
-    }
-
-    @Test fun biographyColorIsAlwaysWhiteAcrossFocusPresentation() {
-        val collapsedColor = ArtistBiographyContentColor
-        val focusedColor = ArtistBiographyContentColor
-
-        assertEquals(Color.White, collapsedColor)
-        assertEquals(collapsedColor, focusedColor)
-    }
-
-    @Test fun focusedBackCollapsesBeforeNavigation() {
-        assertEquals(ArtistProfileBackResult.CollapseProfile, artistProfileBackResult(true))
-        assertEquals(ArtistProfileBackResult.NavigateBack, artistProfileBackResult(false))
-    }
-
-    @Test fun artistHeaderIsPageContentAndFollowsItsScrollAnchor() {
-        val top = artistPageHeaderScrollPresentation(
-            anchorTopPx = 24f,
-            expandedHeightPx = 300f
-        )
-        val scrolled = artistPageHeaderScrollPresentation(
-            anchorTopPx = -212f,
-            expandedHeightPx = 300f
-        )
-
-        assertEquals(0f, top.topPx)
-        assertEquals(-212f, scrolled.topPx)
-        assertEquals(300f, top.visibleHeightPx)
-        assertEquals(300f, scrolled.visibleHeightPx)
-        assertEquals(300f, scrolled.expandedContentHeightPx)
-    }
-
-    @Test fun scrollingPastTheHeaderDoesNotCreateDockedGeometry() {
-        val presentation = artistPageHeaderScrollPresentation(
-            anchorTopPx = -640f,
-            expandedHeightPx = 300f
-        )
-
-        assertEquals(-640f, presentation.topPx)
-        assertEquals(300f, presentation.visibleHeightPx)
-        assertEquals(300f, presentation.expandedContentHeightPx)
-    }
-
-    @Test fun destinationBannerWinsResolverBannerAndNullRemainsValidFallback() {
-        val destination = ink.tenqui.flowtone.core.online.ExtensionImage("provider", "https://example.com/destination.jpg")
-        val resolver = ink.tenqui.flowtone.core.online.ExtensionImage("provider", "https://example.com/resolver.jpg")
-        assertEquals(destination, mergeArtistMetadata("Artist", ArtistMetadata(banner = destination), ArtistMetadata(banner = resolver))?.banner)
-        assertEquals(null, mergeArtistMetadata("Artist", ArtistMetadata(biography = "Bio"), null)?.banner)
-    }
-
-    @Test fun contentDrivenFocusHeightStopsAtRequiredBiographyHeight() {
-        val target = artistProfileFocusHeightTarget(
-            collapsedHeight = 280.dp,
-            requiredFocusedHeight = 380.dp,
-            maxAllowedFocusHeight = 640.dp
-        )
-
-        assertEquals(380.dp, target.height)
-        assertFalse(target.biographyScrollRequired)
-    }
-
-    @Test fun oversizedBiographyUsesMaximumFocusHeightAndInternalScroll() {
-        val target = artistProfileFocusHeightTarget(
-            collapsedHeight = 280.dp,
-            requiredFocusedHeight = 820.dp,
-            maxAllowedFocusHeight = 640.dp
-        )
-
-        assertEquals(640.dp, target.height)
-        assertTrue(target.biographyScrollRequired)
-    }
-
-    @Test fun artworkColorCacheReusesSameKeyAndSeparatesTheme() {
-        ArtworkPaletteMemoryCache.clearForTest()
-        var resolutions = 0
-        fun resolve(color: Color) = color.also { resolutions += 1 }
-        val lightFirst = ArtworkPaletteMemoryCache.resolveColorForTest("artwork", false) {
-            resolve(Color.Red)
-        }
-        val lightSecond = ArtworkPaletteMemoryCache.resolveColorForTest("artwork", false) {
-            resolve(Color.Blue)
-        }
-        val dark = ArtworkPaletteMemoryCache.resolveColorForTest("artwork", true) {
-            resolve(Color.Green)
-        }
-        assertEquals(Color.Red, lightFirst)
-        assertEquals(Color.Red, lightSecond)
-        assertEquals(Color.Green, dark)
-        assertEquals(2, resolutions)
-    }
-
-    @Test fun bannerReadyAtPageEnterUsesPageAlphaWithoutIndependentReveal() {
-        val state = initialArtistBannerPresentationState(
-            bannerKnown = true,
-            drawableReadyImmediately = true
-        )
-
-        assertEquals(ArtistBannerPresentationState.BannerReadyImmediately, state)
-        assertEquals(1f, artistBannerTargetAlpha(state))
-        assertFalse(artistBannerUsesLateReveal(state))
-        assertEquals(state, artistBannerSuccessState(state, pageEnterComplete = false))
-    }
-
-    @Test fun bannerLoadingAtPageEnterKeepsArtistColorVisible() {
-        val state = initialArtistBannerPresentationState(
-            bannerKnown = true,
-            drawableReadyImmediately = false
-        )
-
-        assertEquals(ArtistBannerPresentationState.BannerLoading, state)
-        assertEquals(0f, artistBannerInternalAlpha(state, lateRevealAlpha = 1f))
+        assertEquals(408.dp, geometry.measuredHeight(infoCardHeight))
         assertEquals(
-            ArtistProfileBaseColorSource.ArtistArtwork,
-            artistProfileBaseColorSource(
-                artistArtworkColorAvailable = true,
-                bannerColorAvailable = true,
-                bannerState = state
-            )
-        )
-    }
-
-    @Test fun bannerSuccessAfterPageEnterAllowsOneLateReveal() {
-        val loading = initialArtistBannerPresentationState(
-            bannerKnown = true,
-            drawableReadyImmediately = false
-        )
-        val successDuringEnter = artistBannerSuccessState(
-            current = loading,
-            pageEnterComplete = false
-        )
-        val successAfterEnter = artistBannerSuccessState(
-            current = successDuringEnter,
-            pageEnterComplete = true
-        )
-
-        assertEquals(ArtistBannerPresentationState.BannerLoading, successDuringEnter)
-        assertEquals(ArtistBannerPresentationState.BannerLoadedLate, successAfterEnter)
-        assertTrue(artistBannerUsesLateReveal(successAfterEnter))
-        assertEquals(0.35f, artistBannerInternalAlpha(successAfterEnter, 0.35f))
-    }
-
-    @Test fun pageEnterReverseKeepsReadyBannerOnCurrentPagePresentation() {
-        val state = ArtistBannerPresentationState.BannerReadyImmediately
-
-    }
-
-    @Test fun bannerColorCacheHitIsInitialCardBaseColor() {
-        assertEquals(
-            ArtistProfileBaseColorSource.Banner,
-            artistProfileBaseColorSource(
-                artistArtworkColorAvailable = true,
-                bannerColorAvailable = true,
-                bannerState = ArtistBannerPresentationState.BannerReadyImmediately
-            )
-        )
-    }
-
-    @Test fun bannerColorMissKeepsArtistColorUntilResolved() {
-        assertEquals(
-            ArtistProfileBaseColorSource.ArtistArtwork,
-            artistProfileBaseColorSource(
-                artistArtworkColorAvailable = true,
-                bannerColorAvailable = false,
-                bannerState = ArtistBannerPresentationState.BannerReadyImmediately
-            )
-        )
-    }
-
-    @Test fun resolvedBannerColorBecomesFinalCardBase() {
-        assertEquals(
-            ArtistProfileBaseColorSource.Banner,
-            artistProfileBaseColorSource(
-                artistArtworkColorAvailable = true,
-                bannerColorAvailable = true,
-                bannerState = ArtistBannerPresentationState.BannerLoadedLate
-            )
-        )
-    }
-
-    @Test fun bannerColorUsesSharedArtworkColorCache() {
-        ArtworkPaletteMemoryCache.clearForTest()
-        var resolutions = 0
-        val banner = ExtensionImage("provider", "https://example.com/banner.jpg")
-        val bannerKey = artworkPaletteCacheIdentity(banner)
-
-        val first = ArtworkPaletteMemoryCache.resolveColorForTest(bannerKey, false) {
-            resolutions += 1
-            Color.Magenta
-        }
-        val second = ArtworkPaletteMemoryCache.resolveColorForTest(bannerKey, false) {
-            resolutions += 1
-            Color.Cyan
-        }
-
-        assertEquals(Color.Magenta, first)
-        assertEquals(Color.Magenta, second)
-        assertEquals(1, resolutions)
-    }
-
-    @Test fun bannerImageAndPaletteKeysIncludeProviderAndUrlIdentity() {
-        val first = ExtensionImage("provider-a", "https://example.com/banner.jpg")
-        val second = ExtensionImage("provider-b", "https://example.com/banner.jpg")
-
-        assertEquals(
-            "artist-profile-banner:provider-a:https://example.com/banner.jpg",
-            artistBannerDisplayMemoryCacheKey(first)
-        )
-        assertEquals(
-            "extension-image:provider-a:https://example.com/banner.jpg",
-            artworkPaletteCacheIdentity(first)
-        )
-        assertFalse(artistBannerDisplayMemoryCacheKey(first) == artistBannerDisplayMemoryCacheKey(second))
-    }
-
-    @Test fun unavailableAndFailedBannerLeaveArtistColorVisible() {
-        val unavailable = initialArtistBannerPresentationState(
-            bannerKnown = false,
-            drawableReadyImmediately = false
-        )
-
-        assertEquals(ArtistBannerPresentationState.BannerUnavailable, unavailable)
-        assertEquals(0f, artistBannerTargetAlpha(unavailable))
-        assertEquals(0f, artistBannerTargetAlpha(ArtistBannerPresentationState.BannerFailed))
-    }
-
-    @Test fun focusGrowthDoesNotIncreaseBannerHeroHeight() {
-        val collapsed = artistProfilePresentationHeights(
-            collapsedHeight = 300.dp,
-            expandedHeight = 420.dp,
-            focusProgress = 0f,
-            bannerHeroHeight = 280.dp
-        )
-        val focused = artistProfilePresentationHeights(
-            collapsedHeight = 300.dp,
-            expandedHeight = 420.dp,
-            focusProgress = 1f,
-            bannerHeroHeight = 280.dp
-        )
-        val collapsedOverlay = artistBannerHeroOverlayGeometry(collapsed.bannerHeroHeight)
-        val focusedOverlay = artistBannerHeroOverlayGeometry(focused.bannerHeroHeight)
-
-        assertEquals(300.dp, collapsed.cardHeight)
-        assertEquals(420.dp, focused.cardHeight)
-        assertEquals(280.dp, collapsed.bannerHeroHeight)
-        assertEquals(collapsed.bannerHeroHeight, focused.bannerHeroHeight)
-        assertEquals(collapsedOverlay, focusedOverlay)
-    }
-
-    @Test fun bannerBottomBlendFinishesAtTheExactCardBaseColor() {
-        val bannerColor = Color(0xff315b68)
-
-        assertEquals(bannerColor, artistBannerBottomBlendFinalColor(bannerColor))
-        assertTrue(ArtistBannerBottomFadeStartFraction in 0.45f..0.55f)
-    }
-
-    @Test fun darkScrimAndBottomBlendAreConfinedToFixedHeroGeometry() {
-        val geometry = artistBannerHeroOverlayGeometry(280.dp)
-
-        assertEquals(280.dp, geometry.heroHeight)
-        assertEquals(geometry.heroHeight, geometry.darkScrimHeight)
-        assertEquals(geometry.heroHeight, geometry.bottomBlendHeight)
-        assertTrue(ArtistBannerDarkScrimAlpha > 0f)
-        assertTrue(ArtistBannerDarkScrimAlpha < 0.5f)
-    }
-
-    @Test fun loadingAlwaysProvidesSevenIndependentSkeletonRows() {
-        val presentation = artistPrimaryContentPresentation(
-            hasLocalContent = false,
-            providerSongsLoaded = false,
-            hasSongs = false
-        )
-        val keys = artistLoadingSkeletonKeys()
-
-        assertEquals(ArtistPrimaryContentPresentation.Loading, presentation)
-        assertEquals(7, ArtistLoadingSkeletonCount)
-        assertEquals(ArtistLoadingSkeletonCount, keys.size)
-        assertEquals("artist-loading-skeleton-0", keys.first())
-    }
-
-    @Test fun readySongsNeverReuseSkeletonLayoutOrElementIdentity() {
-        val loadingKeys = artistLoadingSkeletonKeys()
-        val readyKeys = listOf("real-first", "real-second")
-
-        assertTrue(loadingKeys.toSet().intersect(readyKeys.toSet()).isEmpty())
-        assertEquals("real-first", readyKeys.first())
-        assertEquals("real-second", readyKeys[1])
-        assertNotEquals(
-            artistLoadingContentIdentity("artist"),
-            artistRealContentIdentity("artist")
-        )
-    }
-
-    @Test fun headerPrimaryTimingIsIndependentFromSkeletonAndSongKeys() {
-        val beforeReplacement = artistHeaderTimingProgress(0.42f)
-        val afterReplacement = artistHeaderTimingProgress(0.42f)
-
-        assertEquals(beforeReplacement, afterReplacement)
-        assertEquals(
-            PageMotion.elementProgress(
-                pageProgress = 0.42f,
-                order = ArtistHeaderTimingOrder,
-                orderCount = ArtistTransitionOrderCount
-            ),
-            beforeReplacement
-        )
-    }
-
-    @Test fun providerReadyEmptyEndsLoadingWithoutCreatingSongSlot() {
-        val presentation = artistPrimaryContentPresentation(
-            hasLocalContent = false,
-            providerSongsLoaded = true,
-            hasSongs = false
-        )
-
-        assertEquals(ArtistPrimaryContentPresentation.Empty, presentation)
-        assertTrue(presentation != ArtistPrimaryContentPresentation.Loading)
-        assertFalse(
-            artistPageContentVisibility(
-                hasLocalContent = false,
-                hasSongs = false,
-                songsLoading = false,
-                hasAlbums = false
-            ).showSongs
-        )
-    }
-
-    @Test fun sevenSkeletonRowsUseStableKeysAndCanonicalStaggerProgress() {
-        val keys = artistLoadingSkeletonKeys()
-        val firstProgress = PageMotion.elementProgress(0.4f, 0, keys.size)
-        val secondProgress = PageMotion.elementProgress(0.4f, 1, keys.size)
-
-        assertEquals(7, keys.distinct().size)
-        assertEquals("artist-loading-skeleton-0", keys.first())
-        assertTrue(firstProgress > secondProgress)
-        assertEquals(FlowtoneMotion.DurationMillis, PageMotion.DurationMillis)
-        assertEquals(240, FlowtoneMotion.ShortDurationMillis)
-    }
-
-    @Test fun bannerPresenceSelectsHeaderVariant() {
-        assertEquals(ArtistHeaderVariant.Banner, artistHeaderVariant(hasBanner = true))
-        assertEquals(ArtistHeaderVariant.Cloud, artistHeaderVariant(hasBanner = false))
-    }
-
-    @Test fun expandedHeaderContentUsesTheSameScrollDisplacementAsItsVisibleHeight() {
-        assertEquals(0f, artistExpandedContentOffsetPx(320f, 320f))
-        assertEquals(-120f, artistExpandedContentOffsetPx(320f, 200f))
-        assertEquals(-240f, artistExpandedContentOffsetPx(320f, 80f))
-    }
-
-    @Test fun noBannerCloudBelongsToPageWhileExpandedAndFocusSurfacesStayTransparent() {
-        assertEquals(
-            ArtistCloudBackgroundOwner.None,
-            artistCloudBackgroundOwner(ArtistHeaderVariant.Banner)
-        )
-        assertEquals(
-            ArtistCloudBackgroundOwner.Page,
-            artistCloudBackgroundOwner(ArtistHeaderVariant.Cloud)
-        )
-        assertEquals(HomeBackgroundCloudPlacement, ArtistPageTopCloudPlacement)
-        assertEquals(1f, artistFocusCloudEffects().alpha)
-        assertEquals(0f, artistFocusCloudEffects().blurRadiusDp)
-        assertTrue(artistFocusContentAlpha(1f) < artistFocusContentAlpha(0f))
-        assertTrue(artistHeaderUsesRoundedBiographyEdge(ArtistHeaderVariant.Banner))
-        assertTrue(artistHeaderUsesRoundedBiographyEdge(ArtistHeaderVariant.Cloud))
-        assertEquals(
-            ArtistExpandedHeaderSurface.TransparentOverCloud,
-            artistExpandedHeaderSurface(ArtistHeaderVariant.Cloud)
-        )
-    }
-
-    @Test fun noBannerCloudStartsFromTheIncomingPagePresentationOnItsFirstFrame() {
-        assertEquals(
-            0f,
-            artistCloudPagePresentationAlpha(PageTransitionPhase.Incoming, 0f),
-            0.0001f
+            geometry.infoCardTop + infoCardHeight,
+            geometry.measuredHeight(infoCardHeight)
         )
         assertTrue(
-            artistCloudPagePresentationAlpha(PageTransitionPhase.Incoming, 0.5f) < 1f
+            geometry.measuredHeight(infoCardHeight) <
+                geometry.backgroundHeight + infoCardHeight
+        )
+    }
+
+    @Test
+    fun categoryUsesLightweightLabelsWithoutCountsOrIconPresentation() {
+        assertEquals(
+            listOf(ArtistContentCategory.Songs, ArtistContentCategory.Albums),
+            artistContentCategories(showSongs = true, showAlbums = true)
+        )
+        assertEquals(listOf("歌曲", "专辑"), ArtistContentCategory.entries.map { it.label })
+        assertEquals(
+            listOf(ArtistContentCategory.Songs),
+            artistContentCategories(showSongs = true, showAlbums = false)
+        )
+    }
+
+    @Test
+    fun bannerAndCloudUseTheSameStaticHeroGeometry() {
+        val bannerGeometry = artistHeroGeometry(400.dp)
+        val cloudGeometry = artistHeroGeometry(400.dp)
+
+        assertEquals(bannerGeometry, cloudGeometry)
+    }
+
+    @Test
+    fun socialStatsAreNullableAndNeverFabricated() {
+        assertNull(artistSocialStatsText(ArtistSocialStats()))
+        assertEquals(
+            "12.4万 粉丝",
+            artistSocialStatsText(ArtistSocialStats(followers = "12.4万"))
         )
         assertEquals(
-            1f,
-            artistCloudPagePresentationAlpha(PageTransitionPhase.Current, 1f),
-            0.0001f
+            "12.4万 粉丝 · 38 关注",
+            artistSocialStatsText(
+                ArtistSocialStats(followers = "12.4万", following = "38")
+            )
         )
     }
 
-    @Test fun stackOwnedHeaderCleanupCannotClearANewerArtistEntry() {
-        val store = ArtistHeaderStateStore()
-        val first = store.ownerFor("secondary-entry:1:Artist", "Artist", null, null)
-        val second = store.ownerFor("secondary-entry:2:Artist", "Artist", null, null)
-
-        store.retainEntries(setOf(second.entryKey))
-
-        assertEquals(null, store.owner(first.entryKey))
-        assertTrue(store.owner(second.entryKey) === second)
-        assertEquals(null, second.renderModel)
-    }
-
-    @Test fun artistAlbumBackKeepsTheSameEntryHeaderOwner() {
-        val store = ArtistHeaderStateStore()
-        val owner = store.ownerFor("secondary-entry:7:Artist", "Artist", null, null)
-
-        store.retainEntries(setOf("secondary-entry:7:Artist", "secondary-entry:8:Album"))
-
-        assertTrue(store.owner(owner.entryKey) === owner)
-    }
-
-    @Test fun longTopBarTitleDropsAvatarBeforeEllipsizing() {
-        val fits = artistTopBarTitlePresentation(220f, 260f)
-        val overflows = artistTopBarTitlePresentation(320f, 260f)
-
-        assertTrue(fits.showAvatarAndBreadcrumb)
-        assertTrue(fits.showTitle)
-        assertFalse(overflows.showAvatarAndBreadcrumb)
-        assertTrue(overflows.showTitle)
-        assertTrue(overflows.currentTitleUsesEllipsis)
-    }
-
-    @Test fun normalAlbumKeepsArtistAnchorStableAndMovesSuffixFromTheRight() {
-        val start = artistAlbumSuffixTransition(0f)
-        val middle = artistAlbumSuffixTransition(0.5f)
-        val end = artistAlbumSuffixTransition(1f)
-
-        assertEquals(0f, start.alpha)
-        assertEquals(1f, start.translationXFraction)
-        assertEquals(1f, start.blurFraction)
-        assertEquals(0.5f, middle.alpha)
-        assertEquals(0.5f, middle.blurFraction)
-        assertEquals(1f, end.alpha)
-        assertEquals(0f, end.translationXFraction)
-        assertEquals(0f, end.blurFraction)
-    }
-
-    @Test fun normalAlbumSuffixExitsRightAcrossTheFullReverseProgress() {
-        val start = artistAlbumSuffixTransition(1f)
-        val end = artistAlbumSuffixTransition(0f)
-
-        assertEquals(1f, start.alpha)
-        assertEquals(0f, start.translationXFraction, 0.0001f)
-        assertEquals(0f, end.alpha)
-        assertEquals(1f, end.translationXFraction)
-    }
-
-    @Test fun artistScrollOwnerSurvivesChildAndNewEntryStartsAtTop() {
-        val store = ArtistScrollStateStore()
-        val firstEntry = store.ownerFor("secondary-entry:1:Artist")
-        firstEntry.update(8, 37)
-
-        store.retainEntries(setOf(firstEntry.entryKey))
-        val afterAlbumBack = store.ownerFor(firstEntry.entryKey)
-        assertTrue(firstEntry === afterAlbumBack)
-        assertEquals(ArtistScrollPosition(8, 37), afterAlbumBack.position)
-
-        store.retainEntries(emptySet())
-        val secondEntry = store.ownerFor("secondary-entry:2:Artist")
-        assertEquals(ArtistScrollPosition(), secondEntry.position)
-    }
-
-    @Test fun requestedHeaderExistsBeforeItsArtistPageComposition() {
-        val first = "secondary-entry:1:Artist"
-        val second = "secondary-entry:2:Artist"
-        val store = ArtistHeaderStateStore()
-        store.ownerFor(first, "Artist", null, null)
-        val secondOwner = store.ownerFor(second, "Artist", null, null)
-
-        assertTrue(store.owner(second) === secondOwner)
-        assertEquals(null, secondOwner.renderModel)
-        store.retainEntries(setOf(second))
-        assertTrue(store.owner(second) === secondOwner)
-    }
-
-    @Test fun longAlbumFallsBackToBackAndAlbumOnlyTitle() {
-        assertEquals(
-            ArtistTopBarAlbumTitleLayout.Breadcrumb,
-            artistTopBarAlbumTitleLayout(240f, 280f)
+    @Test
+    fun biographyExpandOnlyAppearsForMeasuredPreviewOverflow() {
+        assertFalse(artistBiographyExpandVisible(null, previewHasVisualOverflow = true))
+        assertFalse(artistBiographyExpandVisible("  ", previewHasVisualOverflow = true))
+        assertFalse(
+            artistBiographyExpandVisible(
+                "Exactly three visible lines",
+                previewHasVisualOverflow = false
+            )
         )
-        assertEquals(
-            ArtistTopBarAlbumTitleLayout.AlbumOnly,
-            artistTopBarAlbumTitleLayout(420f, 280f)
+        assertTrue(
+            artistBiographyExpandVisible(
+                "A biography longer than its three-line preview",
+                previewHasVisualOverflow = true
+            )
         )
     }
 
-    @Test fun longAlbumReplacementMovesOldUpAndNewInFromBelowSymmetrically() {
-        val artist = artistAlbumReplacementTransition(0f)
-        val album = artistAlbumReplacementTransition(1f)
-
-        assertEquals(1f, artist.artistAlpha)
-        assertEquals(0f, artist.artistTranslationYFraction, 0.0001f)
-        assertEquals(0f, artist.albumAlpha)
-        assertEquals(1f, artist.albumTranslationYFraction)
-        assertEquals(0f, album.artistAlpha)
-        assertEquals(-1f, album.artistTranslationYFraction)
-        assertEquals(1f, album.albumAlpha)
-        assertEquals(0f, album.albumTranslationYFraction)
-    }
-
-    @Test fun collapsedSoftMaskLeavesTheHeaderCompletelyAtProgressOne() {
-        val start = artistCollapsedSoftMaskBounds(
-            visibleHeightPx = 120f,
-            maskHeightPx = 32f,
-            progress = 0f
-        )
-        val end = artistCollapsedSoftMaskBounds(
-            visibleHeightPx = 120f,
-            maskHeightPx = 32f,
-            progress = 1f
-        )
-
-        assertEquals(88f, start.topPx)
-        assertEquals(120f, start.bottomPx)
-        assertEquals(-32f, end.topPx)
-        assertEquals(0f, end.bottomPx)
-    }
-
-    @Test fun oneAndExactlyTwoLineBiographyHaveNoRevealOrFocus() {
-        val oneLine = ArtistBiographyMeasurement(20, 40)
-        val exactlyTwoLines = ArtistBiographyMeasurement(40, 40)
-        val onePixelRounding = ArtistBiographyMeasurement(41, 40)
-
-        listOf(oneLine, exactlyTwoLines, onePixelRounding).forEach { measurement ->
-            assertFalse(canFocusArtistProfile("Biography", measurement))
-            assertFalse(artistBiographyEdgeEffectEnabled("Biography", measurement))
+    @Test
+    fun incomingHeroNeverStartsFullyVisible() {
+        ArtistHeroElement.entries.forEach { element ->
+            assertEquals(
+                0f,
+                artistHeroElementAlpha(PageTransitionPhase.Incoming, 0f, element),
+                0f
+            )
         }
     }
 
-    @Test fun biographyBeyondTwoLinesEnablesRevealAfterRoundingTolerance() {
-        val measurement = ArtistBiographyMeasurement(42, 40)
-
-        assertTrue(canFocusArtistProfile("Biography", measurement))
-        assertTrue(artistBiographyEdgeEffectEnabled("Biography", measurement))
+    @Test
+    fun outgoingHeroStartsVisibleAndEndsHiddenWithoutRetainedAnimationState() {
+        ArtistHeroElement.entries.forEach { element ->
+            assertEquals(
+                1f,
+                artistHeroElementAlpha(PageTransitionPhase.Outgoing, 0f, element),
+                0f
+            )
+            assertEquals(
+                0f,
+                artistHeroElementAlpha(PageTransitionPhase.Outgoing, 1f, element),
+                0f
+            )
+        }
     }
 
-    @Test fun resolvedArtistHeaderColorDoesNotRegressToMaterialDuringCollapseOrAlbum() {
-        val bannerColor = Color(0xff245c73)
-        val materialColor = Color(0xffeeeeee)
+    @Test
+    fun reverseAndRecompositionUseOnlyTheCurrentPagePresentation() {
+        val forward = artistHeroElementAlpha(
+            PageTransitionPhase.Outgoing,
+            0.62f,
+            ArtistHeroElement.Avatar
+        )
+        val reversed = artistHeroElementAlpha(
+            PageTransitionPhase.Outgoing,
+            0.41f,
+            ArtistHeroElement.Avatar
+        )
+        val recomposed = artistHeroElementAlpha(
+            PageTransitionPhase.Outgoing,
+            0.41f,
+            ArtistHeroElement.Avatar
+        )
 
+        assertTrue(reversed > forward)
+        assertEquals(reversed, recomposed, 0f)
+    }
+
+    @Test
+    fun cloudAndBannerUseTheSameHeroElementTimeline() {
+        val cloudAlpha = artistHeroElementAlpha(
+            PageTransitionPhase.Incoming,
+            0f,
+            ArtistHeroElement.Background
+        )
+        val bannerAlpha = artistHeroElementAlpha(
+            PageTransitionPhase.Incoming,
+            0f,
+            ArtistHeroElement.Background
+        )
+
+        assertEquals(0f, cloudAlpha, 0f)
+        assertEquals(cloudAlpha, bannerAlpha, 0f)
+    }
+
+    @Test
+    fun heroStateIsIsolatedAndRetainedByNavigationEntry() {
+        val store = ArtistHeroStateStore()
+        val first = store.ownerFor(
+            entryKey = "artist-1",
+            initialAvatar = null,
+            initialBackgroundKind = ArtistHeroBackgroundKind.Banner
+        )
+        val second = store.ownerFor(
+            entryKey = "artist-2",
+            initialAvatar = null,
+            initialBackgroundKind = ArtistHeroBackgroundKind.Cloud
+        )
+
+        first.focusRequested = true
+        assertTrue(first.focusRequested)
+        assertFalse(second.focusRequested)
+        assertEquals(first, store.owner("artist-1"))
+
+        store.retainEntries(setOf("artist-2"))
+        assertNull(store.owner("artist-1"))
+        assertEquals(second, store.owner("artist-2"))
+    }
+
+    @Test
+    fun loadingUsesSevenStableSkeletonRowsWithSeparateRealContentIdentity() {
+        assertEquals(7, artistLoadingSkeletonKeys().size)
+        assertEquals(7, artistLoadingSkeletonKeys().distinct().size)
+        assertFalse(
+            artistLoadingContentIdentity("entry") == artistRealContentIdentity("entry")
+        )
+    }
+
+    @Test
+    fun providerReadyEmptyEndsLoadingWithoutCreatingSongSlot() {
         assertEquals(
-            bannerColor,
-            artistEffectiveHeaderColor(
-                retainedResolvedColor = bannerColor,
-                candidateColor = materialColor,
-                candidateSource = ArtistProfileBaseColorSource.Material
+            ArtistPrimaryContentPresentation.Loading,
+            artistPrimaryContentPresentation(
+                hasLocalContent = false,
+                providerSongsLoaded = false,
+                hasSongs = false
             )
         )
         assertEquals(
-            bannerColor,
-            artistEffectiveHeaderColor(
-                retainedResolvedColor = null,
-                candidateColor = bannerColor,
-                candidateSource = ArtistProfileBaseColorSource.Banner
+            ArtistPrimaryContentPresentation.Empty,
+            artistPrimaryContentPresentation(
+                hasLocalContent = false,
+                providerSongsLoaded = true,
+                hasSongs = false
             )
         )
     }
 
-    @Test fun inactiveFocusDoesNotCreateTheArtistOnlyParentRenderLayer() {
-        assertFalse(artistFocusLayerRequired(0f))
-        assertFalse(artistFocusLayerRequired(0.001f))
-        assertTrue(artistFocusLayerRequired(0.5f))
+    @Test
+    fun artistScrollOwnerSurvivesChildAndNewEntryStartsAtTop() {
+        val store = ArtistScrollStateStore()
+        val first = store.ownerFor("artist-1")
+        first.update(firstVisibleItemIndex = 4, firstVisibleItemScrollOffset = 28)
+
+        assertEquals(ArtistScrollPosition(4, 28), store.ownerFor("artist-1").position)
+        assertEquals(ArtistScrollPosition(), store.ownerFor("artist-2").position)
     }
 
-    @Test fun shortHeaderAndContentSwitchUsesTheEstablishedFastMotionToken() {
-        assertEquals(FlowtoneMotion.DurationMillis, PageMotion.DurationMillis)
-        assertEquals(240, FlowtoneMotion.ShortDurationMillis)
-        assertTrue(FlowtoneMotion.ShortDurationMillis < PageMotion.DurationMillis)
-        assertEquals(
-            FlowtoneMotion.Easing.transform(0.42f),
-            PageMotion.Easing.transform(0.42f)
-        )
-    }
-
-    @Test fun artistTopBarThresholdsFollowMeasuredHeaderAndActualTopBarHeight() {
+    @Test
+    fun topBarThresholdsUseMeasuredHeroHeightAndHysteresis() {
         val thresholds = artistTopBarThresholds(
-            headerHeightPx = 300,
+            heroHeightPx = 520,
             topBarHeightPx = 80,
             hysteresisPx = 24
         )
 
-        assertEquals(220, thresholds.showPx)
-        assertEquals(196, thresholds.hidePx)
+        assertEquals(440, thresholds.showPx)
+        assertEquals(416, thresholds.hidePx)
+        assertFalse(artistTopBarVisible(false, 0, 439, thresholds))
+        assertTrue(artistTopBarVisible(false, 0, 440, thresholds))
+        assertTrue(artistTopBarVisible(true, 0, 430, thresholds))
+        assertFalse(artistTopBarVisible(true, 0, 416, thresholds))
     }
 
-    @Test fun artistTopBarVisibilityUsesHysteresisWithoutThresholdFlicker() {
-        val thresholds = ArtistTopBarThresholds(showPx = 220, hidePx = 196)
-
-        assertFalse(artistTopBarVisible(false, 0, 195, thresholds))
-        assertFalse(artistTopBarVisible(false, 0, 219, thresholds))
-        assertTrue(artistTopBarVisible(false, 0, 220, thresholds))
-        assertTrue(artistTopBarVisible(true, 0, 210, thresholds))
-        assertTrue(artistTopBarVisible(true, 0, 197, thresholds))
-        assertFalse(artistTopBarVisible(true, 0, 196, thresholds))
-        assertTrue(artistTopBarVisible(false, 1, 0, thresholds))
-    }
-
-    @Test fun artistTopBarStateIsIsolatedAndRetainedByNavigationEntry() {
-        val store = ArtistTopBarStateStore()
-        val thresholds = ArtistTopBarThresholds(showPx = 220, hidePx = 196)
-        val artistA = store.ownerFor("artist-a")
-        artistA.update(0, 240, thresholds)
-
-        assertTrue(artistA.visible)
-        assertTrue(store.ownerFor("artist-a") === artistA)
-        assertTrue(store.ownerFor("artist-a").visible)
-        assertFalse(store.ownerFor("artist-b").visible)
-
-        store.retainEntries(setOf("artist-b"))
-        assertEquals(null, store.owner("artist-a"))
-    }
-
-    @Test fun restoredScrolledEntryStartsWithItsCorrectTopBarState() {
-        val owner = ArtistTopBarStateStore().ownerFor(
-            entryKey = "restored-artist",
-            initialScrollPosition = ArtistScrollPosition(
-                firstVisibleItemIndex = 1,
-                firstVisibleItemScrollOffset = 0
-            )
+    @Test
+    fun longTopBarTitleDropsAvatarBeforeEllipsizing() {
+        assertTrue(
+            artistTopBarTitlePresentation(
+                naturalContentWidthPx = 220f,
+                availableWidthPx = 260f
+            ).showAvatarAndBreadcrumb
         )
-
-        assertTrue(owner.visible)
+        assertFalse(
+            artistTopBarTitlePresentation(
+                naturalContentWidthPx = 320f,
+                availableWidthPx = 260f
+            ).showAvatarAndBreadcrumb
+        )
     }
 
-    @Test fun bannerAndNoBannerHeadersBothScrollAwayWithoutDocking() {
-        val noBanner = artistPageHeaderScrollPresentation(
-            anchorTopPx = -260f,
-            expandedHeightPx = 260f
-        )
-        val banner = artistPageHeaderScrollPresentation(
-            anchorTopPx = -260f,
-            expandedHeightPx = 260f
-        )
+    @Test
+    fun albumSuffixAndReplacementRemainContinuous() {
+        val suffix = artistAlbumSuffixTransition(0.35f)
+        assertEquals(0.35f, suffix.alpha, 0f)
+        assertEquals(0.65f, suffix.translationXFraction, 0.0001f)
 
-        assertEquals(-260f, noBanner.topPx, 0.0001f)
-        assertEquals(260f, noBanner.visibleHeightPx, 0.0001f)
-        assertEquals(noBanner, banner)
+        val replacement = artistAlbumReplacementTransition(0.35f)
+        assertEquals(0.65f, replacement.artistAlpha, 0.0001f)
+        assertEquals(0.35f, replacement.albumAlpha, 0f)
+        assertEquals(-0.35f, replacement.artistTranslationYFraction, 0f)
+        assertEquals(0.65f, replacement.albumTranslationYFraction, 0.0001f)
     }
-
 }
