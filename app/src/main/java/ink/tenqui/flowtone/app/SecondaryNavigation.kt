@@ -131,14 +131,14 @@ internal sealed interface SecondaryDestination {
     }
 }
 
-internal enum class SecondaryTopPresentationOwner { ArtistHeader, StandardTopBar }
+internal enum class SecondaryTopPresentationOwner { ArtistTopBar, StandardTopBar }
 
 internal fun secondaryTopPresentationOwner(
     destination: SecondaryDestination?
 ): SecondaryTopPresentationOwner = when (destination) {
-    is SecondaryDestination.Artist -> SecondaryTopPresentationOwner.ArtistHeader
+    is SecondaryDestination.Artist -> SecondaryTopPresentationOwner.ArtistTopBar
     is SecondaryDestination.Album -> if (destination.parentArtist != null) {
-        SecondaryTopPresentationOwner.ArtistHeader
+        SecondaryTopPresentationOwner.ArtistTopBar
     } else {
         SecondaryTopPresentationOwner.StandardTopBar
     }
@@ -150,12 +150,41 @@ internal data class SecondaryStackEntry(
     val destination: SecondaryDestination
 )
 
-internal data class ArtistAlbumHeaderSnapshot(
+internal data class ArtistTopBarRoute(
     val artistEntryKey: String,
-    val albumEntryKey: String,
-    val parentArtist: ArtistDestinationIdentity,
-    val albumTitle: String
+    val artist: SecondaryDestination.Artist,
+    val albumEntryKey: String? = null,
+    val albumTitle: String? = null
 )
+
+internal fun artistTopBarIdentityVisible(
+    route: ArtistTopBarRoute,
+    scrollIdentityVisible: Boolean
+): Boolean = route.albumTitle != null || scrollIdentityVisible
+
+internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBarRoute? {
+    val currentEntry = entries.lastOrNull() ?: return null
+    return when (val current = currentEntry.destination) {
+        is SecondaryDestination.Artist -> ArtistTopBarRoute(
+            artistEntryKey = currentEntry.uiStateKey(),
+            artist = current
+        )
+        is SecondaryDestination.Album -> {
+            val parentIdentity = current.parentArtist ?: return null
+            val parentEntry = entries.dropLast(1).lastOrNull { entry ->
+                (entry.destination as? SecondaryDestination.Artist)
+                    ?.identity?.stableId == parentIdentity.stableId
+            } ?: return null
+            ArtistTopBarRoute(
+                artistEntryKey = parentEntry.uiStateKey(),
+                artist = parentEntry.destination as SecondaryDestination.Artist,
+                albumEntryKey = currentEntry.uiStateKey(),
+                albumTitle = current.title
+            )
+        }
+        else -> null
+    }
+}
 
 internal data class SecondaryNavigationState(
     val entries: List<SecondaryStackEntry> = emptyList(),
@@ -199,33 +228,6 @@ internal fun SecondaryStackEntry.uiStateKey(): String {
 /** PageTransition slots must distinguish repeated pushes of the same entity. */
 internal fun SecondaryStackEntry.transitionIdentityKey(): Long = id
 
-internal fun artistAlbumHeaderSnapshot(
-    entries: List<SecondaryStackEntry>
-): ArtistAlbumHeaderSnapshot? {
-    val albumEntry = entries.lastOrNull() ?: return null
-    val album = albumEntry.destination as? SecondaryDestination.Album ?: return null
-    val parentArtist = album.parentArtist ?: return null
-    val artistEntry = entries.dropLast(1).lastOrNull { entry ->
-        (entry.destination as? SecondaryDestination.Artist)
-            ?.identity?.stableId == parentArtist.stableId
-    } ?: return null
-    return ArtistAlbumHeaderSnapshot(
-        artistEntryKey = artistEntry.uiStateKey(),
-        albumEntryKey = albumEntry.uiStateKey(),
-        parentArtist = parentArtist,
-        albumTitle = album.title
-    )
-}
-
-internal fun artistHeaderOwnerKey(entries: List<SecondaryStackEntry>): String? {
-    val currentEntry = entries.lastOrNull() ?: return null
-    return when (currentEntry.destination) {
-        is SecondaryDestination.Artist -> currentEntry.uiStateKey()
-        is SecondaryDestination.Album -> artistAlbumHeaderSnapshot(entries)?.artistEntryKey
-        else -> null
-    }
-}
-
 internal fun providerArtistDestination(artist: ProviderArtist): SecondaryDestination.Artist? {
     val displayName = artist.title.trim()
     val providerId = artist.identity.providerId.trim()
@@ -240,64 +242,6 @@ internal fun providerArtistDestination(artist: ProviderArtist): SecondaryDestina
             profileMetadata = artist.profileMetadata?.sanitizedFor(displayName)
         )
     )
-}
-
-internal data class SecondaryHeaderTransitionSlots(
-    val current: SecondaryStackEntry? = null,
-    val outgoing: SecondaryStackEntry? = null,
-    val incoming: SecondaryStackEntry? = null,
-    val progress: Float = 1f,
-    val transitionId: Int = 0
-)
-
-internal data class ActiveArtistHeaderSelection(
-    val entryKey: String?,
-    val exists: Boolean = entryKey != null
-)
-
-/**
- * The live navigation stack owns the active Header. Transition slots are only a fallback while
- * that owner is leaving, so a retired Artist entry can never override a newly pushed entry.
- */
-internal fun activeArtistHeaderSelection(
-    entries: List<SecondaryStackEntry>,
-    transitionSlots: SecondaryHeaderTransitionSlots
-): ActiveArtistHeaderSelection {
-    artistHeaderOwnerKey(entries)?.let { entryKey ->
-        return ActiveArtistHeaderSelection(entryKey)
-    }
-
-    val transitionEntries = listOfNotNull(
-        transitionSlots.incoming,
-        transitionSlots.current,
-        transitionSlots.outgoing
-    )
-    val knownEntries = (entries + transitionEntries).distinctBy(SecondaryStackEntry::id)
-    val fallbackKey = transitionEntries.firstNotNullOfOrNull { entry ->
-        when (entry.destination) {
-            is SecondaryDestination.Artist -> entry.uiStateKey()
-            is SecondaryDestination.Album -> artistHeaderOwnerKey(
-                knownEntries.takeWhile { candidate -> candidate.id != entry.id } + entry
-            )
-            else -> null
-        }
-    }
-    return ActiveArtistHeaderSelection(fallbackKey)
-}
-
-internal fun artistAlbumHeaderPresentationSnapshot(
-    selectedSnapshot: ArtistAlbumHeaderSnapshot?,
-    retainedSnapshot: ArtistAlbumHeaderSnapshot?,
-    transitionSlots: SecondaryHeaderTransitionSlots
-): ArtistAlbumHeaderSnapshot? {
-    selectedSnapshot?.let { return it }
-    val snapshot = retainedSnapshot ?: return null
-    val presentedEntryKeys = listOfNotNull(
-        transitionSlots.current,
-        transitionSlots.outgoing,
-        transitionSlots.incoming
-    ).mapTo(mutableSetOf(), SecondaryStackEntry::uiStateKey)
-    return snapshot.takeIf { it.albumEntryKey in presentedEntryKeys }
 }
 
 internal fun secondaryDestinationBreadcrumbs(

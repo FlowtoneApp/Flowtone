@@ -40,10 +40,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +51,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -99,12 +99,9 @@ import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
-import ink.tenqui.flowtone.app.ArtistAlbumHeaderSnapshot
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
-import ink.tenqui.flowtone.ui.components.FlowtoneTopBarNavigationTitleShift
-import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderAlbum
@@ -117,7 +114,6 @@ import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
 import ink.tenqui.flowtone.ui.components.presentation
-import ink.tenqui.flowtone.ui.components.pageElementVisualState
 import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
 import ink.tenqui.flowtone.ui.components.SongListItem
@@ -133,8 +129,8 @@ import kotlin.math.roundToInt
 
 private val ArtistHeaderMinimumContentHeight = 252.dp
 private val ArtistToolbarHeight = 64.dp
-private val ArtistDockedAvatarSize = 36.dp
-private val ArtistDockedTitleGap = 10.dp
+private val ArtistTopBarAvatarSize = 36.dp
+private val ArtistTopBarTitleGap = 10.dp
 private val ArtistAvatarSize = 112.dp
 private val ArtistCompactAvatarSize = 104.dp
 private val ArtistHeaderCornerRadius = 24.dp
@@ -338,8 +334,7 @@ internal fun artistProfilePresentationHeights(
 internal data class ArtistHeaderScrollPresentation(
     val topPx: Float,
     val visibleHeightPx: Float,
-    val expandedContentHeightPx: Float,
-    val collapseProgress: Float
+    val expandedContentHeightPx: Float
 )
 
 internal enum class ArtistHeaderVariant { Banner, Cloud }
@@ -354,6 +349,15 @@ internal fun artistCloudBackgroundOwner(variant: ArtistHeaderVariant): ArtistClo
     else ArtistCloudBackgroundOwner.None
 
 internal val ArtistPageTopCloudPlacement = HomeBackgroundCloudPlacement
+
+internal fun artistCloudPagePresentationAlpha(
+    phase: PageTransitionPhase,
+    progress: Float
+): Float = when (phase) {
+    PageTransitionPhase.Incoming -> PageMotion.Easing.transform(progress.coerceIn(0f, 1f))
+    PageTransitionPhase.Current,
+    PageTransitionPhase.Outgoing -> 1f
+}
 
 internal fun artistFocusContentAlpha(focusProgress: Float): Float =
     1f - 0.18f * focusProgress.coerceIn(0f, 1f)
@@ -393,29 +397,6 @@ internal fun artistAlbumSuffixTransition(progress: Float): ArtistAlbumSuffixTran
     )
 }
 
-internal const val ArtistAlbumSeparatorOrder = 0
-internal const val ArtistAlbumTitleOrder = 1
-internal const val ArtistAlbumBreadcrumbOrderCount = 2
-
-internal fun artistAlbumBreadcrumbElementProgress(
-    pagePhase: PageTransitionPhase,
-    pageProgress: Float,
-    order: Int,
-    albumBridgeActive: Boolean
-): Float {
-    if (!albumBridgeActive) return 0f
-    val forwardTimelineProgress = when (pagePhase) {
-        PageTransitionPhase.Outgoing -> pageProgress
-        PageTransitionPhase.Incoming -> 1f - pageProgress
-        PageTransitionPhase.Current -> 0f
-    }
-    return PageMotion.elementProgress(
-        pageProgress = forwardTimelineProgress,
-        order = order,
-        orderCount = ArtistAlbumBreadcrumbOrderCount
-    )
-}
-
 internal data class ArtistAlbumReplacementTransition(
     val artistAlpha: Float,
     val artistTranslationYFraction: Float,
@@ -444,31 +425,6 @@ internal fun artistExpandedHeaderSurface(
     ArtistHeaderVariant.Cloud -> ArtistExpandedHeaderSurface.TransparentOverCloud
 }
 
-internal fun artistHeaderSolidSurfaceAlpha(
-    variant: ArtistHeaderVariant,
-    dockedPresentationProgress: Float
-): Float = when (variant) {
-    ArtistHeaderVariant.Banner -> 1f
-    ArtistHeaderVariant.Cloud -> dockedPresentationProgress.coerceIn(0f, 1f)
-}
-
-internal fun artistHeaderSurfaceColor(
-    variant: ArtistHeaderVariant,
-    artistColor: Color,
-    dockedPresentationProgress: Float
-): Color = artistColor.copy(
-    alpha = artistHeaderSolidSurfaceAlpha(variant, dockedPresentationProgress)
-)
-
-internal fun artistSharedHeaderCollapseProgress(
-    scrollCollapseProgress: Float,
-    albumPresentationProgress: Float
-): Float {
-    val scroll = scrollCollapseProgress.coerceIn(0f, 1f)
-    val album = albumPresentationProgress.coerceIn(0f, 1f)
-    return scroll + (1f - scroll) * album
-}
-
 internal fun artistFocusLayerRequired(focusProgress: Float): Boolean =
     focusProgress > 0.001f
 
@@ -491,9 +447,6 @@ internal fun artistCollapsedSoftMaskBounds(
     )
 }
 
-internal fun artistDockedContentTarget(collapseProgress: Float): Float =
-    if (collapseProgress >= 1f) 1f else 0f
-
 internal data class ArtistHeaderRenderModel(
     val variant: ArtistHeaderVariant,
     val artistName: String,
@@ -512,22 +465,13 @@ internal data class ArtistHeaderRenderModel(
     val collapsedBiographyViewportHeight: Dp,
     val bannerHeroHeight: Dp,
     val bannerAlpha: Float,
-    val collapseProgress: Float,
-    val dockedContentProgress: Float,
-    val albumTitle: String?,
-    val albumPresentationKey: String?,
-    val albumBreadcrumbProgress: Float,
-    val albumSeparatorProgress: Float,
-    val albumTitleProgress: Float,
     val expandedContentHeight: Dp,
     val topOffsetPx: Int,
     val viewportHeight: Dp,
-    val pagePresentation: PageTransitionPresentation,
     val onBannerLoading: () -> Unit,
     val onBannerSuccess: () -> Unit,
     val onBannerError: () -> Unit,
-    val onBiographyMeasurementChanged: (ArtistBiographyMeasurement) -> Unit,
-    val onFullTitleRequest: (String) -> Unit
+    val onBiographyMeasurementChanged: (ArtistBiographyMeasurement) -> Unit
 )
 
 @Stable
@@ -540,41 +484,11 @@ internal class ArtistHeaderStateOwner internal constructor(
     var renderModel by mutableStateOf<ArtistHeaderRenderModel?>(null)
         private set
     var focusRequested by mutableStateOf(false)
-    var measuredWidthPx by mutableStateOf(0)
-        private set
-    var measuredHeightPx by mutableStateOf(0)
-        private set
 
     fun update(model: ArtistHeaderRenderModel) {
         renderModel = model
     }
 
-    fun diagnosticPresentationAlpha(
-        bootstrapPresentation: PageTransitionPresentation = PageTransitionPresentation(
-            phase = PageTransitionPhase.Current,
-            progress = 1f,
-            transitionId = 0
-        )
-    ): Float {
-        val model = renderModel
-        val presentation = model?.pagePresentation ?: bootstrapPresentation
-        if (model?.albumTitle != null) return 1f
-        val elementProgress = PageMotion.elementProgress(
-            pageProgress = presentation.progress,
-            order = ArtistHeaderTimingOrder,
-            orderCount = ArtistTransitionOrderCount
-        )
-        return pageElementVisualState(
-            phase = presentation.phase,
-            elementProgress = elementProgress,
-            signedOffsetYPx = 0f
-        ).alpha
-    }
-
-    fun updateMeasuredSize(widthPx: Int, heightPx: Int) {
-        measuredWidthPx = widthPx
-        measuredHeightPx = heightPx
-    }
 }
 
 internal class ArtistHeaderStateStore {
@@ -596,86 +510,48 @@ internal class ArtistHeaderStateStore {
     }
 }
 
-internal data class ArtistDockedTitlePresentation(
+internal data class ArtistTopBarTitlePresentation(
     val showAvatarAndBreadcrumb: Boolean,
     val showTitle: Boolean = true,
     val currentTitleUsesEllipsis: Boolean = true
 )
 
-internal fun artistDockedTitlePresentation(
+internal fun artistTopBarTitlePresentation(
     naturalContentWidthPx: Float,
     availableWidthPx: Float
-): ArtistDockedTitlePresentation = ArtistDockedTitlePresentation(
+): ArtistTopBarTitlePresentation = ArtistTopBarTitlePresentation(
     showAvatarAndBreadcrumb = naturalContentWidthPx <= availableWidthPx.coerceAtLeast(0f)
 )
 
-internal enum class ArtistDockedAlbumTitleLayout { Breadcrumb, AlbumOnly }
+internal enum class ArtistTopBarAlbumTitleLayout { Breadcrumb, AlbumOnly }
 
-internal fun artistDockedAlbumTitleLayout(
+internal fun artistTopBarAlbumTitleLayout(
     breadcrumbNaturalWidthPx: Float,
     availableWidthPx: Float
-): ArtistDockedAlbumTitleLayout = if (
+): ArtistTopBarAlbumTitleLayout = if (
     breadcrumbNaturalWidthPx <= availableWidthPx.coerceAtLeast(0f)
 ) {
-    ArtistDockedAlbumTitleLayout.Breadcrumb
+    ArtistTopBarAlbumTitleLayout.Breadcrumb
 } else {
-    ArtistDockedAlbumTitleLayout.AlbumOnly
+    ArtistTopBarAlbumTitleLayout.AlbumOnly
 }
 
-internal fun artistAlbumHeaderLocalProgress(
-    pagePhase: PageTransitionPhase,
-    pageProgress: Float
-): Float {
-    val forwardTimelineProgress = when (pagePhase) {
-        PageTransitionPhase.Outgoing -> pageProgress
-        PageTransitionPhase.Incoming -> 1f - pageProgress
-        PageTransitionPhase.Current -> 0f
-    }
-    return FlowtoneMotion.Easing.transform(forwardTimelineProgress.coerceIn(0f, 1f))
-}
-
-internal fun artistAlbumBreadcrumbProgress(
-    pagePhase: PageTransitionPhase,
-    pageProgress: Float,
-    albumBridgeActive: Boolean
-): Float {
-    if (!albumBridgeActive) return 0f
-    return when (pagePhase) {
-        PageTransitionPhase.Outgoing,
-        PageTransitionPhase.Incoming -> artistAlbumHeaderLocalProgress(
-            pagePhase = pagePhase,
-            pageProgress = pageProgress
-        )
-        // The parent Artist is still Current for the composition in which Album is pushed.
-        // Starting at zero prevents the new suffix from drawing at its destination for one frame
-        // before PageTransitionHost installs the outgoing/incoming pair.
-        PageTransitionPhase.Current -> 0f
-    }
-}
-
-internal fun artistHeaderScrollPresentation(
+internal fun artistPageHeaderScrollPresentation(
     anchorTopPx: Float,
-    dockedTopPx: Float,
-    expandedHeightPx: Float,
-    dockedHeightPx: Float
+    expandedHeightPx: Float
 ): ArtistHeaderScrollPresentation {
     val expandedHeight = expandedHeightPx.coerceAtLeast(0f)
-    val dockedHeight = dockedHeightPx.coerceIn(0f, expandedHeight)
-    val collapseDistance = (expandedHeight - dockedHeight).coerceAtLeast(1f)
-    val collapseProgress = ((dockedTopPx - anchorTopPx) / collapseDistance).coerceIn(0f, 1f)
     return ArtistHeaderScrollPresentation(
-        topPx = maxOf(anchorTopPx, dockedTopPx),
-        visibleHeightPx = expandedHeight + (dockedHeight - expandedHeight) * collapseProgress,
-        expandedContentHeightPx = expandedHeight,
-        collapseProgress = collapseProgress
+        topPx = anchorTopPx.coerceAtMost(0f),
+        visibleHeightPx = expandedHeight,
+        expandedContentHeightPx = expandedHeight
     )
 }
 
 @Composable
-internal fun ArtistSharedHeader(
+internal fun ArtistPageHeader(
     owner: ArtistHeaderStateOwner?,
     bootstrapPresentation: PageTransitionPresentation,
-    onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val headerOwner = owner ?: return
@@ -694,23 +570,7 @@ internal fun ArtistSharedHeader(
             modifier = modifier
                 .fillMaxWidth()
                 .height(ArtistHeaderMinimumContentHeight + statusBarTop)
-                .onSizeChanged { size ->
-                    headerOwner.updateMeasuredSize(size.width, size.height)
-                }
         ) {
-            IconButton(
-                onClick = onNavigateBack,
-                modifier = Modifier
-                    .offset(x = (-8).dp)
-                    .padding(start = 12.dp, top = statusBarTop)
-                    .size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "返回",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -738,16 +598,12 @@ internal fun ArtistSharedHeader(
     }
 
     val offsetYPx = with(LocalDensity.current) { PageMotion.Offset.toPx() }
-    val pageModifier = if (model.albumTitle != null) {
-        Modifier
-    } else {
-        model.pagePresentation.elementAppearanceModifier(
-            offsetYPx = offsetYPx,
-            order = ArtistHeaderTimingOrder,
-            orderCount = ArtistTransitionOrderCount,
-            translationOffsetScale = -0.4f
-        )
-    }
+    val pageModifier = bootstrapPresentation.elementAppearanceModifier(
+        offsetYPx = offsetYPx,
+        order = ArtistHeaderTimingOrder,
+        orderCount = ArtistTransitionOrderCount,
+        translationOffsetScale = -0.4f
+    )
     ArtistHeaderHost(
         variant = model.variant,
         artistName = model.artistName,
@@ -766,35 +622,17 @@ internal fun ArtistSharedHeader(
         collapsedBiographyViewportHeight = model.collapsedBiographyViewportHeight,
         bannerHeroHeight = model.bannerHeroHeight,
         bannerAlpha = model.bannerAlpha,
-        collapseProgress = model.collapseProgress,
-        dockedContentProgress = model.dockedContentProgress,
-        albumTitle = model.albumTitle,
-        albumPresentationKey = model.albumPresentationKey,
-        albumBreadcrumbProgress = model.albumBreadcrumbProgress,
-        albumSeparatorProgress = model.albumSeparatorProgress,
-        albumTitleProgress = model.albumTitleProgress,
         expandedContentHeight = model.expandedContentHeight,
         onBannerLoading = model.onBannerLoading,
         onBannerSuccess = model.onBannerSuccess,
         onBannerError = model.onBannerError,
         onBiographyMeasurementChanged = model.onBiographyMeasurementChanged,
         onClick = { headerOwner.focusRequested = true },
-        onBack = {
-            if (headerOwner.focusRequested) {
-                headerOwner.focusRequested = false
-            } else {
-                onNavigateBack()
-            }
-        },
-        onFullTitleRequest = model.onFullTitleRequest,
         modifier = modifier
             .offset { IntOffset(0, model.topOffsetPx) }
             .fillMaxWidth()
             .height(model.viewportHeight)
             .then(pageModifier)
-            .onSizeChanged { size ->
-                headerOwner.updateMeasuredSize(size.width, size.height)
-            }
     )
 }
 
@@ -804,6 +642,7 @@ internal fun ArtistPage(
     headerOwnerKey: String,
     scrollStateOwner: ArtistScrollStateOwner,
     headerStateOwner: ArtistHeaderStateOwner,
+    artistTopBarStateOwner: ArtistTopBarStateOwner,
     artistName: String,
     hasLocalContent: Boolean,
     providedAvatar: ExtensionImage?,
@@ -821,8 +660,6 @@ internal fun ArtistPage(
     onProviderSongClick: (List<ProviderSong>, Int) -> Unit = { _, _ -> },
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit = {},
-    albumTransitionSnapshot: ArtistAlbumHeaderSnapshot? = null,
-    onFullTitleRequest: (String) -> Unit = {},
     pageTransition: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
@@ -1219,6 +1056,12 @@ internal fun ArtistPage(
     }
 
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+    var measuredHeaderHeightPx by remember(headerOwnerKey) { mutableIntStateOf(0) }
+    val artistTopBarHeightPx = with(density) {
+        (statusBarTop + FlowtoneTopBarContentHeight).toPx()
+    }
+    val isolateArtistTopBarContent = artistTopBarStateOwner.visible ||
+        pageTransition.phase == PageTransitionPhase.Outgoing
 
     BoxWithConstraints(
         modifier = modifier
@@ -1233,6 +1076,12 @@ internal fun ArtistPage(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = artistCloudPagePresentationAlpha(
+                            phase = pageTransition.phase,
+                            progress = pageTransition.progress
+                        )
+                    }
                     .topLevelPageBackground(
                         cloudPalette = monochromeFlowtoneCloudPalette(effectiveHeaderColor),
                         cloudAlpha = cloudEffects.alpha,
@@ -1271,6 +1120,13 @@ internal fun ArtistPage(
                 userScrollEnabled = !focusPresentationActive,
                 modifier = Modifier
                     .fillMaxSize()
+                    .drawWithContent {
+                        clipRect(
+                            top = if (isolateArtistTopBarContent) artistTopBarHeightPx else 0f
+                        ) {
+                            this@drawWithContent.drawContent()
+                        }
+                    }
                     .then(
                         if (artistFocusLayerRequired(focusProgress)) {
                             Modifier
@@ -1465,65 +1321,48 @@ internal fun ArtistPage(
             )
         }
 
-        val collapsedHeaderHeightPx = with(density) { collapsedProfileCardHeight.toPx() }
-        val dockedHeaderHeight = statusBarTop + FlowtoneTopBarContentHeight
-        val dockedHeaderHeightPx = with(density) { dockedHeaderHeight.toPx() }
-        val collapsedDistancePx = (collapsedHeaderHeightPx - dockedHeaderHeightPx)
-            .coerceAtLeast(0f)
+        val fallbackHeaderHeightPx = with(density) { collapsedProfileCardHeight.toPx() }
+        val collapsedHeaderHeightPx = measuredHeaderHeightPx
+            .takeIf { it > 0 }
+            ?.toFloat()
+            ?: fallbackHeaderHeightPx
+        val artistTopBarHeight = statusBarTop + FlowtoneTopBarContentHeight
+        val measuredArtistTopBarHeightPx = with(density) { artistTopBarHeight.toPx() }
+        val topBarThresholds = remember(
+            collapsedHeaderHeightPx,
+            measuredArtistTopBarHeightPx,
+            density
+        ) {
+            artistTopBarThresholds(
+                headerHeightPx = collapsedHeaderHeightPx.roundToInt(),
+                topBarHeightPx = measuredArtistTopBarHeightPx.roundToInt(),
+                hysteresisPx = with(density) { 24.dp.roundToPx() }
+            )
+        }
+        LaunchedEffect(
+            artistTopBarStateOwner,
+            realListState,
+            topBarThresholds
+        ) {
+            snapshotFlow {
+                realListState.firstVisibleItemIndex to
+                    realListState.firstVisibleItemScrollOffset
+            }.distinctUntilChanged().collect { (index, offset) ->
+                artistTopBarStateOwner.update(
+                    firstVisibleItemIndex = index,
+                    firstVisibleItemScrollOffset = offset,
+                    thresholds = topBarThresholds
+                )
+            }
+        }
         val anchorTopPx = if (realListState.firstVisibleItemIndex == 0) {
             -realListState.firstVisibleItemScrollOffset.toFloat()
         } else {
-            -collapsedDistancePx
+            -collapsedHeaderHeightPx
         }
-        val headerScrollPresentation = artistHeaderScrollPresentation(
+        val headerScrollPresentation = artistPageHeaderScrollPresentation(
             anchorTopPx = anchorTopPx,
-            // Artist owns the full edge-to-edge top region; its content starts below statusBarTop.
-            dockedTopPx = 0f,
-            expandedHeightPx = collapsedHeaderHeightPx,
-            dockedHeightPx = dockedHeaderHeightPx
-        )
-        val albumHeaderProgress = if (albumTransitionSnapshot == null) {
-            0f
-        } else {
-            artistAlbumHeaderLocalProgress(
-                pagePhase = pageTransition.phase,
-                pageProgress = pageTransition.progress
-            )
-        }
-        val headerCollapseProgress = artistSharedHeaderCollapseProgress(
-            scrollCollapseProgress = headerScrollPresentation.collapseProgress,
-            albumPresentationProgress = albumHeaderProgress
-        )
-        val scrollDockedContentProgress by animateFloatAsState(
-            targetValue = artistDockedContentTarget(
-                headerScrollPresentation.collapseProgress
-            ),
-            animationSpec = tween(
-                durationMillis = FlowtoneMotion.ShortDurationMillis,
-                easing = FlowtoneMotion.Easing
-            ),
-            label = "ArtistHeaderDockedContentProgress"
-        )
-        val dockedContentProgress = maxOf(
-            scrollDockedContentProgress,
-            albumHeaderProgress
-        ).coerceIn(0f, 1f)
-        val albumBreadcrumbProgress = artistAlbumBreadcrumbProgress(
-            pagePhase = pageTransition.phase,
-            pageProgress = pageTransition.progress,
-            albumBridgeActive = albumTransitionSnapshot != null
-        )
-        val albumSeparatorProgress = artistAlbumBreadcrumbElementProgress(
-            pagePhase = pageTransition.phase,
-            pageProgress = pageTransition.progress,
-            order = ArtistAlbumSeparatorOrder,
-            albumBridgeActive = albumTransitionSnapshot != null
-        )
-        val albumTitleProgress = artistAlbumBreadcrumbElementProgress(
-            pagePhase = pageTransition.phase,
-            pageProgress = pageTransition.progress,
-            order = ArtistAlbumTitleOrder,
-            albumBridgeActive = albumTransitionSnapshot != null
+            expandedHeightPx = collapsedHeaderHeightPx
         )
         val maxAllowedFocusHeight = maxHeight * 0.76f
         val fullBiographyHeight = with(density) {
@@ -1550,15 +1389,10 @@ internal fun ArtistPage(
             expandedHeight = expandedBiographyViewportHeight,
             focusProgress = focusProgress
         )
-        val scrollingHeaderHeight = lerp(
-            collapsedProfileCardHeight,
-            dockedHeaderHeight,
-            headerCollapseProgress
-        )
         val headerViewportHeight = if (focusPresentationActive) {
             presentationHeights.cardHeight
         } else {
-            scrollingHeaderHeight
+            collapsedProfileCardHeight
         }
         val headerRenderModel = ArtistHeaderRenderModel(
                 variant = headerVariant,
@@ -1578,17 +1412,9 @@ internal fun ArtistPage(
                 collapsedBiographyViewportHeight = collapsedBiographyViewportHeight,
                 bannerHeroHeight = presentationHeights.bannerHeroHeight,
                 bannerAlpha = bannerAlpha,
-                collapseProgress = headerCollapseProgress,
-                dockedContentProgress = dockedContentProgress,
-                albumTitle = albumTransitionSnapshot?.albumTitle,
-                albumPresentationKey = albumTransitionSnapshot?.albumEntryKey,
-                albumBreadcrumbProgress = albumBreadcrumbProgress,
-                albumSeparatorProgress = albumSeparatorProgress,
-                albumTitleProgress = albumTitleProgress,
                 expandedContentHeight = presentationHeights.cardHeight,
                 topOffsetPx = headerScrollPresentation.topPx.toInt(),
                 viewportHeight = headerViewportHeight,
-                pagePresentation = pageTransition.presentation(),
                 onBannerLoading = {
                     if (
                         bannerPresentationState != ArtistBannerPresentationState.BannerReadyImmediately &&
@@ -1613,12 +1439,26 @@ internal fun ArtistPage(
                         bannerPresentationState = ArtistBannerPresentationState.BannerFailed
                     }
                 },
-                onBiographyMeasurementChanged = { biographyMeasurement = it },
-                onFullTitleRequest = onFullTitleRequest
+                onBiographyMeasurementChanged = { biographyMeasurement = it }
             )
         SideEffect {
             headerStateOwner.update(headerRenderModel)
         }
+        ArtistPageHeader(
+            owner = headerStateOwner,
+            bootstrapPresentation = pageTransition.presentation(),
+            modifier = Modifier
+                .onSizeChanged { size ->
+                    if (!focusPresentationActive) measuredHeaderHeightPx = size.height
+                }
+                .drawWithContent {
+                    clipRect(
+                        top = if (isolateArtistTopBarContent) artistTopBarHeightPx else 0f
+                    ) {
+                        this@drawWithContent.drawContent()
+                    }
+                }
+        )
 
     }
 }
@@ -1642,21 +1482,12 @@ private fun ArtistHeaderHost(
     collapsedBiographyViewportHeight: Dp,
     bannerHeroHeight: Dp,
     bannerAlpha: Float,
-    collapseProgress: Float,
-    dockedContentProgress: Float,
-    albumTitle: String?,
-    albumPresentationKey: String?,
-    albumBreadcrumbProgress: Float,
-    albumSeparatorProgress: Float,
-    albumTitleProgress: Float,
     expandedContentHeight: Dp,
     onBannerLoading: () -> Unit,
     onBannerSuccess: () -> Unit,
     onBannerError: () -> Unit,
     onBiographyMeasurementChanged: (ArtistBiographyMeasurement) -> Unit,
     onClick: () -> Unit,
-    onBack: () -> Unit,
-    onFullTitleRequest: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val displayAlias = alias?.trim()?.takeIf(String::isNotEmpty)
@@ -1667,12 +1498,7 @@ private fun ArtistHeaderHost(
         bottomStart = ArtistHeaderCornerRadius,
         bottomEnd = ArtistHeaderCornerRadius
     )
-    val clampedCollapseProgress = collapseProgress.coerceIn(0f, 1f)
-    val dockedContentAlpha = dockedContentProgress.coerceIn(0f, 1f)
     val density = LocalDensity.current
-    val dockedContentTranslationYPx = with(density) {
-        8.dp.toPx() * (1f - dockedContentAlpha)
-    }
     val heroPrimaryContentColor = lerpColor(
         MaterialTheme.colorScheme.onSurface,
         Color.White.copy(alpha = 0.94f),
@@ -1693,7 +1519,7 @@ private fun ArtistHeaderHost(
                 }
             )
             .clickable(
-                enabled = canFocus && clampedCollapseProgress <= 0.001f,
+                enabled = canFocus,
                 indication = null,
                 interactionSource = remember {
                     androidx.compose.foundation.interaction.MutableInteractionSource()
@@ -1709,11 +1535,7 @@ private fun ArtistHeaderHost(
             modifier = Modifier
                 .matchParentSize()
                 .background(
-                    artistHeaderSurfaceColor(
-                        variant = variant,
-                        artistColor = artistColor,
-                        dockedPresentationProgress = dockedContentAlpha
-                    )
+                    if (variant == ArtistHeaderVariant.Banner) artistColor else Color.Transparent
                 )
         )
         if (variant == ArtistHeaderVariant.Cloud) {
@@ -1858,7 +1680,7 @@ private fun ArtistHeaderHost(
                 .then(
                     if (variant == ArtistHeaderVariant.Banner) {
                         Modifier.artistCollapsedContentSoftMask(
-                            progress = dockedContentAlpha,
+                            progress = 0f,
                             maskHeight = ArtistCollapsedHeaderMaskHeight,
                             blurRadius = ArtistBiographyEdgeBlurRadius
                         )
@@ -1868,7 +1690,6 @@ private fun ArtistHeaderHost(
                 )
                 .graphicsLayer {
                     translationY = expandedContentOffsetYPx
-                    alpha = 1f - dockedContentAlpha
                 }
         ) { measurables, constraints ->
             // The outer height is only a viewport. Keep expanded content at its natural height;
@@ -1881,56 +1702,11 @@ private fun ArtistHeaderHost(
                 placeable.place(0, 0)
             }
         }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = topPadding)
-                .height(FlowtoneTopBarContentHeight),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            ArtistDockedIdentityRow(
-                artistName = artistName,
-                avatarImage = avatarImage,
-                albumTitle = albumTitle,
-                albumPresentationKey = albumPresentationKey,
-                albumBreadcrumbProgress = albumBreadcrumbProgress,
-                albumSeparatorProgress = albumSeparatorProgress,
-                albumTitleProgress = albumTitleProgress,
-                contentColor = heroPrimaryContentColor,
-                onFullTitleRequest = onFullTitleRequest,
-                interactionEnabled = dockedContentAlpha >= 0.999f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = FlowtoneTopBarTitleStartPadding +
-                            FlowtoneTopBarNavigationTitleShift,
-                        end = 24.dp
-                    )
-                    .graphicsLayer {
-                        alpha = dockedContentAlpha
-                        translationY = dockedContentTranslationYPx
-                    }
-            )
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .offset(x = (-8).dp)
-                    .padding(start = 12.dp)
-                    .size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "返回",
-                    tint = heroPrimaryContentColor
-                )
-            }
-        }
     }
 }
 
 @Composable
-private fun ArtistDockedIdentityRow(
+internal fun ArtistIdentityTopBarRow(
     artistName: String,
     avatarImage: ExtensionImage?,
     albumTitle: String?,
@@ -1938,6 +1714,9 @@ private fun ArtistDockedIdentityRow(
     albumBreadcrumbProgress: Float,
     albumSeparatorProgress: Float,
     albumTitleProgress: Float,
+    avatarProgress: Float,
+    artistTitleProgress: Float,
+    identityMotionDistancePx: Float,
     contentColor: Color,
     onFullTitleRequest: (String) -> Unit,
     interactionEnabled: Boolean = true,
@@ -1962,11 +1741,11 @@ private fun ArtistDockedIdentityRow(
 
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.CenterStart) {
         val avatarAndGapWidthPx = with(density) {
-            ArtistDockedAvatarSize.toPx() + ArtistDockedTitleGap.toPx()
+            ArtistTopBarAvatarSize.toPx() + ArtistTopBarTitleGap.toPx()
         }
         val artistWidthPx = textMeasurer.measure(artistName, textStyle).size.width.toFloat()
         val availableWidthPx = with(density) { maxWidth.toPx() }
-        val artistPresentation = artistDockedTitlePresentation(
+        val artistPresentation = artistTopBarTitlePresentation(
             naturalContentWidthPx = avatarAndGapWidthPx + artistWidthPx,
             availableWidthPx = availableWidthPx
         )
@@ -1977,10 +1756,14 @@ private fun ArtistDockedIdentityRow(
             ) {
                 if (artistPresentation.showAvatarAndBreadcrumb) {
                     ArtistAvatar(
-                        size = ArtistDockedAvatarSize,
+                        size = ArtistTopBarAvatarSize,
                         image = avatarImage,
                         backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                        iconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.graphicsLayer {
+                            alpha = avatarProgress
+                            translationY = -identityMotionDistancePx * (1f - avatarProgress)
+                        }
                     )
                 }
                 Text(
@@ -1996,11 +1779,16 @@ private fun ArtistDockedIdentityRow(
                         .weight(1f)
                         .then(
                             if (artistPresentation.showAvatarAndBreadcrumb) {
-                                Modifier.padding(start = ArtistDockedTitleGap)
+                                Modifier.padding(start = ArtistTopBarTitleGap)
                             } else {
                                 Modifier
                             }
                         )
+                        .graphicsLayer {
+                            alpha = artistTitleProgress
+                            translationY = -identityMotionDistancePx *
+                                (1f - artistTitleProgress)
+                        }
                         .clickable(
                             enabled = interactionEnabled &&
                                 canOpenFullTitleOverlay(artistHasVisualOverflow),
@@ -2012,29 +1800,39 @@ private fun ArtistDockedIdentityRow(
         } else {
             val separatorWidthPx = textMeasurer.measure(" / ", textStyle).size.width.toFloat()
             val albumWidthPx = textMeasurer.measure(albumTitle, textStyle).size.width.toFloat()
-            val albumLayout = artistDockedAlbumTitleLayout(
+            val albumLayout = artistTopBarAlbumTitleLayout(
                 breadcrumbNaturalWidthPx = avatarAndGapWidthPx + artistWidthPx +
                     separatorWidthPx + albumWidthPx,
                 availableWidthPx = availableWidthPx
             )
             key(checkNotNull(albumPresentationKey)) {
-                if (albumLayout == ArtistDockedAlbumTitleLayout.Breadcrumb) {
+                if (albumLayout == ArtistTopBarAlbumTitleLayout.Breadcrumb) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         ArtistAvatar(
-                            size = ArtistDockedAvatarSize,
+                            size = ArtistTopBarAvatarSize,
                             image = avatarImage,
                             backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                            iconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = avatarProgress
+                                translationY = -identityMotionDistancePx * (1f - avatarProgress)
+                            }
                         )
                         Text(
                             text = artistName,
                             style = textStyle,
                             color = contentColor,
                             maxLines = 1,
-                            modifier = Modifier.padding(start = ArtistDockedTitleGap)
+                            modifier = Modifier
+                                .padding(start = ArtistTopBarTitleGap)
+                                .graphicsLayer {
+                                    alpha = artistTitleProgress
+                                    translationY = -identityMotionDistancePx *
+                                        (1f - artistTitleProgress)
+                                }
                         )
                         Text(
                             text = " / ",
@@ -2101,10 +1899,15 @@ private fun ArtistDockedIdentityRow(
                         ) {
                             if (artistPresentation.showAvatarAndBreadcrumb) {
                                 ArtistAvatar(
-                                    size = ArtistDockedAvatarSize,
+                                    size = ArtistTopBarAvatarSize,
                                     image = avatarImage,
                                     backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                                    iconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = avatarProgress
+                                        translationY = -identityMotionDistancePx *
+                                            (1f - avatarProgress)
+                                    }
                                 )
                             }
                             Text(
@@ -2117,11 +1920,16 @@ private fun ArtistDockedIdentityRow(
                                     .weight(1f)
                                     .then(
                                         if (artistPresentation.showAvatarAndBreadcrumb) {
-                                            Modifier.padding(start = ArtistDockedTitleGap)
+                                            Modifier.padding(start = ArtistTopBarTitleGap)
                                         } else {
                                             Modifier
                                         }
                                     )
+                                    .graphicsLayer {
+                                        alpha = artistTitleProgress
+                                        translationY = -identityMotionDistancePx *
+                                            (1f - artistTitleProgress)
+                                    }
                             )
                         }
                         Text(

@@ -10,51 +10,11 @@ import org.junit.Test
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.ui.components.FullTitleOverlayBackResult
-import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 import ink.tenqui.flowtone.ui.components.fullTitleOverlayBackResult
+import ink.tenqui.flowtone.ui.library.ArtistHeaderVariant
 
 class SecondaryNavigationTest {
-    @Test
-    fun newArtistHeaderBootstrapStartsAtIncomingZeroBeforeSlotsCatchUp() {
-        val entryKey = SecondaryNavigationState()
-            .push(SecondaryDestination.Artist("Artist"))
-            .currentEntry
-            ?.uiStateKey()
-
-        val presentation = artistHeaderBootstrapPresentation(
-            entryKey = entryKey,
-            ownerHasRenderModel = false,
-            transitionSlots = SecondaryHeaderTransitionSlots()
-        )
-
-        assertEquals(PageTransitionPhase.Incoming, presentation.phase)
-        assertEquals(0f, presentation.progress, 0.0001f)
-    }
-
-    @Test
-    fun artistHeaderBootstrapTracksTheInstalledIncomingSlotSynchronously() {
-        val entry = checkNotNull(
-            SecondaryNavigationState()
-                .push(SecondaryDestination.Artist("Artist"))
-                .currentEntry
-        )
-
-        val presentation = artistHeaderBootstrapPresentation(
-            entryKey = entry.uiStateKey(),
-            ownerHasRenderModel = false,
-            transitionSlots = SecondaryHeaderTransitionSlots(
-                incoming = entry,
-                progress = 0.42f,
-                transitionId = 7
-            )
-        )
-
-        assertEquals(PageTransitionPhase.Incoming, presentation.phase)
-        assertEquals(0.42f, presentation.progress, 0.0001f)
-        assertEquals(7, presentation.transitionId)
-    }
-
     @Test
     fun localAlbumDestinationKeepsLongIdentity() {
         val destination = SecondaryDestination.Album(42L, "Local")
@@ -309,15 +269,15 @@ class SecondaryNavigationTest {
     }
 
     @Test
-    fun artistParentedAlbumKeepsArtistHeaderAsTopPresentationOwner() {
+    fun artistParentedAlbumKeepsArtistTopBarAsTopPresentationOwner() {
         val artist = ArtistDestinationIdentity.Local("A")
 
         assertEquals(
-            SecondaryTopPresentationOwner.ArtistHeader,
+            SecondaryTopPresentationOwner.ArtistTopBar,
             secondaryTopPresentationOwner(SecondaryDestination.Artist(artist))
         )
         assertEquals(
-            SecondaryTopPresentationOwner.ArtistHeader,
+            SecondaryTopPresentationOwner.ArtistTopBar,
             secondaryTopPresentationOwner(
                 SecondaryDestination.Album(1L, "Album", parentArtist = artist)
             )
@@ -352,151 +312,107 @@ class SecondaryNavigationTest {
     }
 
     @Test
-    fun artistHeaderOwnerComesFromTheActualStackEntryRatherThanArtistIdentity() {
+    fun artistTopBarRouteIsBoundToTheActualStackEntryRatherThanArtistIdentity() {
         val artist = SecondaryDestination.Artist("A")
         val firstOpen = SecondaryNavigationState().push(artist)
         val secondOpen = firstOpen.pop().push(artist)
 
         assertNotEquals(
-            artistHeaderOwnerKey(firstOpen.entries),
-            artistHeaderOwnerKey(secondOpen.entries)
+            artistTopBarRoute(firstOpen.entries)?.artistEntryKey,
+            artistTopBarRoute(secondOpen.entries)?.artistEntryKey
         )
     }
 
     @Test
-    fun newlyPushedArtistImmediatelyOverridesTheRetiredOutgoingHeader() {
+    fun currentArtistOwnsTheTopBarWithoutAnAlbumSuffix() {
         val artist = SecondaryDestination.Artist("A")
-        val firstOpen = SecondaryNavigationState().push(artist)
-        val secondOpen = firstOpen.pop().push(artist)
-        val firstEntry = checkNotNull(firstOpen.currentEntry)
-        val secondEntry = checkNotNull(secondOpen.currentEntry)
-        listOf(0.3f, 0.5f, 1f).forEach { oldProgress ->
-            val selectedBeforeSlotReplacement = activeArtistHeaderSelection(
-                entries = secondOpen.entries,
-                transitionSlots = SecondaryHeaderTransitionSlots(
-                    outgoing = firstEntry,
-                    progress = oldProgress
-                )
-            )
-            val selectedAfterSlotReplacement = activeArtistHeaderSelection(
-                entries = secondOpen.entries,
-                transitionSlots = SecondaryHeaderTransitionSlots(
-                    outgoing = firstEntry,
-                    incoming = secondEntry,
-                    progress = oldProgress
-                )
-            )
+        val state = SecondaryNavigationState().push(artist)
+        val route = checkNotNull(artistTopBarRoute(state.entries))
 
-            assertTrue(selectedBeforeSlotReplacement.exists)
-            assertEquals(secondEntry.uiStateKey(), selectedBeforeSlotReplacement.entryKey)
-            assertEquals(secondEntry.uiStateKey(), selectedAfterSlotReplacement.entryKey)
-        }
+        assertEquals(state.currentEntry?.uiStateKey(), route.artistEntryKey)
+        assertEquals(artist, route.artist)
+        assertEquals(null, route.albumEntryKey)
+        assertEquals(null, route.albumTitle)
     }
 
     @Test
-    fun retiredArtistCleanupCannotChangeTheNewActiveHeader() {
-        val artist = SecondaryDestination.Artist("A")
-        val firstOpen = SecondaryNavigationState().push(artist)
-        val secondOpen = firstOpen.pop().push(artist)
-        val secondEntry = checkNotNull(secondOpen.currentEntry)
-
-        val afterCleanup = activeArtistHeaderSelection(
-            entries = secondOpen.entries,
-            transitionSlots = SecondaryHeaderTransitionSlots(current = secondEntry)
-        )
-
-        assertTrue(afterCleanup.exists)
-        assertEquals(secondEntry.uiStateKey(), afterCleanup.entryKey)
-    }
-
-    @Test
-    fun artistHeaderCanOpenAgainAfterThePreviousTransitionFullyCleanedUp() {
-        val artist = SecondaryDestination.Artist("A")
-        val firstOpen = SecondaryNavigationState().push(artist)
-        val secondOpen = firstOpen.pop().push(artist)
-        val thirdOpen = secondOpen.pop().push(artist)
-        val thirdEntry = checkNotNull(thirdOpen.currentEntry)
-
-        val selected = activeArtistHeaderSelection(
-            entries = thirdOpen.entries,
-            transitionSlots = SecondaryHeaderTransitionSlots(current = thirdEntry)
-        )
-
-        assertTrue(selected.exists)
-        assertEquals(thirdEntry.uiStateKey(), selected.entryKey)
-        assertNotEquals(firstOpen.currentEntry?.id, thirdEntry.id)
-        assertNotEquals(secondOpen.currentEntry?.id, thirdEntry.id)
-    }
-
-    @Test
-    fun outgoingArtistHeaderRemainsUntilItsPopTransitionCompletes() {
+    fun artistParentedAlbumKeepsTheSameArtistTopBarAndAddsItsSuffix() {
         val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
-        val artistEntry = checkNotNull(artistState.currentEntry)
-
-        val leaving = activeArtistHeaderSelection(
-            entries = emptyList(),
-            transitionSlots = SecondaryHeaderTransitionSlots(
-                outgoing = artistEntry,
-                progress = 0.6f
-            )
+        val artist = artistState.current as SecondaryDestination.Artist
+        val albumState = artistState.push(
+            SecondaryDestination.Album(7L, "Album", parentArtist = artist.identity)
         )
-        val completed = activeArtistHeaderSelection(
-            entries = emptyList(),
-            transitionSlots = SecondaryHeaderTransitionSlots()
-        )
+        val route = checkNotNull(artistTopBarRoute(albumState.entries))
 
-        assertEquals(artistEntry.uiStateKey(), leaving.entryKey)
-        assertFalse(completed.exists)
+        assertEquals(artistState.currentEntry?.uiStateKey(), route.artistEntryKey)
+        assertEquals(albumState.currentEntry?.uiStateKey(), route.albumEntryKey)
+        assertEquals("Album", route.albumTitle)
+        assertTrue(artistTopBarIdentityVisible(route, scrollIdentityVisible = false))
     }
 
     @Test
-    fun artistParentedAlbumCapturesAnImmutableEntryBoundHeaderSnapshot() {
-        val artist = SecondaryDestination.Artist("A")
-        val artistState = SecondaryNavigationState().push(artist)
-        val albumState = artistState.push(
-            SecondaryDestination.Album(7L, "A Very Long Album", artist.identity)
-        )
+    fun artistPageIdentityStillFollowsItsEntryScopedScrollState() {
+        val state = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val route = checkNotNull(artistTopBarRoute(state.entries))
 
-        val snapshot = checkNotNull(artistAlbumHeaderSnapshot(albumState.entries))
-        assertEquals(artistState.currentEntry?.uiStateKey(), snapshot.artistEntryKey)
-        assertEquals(albumState.currentEntry?.uiStateKey(), snapshot.albumEntryKey)
-        assertEquals("A Very Long Album", snapshot.albumTitle)
-        assertEquals(snapshot.artistEntryKey, artistHeaderOwnerKey(albumState.entries))
+        assertFalse(artistTopBarIdentityVisible(route, scrollIdentityVisible = false))
+        assertTrue(artistTopBarIdentityVisible(route, scrollIdentityVisible = true))
+    }
+
+    @Test
+    fun bannerAndCloudUseOneTopBarWithOnlySurfaceTreatmentDifferent() {
         assertEquals(
-            artistState.currentEntry?.uiStateKey(),
-            artistHeaderOwnerKey(albumState.pop().entries)
+            ArtistTopBarSurfaceTreatment.ArtistColor,
+            artistTopBarSurfaceTreatment(ArtistHeaderVariant.Banner)
+        )
+        assertEquals(
+            ArtistTopBarSurfaceTreatment.Transparent,
+            artistTopBarSurfaceTreatment(ArtistHeaderVariant.Cloud)
         )
     }
 
     @Test
-    fun albumHeaderSnapshotSurvivesTheWholeReverseTransition() {
+    fun albumPathStaggersSeparatorThenTitleAndReversesInTheOppositeOrder() {
+        val entering = artistTopBarPathElementProgress(pathProgress = 0.5f, entering = true)
+        val exiting = artistTopBarPathElementProgress(pathProgress = 0.5f, entering = false)
+
+        assertTrue(entering.separator > entering.title)
+        assertTrue(exiting.title < exiting.separator)
+    }
+
+    @Test
+    fun artistParentedAlbumFindsItsMatchingArtistEntry() {
+        val artistAState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val artistBState = artistAState.push(SecondaryDestination.Artist("B"))
+        val artistA = artistAState.current as SecondaryDestination.Artist
+        val albumState = artistBState.push(
+            SecondaryDestination.Album(7L, "Album A", parentArtist = artistA.identity)
+        )
+        val route = checkNotNull(artistTopBarRoute(albumState.entries))
+
+        assertEquals(artistAState.currentEntry?.uiStateKey(), route.artistEntryKey)
+        assertEquals(artistA, route.artist)
+    }
+
+    @Test
+    fun directAlbumDoesNotCreateAnArtistTopBarRoute() {
+        val state = SecondaryNavigationState().push(SecondaryDestination.Album(7L, "Album"))
+
+        assertEquals(null, artistTopBarRoute(state.entries))
+    }
+
+    @Test
+    fun poppingArtistParentedAlbumRestoresTheSameArtistTopBarRoute() {
         val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val artist = artistState.current as SecondaryDestination.Artist
         val albumState = artistState.push(
-            SecondaryDestination.Album(7L, "Album", artistState.current.let {
-                (it as SecondaryDestination.Artist).identity
-            })
+            SecondaryDestination.Album(7L, "Album", artist.identity)
         )
-        val snapshot = checkNotNull(artistAlbumHeaderSnapshot(albumState.entries))
-        val artistEntry = checkNotNull(artistState.currentEntry)
-        val albumEntry = checkNotNull(albumState.currentEntry)
+        val albumRoute = checkNotNull(artistTopBarRoute(albumState.entries))
+        val restoredRoute = checkNotNull(artistTopBarRoute(albumState.pop().entries))
 
-        val reversing = artistAlbumHeaderPresentationSnapshot(
-            selectedSnapshot = null,
-            retainedSnapshot = snapshot,
-            transitionSlots = SecondaryHeaderTransitionSlots(
-                outgoing = albumEntry,
-                incoming = artistEntry,
-                progress = 0.65f
-            )
-        )
-        val completed = artistAlbumHeaderPresentationSnapshot(
-            selectedSnapshot = null,
-            retainedSnapshot = snapshot,
-            transitionSlots = SecondaryHeaderTransitionSlots(current = artistEntry)
-        )
-
-        assertEquals(snapshot, reversing)
-        assertEquals(null, completed)
+        assertEquals(albumRoute.artistEntryKey, restoredRoute.artistEntryKey)
+        assertEquals(null, restoredRoute.albumTitle)
     }
 
 }

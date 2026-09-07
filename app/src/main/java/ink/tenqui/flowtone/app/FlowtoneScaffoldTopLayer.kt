@@ -5,6 +5,12 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.Color
+import ink.tenqui.flowtone.ui.library.ArtistHeaderStateStore
+import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
+import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
+import ink.tenqui.flowtone.ui.library.artistHeaderVariant
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 
 @Composable
@@ -17,11 +23,53 @@ internal fun FlowtoneScaffoldTopLayer(
     playlistBackAction: (() -> Unit)?,
     playlistSortProgress: Float,
     descriptionBlurRadius: Dp,
-    onFullTitleRequest: (String) -> Unit
+    onFullTitleRequest: (String) -> Unit,
+    artistHeaderStateStore: ArtistHeaderStateStore,
+    artistScrollStateStore: ArtistScrollStateStore,
+    artistTopBarStateStore: ArtistTopBarStateStore
 ) {
-    val artistHeaderOwnsTopBar = secondaryTopPresentationOwner(state.secondaryDestination) ==
-        SecondaryTopPresentationOwner.ArtistHeader
-    if (!artistHeaderOwnsTopBar) {
+    val artistRoute = artistTopBarRoute(state.secondaryEntries)
+    if (artistRoute != null) {
+        val topBarStateOwner = artistTopBarStateStore.ownerFor(
+            entryKey = artistRoute.artistEntryKey,
+            initialScrollPosition = artistScrollStateStore.ownerFor(
+                artistRoute.artistEntryKey
+            ).position
+        )
+        val headerOwner = artistHeaderStateStore.ownerFor(
+            entryKey = artistRoute.artistEntryKey,
+            artistName = artistRoute.artist.name,
+            avatarImage = artistRoute.artist.identity.avatar,
+            profileMetadata = artistRoute.artist.identity.profileMetadata
+        )
+        key(artistRoute.artistEntryKey) {
+            val headerModel = headerOwner.renderModel
+            ArtistIdentityTopBar(
+                artistName = artistRoute.artist.name,
+                avatarImage = headerModel?.avatarImage
+                    ?: headerOwner.avatarImage
+                    ?: artistRoute.artist.identity.avatar,
+                variant = headerModel?.variant ?: artistHeaderVariant(
+                    artistRoute.artist.identity.profileMetadata?.banner != null
+                ),
+                artistColor = headerModel?.artistColor ?: Color.Transparent,
+                identityVisible = artistTopBarIdentityVisible(
+                    route = artistRoute,
+                    scrollIdentityVisible = topBarStateOwner.visible
+                ),
+                albumEntryKey = artistRoute.albumEntryKey,
+                albumTitle = artistRoute.albumTitle,
+                onBack = {
+                    if (headerOwner.focusRequested) {
+                        headerOwner.focusRequested = false
+                    } else {
+                        callbacks.onCloseSecondaryPage()
+                    }
+                },
+                onFullTitleRequest = onFullTitleRequest
+            )
+        }
+    } else {
         val titleVisible = state.secondaryPage != null
         val standardPathSegments = secondaryDestinationBreadcrumbs(
             current = state.secondaryDestination,

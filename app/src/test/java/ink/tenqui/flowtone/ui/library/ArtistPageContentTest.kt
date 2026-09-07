@@ -273,73 +273,32 @@ class ArtistPageContentTest {
         assertEquals(ArtistProfileBackResult.NavigateBack, artistProfileBackResult(false))
     }
 
-    @Test fun artistHeaderFollowsAnchorBeforeDockThreshold() {
-        val presentation = artistHeaderScrollPresentation(
+    @Test fun artistHeaderIsPageContentAndFollowsItsScrollAnchor() {
+        val top = artistPageHeaderScrollPresentation(
             anchorTopPx = 24f,
-            dockedTopPx = 8f,
-            expandedHeightPx = 300f,
-            dockedHeightPx = 80f
+            expandedHeightPx = 300f
         )
-
-        assertEquals(24f, presentation.topPx)
-        assertEquals(0f, presentation.collapseProgress)
-        assertEquals(300f, presentation.visibleHeightPx)
-    }
-
-    @Test fun artistHeaderPinsAndBecomesDockedAtCollapseDistance() {
-        val presentation = artistHeaderScrollPresentation(
+        val scrolled = artistPageHeaderScrollPresentation(
             anchorTopPx = -212f,
-            dockedTopPx = 8f,
-            expandedHeightPx = 300f,
-            dockedHeightPx = 80f
+            expandedHeightPx = 300f
         )
 
-        assertEquals(8f, presentation.topPx)
-        assertEquals(1f, presentation.collapseProgress)
-        assertEquals(80f, presentation.visibleHeightPx)
+        assertEquals(0f, top.topPx)
+        assertEquals(-212f, scrolled.topPx)
+        assertEquals(300f, top.visibleHeightPx)
+        assertEquals(300f, scrolled.visibleHeightPx)
+        assertEquals(300f, scrolled.expandedContentHeightPx)
     }
 
-    @Test fun scrollingFurtherKeepsArtistHeaderPinnedAndDocked() {
-        val presentation = artistHeaderScrollPresentation(
+    @Test fun scrollingPastTheHeaderDoesNotCreateDockedGeometry() {
+        val presentation = artistPageHeaderScrollPresentation(
             anchorTopPx = -640f,
-            dockedTopPx = 8f,
-            expandedHeightPx = 300f,
-            dockedHeightPx = 80f
+            expandedHeightPx = 300f
         )
 
-        assertEquals(8f, presentation.topPx)
-        assertEquals(1f, presentation.collapseProgress)
-        assertEquals(80f, presentation.visibleHeightPx)
-    }
-
-    @Test fun collapsingViewportDoesNotChangeExpandedHeaderContentHeight() {
-        val presentation = artistHeaderScrollPresentation(
-            anchorTopPx = -102f,
-            dockedTopPx = 8f,
-            expandedHeightPx = 300f,
-            dockedHeightPx = 80f
-        )
-
-        assertEquals(190f, presentation.visibleHeightPx)
+        assertEquals(-640f, presentation.topPx)
+        assertEquals(300f, presentation.visibleHeightPx)
         assertEquals(300f, presentation.expandedContentHeightPx)
-    }
-
-    @Test fun restoredArtistScrollDerivesDockedHeaderWithoutSavedFlag() {
-        val restored = artistHeaderScrollPresentation(
-            anchorTopPx = -500f,
-            dockedTopPx = 0f,
-            expandedHeightPx = 280f,
-            dockedHeightPx = 72f
-        )
-        val newEntry = artistHeaderScrollPresentation(
-            anchorTopPx = 0f,
-            dockedTopPx = 0f,
-            expandedHeightPx = 280f,
-            dockedHeightPx = 72f
-        )
-
-        assertEquals(1f, restored.collapseProgress)
-        assertEquals(0f, newEntry.collapseProgress)
     }
 
     @Test fun destinationBannerWinsResolverBannerAndNullRemainsValidFallback() {
@@ -667,10 +626,22 @@ class ArtistPageContentTest {
             ArtistExpandedHeaderSurface.TransparentOverCloud,
             artistExpandedHeaderSurface(ArtistHeaderVariant.Cloud)
         )
-        assertEquals(0f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Cloud, 0f))
-        assertEquals(0.5f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Cloud, 0.5f))
-        assertEquals(1f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Cloud, 1f))
-        assertEquals(1f, artistHeaderSolidSurfaceAlpha(ArtistHeaderVariant.Banner, 0f))
+    }
+
+    @Test fun noBannerCloudStartsFromTheIncomingPagePresentationOnItsFirstFrame() {
+        assertEquals(
+            0f,
+            artistCloudPagePresentationAlpha(PageTransitionPhase.Incoming, 0f),
+            0.0001f
+        )
+        assertTrue(
+            artistCloudPagePresentationAlpha(PageTransitionPhase.Incoming, 0.5f) < 1f
+        )
+        assertEquals(
+            1f,
+            artistCloudPagePresentationAlpha(PageTransitionPhase.Current, 1f),
+            0.0001f
+        )
     }
 
     @Test fun stackOwnedHeaderCleanupCannotClearANewerArtistEntry() {
@@ -694,9 +665,9 @@ class ArtistPageContentTest {
         assertTrue(store.owner(owner.entryKey) === owner)
     }
 
-    @Test fun longDockedTitleDropsAvatarBeforeEllipsizing() {
-        val fits = artistDockedTitlePresentation(220f, 260f)
-        val overflows = artistDockedTitlePresentation(320f, 260f)
+    @Test fun longTopBarTitleDropsAvatarBeforeEllipsizing() {
+        val fits = artistTopBarTitlePresentation(220f, 260f)
+        val overflows = artistTopBarTitlePresentation(320f, 260f)
 
         assertTrue(fits.showAvatarAndBreadcrumb)
         assertTrue(fits.showTitle)
@@ -720,19 +691,6 @@ class ArtistPageContentTest {
         assertEquals(0f, end.blurFraction)
     }
 
-    @Test fun albumSuffixIsHiddenOnThePreTransitionCurrentFrame() {
-        val progress = artistAlbumBreadcrumbProgress(
-            pagePhase = PageTransitionPhase.Current,
-            pageProgress = 1f,
-            albumBridgeActive = true
-        )
-
-        assertEquals(0f, progress)
-        val suffix = artistAlbumSuffixTransition(progress)
-        assertEquals(0f, suffix.alpha)
-        assertEquals(1f, suffix.translationXFraction)
-    }
-
     @Test fun normalAlbumSuffixExitsRightAcrossTheFullReverseProgress() {
         val start = artistAlbumSuffixTransition(1f)
         val end = artistAlbumSuffixTransition(0f)
@@ -741,54 +699,6 @@ class ArtistPageContentTest {
         assertEquals(0f, start.translationXFraction, 0.0001f)
         assertEquals(0f, end.alpha)
         assertEquals(1f, end.translationXFraction)
-    }
-
-    @Test fun normalAlbumBreadcrumbStaggersSeparatorBeforeTitleAndReversesExactly() {
-        val separatorForward = artistAlbumBreadcrumbElementProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.35f,
-            order = ArtistAlbumSeparatorOrder,
-            albumBridgeActive = true
-        )
-        val titleForward = artistAlbumBreadcrumbElementProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.35f,
-            order = ArtistAlbumTitleOrder,
-            albumBridgeActive = true
-        )
-        val separatorReverse = artistAlbumBreadcrumbElementProgress(
-            PageTransitionPhase.Incoming,
-            pageProgress = 0.65f,
-            order = ArtistAlbumSeparatorOrder,
-            albumBridgeActive = true
-        )
-        val titleReverse = artistAlbumBreadcrumbElementProgress(
-            PageTransitionPhase.Incoming,
-            pageProgress = 0.65f,
-            order = ArtistAlbumTitleOrder,
-            albumBridgeActive = true
-        )
-
-        assertTrue(separatorForward > titleForward)
-        assertEquals(separatorForward, separatorReverse, 0.0001f)
-        assertEquals(titleForward, titleReverse, 0.0001f)
-    }
-
-    @Test fun normalAlbumReverseDropsTitleBeforeSeparator() {
-        val separator = artistAlbumBreadcrumbElementProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.8f,
-            order = ArtistAlbumSeparatorOrder,
-            albumBridgeActive = true
-        )
-        val title = artistAlbumBreadcrumbElementProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.8f,
-            order = ArtistAlbumTitleOrder,
-            albumBridgeActive = true
-        )
-
-        assertTrue(title < separator)
     }
 
     @Test fun artistScrollOwnerSurvivesChildAndNewEntryStartsAtTop() {
@@ -815,31 +725,18 @@ class ArtistPageContentTest {
 
         assertTrue(store.owner(second) === secondOwner)
         assertEquals(null, secondOwner.renderModel)
-        assertEquals(
-            0f,
-            secondOwner.diagnosticPresentationAlpha(
-                PageTransitionPresentation(
-                    phase = PageTransitionPhase.Incoming,
-                    progress = 0f,
-                    transitionId = 1
-                )
-            )
-        )
-        secondOwner.updateMeasuredSize(widthPx = 1080, heightPx = 320)
-        assertTrue(secondOwner.measuredWidthPx > 0)
-        assertTrue(secondOwner.measuredHeightPx > 0)
         store.retainEntries(setOf(second))
         assertTrue(store.owner(second) === secondOwner)
     }
 
     @Test fun longAlbumFallsBackToBackAndAlbumOnlyTitle() {
         assertEquals(
-            ArtistDockedAlbumTitleLayout.Breadcrumb,
-            artistDockedAlbumTitleLayout(240f, 280f)
+            ArtistTopBarAlbumTitleLayout.Breadcrumb,
+            artistTopBarAlbumTitleLayout(240f, 280f)
         )
         assertEquals(
-            ArtistDockedAlbumTitleLayout.AlbumOnly,
-            artistDockedAlbumTitleLayout(420f, 280f)
+            ArtistTopBarAlbumTitleLayout.AlbumOnly,
+            artistTopBarAlbumTitleLayout(420f, 280f)
         )
     }
 
@@ -873,12 +770,6 @@ class ArtistPageContentTest {
         assertEquals(120f, start.bottomPx)
         assertEquals(-32f, end.topPx)
         assertEquals(0f, end.bottomPx)
-    }
-
-    @Test fun collapsedSoftMaskOnlyStartsAtTheFullyDockedThreshold() {
-        assertEquals(0f, artistDockedContentTarget(0f))
-        assertEquals(0f, artistDockedContentTarget(0.999f))
-        assertEquals(1f, artistDockedContentTarget(1f))
     }
 
     @Test fun oneAndExactlyTwoLineBiographyHaveNoRevealOrFocus() {
@@ -921,68 +812,10 @@ class ArtistPageContentTest {
         )
     }
 
-    @Test fun sharedHeaderCollapseStartsAtTheRealScrollPresentationAndReversesExactly() {
-        val scroll = 0.22f
-        val start = artistSharedHeaderCollapseProgress(scroll, 0f)
-        val middle = artistSharedHeaderCollapseProgress(scroll, 0.5f)
-        val docked = artistSharedHeaderCollapseProgress(scroll, 1f)
-
-        assertEquals(scroll, start, 0.0001f)
-        assertTrue(middle > scroll)
-        assertEquals(1f, docked, 0.0001f)
-        assertEquals(start, artistSharedHeaderCollapseProgress(scroll, 0f), 0.0001f)
-    }
-
-    @Test fun noBannerSurfaceColorMorphsWithoutAMaterialFallback() {
-        val artistColor = Color(0xff285b67)
-        val expanded = artistHeaderSurfaceColor(ArtistHeaderVariant.Cloud, artistColor, 0f)
-        val middle = artistHeaderSurfaceColor(ArtistHeaderVariant.Cloud, artistColor, 0.5f)
-        val docked = artistHeaderSurfaceColor(ArtistHeaderVariant.Cloud, artistColor, 1f)
-
-        assertEquals(0f, expanded.alpha, 0.0001f)
-        assertEquals(0.5f, middle.alpha, 0.01f)
-        assertEquals(1f, docked.alpha, 0.0001f)
-        assertEquals(artistColor.copy(alpha = 1f), docked)
-        assertEquals(0.08f, ArtistCloudReadabilityOverlayAlpha, 0.0001f)
-    }
-
     @Test fun inactiveFocusDoesNotCreateTheArtistOnlyParentRenderLayer() {
         assertFalse(artistFocusLayerRequired(0f))
         assertFalse(artistFocusLayerRequired(0.001f))
         assertTrue(artistFocusLayerRequired(0.5f))
-    }
-
-    @Test fun albumBreadcrumbUsesTheSameCanonicalMappingInReverse() {
-        val forward = artistAlbumBreadcrumbProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.38f,
-            albumBridgeActive = true
-        )
-        val reversed = artistAlbumBreadcrumbProgress(
-            PageTransitionPhase.Incoming,
-            pageProgress = 0.62f,
-            albumBridgeActive = true
-        )
-
-        assertEquals(forward, reversed, 0.0001f)
-    }
-
-    @Test fun albumHeaderUsesOrderZeroItemWindowAndEasing() {
-        val start = PageMotion.staggerStartFraction(0, ArtistTransitionOrderCount)
-        val itemProgress = PageMotion.elementProgress(
-            pageProgress = 0.42f,
-            order = 0,
-            orderCount = ArtistTransitionOrderCount
-        )
-        val headerProgress = artistAlbumHeaderLocalProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.42f
-        )
-
-        assertEquals(0f, start)
-        assertEquals(1f, 1f - start)
-        assertEquals(itemProgress, headerProgress)
-        assertTrue(headerProgress > 0.42f)
     }
 
     @Test fun shortHeaderAndContentSwitchUsesTheEstablishedFastMotionToken() {
@@ -995,17 +828,69 @@ class ArtistPageContentTest {
         )
     }
 
-    @Test fun albumHeaderReverseUsesTheSameLocalMapping() {
-        val forward = artistAlbumHeaderLocalProgress(
-            PageTransitionPhase.Outgoing,
-            pageProgress = 0.38f
-        )
-        val back = artistAlbumHeaderLocalProgress(
-            PageTransitionPhase.Incoming,
-            pageProgress = 0.62f
+    @Test fun artistTopBarThresholdsFollowMeasuredHeaderAndActualTopBarHeight() {
+        val thresholds = artistTopBarThresholds(
+            headerHeightPx = 300,
+            topBarHeightPx = 80,
+            hysteresisPx = 24
         )
 
-        assertEquals(forward, back, 0.0001f)
+        assertEquals(220, thresholds.showPx)
+        assertEquals(196, thresholds.hidePx)
+    }
+
+    @Test fun artistTopBarVisibilityUsesHysteresisWithoutThresholdFlicker() {
+        val thresholds = ArtistTopBarThresholds(showPx = 220, hidePx = 196)
+
+        assertFalse(artistTopBarVisible(false, 0, 195, thresholds))
+        assertFalse(artistTopBarVisible(false, 0, 219, thresholds))
+        assertTrue(artistTopBarVisible(false, 0, 220, thresholds))
+        assertTrue(artistTopBarVisible(true, 0, 210, thresholds))
+        assertTrue(artistTopBarVisible(true, 0, 197, thresholds))
+        assertFalse(artistTopBarVisible(true, 0, 196, thresholds))
+        assertTrue(artistTopBarVisible(false, 1, 0, thresholds))
+    }
+
+    @Test fun artistTopBarStateIsIsolatedAndRetainedByNavigationEntry() {
+        val store = ArtistTopBarStateStore()
+        val thresholds = ArtistTopBarThresholds(showPx = 220, hidePx = 196)
+        val artistA = store.ownerFor("artist-a")
+        artistA.update(0, 240, thresholds)
+
+        assertTrue(artistA.visible)
+        assertTrue(store.ownerFor("artist-a") === artistA)
+        assertTrue(store.ownerFor("artist-a").visible)
+        assertFalse(store.ownerFor("artist-b").visible)
+
+        store.retainEntries(setOf("artist-b"))
+        assertEquals(null, store.owner("artist-a"))
+    }
+
+    @Test fun restoredScrolledEntryStartsWithItsCorrectTopBarState() {
+        val owner = ArtistTopBarStateStore().ownerFor(
+            entryKey = "restored-artist",
+            initialScrollPosition = ArtistScrollPosition(
+                firstVisibleItemIndex = 1,
+                firstVisibleItemScrollOffset = 0
+            )
+        )
+
+        assertTrue(owner.visible)
+    }
+
+    @Test fun bannerAndNoBannerHeadersBothScrollAwayWithoutDocking() {
+        val noBanner = artistPageHeaderScrollPresentation(
+            anchorTopPx = -260f,
+            expandedHeightPx = 260f
+        )
+        val banner = artistPageHeaderScrollPresentation(
+            anchorTopPx = -260f,
+            expandedHeightPx = 260f
+        )
+
+        assertEquals(-260f, noBanner.topPx, 0.0001f)
+        assertEquals(260f, noBanner.visibleHeightPx, 0.0001f)
+        assertEquals(noBanner, banner)
     }
 
 }

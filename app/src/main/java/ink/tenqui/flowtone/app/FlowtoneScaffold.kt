@@ -46,6 +46,9 @@ import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FullTitleOverlay
+import ink.tenqui.flowtone.ui.library.ArtistHeaderStateStore
+import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
+import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
@@ -67,6 +70,9 @@ internal fun FlowtoneScaffold(
     val coroutineScope = rememberCoroutineScope()
     val homeScrollState = rememberScrollState()
     val libraryPlaylistController = rememberLibraryPlaylistController()
+    val artistHeaderStateStore = remember { ArtistHeaderStateStore() }
+    val artistScrollStateStore = remember { ArtistScrollStateStore() }
+    val artistTopBarStateStore = remember { ArtistTopBarStateStore() }
     val topLevelPageCollapseProgress = rememberTopLevelPageCollapseProgress(
         homeScrollState = homeScrollState,
         libraryListState = libraryPlaylistController.listState
@@ -324,7 +330,10 @@ internal fun FlowtoneScaffold(
                     playlistBackAction = playlistBackAction,
                     playlistSortProgress = playlistSortProgress,
                     descriptionBlurRadius = descriptionBlurRadius,
-                    onFullTitleRequest = showFullTitle
+                    onFullTitleRequest = showFullTitle,
+                    artistHeaderStateStore = artistHeaderStateStore,
+                    artistScrollStateStore = artistScrollStateStore,
+                    artistTopBarStateStore = artistTopBarStateStore
                 )
             }
         ) { innerPadding ->
@@ -370,6 +379,9 @@ internal fun FlowtoneScaffold(
                 onFullTitleRequest = showFullTitle,
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
+                artistHeaderStateStore = artistHeaderStateStore,
+                artistScrollStateStore = artistScrollStateStore,
+                artistTopBarStateStore = artistTopBarStateStore,
                 modifier = Modifier.blur(
                     PlaylistSortContentBlurRadius *
                         playlistSortProgress.coerceIn(0f, 1f)

@@ -28,6 +28,7 @@ import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
 import ink.tenqui.flowtone.ui.library.ArtistHeaderStateOwner
+import ink.tenqui.flowtone.ui.library.ArtistTopBarStateOwner
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateOwner
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
@@ -99,6 +100,7 @@ internal fun SecondaryPageHost(
     navigationEntryKey: String,
     artistScrollStateOwner: ArtistScrollStateOwner? = null,
     artistHeaderStateOwner: ArtistHeaderStateOwner? = null,
+    artistTopBarStateOwner: ArtistTopBarStateOwner? = null,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
@@ -152,7 +154,6 @@ internal fun SecondaryPageHost(
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
-    artistAlbumTransitionSnapshot: ArtistAlbumHeaderSnapshot? = null,
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
@@ -433,6 +434,7 @@ internal fun SecondaryPageHost(
                     headerOwnerKey = navigationEntryKey,
                     scrollStateOwner = checkNotNull(artistScrollStateOwner),
                     headerStateOwner = checkNotNull(artistHeaderStateOwner),
+                    artistTopBarStateOwner = checkNotNull(artistTopBarStateOwner),
                     artistName = artist.name,
                     hasLocalContent = artist.identity.hasLocalContent,
                     providedAvatar = artist.identity.avatar,
@@ -467,8 +469,6 @@ internal fun SecondaryPageHost(
                     },
                     onOpenAlbum = onOpenAlbum,
                     onOpenProviderAlbum = onOpenProviderAlbum,
-                    albumTransitionSnapshot = artistAlbumTransitionSnapshot,
-                    onFullTitleRequest = onFullTitleRequest,
                     pageTransition = pageScope,
                     modifier = Modifier.fillMaxSize()
                 )

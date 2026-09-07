@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.app
 
-import android.util.Log
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.animateColor
@@ -28,11 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.LocalPlaylistCreatorName
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
@@ -41,16 +41,14 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
-import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.PageTransitionSlots
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.components.rememberAlbumArtworkCloudPalette
 import ink.tenqui.flowtone.ui.library.ArtistHeaderStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
-import ink.tenqui.flowtone.ui.library.ArtistSharedHeader
+import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
@@ -83,10 +81,11 @@ internal fun FlowtoneScaffoldContent(
     onFullTitleRequest: (String) -> Unit,
     innerPadding: PaddingValues,
     topBarBackgroundHeight: androidx.compose.ui.unit.Dp,
+    artistHeaderStateStore: ArtistHeaderStateStore,
+    artistScrollStateStore: ArtistScrollStateStore,
+    artistTopBarStateStore: ArtistTopBarStateStore,
     modifier: Modifier = Modifier
 ) {
-    val artistHeaderStateStore = remember { ArtistHeaderStateStore() }
-    val artistScrollStateStore = remember { ArtistScrollStateStore() }
     val secondaryPageStateHolder = rememberSaveableStateHolder()
     val retainedSecondaryStateKeys = remember { mutableSetOf<String>() }
     val activeSecondaryStateKeys = remember(state.secondaryEntries) {
@@ -104,6 +103,7 @@ internal fun FlowtoneScaffoldContent(
         retainedSecondaryStateKeys.clear()
         retainedSecondaryStateKeys.addAll(activeSecondaryStateKeys)
         artistScrollStateStore.retainEntries(activeArtistEntryKeys)
+        artistTopBarStateStore.retainEntries(activeArtistEntryKeys)
     }
     val detailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
         state.secondaryPage == SecondaryPage.Album ||
@@ -117,15 +117,6 @@ internal fun FlowtoneScaffoldContent(
     val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
     val selectedPlaylistDestination = state.secondaryDestination as? SecondaryDestination.Playlist
     val selectedAlbumDestination = state.secondaryDestination as? SecondaryDestination.Album
-    val selectedArtistAlbumSnapshot = remember(state.secondaryEntries) {
-        artistAlbumHeaderSnapshot(state.secondaryEntries)
-    }
-    var retainedArtistAlbumSnapshot by remember {
-        mutableStateOf<ArtistAlbumHeaderSnapshot?>(null)
-    }
-    if (selectedArtistAlbumSnapshot != null) {
-        SideEffect { retainedArtistAlbumSnapshot = selectedArtistAlbumSnapshot }
-    }
     val selectedPlaylistCard = remember(
         selectedPlaylistDestination?.playlistId,
         libraryPlaylistController.playlists
@@ -283,87 +274,6 @@ internal fun FlowtoneScaffoldContent(
             albumDetailDestination = albumDetailDestination
         )
     } ?: FlowtoneScaffoldPage.MainTabs
-    var scaffoldTransitionSlots by remember {
-        mutableStateOf(PageTransitionSlots(current = targetPage))
-    }
-    val secondaryHeaderTransitionSlots = scaffoldTransitionSlots.toSecondaryHeaderSlots()
-    val artistAlbumSnapshot = artistAlbumHeaderPresentationSnapshot(
-        selectedSnapshot = selectedArtistAlbumSnapshot,
-        retainedSnapshot = retainedArtistAlbumSnapshot,
-        transitionSlots = secondaryHeaderTransitionSlots
-    )
-    if (artistAlbumSnapshot != retainedArtistAlbumSnapshot) {
-        SideEffect { retainedArtistAlbumSnapshot = artistAlbumSnapshot }
-    }
-    val activeArtistHeader = activeArtistHeaderSelection(
-        entries = state.secondaryEntries,
-        transitionSlots = secondaryHeaderTransitionSlots
-    )
-    val headerCandidateEntries = (
-        state.secondaryEntries +
-            listOfNotNull(
-                secondaryHeaderTransitionSlots.current,
-                secondaryHeaderTransitionSlots.outgoing,
-                secondaryHeaderTransitionSlots.incoming
-            )
-        ).distinctBy(SecondaryStackEntry::id)
-    val activeArtistHeaderOwner = headerCandidateEntries
-        .firstOrNull { entry -> entry.uiStateKey() == activeArtistHeader.entryKey }
-        ?.let { entry ->
-            val artist = entry.destination as? SecondaryDestination.Artist ?: return@let null
-            artistHeaderStateStore.ownerFor(
-                entryKey = entry.uiStateKey(),
-                artistName = artist.name,
-                avatarImage = artist.identity.avatar,
-                profileMetadata = artist.identity.profileMetadata
-            )
-        }
-    val activeArtistHeaderPresentation = artistHeaderBootstrapPresentation(
-        entryKey = activeArtistHeader.entryKey,
-        ownerHasRenderModel = activeArtistHeaderOwner?.renderModel != null,
-        transitionSlots = secondaryHeaderTransitionSlots
-    )
-    val transitionSecondaryStateKeys = listOfNotNull(
-        secondaryHeaderTransitionSlots.current,
-        secondaryHeaderTransitionSlots.outgoing,
-        secondaryHeaderTransitionSlots.incoming
-    ).mapTo(mutableSetOf(), SecondaryStackEntry::uiStateKey)
-    val headerDiagnosticProgressPercent =
-        ((secondaryHeaderTransitionSlots.progress * 20f).toInt() * 5)
-    LaunchedEffect(
-        state.secondaryEntries.map(SecondaryStackEntry::id),
-        secondaryHeaderTransitionSlots.current?.id,
-        secondaryHeaderTransitionSlots.outgoing?.id,
-        secondaryHeaderTransitionSlots.incoming?.id,
-        activeArtistHeader.entryKey,
-        activeArtistHeaderOwner,
-        activeArtistHeaderOwner?.renderModel != null,
-        activeArtistHeaderOwner?.renderModel?.pagePresentation?.phase,
-        activeArtistHeaderOwner?.measuredWidthPx,
-        activeArtistHeaderOwner?.measuredHeightPx,
-        headerDiagnosticProgressPercent
-    ) {
-        if (BuildConfig.DEBUG) {
-            val model = activeArtistHeaderOwner?.renderModel
-            Log.d(
-                "ArtistHeader",
-                "stack=${state.secondaryEntries.map(SecondaryStackEntry::id)} " +
-                    "current=${secondaryHeaderTransitionSlots.current?.id} " +
-                    "outgoing=${secondaryHeaderTransitionSlots.outgoing?.id} " +
-                    "incoming=${secondaryHeaderTransitionSlots.incoming?.id} " +
-                    "selected=${activeArtistHeader.entryKey} " +
-                    "owner=${activeArtistHeaderOwner != null} " +
-                    "composed=${activeArtistHeaderOwner != null} " +
-                    "modelReady=${model != null} " +
-                    "phase=${model?.pagePresentation?.phase} " +
-                    "progress=${model?.pagePresentation?.progress} " +
-                    "alpha=${activeArtistHeaderOwner?.diagnosticPresentationAlpha(activeArtistHeaderPresentation)} " +
-                    "widthPx=${activeArtistHeaderOwner?.measuredWidthPx} " +
-                    "heightPx=${activeArtistHeaderOwner?.measuredHeightPx}"
-            )
-        }
-    }
-
     Box(modifier = modifier.fillMaxSize()) {
         SharedTransitionLayout(
             modifier = Modifier
@@ -378,8 +288,7 @@ internal fun FlowtoneScaffoldContent(
                     val secondary = page as? FlowtoneScaffoldPage.Secondary
                     secondary?.destination?.page != SecondaryPage.Artist &&
                         secondary?.destination?.page != SecondaryPage.Album
-                },
-                onSlotsChanged = { slots -> scaffoldTransitionSlots = slots }
+                }
             ) { page ->
                 val pageScope = this
                 val pageUsesSharedCloud = when (page) {
@@ -541,6 +450,20 @@ internal fun FlowtoneScaffoldContent(
                                     }
                                 )
                                 .padding(bottom = state.miniPlayerContentBottomPadding)
+                                .drawWithContent {
+                                    val artistParentedAlbum =
+                                        (page.destination as? SecondaryDestination.Album)
+                                            ?.parentArtist != null
+                                    clipRect(
+                                        top = if (artistParentedAlbum) {
+                                            topBarBackgroundHeight.toPx()
+                                        } else {
+                                            0f
+                                        }
+                                    ) {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                }
                         ) {
                             secondaryPageStateHolder.SaveableStateProvider(
                                 key = page.entry.uiStateKey()
@@ -564,11 +487,23 @@ internal fun FlowtoneScaffoldContent(
                                 } else {
                                     null
                                 }
+                                val artistTopBarStateOwner =
+                                    if (artistDestination != null) {
+                                        artistTopBarStateStore.ownerFor(
+                                            entryKey = page.entry.uiStateKey(),
+                                            initialScrollPosition = checkNotNull(
+                                                artistScrollStateOwner
+                                            ).position
+                                        )
+                                    } else {
+                                        null
+                                    }
                                 SecondaryPageHost(
                         destination = page.destination,
                         navigationEntryKey = page.entry.uiStateKey(),
                         artistScrollStateOwner = artistScrollStateOwner,
                         artistHeaderStateOwner = artistHeaderStateOwner,
+                        artistTopBarStateOwner = artistTopBarStateOwner,
                         pageScope = pageScope,
                         appPreferences = state.appPreferences,
                     themeMode = state.themeMode,
@@ -628,15 +563,6 @@ internal fun FlowtoneScaffoldContent(
                     onProviderSongQueueClick = callbacks.onProviderSongQueueClick,
                     onOpenAlbum = callbacks.onOpenAlbum,
                     onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
-                    artistAlbumTransitionSnapshot = artistAlbumSnapshot?.takeIf {
-                        snapshot ->
-                        val artist = page.destination as? SecondaryDestination.Artist
-                        artist != null &&
-                            page.entry.uiStateKey() == snapshot.artistEntryKey &&
-                            artist.identity.stableId == snapshot.parentArtist.stableId &&
-                            (selectedArtistAlbumSnapshot != null ||
-                                pageScope.phase != PageTransitionPhase.Current)
-                    },
                     onFullTitleRequest = onFullTitleRequest,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
@@ -670,15 +596,8 @@ internal fun FlowtoneScaffoldContent(
                 }
             }
             SideEffect {
-                artistHeaderStateStore.retainEntries(
-                    activeSecondaryStateKeys + transitionSecondaryStateKeys
-                )
+                artistHeaderStateStore.retainEntries(activeArtistEntryKeys)
             }
-            ArtistSharedHeader(
-                owner = activeArtistHeaderOwner,
-                bootstrapPresentation = activeArtistHeaderPresentation,
-                onNavigateBack = callbacks.onCloseSecondaryPage
-            )
         }
 }
 @Composable
@@ -751,51 +670,6 @@ private sealed interface FlowtoneScaffoldPage {
         val destination: SecondaryDestination
             get() = entry.destination
     }
-}
-
-private fun PageTransitionSlots<FlowtoneScaffoldPage>.toSecondaryHeaderSlots():
-    SecondaryHeaderTransitionSlots = SecondaryHeaderTransitionSlots(
-        current = (current as? FlowtoneScaffoldPage.Secondary)?.entry,
-        outgoing = (outgoing as? FlowtoneScaffoldPage.Secondary)?.entry,
-        incoming = (incoming as? FlowtoneScaffoldPage.Secondary)?.entry,
-        progress = progress,
-        transitionId = transitionId
-    )
-
-internal fun artistHeaderBootstrapPresentation(
-    entryKey: String?,
-    ownerHasRenderModel: Boolean,
-    transitionSlots: SecondaryHeaderTransitionSlots
-): PageTransitionPresentation {
-    val phase = when (entryKey) {
-        transitionSlots.incoming?.uiStateKey() -> PageTransitionPhase.Incoming
-        transitionSlots.outgoing?.uiStateKey() -> PageTransitionPhase.Outgoing
-        transitionSlots.current?.uiStateKey() -> PageTransitionPhase.Current
-        // Navigation has selected the entry, but PageTransitionHost has not installed its
-        // incoming slot yet. A new owner must still draw its first frame at progress zero.
-        else -> if (ownerHasRenderModel) {
-            PageTransitionPhase.Current
-        } else {
-            PageTransitionPhase.Incoming
-        }
-    }
-    val progress = when (phase) {
-        PageTransitionPhase.Incoming,
-        PageTransitionPhase.Outgoing -> transitionSlots.progress
-        PageTransitionPhase.Current -> 1f
-    }
-    return PageTransitionPresentation(
-        phase = phase,
-        progress = if (
-            phase == PageTransitionPhase.Incoming &&
-            entryKey != transitionSlots.incoming?.uiStateKey()
-        ) {
-            0f
-        } else {
-            progress
-        },
-        transitionId = transitionSlots.transitionId
-    )
 }
 
 private sealed interface FlowtoneReversibleTransitionKey {
