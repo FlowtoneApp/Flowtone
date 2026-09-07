@@ -10,10 +10,51 @@ import org.junit.Test
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.ui.components.FullTitleOverlayBackResult
+import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 import ink.tenqui.flowtone.ui.components.fullTitleOverlayBackResult
 
 class SecondaryNavigationTest {
+    @Test
+    fun newArtistHeaderBootstrapStartsAtIncomingZeroBeforeSlotsCatchUp() {
+        val entryKey = SecondaryNavigationState()
+            .push(SecondaryDestination.Artist("Artist"))
+            .currentEntry
+            ?.uiStateKey()
+
+        val presentation = artistHeaderBootstrapPresentation(
+            entryKey = entryKey,
+            ownerHasRenderModel = false,
+            transitionSlots = SecondaryHeaderTransitionSlots()
+        )
+
+        assertEquals(PageTransitionPhase.Incoming, presentation.phase)
+        assertEquals(0f, presentation.progress, 0.0001f)
+    }
+
+    @Test
+    fun artistHeaderBootstrapTracksTheInstalledIncomingSlotSynchronously() {
+        val entry = checkNotNull(
+            SecondaryNavigationState()
+                .push(SecondaryDestination.Artist("Artist"))
+                .currentEntry
+        )
+
+        val presentation = artistHeaderBootstrapPresentation(
+            entryKey = entry.uiStateKey(),
+            ownerHasRenderModel = false,
+            transitionSlots = SecondaryHeaderTransitionSlots(
+                incoming = entry,
+                progress = 0.42f,
+                transitionId = 7
+            )
+        )
+
+        assertEquals(PageTransitionPhase.Incoming, presentation.phase)
+        assertEquals(0.42f, presentation.progress, 0.0001f)
+        assertEquals(7, presentation.transitionId)
+    }
+
     @Test
     fun localAlbumDestinationKeepsLongIdentity() {
         val destination = SecondaryDestination.Album(42L, "Local")

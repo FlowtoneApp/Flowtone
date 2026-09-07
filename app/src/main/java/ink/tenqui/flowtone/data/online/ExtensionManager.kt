@@ -86,7 +86,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     suspend fun initialize() = mutex.withLock {
         if (initialized) return@withLock
-        installBundledDebugExtensions()
+        installBundledUiTestExtensions()
         installer.scan().forEach { load(it) }
         initialized = true
     }
@@ -391,16 +391,16 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     /** Debug APK 将随包携带的 fixture 先走正常安装器安装，再由下方既有扫描流程加载。 */
-    private fun installBundledDebugExtensions() {
-        if (!BuildConfig.DEBUG) return
+    private fun installBundledUiTestExtensions() {
+        if (!BuildConfig.UI_TEST_FIXTURE_ENABLED) return
         runCatching {
-            appContext.assets.open(BundledDebugArtistProfileFixturePackage).use { input ->
-                installer.install(BundledDebugArtistProfileFixturePackage, input)
+            appContext.assets.open(BundledArtistProfileFixturePackage).use { input ->
+                installer.install(BundledArtistProfileFixturePackage, input)
             }
         }.onFailure { error ->
             Log.w(
                 LogTag,
-                "extension.debug_fixture.install.failed type=${error.javaClass.simpleName}"
+                "extension.ui_test_fixture.install.failed type=${error.javaClass.simpleName}"
             )
         }
     }
@@ -414,7 +414,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     companion object {
         private const val LogTag = "FlowtoneExtension"
-        private const val BundledDebugArtistProfileFixturePackage =
+        private const val BundledArtistProfileFixturePackage =
             "provider-artist-profile-fixture.flowtone"
         @Volatile private var instance: ExtensionManager? = null
         fun get(context: Context): ExtensionManager = instance ?: synchronized(this) {

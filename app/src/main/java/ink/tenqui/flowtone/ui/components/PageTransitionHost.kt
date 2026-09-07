@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
@@ -25,7 +26,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -250,20 +250,38 @@ internal fun pageTransitionDurationMillis(
         pageTransitionRemainingFraction(currentProgress, targetProgress)).roundToInt()
 )
 
-internal fun pageTransitionEndpointCommitAllowed(
-    animationGeneration: Any,
-    activeGeneration: Any,
-    requestedTargetIsStillActive: Boolean,
+internal fun pageTransitionEndpointReached(
     currentProgress: Float,
     targetProgress: Float
-): Boolean = animationGeneration === activeGeneration &&
-    requestedTargetIsStillActive &&
-    abs(currentProgress - targetProgress) <= PageTransitionEndpointThreshold
+): Boolean = currentProgress == targetProgress
 
-private data class PageTransitionTargetRequest<T>(
-    val target: T,
-    val generation: Any
-)
+internal fun <T> pageTransitionEndpointStillRequested(
+    targetProgress: Float,
+    latestTarget: T,
+    outgoing: T,
+    incoming: T,
+    samePage: (T, T) -> Boolean
+): Boolean = if (targetProgress == 0f) {
+    samePage(latestTarget, outgoing)
+} else {
+    samePage(latestTarget, incoming)
+}
+
+internal fun <T> pageTransitionCanCommitPair(
+    currentProgress: Float,
+    targetProgress: Float,
+    latestTarget: T,
+    outgoing: T,
+    incoming: T,
+    samePage: (T, T) -> Boolean
+): Boolean = pageTransitionEndpointReached(currentProgress, targetProgress) &&
+    pageTransitionEndpointStillRequested(
+        targetProgress = targetProgress,
+        latestTarget = latestTarget,
+        outgoing = outgoing,
+        incoming = incoming,
+        samePage = samePage
+    )
 
 private enum class PageSlot {
     First,
@@ -296,6 +314,7 @@ internal fun <T> PageTransitionHost(
     var transitioning by remember { mutableStateOf(false) }
     var transitionId by remember { mutableStateOf(0) }
     val progress = remember { Animatable(1f) }
+    val latestTargetState = rememberUpdatedState(targetState)
     val offsetYPx = with(LocalDensity.current) { PageMotion.Offset.toPx() }
 
     fun pageValue(slot: PageSlot): T {
@@ -322,7 +341,10 @@ internal fun <T> PageTransitionHost(
 
     suspend fun animateProgressTo(targetValue: Float) {
         val remainingFraction = pageTransitionRemainingFraction(progress.value, targetValue)
-        if (remainingFraction <= PageTransitionEndpointThreshold) return
+        if (remainingFraction <= PageTransitionEndpointThreshold) {
+            progress.snapTo(targetValue)
+            return
+        }
         progress.animateTo(
             targetValue = targetValue,
             animationSpec = tween(
@@ -332,87 +354,79 @@ internal fun <T> PageTransitionHost(
         )
     }
 
-    val targetGeneration = remember(targetState) { Any() }
-    val latestTargetRequest = rememberUpdatedState(
-        PageTransitionTargetRequest(
-            target = targetState,
-            generation = targetGeneration
-        )
-    )
-    // collectLatest is the ownership boundary for the master animation: a target change
-    // cancels animateTo before the new target is evaluated against the retained slot pair.
-    LaunchedEffect(Unit) {
-        snapshotFlow { latestTargetRequest.value }.collectLatest { request ->
-            val requestedTarget = request.target
-            while (true) {
-                if (!transitioning) {
-                    if (samePage(requestedTarget, pageValue(currentSlot))) {
-                        return@collectLatest
-                    }
-
-                    val outgoingSlot = currentSlot
-                    val incomingSlot = outgoingSlot.other()
-                    val incomingPage = PageSnapshot(requestedTarget, nextSnapshotIdentity++)
-                    when (incomingSlot) {
-                        PageSlot.First -> firstPage = incomingPage
-                        PageSlot.Second -> secondPage = incomingPage
-                    }
-                    transitionId += 1
-                    transitioning = true
-                    progress.snapTo(0f)
+    // Match the established TopBar transition ownership: the target itself keys the coroutine.
+    // A Back recomposition therefore cancels animateTo before this retained pair is retargeted.
+    LaunchedEffect(targetState) {
+        val requestedTarget = targetState
+        while (true) {
+            if (!transitioning) {
+                if (samePage(requestedTarget, pageValue(currentSlot))) {
+                    return@LaunchedEffect
                 }
 
                 val outgoingSlot = currentSlot
                 val incomingSlot = outgoingSlot.other()
-                val retargetAction = pageTransitionRetargetAction(
-                    requestedTarget = requestedTarget,
+                val incomingPage = PageSnapshot(requestedTarget, nextSnapshotIdentity++)
+                when (incomingSlot) {
+                    PageSlot.First -> firstPage = incomingPage
+                    PageSlot.Second -> secondPage = incomingPage
+                }
+                transitionId += 1
+                transitioning = true
+                progress.snapTo(0f)
+            }
+
+            val outgoingSlot = currentSlot
+            val incomingSlot = outgoingSlot.other()
+            val retargetAction = pageTransitionRetargetAction(
+                requestedTarget = requestedTarget,
+                outgoing = pageValue(outgoingSlot),
+                incoming = pageValue(incomingSlot),
+                samePage = ::samePage
+            )
+            if (retargetAction == PageTransitionRetargetAction.ReplaceIncoming) {
+                val replacement = PageSnapshot(requestedTarget, nextSnapshotIdentity++)
+                when (incomingSlot) {
+                    PageSlot.First -> firstPage = replacement
+                    PageSlot.Second -> secondPage = replacement
+                }
+                transitionId += 1
+                progress.snapTo(0f)
+            }
+            val targetEndpoint = pageTransitionTargetEndpoint(retargetAction)
+
+            animateProgressTo(targetEndpoint)
+
+            // Like animate*AsState in the TopBar, endpoint cleanup yields through the next
+            // composition frame. A Back/forward retarget that arrived on the final animation
+            // frame can then cancel this effect before either retained page is disposed.
+            withFrameNanos { }
+
+            if (
+                !pageTransitionCanCommitPair(
+                    currentProgress = progress.value,
+                    targetProgress = targetEndpoint,
+                    latestTarget = latestTargetState.value,
                     outgoing = pageValue(outgoingSlot),
                     incoming = pageValue(incomingSlot),
                     samePage = ::samePage
                 )
-                if (retargetAction == PageTransitionRetargetAction.ReplaceIncoming) {
-                    val replacement = PageSnapshot(requestedTarget, nextSnapshotIdentity++)
-                    when (incomingSlot) {
-                        PageSlot.First -> firstPage = replacement
-                        PageSlot.Second -> secondPage = replacement
-                    }
-                    transitionId += 1
-                    progress.snapTo(0f)
-                }
-                val targetEndpoint = pageTransitionTargetEndpoint(retargetAction)
-
-                animateProgressTo(targetEndpoint)
-
-                val activeRequest = latestTargetRequest.value
-                // animateTo can reach an endpoint in the same frame that a new target arrives.
-                // Endpoint cleanup belongs only to the generation that is still active.
-                if (!pageTransitionEndpointCommitAllowed(
-                        animationGeneration = request.generation,
-                        activeGeneration = activeRequest.generation,
-                        requestedTargetIsStillActive = samePage(
-                            requestedTarget,
-                            activeRequest.target
-                        ),
-                        currentProgress = progress.value,
-                        targetProgress = targetEndpoint
-                    )
-                ) {
-                    return@collectLatest
-                }
-
-                if (targetEndpoint == 0f) {
-                    clearPage(incomingSlot)
-                } else {
-                    clearPage(outgoingSlot)
-                    currentSlot = incomingSlot
-                }
-                transitioning = false
-
-                if (samePage(requestedTarget, pageValue(currentSlot))) {
-                    return@collectLatest
-                }
-                // A target that arrives after endpoint cleanup starts a fresh pair here.
+            ) {
+                return@LaunchedEffect
             }
+
+            if (targetEndpoint == 0f) {
+                clearPage(incomingSlot)
+            } else {
+                clearPage(outgoingSlot)
+                currentSlot = incomingSlot
+            }
+            transitioning = false
+
+            if (samePage(requestedTarget, pageValue(currentSlot))) {
+                return@LaunchedEffect
+            }
+            // A target that changes after endpoint cleanup starts a fresh pair here.
         }
     }
 

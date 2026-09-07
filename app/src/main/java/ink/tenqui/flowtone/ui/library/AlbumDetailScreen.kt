@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.ui.library
 import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
@@ -32,21 +33,22 @@ import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
 
-internal data class AlbumSongAnimationOrder(
+internal data class SongListAnimationOrder(
     val order: Int,
     val orderCount: Int
 )
 
-internal fun albumSongAnimationOrder(
+internal fun songListAnimationOrder(
     songKey: String,
     animationGroupKeys: List<String>
-): AlbumSongAnimationOrder {
+): SongListAnimationOrder {
     val orderCount = animationGroupKeys.size.coerceAtLeast(1)
-    return AlbumSongAnimationOrder(
+    return SongListAnimationOrder(
         order = animationGroupKeys.indexOf(songKey).takeIf { it >= 0 } ?: orderCount - 1,
         orderCount = orderCount
     )
@@ -275,7 +277,11 @@ internal fun ProviderAlbumDetailScreen(
         headerModifier = headerModifier,
         modifier = modifier
     ) {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(StandardSongListItemSpacing),
+            modifier = Modifier.fillMaxSize()
+        ) {
             item(key = "provider-album-header:${album.identity.stableKey}") {
                 AlbumMetadataHeader(
                     vinylSeed = album.identity.stableKey.hashCode().toLong(),
@@ -303,7 +309,7 @@ internal fun ProviderAlbumDetailScreen(
                     key = { index, _ -> songs[index].identity.stableKey }
                 ) { index, song ->
                     val songKey = songKeys[index]
-                    val animationOrder = albumSongAnimationOrder(songKey, animationGroupKeys)
+                    val animationOrder = songListAnimationOrder(songKey, animationGroupKeys)
                     val pageItemModifier = if (enterGroupReady) {
                         itemModifier(
                             listProgress,

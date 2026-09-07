@@ -41,6 +41,7 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.PageTransitionSlots
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
@@ -317,6 +318,11 @@ internal fun FlowtoneScaffoldContent(
                 profileMetadata = artist.identity.profileMetadata
             )
         }
+    val activeArtistHeaderPresentation = artistHeaderBootstrapPresentation(
+        entryKey = activeArtistHeader.entryKey,
+        ownerHasRenderModel = activeArtistHeaderOwner?.renderModel != null,
+        transitionSlots = secondaryHeaderTransitionSlots
+    )
     val transitionSecondaryStateKeys = listOfNotNull(
         secondaryHeaderTransitionSlots.current,
         secondaryHeaderTransitionSlots.outgoing,
@@ -351,7 +357,7 @@ internal fun FlowtoneScaffoldContent(
                     "modelReady=${model != null} " +
                     "phase=${model?.pagePresentation?.phase} " +
                     "progress=${model?.pagePresentation?.progress} " +
-                    "alpha=${activeArtistHeaderOwner?.diagnosticPresentationAlpha()} " +
+                    "alpha=${activeArtistHeaderOwner?.diagnosticPresentationAlpha(activeArtistHeaderPresentation)} " +
                     "widthPx=${activeArtistHeaderOwner?.measuredWidthPx} " +
                     "heightPx=${activeArtistHeaderOwner?.measuredHeightPx}"
             )
@@ -631,7 +637,6 @@ internal fun FlowtoneScaffoldContent(
                             (selectedArtistAlbumSnapshot != null ||
                                 pageScope.phase != PageTransitionPhase.Current)
                     },
-                    artistAlbumTargetVisible = selectedArtistAlbumSnapshot != null,
                     onFullTitleRequest = onFullTitleRequest,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
@@ -671,6 +676,7 @@ internal fun FlowtoneScaffoldContent(
             }
             ArtistSharedHeader(
                 owner = activeArtistHeaderOwner,
+                bootstrapPresentation = activeArtistHeaderPresentation,
                 onNavigateBack = callbacks.onCloseSecondaryPage
             )
         }
@@ -752,8 +758,45 @@ private fun PageTransitionSlots<FlowtoneScaffoldPage>.toSecondaryHeaderSlots():
         current = (current as? FlowtoneScaffoldPage.Secondary)?.entry,
         outgoing = (outgoing as? FlowtoneScaffoldPage.Secondary)?.entry,
         incoming = (incoming as? FlowtoneScaffoldPage.Secondary)?.entry,
-        progress = progress
+        progress = progress,
+        transitionId = transitionId
     )
+
+internal fun artistHeaderBootstrapPresentation(
+    entryKey: String?,
+    ownerHasRenderModel: Boolean,
+    transitionSlots: SecondaryHeaderTransitionSlots
+): PageTransitionPresentation {
+    val phase = when (entryKey) {
+        transitionSlots.incoming?.uiStateKey() -> PageTransitionPhase.Incoming
+        transitionSlots.outgoing?.uiStateKey() -> PageTransitionPhase.Outgoing
+        transitionSlots.current?.uiStateKey() -> PageTransitionPhase.Current
+        // Navigation has selected the entry, but PageTransitionHost has not installed its
+        // incoming slot yet. A new owner must still draw its first frame at progress zero.
+        else -> if (ownerHasRenderModel) {
+            PageTransitionPhase.Current
+        } else {
+            PageTransitionPhase.Incoming
+        }
+    }
+    val progress = when (phase) {
+        PageTransitionPhase.Incoming,
+        PageTransitionPhase.Outgoing -> transitionSlots.progress
+        PageTransitionPhase.Current -> 1f
+    }
+    return PageTransitionPresentation(
+        phase = phase,
+        progress = if (
+            phase == PageTransitionPhase.Incoming &&
+            entryKey != transitionSlots.incoming?.uiStateKey()
+        ) {
+            0f
+        } else {
+            progress
+        },
+        transitionId = transitionSlots.transitionId
+    )
+}
 
 private sealed interface FlowtoneReversibleTransitionKey {
     data object MainTabs : FlowtoneReversibleTransitionKey

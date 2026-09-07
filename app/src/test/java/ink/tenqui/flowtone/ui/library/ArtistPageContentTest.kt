@@ -12,6 +12,7 @@ import ink.tenqui.flowtone.ui.components.ArtworkPaletteMemoryCache
 import ink.tenqui.flowtone.ui.components.artworkPaletteCacheIdentity
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
@@ -711,9 +712,12 @@ class ArtistPageContentTest {
 
         assertEquals(0f, start.alpha)
         assertEquals(1f, start.translationXFraction)
+        assertEquals(1f, start.blurFraction)
         assertEquals(0.5f, middle.alpha)
+        assertEquals(0.5f, middle.blurFraction)
         assertEquals(1f, end.alpha)
         assertEquals(0f, end.translationXFraction)
+        assertEquals(0f, end.blurFraction)
     }
 
     @Test fun albumSuffixIsHiddenOnThePreTransitionCurrentFrame() {
@@ -811,7 +815,16 @@ class ArtistPageContentTest {
 
         assertTrue(store.owner(second) === secondOwner)
         assertEquals(null, secondOwner.renderModel)
-        assertEquals(1f, secondOwner.diagnosticPresentationAlpha())
+        assertEquals(
+            0f,
+            secondOwner.diagnosticPresentationAlpha(
+                PageTransitionPresentation(
+                    phase = PageTransitionPhase.Incoming,
+                    progress = 0f,
+                    transitionId = 1
+                )
+            )
+        )
         secondOwner.updateMeasuredSize(widthPx = 1080, heightPx = 320)
         assertTrue(secondOwner.measuredWidthPx > 0)
         assertTrue(secondOwner.measuredHeightPx > 0)
@@ -908,23 +921,35 @@ class ArtistPageContentTest {
         )
     }
 
-    @Test fun albumTransitionTemporarilyTargetsDockedWithoutChangingScrollGeometry() {
-        val restoredScrollCollapse = 0.18f
-        val transitionCollapse = artistTransitionCollapseProgress(
-            scrollCollapseProgress = restoredScrollCollapse,
-            pagePhase = PageTransitionPhase.Outgoing,
-            pageProgress = 1f,
-            albumBridgeActive = true
-        )
-        val restored = artistTransitionCollapseProgress(
-            scrollCollapseProgress = restoredScrollCollapse,
-            pagePhase = PageTransitionPhase.Current,
-            pageProgress = 1f,
-            albumBridgeActive = false
-        )
+    @Test fun sharedHeaderCollapseStartsAtTheRealScrollPresentationAndReversesExactly() {
+        val scroll = 0.22f
+        val start = artistSharedHeaderCollapseProgress(scroll, 0f)
+        val middle = artistSharedHeaderCollapseProgress(scroll, 0.5f)
+        val docked = artistSharedHeaderCollapseProgress(scroll, 1f)
 
-        assertEquals(1f, transitionCollapse)
-        assertEquals(restoredScrollCollapse, restored)
+        assertEquals(scroll, start, 0.0001f)
+        assertTrue(middle > scroll)
+        assertEquals(1f, docked, 0.0001f)
+        assertEquals(start, artistSharedHeaderCollapseProgress(scroll, 0f), 0.0001f)
+    }
+
+    @Test fun noBannerSurfaceColorMorphsWithoutAMaterialFallback() {
+        val artistColor = Color(0xff285b67)
+        val expanded = artistHeaderSurfaceColor(ArtistHeaderVariant.Cloud, artistColor, 0f)
+        val middle = artistHeaderSurfaceColor(ArtistHeaderVariant.Cloud, artistColor, 0.5f)
+        val docked = artistHeaderSurfaceColor(ArtistHeaderVariant.Cloud, artistColor, 1f)
+
+        assertEquals(0f, expanded.alpha, 0.0001f)
+        assertEquals(0.5f, middle.alpha, 0.01f)
+        assertEquals(1f, docked.alpha, 0.0001f)
+        assertEquals(artistColor.copy(alpha = 1f), docked)
+        assertEquals(0.08f, ArtistCloudReadabilityOverlayAlpha, 0.0001f)
+    }
+
+    @Test fun inactiveFocusDoesNotCreateTheArtistOnlyParentRenderLayer() {
+        assertFalse(artistFocusLayerRequired(0f))
+        assertFalse(artistFocusLayerRequired(0.001f))
+        assertTrue(artistFocusLayerRequired(0.5f))
     }
 
     @Test fun albumBreadcrumbUsesTheSameCanonicalMappingInReverse() {
@@ -935,11 +960,11 @@ class ArtistPageContentTest {
         )
         val reversed = artistAlbumBreadcrumbProgress(
             PageTransitionPhase.Incoming,
-            pageProgress = 0.38f,
+            pageProgress = 0.62f,
             albumBridgeActive = true
         )
 
-        assertEquals(1f, forward + reversed, 0.0001f)
+        assertEquals(forward, reversed, 0.0001f)
     }
 
     @Test fun albumHeaderUsesOrderZeroItemWindowAndEasing() {
@@ -977,10 +1002,10 @@ class ArtistPageContentTest {
         )
         val back = artistAlbumHeaderLocalProgress(
             PageTransitionPhase.Incoming,
-            pageProgress = 0.38f
+            pageProgress = 0.62f
         )
 
-        assertEquals(1f, forward + back, 0.0001f)
+        assertEquals(forward, back, 0.0001f)
     }
 
 }

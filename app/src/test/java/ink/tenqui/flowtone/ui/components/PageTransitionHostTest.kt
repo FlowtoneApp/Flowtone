@@ -61,43 +61,82 @@ class PageTransitionHostTest {
                 (PageMotion.DurationMillis * progress).toInt(),
                 pageTransitionDurationMillis(progress, 0f)
             )
+            assertFalse(pageTransitionEndpointReached(progress, 1f))
         }
     }
 
-    @Test fun cancelledForwardGenerationCannotCommitItsEndpoint() {
-        val forwardGeneration = Any()
-        val backGeneration = Any()
+    @Test fun onlyTheCoroutineThatReachesItsEndpointCanCleanUpThePair() {
+        assertFalse(pageTransitionEndpointReached(0.99f, 1f))
+        assertTrue(pageTransitionEndpointReached(0f, 0f))
+        assertTrue(pageTransitionEndpointReached(1f, 1f))
+    }
 
+    @Test fun anEndpointCannotCommitBeforeTheAnimatableActuallyReachesIt() {
         assertFalse(
-            pageTransitionEndpointCommitAllowed(
-                animationGeneration = forwardGeneration,
-                activeGeneration = backGeneration,
-                requestedTargetIsStillActive = false,
-                currentProgress = 1f,
+            pageTransitionEndpointReached(
+                currentProgress = 0.99f,
                 targetProgress = 1f
-            )
-        )
-        assertTrue(
-            pageTransitionEndpointCommitAllowed(
-                animationGeneration = backGeneration,
-                activeGeneration = backGeneration,
-                requestedTargetIsStillActive = true,
-                currentProgress = 0f,
-                targetProgress = 0f
             )
         )
     }
 
-    @Test fun anEndpointCannotCommitBeforeTheAnimatableActuallyReachesIt() {
-        val generation = Any()
+    @Test fun localElementCompletionCannotCommitTheMasterPair() {
+        val masterProgress = 0.8f
+        val localProgress = PageMotion.elementProgress(
+            pageProgress = masterProgress,
+            order = 0,
+            orderCount = PageMotion.DefaultOrderCount
+        )
 
+        assertTrue(localProgress > masterProgress)
+        assertFalse(pageTransitionEndpointReached(masterProgress, 1f))
+    }
+
+    @Test fun endpointCleanupRequiresTheLatestTargetToStillOwnThatEndpoint() {
         assertFalse(
-            pageTransitionEndpointCommitAllowed(
-                animationGeneration = generation,
-                activeGeneration = generation,
-                requestedTargetIsStillActive = true,
-                currentProgress = 0.99f,
-                targetProgress = 1f
+            pageTransitionEndpointStillRequested(
+                targetProgress = 1f,
+                latestTarget = "artist",
+                outgoing = "artist",
+                incoming = "album",
+                samePage = String::equals
+            )
+        )
+        assertTrue(
+            pageTransitionEndpointStillRequested(
+                targetProgress = 0f,
+                latestTarget = "artist",
+                outgoing = "artist",
+                incoming = "album",
+                samePage = String::equals
+            )
+        )
+    }
+
+    @Test fun retainedPairCannotCommitAtAnyLateBackSample() {
+        listOf(0.7f, 0.8f, 0.9f, 0.95f, 0.99f).forEach { progress ->
+            assertFalse(
+                pageTransitionCanCommitPair(
+                    currentProgress = progress,
+                    targetProgress = 1f,
+                    latestTarget = "album",
+                    outgoing = "artist",
+                    incoming = "album",
+                    samePage = String::equals
+                )
+            )
+        }
+    }
+
+    @Test fun finalFrameBackRevokesForwardEndpointCleanupOwnership() {
+        assertFalse(
+            pageTransitionCanCommitPair(
+                currentProgress = 1f,
+                targetProgress = 1f,
+                latestTarget = "artist",
+                outgoing = "artist",
+                incoming = "album",
+                samePage = String::equals
             )
         )
     }

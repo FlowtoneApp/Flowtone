@@ -153,7 +153,6 @@ internal fun SecondaryPageHost(
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     artistAlbumTransitionSnapshot: ArtistAlbumHeaderSnapshot? = null,
-    artistAlbumTargetVisible: Boolean = artistAlbumTransitionSnapshot != null,
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
@@ -469,7 +468,6 @@ internal fun SecondaryPageHost(
                     onOpenAlbum = onOpenAlbum,
                     onOpenProviderAlbum = onOpenProviderAlbum,
                     albumTransitionSnapshot = artistAlbumTransitionSnapshot,
-                    albumTransitionTargetVisible = artistAlbumTargetVisible,
                     onFullTitleRequest = onFullTitleRequest,
                     pageTransition = pageScope,
                     modifier = Modifier.fillMaxSize()

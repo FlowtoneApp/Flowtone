@@ -64,6 +64,38 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ExtensionManager
 
+internal data class SongListItemLayoutSpec(
+    val rowMinHeight: Dp,
+    val outerMinHeight: Dp,
+    val artworkSize: Dp,
+    val verticalPadding: Dp,
+    val horizontalPadding: Dp,
+    val titleToArtistSpacing: Dp,
+    val artworkToTextSpacing: Dp,
+    val textToTrailingSpacing: Dp,
+    val trailingWidth: Dp
+)
+
+internal val StandardSongListItemSpacing = 4.dp
+
+internal fun songListItemLayoutSpec(
+    compact: Boolean,
+    selectionSlotPadding: Dp = 0.dp
+): SongListItemLayoutSpec {
+    val rowMinHeight = if (compact) 64.dp else 72.dp
+    return SongListItemLayoutSpec(
+        rowMinHeight = rowMinHeight,
+        outerMinHeight = rowMinHeight + selectionSlotPadding * 2,
+        artworkSize = if (compact) 48.dp else 56.dp,
+        verticalPadding = if (compact) 6.dp else 8.dp,
+        horizontalPadding = 12.dp,
+        titleToArtistSpacing = if (compact) 0.dp else 2.dp,
+        artworkToTextSpacing = 12.dp,
+        textToTrailingSpacing = 12.dp,
+        trailingWidth = 96.dp
+    )
+}
+
 @Composable
 fun SongListItem(
     song: Song,
@@ -106,10 +138,7 @@ fun SongListItem(
             onClick = { onClick(song) }
         )
     }
-    val itemMinHeight = if (compact) 64.dp else 72.dp
-    val itemVerticalPadding = if (compact) 6.dp else 8.dp
-    val artworkSize = if (compact) 48.dp else 56.dp
-    val artistTopPadding = if (compact) 0.dp else 2.dp
+    val layoutSpec = songListItemLayoutSpec(compact, selectionSlotPadding)
     val contentColor = if (isCurrentSong) {
         MaterialTheme.colorScheme.onSecondaryContainer
     } else {
@@ -209,7 +238,7 @@ fun SongListItem(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = itemMinHeight + selectionSlotPadding * 2)
+            .heightIn(min = layoutSpec.outerMinHeight)
     ) {
         val selectionTopInset =
             selectionSlotPadding * (1f - topConnectionProgress)
@@ -260,11 +289,14 @@ fun SongListItem(
                         }
                     }
                 }
-                .heightIn(min = itemMinHeight)
-                .padding(horizontal = 12.dp, vertical = itemVerticalPadding),
+                .heightIn(min = layoutSpec.rowMinHeight)
+                .padding(
+                    horizontal = layoutSpec.horizontalPadding,
+                    vertical = layoutSpec.verticalPadding
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.size(artworkSize)) {
+            Box(modifier = Modifier.size(layoutSpec.artworkSize)) {
                 AlbumArtwork(
                     song = song,
                     isCurrentSong = isCurrentSong,
@@ -279,7 +311,10 @@ fun SongListItem(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp, end = 12.dp)
+                    .padding(
+                        start = layoutSpec.artworkToTextSpacing,
+                        end = layoutSpec.textToTrailingSpacing
+                    )
             ) {
                 Text(
                     text = song.title,
@@ -299,11 +334,11 @@ fun SongListItem(
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = artistTopPadding)
+                    modifier = Modifier.padding(top = layoutSpec.titleToArtistSpacing)
                 )
             }
             Box(
-                modifier = Modifier.width(96.dp)
+                modifier = Modifier.width(layoutSpec.trailingWidth)
             ) {
                 if (isPendingPlayback) {
                     androidx.compose.material3.CircularProgressIndicator(

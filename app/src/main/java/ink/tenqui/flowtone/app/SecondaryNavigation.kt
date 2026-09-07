@@ -246,7 +246,8 @@ internal data class SecondaryHeaderTransitionSlots(
     val current: SecondaryStackEntry? = null,
     val outgoing: SecondaryStackEntry? = null,
     val incoming: SecondaryStackEntry? = null,
-    val progress: Float = 1f
+    val progress: Float = 1f,
+    val transitionId: Int = 0
 )
 
 internal data class ActiveArtistHeaderSelection(

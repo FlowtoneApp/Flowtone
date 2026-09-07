@@ -14,7 +14,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class DebugProviderUiRegressionFixtureTest {
+class ProviderUiRegressionFixtureTest {
     @Test
     fun manifestDeclaresCurrentProviderCollectionContract() {
         val manifest = ExtensionManifestParser.parse(fixtureFile("manifest.json").readText())
@@ -165,9 +165,9 @@ class DebugProviderUiRegressionFixtureTest {
     }
 
     private fun fixtureFile(name: String): File = listOf(
-        File("src/debug/provider-artist-profile-fixture/$name"),
-        File("app/src/debug/provider-artist-profile-fixture/$name")
-    ).firstOrNull(File::isFile) ?: error("Debug provider UI fixture file is missing: $name")
+        File("src/internalTestFixture/provider-artist-profile-fixture/$name"),
+        File("app/src/internalTestFixture/provider-artist-profile-fixture/$name")
+    ).firstOrNull(File::isFile) ?: error("Provider UI fixture file is missing: $name")
 
     private fun String.between(start: String, end: String): String =
         substringAfter(start).substringBefore(end)
