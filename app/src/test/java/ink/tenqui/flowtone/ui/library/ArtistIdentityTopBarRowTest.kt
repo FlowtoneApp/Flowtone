@@ -1,9 +1,21 @@
 package ink.tenqui.flowtone.ui.library
 
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarPathBaselineCorrection
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ArtistIdentityTopBarRowTest {
+    @Test
+    fun everyArtistPathUsesOneTopBarAlignmentContract() {
+        assertEquals(FlowtoneTopBarContentHeight, ArtistTopBarLayout.contentHeight)
+        assertEquals(36f, ArtistTopBarLayout.avatarSize.value, 0f)
+        assertEquals(
+            FlowtoneTopBarPathBaselineCorrection,
+            ArtistTopBarLayout.breadcrumbBaselineOffsetY
+        )
+    }
+
     @Test
     fun measuredFullPathIsUsedWhenItFits() {
         assertEquals(

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarChildTitleOffsetY
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarPathBaselineCorrection
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarRootTitleOffsetY
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -93,7 +94,9 @@ internal fun FlowtonePathTitle(
     val rootOpticalOffsetXPx = with(density) { 1.dp.toPx() }
     val childRestingOffsetYPx = with(density) { FlowtoneTopBarChildTitleOffsetY.toPx() }
     val childHiddenOffsetYPx = with(density) { 48.dp.toPx() }
-    val pathBaselineCorrectionPx = with(density) { 1.dp.toPx() }
+    val pathBaselineCorrectionPx = with(density) {
+        FlowtoneTopBarPathBaselineCorrection.toPx()
+    }
     val pathGapPx = with(density) { 2.dp.toPx() }
     val separatorEnterDistancePx = with(density) { 16.dp.toPx() }
     val ancestorYPx = titleBaseOffsetYPx + ancestorOffsetYPx + pathBaselineCorrectionPx

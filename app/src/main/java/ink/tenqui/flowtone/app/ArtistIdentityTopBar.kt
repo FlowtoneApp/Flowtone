@@ -28,7 +28,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -40,10 +39,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneTopBarTitleStartPadding
 import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 import ink.tenqui.flowtone.ui.library.ArtistIdentityTopBarRow
 
-private val ArtistTopBarIdentityMotionDistance = 8.dp
-private const val ArtistTopBarIdentityStaggerMillis = 40
-private const val ArtistTopBarIdentityElementDurationMillis =
-    FlowtoneMotion.ShortDurationMillis - ArtistTopBarIdentityStaggerMillis
+internal val ArtistTopBarIdentityMotionDistance = 16.dp
 private const val ArtistTopBarPathStaggerFraction = 0.18f
 
 internal enum class ArtistTopBarSurfaceTreatment { Transparent }
@@ -56,6 +52,25 @@ internal data class ArtistTopBarPathElementProgress(
     val separator: Float,
     val title: Float
 )
+
+internal data class ArtistTopBarIdentityPresentation(
+    val alpha: Float,
+    val translationYFraction: Float
+)
+
+internal enum class ArtistTopBarPresentedElement { Back, Avatar, Breadcrumb }
+
+internal val ArtistTopBarUnifiedPresentedElements = ArtistTopBarPresentedElement.entries.toSet()
+
+internal fun artistTopBarIdentityPresentation(
+    progress: Float
+): ArtistTopBarIdentityPresentation {
+    val safeProgress = progress.coerceIn(0f, 1f)
+    return ArtistTopBarIdentityPresentation(
+        alpha = safeProgress,
+        translationYFraction = -(1f - safeProgress)
+    )
+}
 
 internal fun artistTopBarPathElementProgress(
     pathProgress: Float,
@@ -121,36 +136,20 @@ internal fun ArtistIdentityTopBar(
         targetState = identityVisible,
         label = "ArtistTopBarIdentity"
     )
-    val avatarProgress by identityTransition.animateFloat(
+    val identityProgress by identityTransition.animateFloat(
         transitionSpec = {
             tween(
-                durationMillis = ArtistTopBarIdentityElementDurationMillis,
-                delayMillis = if (targetState) 0 else ArtistTopBarIdentityStaggerMillis,
+                durationMillis = FlowtoneMotion.ShortDurationMillis,
                 easing = FlowtoneMotion.Easing
             )
         },
-        label = "ArtistTopBarAvatarProgress"
+        label = "ArtistTopBarIdentityProgress"
     ) { shown -> if (shown) 1f else 0f }
-    val artistTitleProgress by identityTransition.animateFloat(
-        transitionSpec = {
-            tween(
-                durationMillis = ArtistTopBarIdentityElementDurationMillis,
-                delayMillis = if (targetState) ArtistTopBarIdentityStaggerMillis else 0,
-                easing = FlowtoneMotion.Easing
-            )
-        },
-        label = "ArtistTopBarTitleProgress"
-    ) { shown -> if (shown) 1f else 0f }
+    val identityPresentation = artistTopBarIdentityPresentation(identityProgress)
     val density = LocalDensity.current
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     val identityMotionDistancePx = with(density) { ArtistTopBarIdentityMotionDistance.toPx() }
-    val contentColor = if (
-        backgroundKind == ArtistHeroBackgroundKind.Banner && !identityVisible
-    ) {
-        Color.White.copy(alpha = 0.94f)
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val contentColor = MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = modifier
@@ -163,11 +162,17 @@ internal fun ArtistIdentityTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(FlowtoneTopBarContentHeight),
+                .height(FlowtoneTopBarContentHeight)
+                .graphicsLayer {
+                    alpha = identityPresentation.alpha
+                    translationY = identityMotionDistancePx *
+                        identityPresentation.translationYFraction
+                },
             contentAlignment = Alignment.CenterStart
         ) {
             IconButton(
                 onClick = onBack,
+                enabled = identityVisible,
                 modifier = Modifier
                     .offset(x = (-8).dp)
                     .padding(start = 12.dp)
@@ -187,9 +192,6 @@ internal fun ArtistIdentityTopBar(
                 pathProgress = pathProgress.value,
                 pathSeparatorProgress = pathElementProgress.separator,
                 pathTitleProgress = pathElementProgress.title,
-                avatarProgress = avatarProgress,
-                artistTitleProgress = artistTitleProgress,
-                identityMotionDistancePx = identityMotionDistancePx,
                 contentColor = contentColor,
                 onFullTitleRequest = onFullTitleRequest,
                 interactionEnabled = identityVisible,

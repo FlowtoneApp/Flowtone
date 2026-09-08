@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.online.ExtensionImage
@@ -117,14 +118,19 @@ internal class ArtistHeroStateOwner internal constructor(
     var backgroundKind by mutableStateOf(initialBackgroundKind)
         private set
 
+    var resolvedCloudColor by mutableStateOf<Color?>(null)
+        private set
+
     var focusRequested by mutableStateOf(false)
 
     fun updatePresentation(
         avatar: ExtensionImage?,
-        backgroundKind: ArtistHeroBackgroundKind
+        backgroundKind: ArtistHeroBackgroundKind,
+        cloudColor: Color
     ) {
         resolvedAvatar = avatar
         this.backgroundKind = backgroundKind
+        resolvedCloudColor = cloudColor
     }
 }
 

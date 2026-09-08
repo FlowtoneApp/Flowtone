@@ -37,7 +37,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -88,21 +87,21 @@ import ink.tenqui.flowtone.data.online.providerAlbumsForArtist
 import ink.tenqui.flowtone.data.online.providerSongsForArtist
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
+import ink.tenqui.flowtone.ui.components.FlowtoneCollectionArtworkCard
+import ink.tenqui.flowtone.ui.components.FlowtoneCollectionCardWidth
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
-import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
-import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.SongListItemSkeleton
 import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
 import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
+import ink.tenqui.flowtone.ui.components.rememberHorizontalCardPageMotion
+import ink.tenqui.flowtone.ui.components.horizontalEndDragAction
 import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
-import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
-import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
 
@@ -113,7 +112,6 @@ private val ArtistInfoCardShape = RoundedCornerShape(
     bottomStart = 8.dp
 )
 private val ArtistInfoCardSectionGap = 8.dp
-private val ArtistAlbumArtworkSize = 140.dp
 private val ArtistSectionHeaderTopSpacing = 12.dp
 private val ArtistSectionHeaderBottomSpacing = 8.dp
 private const val ArtistFirstSongListItemIndex = 2
@@ -129,23 +127,6 @@ internal enum class ArtistHeroElement(val order: Int) {
     Metadata(4),
     Biography(5),
     Content(6)
-}
-
-internal fun artistHeroElementAlpha(
-    phase: PageTransitionPhase,
-    pageProgress: Float,
-    element: ArtistHeroElement
-): Float {
-    val elementProgress = PageMotion.elementProgress(
-        pageProgress = pageProgress,
-        order = element.order,
-        orderCount = ArtistHeroMotionOrderCount
-    )
-    return when (phase) {
-        PageTransitionPhase.Incoming,
-        PageTransitionPhase.Current -> elementProgress
-        PageTransitionPhase.Outgoing -> 1f - elementProgress
-    }
 }
 
 internal fun artistBannerDisplayMemoryCacheKey(banner: ExtensionImage): String =
@@ -303,6 +284,12 @@ internal fun ArtistPage(
     val previewProviderAlbums = remember(artistProviderAlbums) {
         artistAlbumPreview(artistProviderAlbums)
     }
+    val hasMoreAlbums = artistAlbums.size + artistProviderAlbums.size > ArtistAlbumPreviewLimit
+    val albumPreviewMotion = rememberHorizontalCardPageMotion(
+        sessionKey = "$entryKey:albums-preview",
+        listState = albumPreviewState,
+        pageTransition = pageTransition
+    )
     val songsSectionTitle = remember(songOrderTitle) {
         artistSongsSectionTitle(songOrderTitle)
     }
@@ -395,7 +382,8 @@ internal fun ArtistPage(
     SideEffect {
         heroStateOwner.updatePresentation(
             avatar = artistAvatarImage,
-            backgroundKind = backgroundKind
+            backgroundKind = backgroundKind,
+            cloudColor = artistColor
         )
     }
     val heroFocused = heroStateOwner.focusRequested
@@ -506,22 +494,8 @@ internal fun ArtistPage(
             }
     ) {
         val heroGeometry = artistHeroGeometry(maxWidth)
-        if (backgroundKind == ArtistHeroBackgroundKind.Cloud) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        alpha = artistHeroElementAlpha(
-                            phase = pageTransition.phase,
-                            pageProgress = pageTransition.progress,
-                            element = ArtistHeroElement.Background
-                        )
-                    }
-                    .topLevelPageBackground(
-                        cloudPalette = monochromeFlowtoneCloudPalette(artistColor),
-                        cloudPlacement = HomeBackgroundCloudPlacement
-                    )
-            )
+        if (artistCloudVisible(backgroundKind)) {
+            ArtistCloudBackground(accentColor = artistColor)
         }
         LazyColumn(
             state = listState,
@@ -669,33 +643,39 @@ internal fun ArtistPage(
                         LazyRow(
                             state = albumPreviewState,
                             contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.horizontalEndDragAction(
+                                listState = albumPreviewState,
+                                enabled = hasMoreAlbums,
+                                onTriggered = onOpenAllAlbums
+                            )
                         ) {
                             items(previewLocalAlbums, key = LocalAlbum::id) { album ->
-                                ArtistAlbumCard(
-                                    album = album,
-                                    onClick = { onOpenAlbum(album.id) }
+                                FlowtoneCollectionArtworkCard(
+                                    title = album.title,
+                                    subtitle = "${album.songs.size} 首歌曲",
+                                    artworkUri = album.artworkUri,
+                                    onClick = { onOpenAlbum(album.id) },
+                                    titleMaxLines = 2,
+                                    modifier = albumPreviewMotion.itemModifier(album.id)
+                                        .width(FlowtoneCollectionCardWidth)
                                 )
                             }
                             items(
                                 previewProviderAlbums,
                                 key = { album -> album.identity.stableKey }
                             ) { album ->
-                                ArtistAlbumCard(
+                                FlowtoneCollectionArtworkCard(
                                     title = album.title,
-                                    supportingText = album.songCount?.let { "$it 首歌曲" }
+                                    subtitle = album.songCount?.let { "$it 首歌曲" }
                                         ?: album.artist.ifBlank { "未知艺术家" },
                                     extensionArtwork = album.artwork,
-                                    onClick = { onOpenProviderAlbum(album) }
+                                    onClick = { onOpenProviderAlbum(album) },
+                                    titleMaxLines = 2,
+                                    modifier = albumPreviewMotion.itemModifier(
+                                        album.identity.stableKey
+                                    ).width(FlowtoneCollectionCardWidth)
                                 )
-                            }
-                            if (
-                                artistAlbums.size > ArtistAlbumPreviewLimit ||
-                                artistProviderAlbums.size > ArtistAlbumPreviewLimit
-                            ) {
-                                item(key = "artist-albums-more") {
-                                    ArtistAlbumsMoreCard(onClick = onOpenAllAlbums)
-                                }
                             }
                         }
                     }
@@ -765,13 +745,16 @@ private fun ArtistHero(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(geometry.backgroundHeight)
-                    .graphicsLayer {
-                        alpha = artistHeroElementAlpha(
-                            phase = pageTransition.phase,
-                            pageProgress = pageTransition.progress,
-                            element = ArtistHeroElement.Background
-                        )
-                    }
+                    .then(
+                        if (backgroundKind == ArtistHeroBackgroundKind.Banner) {
+                            pageTransition.elementModifier(
+                                order = ArtistHeroElement.Background.order,
+                                orderCount = ArtistHeroMotionOrderCount
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
             )
             ArtistInfoCard(
                 artistName = artistName,
@@ -1042,39 +1025,6 @@ private fun ArtistPreviewSectionHeader(
 }
 
 @Composable
-private fun ArtistAlbumsMoreCard(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
-        modifier = modifier
-            .size(ArtistAlbumArtworkSize)
-            .clickable(onClick = onClick)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "继续左滑以查看更多",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-    }
-}
-
-@Composable
 private fun ArtistBiographyFocus(
     artistName: String,
     biography: String,
@@ -1141,59 +1091,6 @@ private fun ArtistBiographyFocus(
                 }
             }
         }
-    }
-}
-
-@Composable
-internal fun ArtistAlbumCard(
-    album: LocalAlbum,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    ArtistAlbumCard(
-        title = album.title,
-        supportingText = "${album.songs.size} 首歌曲",
-        artworkUri = album.artworkUri,
-        onClick = onClick,
-        modifier = modifier
-    )
-}
-
-@Composable
-internal fun ArtistAlbumCard(
-    title: String,
-    supportingText: String,
-    artworkUri: android.net.Uri? = null,
-    extensionArtwork: ExtensionImage? = null,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .width(ArtistAlbumArtworkSize)
-            .clickable(onClick = onClick)
-    ) {
-        FlowtoneArtwork(
-            artworkUri = artworkUri,
-            extensionArtwork = extensionArtwork,
-            modifier = Modifier.size(ArtistAlbumArtworkSize)
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Text(
-            text = supportingText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            modifier = Modifier.padding(top = 2.dp)
-        )
     }
 }
 

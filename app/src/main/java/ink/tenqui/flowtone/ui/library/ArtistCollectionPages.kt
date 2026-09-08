@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,10 +30,12 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.toPresentationSong
+import ink.tenqui.flowtone.ui.components.FlowtoneCollectionArtworkCard
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.SongListItemSkeleton
+import ink.tenqui.flowtone.ui.components.rememberGridCardPageMotion
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 
 private val ArtistCollectionHorizontalPadding = 20.dp
@@ -128,6 +131,8 @@ internal fun ArtistSongsPage(
 
 @Composable
 internal fun ArtistAlbumsPage(
+    entryKey: String,
+    artistCloudColor: Color,
     hasLocalContent: Boolean,
     localAlbums: List<LocalAlbum>,
     providerAlbums: List<ProviderAlbum>,
@@ -138,69 +143,85 @@ internal fun ArtistAlbumsPage(
     modifier: Modifier = Modifier
 ) {
     val gridState = rememberLazyGridState()
+    val gridMotion = rememberGridCardPageMotion(
+        sessionKey = entryKey,
+        gridState = gridState,
+        pageTransition = pageTransition
+    )
     val density = LocalDensity.current
     val topPadding = with(density) { WindowInsets.statusBars.getTop(this).toDp() } +
         FlowtoneTopBarContentHeight + ArtistCollectionTopGap
 
-    if (localAlbums.isEmpty() && providerAlbums.isEmpty()) {
-        Box(
-            contentAlignment = Alignment.TopStart,
-            modifier = modifier
-                .fillMaxSize()
-                .rightSwipeBackGesture(onBack)
-                .padding(top = topPadding)
-        ) {
-            ArtistCollectionEmptyText(
-                text = "没有找到该艺术家的专辑",
-                modifier = pageTransition.elementModifier(0)
-            )
-        }
-        return
-    }
-
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 140.dp),
-        state = gridState,
-        contentPadding = PaddingValues(
-            start = ArtistCollectionHorizontalPadding,
-            top = topPadding,
-            end = ArtistCollectionHorizontalPadding,
-            bottom = ArtistCollectionBottomPadding
-        ),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+    Box(
         modifier = modifier
             .fillMaxSize()
             .rightSwipeBackGesture(onBack)
     ) {
-        if (hasLocalContent) {
-            itemsIndexed(localAlbums, key = { _, album -> album.id }) { index, album ->
-                Box(
-                    contentAlignment = Alignment.TopCenter,
-                    modifier = pageTransition.elementModifier(index).fillMaxWidth()
-                ) {
-                    ArtistAlbumCard(
-                        album = album,
-                        onClick = { onOpenAlbum(album.id) }
-                    )
-                }
+        ArtistCloudBackground(accentColor = artistCloudColor)
+        if (localAlbums.isEmpty() && providerAlbums.isEmpty()) {
+            Box(
+                contentAlignment = Alignment.TopStart,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = topPadding)
+            ) {
+                ArtistCollectionEmptyText(
+                    text = "没有找到该艺术家的专辑",
+                    modifier = pageTransition.elementModifier(0)
+                )
             }
         } else {
-            itemsIndexed(
-                providerAlbums,
-                key = { _, album -> album.identity.stableKey }
-            ) { index, album ->
-                Box(
-                    contentAlignment = Alignment.TopCenter,
-                    modifier = pageTransition.elementModifier(index).fillMaxWidth()
-                ) {
-                    ArtistAlbumCard(
-                        title = album.title,
-                        supportingText = album.songCount?.let { "$it 首歌曲" }
-                            ?: album.artist.ifBlank { "未知艺术家" },
-                        extensionArtwork = album.artwork,
-                        onClick = { onOpenProviderAlbum(album) }
-                    )
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 140.dp),
+                state = gridState,
+                contentPadding = PaddingValues(
+                    start = ArtistCollectionHorizontalPadding,
+                    top = topPadding,
+                    end = ArtistCollectionHorizontalPadding,
+                    bottom = ArtistCollectionBottomPadding
+                ),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (hasLocalContent) {
+                    itemsIndexed(localAlbums, key = { _, album -> album.id }) { _, album ->
+                        Box(
+                            contentAlignment = Alignment.TopCenter,
+                            modifier = gridMotion.itemModifier(album.id).fillMaxWidth()
+                        ) {
+                            FlowtoneCollectionArtworkCard(
+                                title = album.title,
+                                subtitle = "${album.songs.size} 首歌曲",
+                                artworkUri = album.artworkUri,
+                                onClick = { onOpenAlbum(album.id) },
+                                titleMaxLines = 2,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                } else {
+                    itemsIndexed(
+                        providerAlbums,
+                        key = { _, album -> album.identity.stableKey }
+                    ) { _, album ->
+                        Box(
+                            contentAlignment = Alignment.TopCenter,
+                            modifier = gridMotion.itemModifier(
+                                album.identity.stableKey
+                            ).fillMaxWidth()
+                        ) {
+                            FlowtoneCollectionArtworkCard(
+                                title = album.title,
+                                subtitle = album.songCount?.let { "$it 首歌曲" }
+                                    ?: album.artist.ifBlank { "未知艺术家" },
+                                extensionArtwork = album.artwork,
+                                onClick = { onOpenProviderAlbum(album) },
+                                titleMaxLines = 2,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
         }

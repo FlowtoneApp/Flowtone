@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
@@ -42,6 +43,7 @@ import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 internal val FlowtoneContentCardShape = RoundedCornerShape(8.dp)
+internal val FlowtoneCollectionCardWidth = 140.dp
 
 @Composable
 internal fun FlowtoneContentSectionTitle(
@@ -66,31 +68,13 @@ internal fun FlowtoneSongArtworkCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    FlowtoneCollectionArtworkCard(
+        title = song.title,
+        subtitle = song.artist,
+        artworkUri = song.artworkUri,
+        onClick = onClick,
         modifier = modifier
-            .clip(FlowtoneContentCardShape)
-            .clickable(onClick = onClick)
-            .padding(bottom = 4.dp)
-    ) {
-        FlowtoneArtwork(song = song)
-        Text(
-            text = song.title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Text(
-            text = song.artist,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-    }
+    )
 }
 
 /** 保留“常听歌单”的强调卡与标题层级，供该区块恢复时直接使用。 */
@@ -163,24 +147,47 @@ internal fun FlowtoneProviderPlaylistCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    FlowtoneCollectionArtworkCard(
+        title = title,
+        subtitle = creator,
+        artworkUri = artworkUri,
+        onClick = onClick,
+        modifier = modifier
+    )
+}
+
+/** Shared artwork/text shell for home playlists, albums, and other media collections. */
+@Composable
+internal fun FlowtoneCollectionArtworkCard(
+    title: String,
+    subtitle: String,
+    artworkUri: Uri? = null,
+    extensionArtwork: ExtensionImage? = null,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    titleMaxLines: Int = 1
+) {
     Column(
         modifier = modifier
             .clip(FlowtoneContentCardShape)
             .clickable(onClick = onClick)
             .padding(bottom = 4.dp)
     ) {
-        FlowtoneArtwork(artworkUri = artworkUri)
+        FlowtoneArtwork(
+            artworkUri = artworkUri,
+            extensionArtwork = extensionArtwork
+        )
         Text(
             text = title,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
-            maxLines = 1,
+            maxLines = titleMaxLines,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp)
         )
         Text(
-            text = creator,
+            text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -190,6 +197,7 @@ internal fun FlowtoneProviderPlaylistCard(
     }
 }
 
+/** A narrow terminal action which keeps the collection-card surface language. */
 @Composable
 internal fun FlowtoneArtwork(
     song: Song,

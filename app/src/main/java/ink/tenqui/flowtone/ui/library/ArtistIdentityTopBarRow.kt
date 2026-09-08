@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,12 +27,26 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarPathBaselineCorrection
 import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 
-private val ArtistTopBarAvatarSize = 36.dp
+internal data class ArtistTopBarLayoutContract(
+    val contentHeight: Dp,
+    val avatarSize: Dp,
+    val breadcrumbBaselineOffsetY: Dp
+)
+
+internal val ArtistTopBarLayout = ArtistTopBarLayoutContract(
+    contentHeight = FlowtoneTopBarContentHeight,
+    avatarSize = 36.dp,
+    breadcrumbBaselineOffsetY = FlowtoneTopBarPathBaselineCorrection
+)
+
 private val ArtistTopBarTitleGap = 10.dp
 
 internal data class ArtistTopBarTitlePresentation(
@@ -105,9 +121,6 @@ internal fun ArtistIdentityTopBarRow(
     pathProgress: Float,
     pathSeparatorProgress: Float,
     pathTitleProgress: Float,
-    avatarProgress: Float,
-    artistTitleProgress: Float,
-    identityMotionDistancePx: Float,
     contentColor: Color,
     onFullTitleRequest: (String) -> Unit,
     interactionEnabled: Boolean = true,
@@ -127,9 +140,12 @@ internal fun ArtistIdentityTopBarRow(
     val artistInteractionSource = remember(artistName) { MutableInteractionSource() }
     val currentInteractionSource = remember(currentTitle) { MutableInteractionSource() }
 
-    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.CenterStart) {
+    BoxWithConstraints(
+        modifier = modifier.height(ArtistTopBarLayout.contentHeight),
+        contentAlignment = Alignment.CenterStart
+    ) {
         val avatarAndGapWidthPx = with(density) {
-            ArtistTopBarAvatarSize.toPx() + ArtistTopBarTitleGap.toPx()
+            ArtistTopBarLayout.avatarSize.toPx() + ArtistTopBarTitleGap.toPx()
         }
         val artistWidthPx = textMeasurer.measure(artistName, textStyle).size.width.toFloat()
         val availableWidthPx = with(density) { maxWidth.toPx() }
@@ -144,14 +160,10 @@ internal fun ArtistIdentityTopBarRow(
             ) {
                 if (artistPresentation.showAvatarAndBreadcrumb) {
                     ArtistAvatar(
-                        size = ArtistTopBarAvatarSize,
+                        size = ArtistTopBarLayout.avatarSize,
                         image = avatarImage,
                         backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                        iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.graphicsLayer {
-                            alpha = avatarProgress
-                            translationY = -identityMotionDistancePx * (1f - avatarProgress)
-                        }
+                        iconColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
                 Text(
@@ -170,10 +182,7 @@ internal fun ArtistIdentityTopBarRow(
                                 Modifier
                             }
                         )
-                        .graphicsLayer {
-                            alpha = artistTitleProgress
-                            translationY = -identityMotionDistancePx * (1f - artistTitleProgress)
-                        }
+                        .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
                         .clickable(
                             enabled = interactionEnabled &&
                                 canOpenFullTitleOverlay(artistHasVisualOverflow),
@@ -206,14 +215,10 @@ internal fun ArtistIdentityTopBarRow(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         ArtistAvatar(
-                            size = ArtistTopBarAvatarSize,
+                            size = ArtistTopBarLayout.avatarSize,
                             image = avatarImage,
                             backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                            iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.graphicsLayer {
-                                alpha = avatarProgress
-                                translationY = -identityMotionDistancePx * (1f - avatarProgress)
-                            }
+                            iconColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
                             text = artistName,
@@ -222,15 +227,12 @@ internal fun ArtistIdentityTopBarRow(
                             maxLines = 1,
                             modifier = Modifier
                                 .padding(start = ArtistTopBarTitleGap)
-                                .graphicsLayer {
-                                    alpha = artistTitleProgress
-                                    translationY = -identityMotionDistancePx *
-                                        (1f - artistTitleProgress)
-                                }
+                                .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
                         )
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
+                                .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
                                 .graphicsLayer {
                                     alpha = titleTransition.alpha
                                     translationX = pathMotionDistancePx *
@@ -280,15 +282,10 @@ internal fun ArtistIdentityTopBarRow(
                         ) {
                             if (artistPresentation.showAvatarAndBreadcrumb) {
                                 ArtistAvatar(
-                                    size = ArtistTopBarAvatarSize,
+                                    size = ArtistTopBarLayout.avatarSize,
                                     image = avatarImage,
                                     backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                                    iconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.graphicsLayer {
-                                        alpha = avatarProgress
-                                        translationY = -identityMotionDistancePx *
-                                            (1f - avatarProgress)
-                                    }
+                                    iconColor = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                             Text(
@@ -306,11 +303,7 @@ internal fun ArtistIdentityTopBarRow(
                                             Modifier
                                         }
                                     )
-                                    .graphicsLayer {
-                                        alpha = artistTitleProgress
-                                        translationY = -identityMotionDistancePx *
-                                            (1f - artistTitleProgress)
-                                    }
+                                    .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
                             )
                         }
                         Row(
@@ -329,7 +322,7 @@ internal fun ArtistIdentityTopBarRow(
                                 )
                         ) {
                             ArtistAvatar(
-                                size = ArtistTopBarAvatarSize,
+                                size = ArtistTopBarLayout.avatarSize,
                                 image = avatarImage,
                                 backgroundColor = MaterialTheme.colorScheme.primaryContainer,
                                 iconColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -339,7 +332,9 @@ internal fun ArtistIdentityTopBarRow(
                                 style = textStyle,
                                 color = contentColor.copy(alpha = 0.72f),
                                 maxLines = 1,
-                                modifier = Modifier.padding(start = ArtistTopBarTitleGap)
+                                modifier = Modifier
+                                    .padding(start = ArtistTopBarTitleGap)
+                                    .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
                             )
                             Text(
                                 text = currentTitle,
@@ -352,6 +347,7 @@ internal fun ArtistIdentityTopBarRow(
                                 },
                                 modifier = Modifier
                                     .weight(1f)
+                                    .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
                                     .clickable(
                                         enabled = interactionEnabled &&
                                             replacementTransition.albumAlpha >= 0.999f &&

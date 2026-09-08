@@ -1,8 +1,11 @@
 package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import ink.tenqui.flowtone.core.online.ArtistMetadata
+import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.pageElementVisualState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -284,69 +287,47 @@ class ArtistPageContentTest {
     }
 
     @Test
-    fun incomingHeroNeverStartsFullyVisible() {
-        ArtistHeroElement.entries.forEach { element ->
-            assertEquals(
-                0f,
-                artistHeroElementAlpha(PageTransitionPhase.Incoming, 0f, element),
-                0f
-            )
-        }
-    }
-
-    @Test
-    fun outgoingHeroStartsVisibleAndEndsHiddenWithoutRetainedAnimationState() {
-        ArtistHeroElement.entries.forEach { element ->
-            assertEquals(
-                1f,
-                artistHeroElementAlpha(PageTransitionPhase.Outgoing, 0f, element),
-                0f
-            )
-            assertEquals(
-                0f,
-                artistHeroElementAlpha(PageTransitionPhase.Outgoing, 1f, element),
-                0f
-            )
-        }
-    }
-
-    @Test
-    fun reverseAndRecompositionUseOnlyTheCurrentPagePresentation() {
-        val forward = artistHeroElementAlpha(
-            PageTransitionPhase.Outgoing,
-            0.62f,
-            ArtistHeroElement.Avatar
+    fun incomingBannerUsesCanonicalPageElementStart() {
+        val progress = PageMotion.elementProgress(
+            pageProgress = 0f,
+            order = ArtistHeroElement.Background.order,
+            orderCount = ArtistHeroElement.entries.size
         )
-        val reversed = artistHeroElementAlpha(
-            PageTransitionPhase.Outgoing,
-            0.41f,
-            ArtistHeroElement.Avatar
-        )
-        val recomposed = artistHeroElementAlpha(
-            PageTransitionPhase.Outgoing,
-            0.41f,
-            ArtistHeroElement.Avatar
-        )
-
-        assertTrue(reversed > forward)
-        assertEquals(reversed, recomposed, 0f)
-    }
-
-    @Test
-    fun cloudAndBannerUseTheSameHeroElementTimeline() {
-        val cloudAlpha = artistHeroElementAlpha(
+        val presentation = pageElementVisualState(
             PageTransitionPhase.Incoming,
-            0f,
-            ArtistHeroElement.Background
-        )
-        val bannerAlpha = artistHeroElementAlpha(
-            PageTransitionPhase.Incoming,
-            0f,
-            ArtistHeroElement.Background
+            progress,
+            signedOffsetYPx = 24f
         )
 
-        assertEquals(0f, cloudAlpha, 0f)
-        assertEquals(cloudAlpha, bannerAlpha, 0f)
+        assertEquals(0f, presentation.alpha, 0f)
+        assertTrue(presentation.translationY > 0f)
+    }
+
+    @Test
+    fun outgoingBannerUsesCanonicalDownwardFade() {
+        val start = pageElementVisualState(PageTransitionPhase.Outgoing, 0f, 24f)
+        val end = pageElementVisualState(PageTransitionPhase.Outgoing, 1f, 24f)
+
+        assertEquals(1f, start.alpha, 0f)
+        assertEquals(0f, start.translationY, 0f)
+        assertEquals(0f, end.alpha, 0f)
+        assertTrue(end.translationY > 0f)
+    }
+
+    @Test
+    fun bannerReverseAndRecompositionFollowOnlyPageMasterProgress() {
+        val forward = pageElementVisualState(PageTransitionPhase.Outgoing, 0.62f, 24f)
+        val reversed = pageElementVisualState(PageTransitionPhase.Outgoing, 0.41f, 24f)
+        val recomposed = pageElementVisualState(PageTransitionPhase.Outgoing, 0.41f, 24f)
+
+        assertTrue(reversed.alpha > forward.alpha)
+        assertEquals(reversed, recomposed)
+    }
+
+    @Test
+    fun artistCloudIsPresentWithAndWithoutBanner() {
+        assertTrue(artistCloudVisible(ArtistHeroBackgroundKind.Banner))
+        assertTrue(artistCloudVisible(ArtistHeroBackgroundKind.Cloud))
     }
 
     @Test
@@ -363,9 +344,15 @@ class ArtistPageContentTest {
             initialBackgroundKind = ArtistHeroBackgroundKind.Cloud
         )
 
+        first.updatePresentation(
+            avatar = null,
+            backgroundKind = ArtistHeroBackgroundKind.Banner,
+            cloudColor = Color.Red
+        )
         first.focusRequested = true
         assertTrue(first.focusRequested)
         assertFalse(second.focusRequested)
+        assertEquals(Color.Red, store.owner("artist-1")?.resolvedCloudColor)
         assertEquals(first, store.owner("artist-1"))
 
         store.retainEntries(setOf("artist-2"))

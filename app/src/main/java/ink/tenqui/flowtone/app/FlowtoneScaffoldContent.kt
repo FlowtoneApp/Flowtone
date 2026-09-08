@@ -478,20 +478,29 @@ internal fun FlowtoneScaffoldContent(
                                 }
                                 val artistDestination =
                                     page.destination as? SecondaryDestination.Artist
-                                val artistHeroStateOwner = if (artistDestination != null) {
-                                    artistHeroStateStore.ownerFor(
-                                        entryKey = page.entry.uiStateKey(),
-                                        initialAvatar = artistDestination.identity.avatar,
-                                        initialBackgroundKind = if (
-                                            artistDestination.identity.profileMetadata?.banner != null
-                                        ) {
-                                            ArtistHeroBackgroundKind.Banner
-                                        } else {
-                                            ArtistHeroBackgroundKind.Cloud
-                                        }
-                                    )
-                                } else {
-                                    null
+                                val artistHeroStateOwner = remember(page.entry.uiStateKey()) {
+                                    if (artistDestination != null) {
+                                        artistHeroStateStore.ownerFor(
+                                            entryKey = page.entry.uiStateKey(),
+                                            initialAvatar = artistDestination.identity.avatar,
+                                            initialBackgroundKind = if (
+                                                artistDestination.identity.profileMetadata
+                                                    ?.banner != null
+                                            ) {
+                                                ArtistHeroBackgroundKind.Banner
+                                            } else {
+                                                ArtistHeroBackgroundKind.Cloud
+                                            }
+                                        )
+                                    } else {
+                                        val parentIdentity = artistPathIdentity(page.destination)
+                                        val parentEntryKey = state.secondaryEntries
+                                            .lastOrNull { entry ->
+                                                (entry.destination as? SecondaryDestination.Artist)
+                                                    ?.identity?.stableId == parentIdentity?.stableId
+                                            }?.uiStateKey()
+                                        artistHeroStateStore.owner(parentEntryKey)
+                                    }
                                 }
                                 val artistTopBarStateOwner =
                                     if (artistDestination != null) {
