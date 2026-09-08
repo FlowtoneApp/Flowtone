@@ -5,6 +5,8 @@ import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
+import ink.tenqui.flowtone.data.online.displayTitleOrNull
 import ink.tenqui.flowtone.data.online.sanitizedFor
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
@@ -14,6 +16,8 @@ internal sealed interface ArtistDestinationIdentity {
     val avatar: ExtensionImage?
     val hasLocalContent: Boolean
     val profileMetadata: ArtistMetadata?
+        get() = null
+    val songOrder: ArtistSongOrderInfo?
         get() = null
 
     data class Local(
@@ -32,7 +36,8 @@ internal sealed interface ArtistDestinationIdentity {
         val artistId: String,
         override val displayName: String,
         override val avatar: ExtensionImage?,
-        override val profileMetadata: ArtistMetadata? = null
+        override val profileMetadata: ArtistMetadata? = null,
+        override val songOrder: ArtistSongOrderInfo? = null
     ) : ArtistDestinationIdentity {
         override val stableId: String
             get() = "provider:${providerId.trim()}\u0000${artistId.trim()}"
@@ -129,6 +134,18 @@ internal sealed interface SecondaryDestination {
 
         override fun toString(): String = "Artist(identity=$identity)"
     }
+
+    data class ArtistSongs(
+        val parentArtist: ArtistDestinationIdentity
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.Artist
+    }
+
+    data class ArtistAlbums(
+        val parentArtist: ArtistDestinationIdentity
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.Artist
+    }
 }
 
 internal enum class SecondaryTopPresentationOwner { ArtistTopBar, StandardTopBar }
@@ -136,7 +153,9 @@ internal enum class SecondaryTopPresentationOwner { ArtistTopBar, StandardTopBar
 internal fun secondaryTopPresentationOwner(
     destination: SecondaryDestination?
 ): SecondaryTopPresentationOwner = when (destination) {
-    is SecondaryDestination.Artist -> SecondaryTopPresentationOwner.ArtistTopBar
+    is SecondaryDestination.Artist,
+    is SecondaryDestination.ArtistSongs,
+    is SecondaryDestination.ArtistAlbums -> SecondaryTopPresentationOwner.ArtistTopBar
     is SecondaryDestination.Album -> if (destination.parentArtist != null) {
         SecondaryTopPresentationOwner.ArtistTopBar
     } else {
@@ -153,14 +172,14 @@ internal data class SecondaryStackEntry(
 internal data class ArtistTopBarRoute(
     val artistEntryKey: String,
     val artist: SecondaryDestination.Artist,
-    val albumEntryKey: String? = null,
-    val albumTitle: String? = null
+    val pathEntryKey: String? = null,
+    val pathSegments: List<String> = emptyList()
 )
 
 internal fun artistTopBarIdentityVisible(
     route: ArtistTopBarRoute,
     scrollIdentityVisible: Boolean
-): Boolean = route.albumTitle != null || scrollIdentityVisible
+): Boolean = route.pathSegments.isNotEmpty() || scrollIdentityVisible
 
 internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBarRoute? {
     val currentEntry = entries.lastOrNull() ?: return null
@@ -169,21 +188,67 @@ internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBar
             artistEntryKey = currentEntry.uiStateKey(),
             artist = current
         )
+        is SecondaryDestination.ArtistSongs -> artistChildTopBarRoute(
+            entries = entries,
+            parentIdentity = current.parentArtist,
+            pathSegments = listOf("全部歌曲")
+        )
+        is SecondaryDestination.ArtistAlbums -> artistChildTopBarRoute(
+            entries = entries,
+            parentIdentity = current.parentArtist,
+            pathSegments = listOf("全部专辑")
+        )
         is SecondaryDestination.Album -> {
             val parentIdentity = current.parentArtist ?: return null
-            val parentEntry = entries.dropLast(1).lastOrNull { entry ->
+            val parentIndex = entries.dropLast(1).indexOfLast { entry ->
                 (entry.destination as? SecondaryDestination.Artist)
                     ?.identity?.stableId == parentIdentity.stableId
-            } ?: return null
+            }.takeIf { it >= 0 } ?: return null
+            val parentEntry = entries[parentIndex]
+            val parentSegments = entries.subList(parentIndex + 1, entries.lastIndex)
+                .mapNotNull { entry ->
+                    when (entry.destination) {
+                        is SecondaryDestination.ArtistAlbums -> "全部专辑"
+                        else -> null
+                    }
+                }
             ArtistTopBarRoute(
                 artistEntryKey = parentEntry.uiStateKey(),
                 artist = parentEntry.destination as SecondaryDestination.Artist,
-                albumEntryKey = currentEntry.uiStateKey(),
-                albumTitle = current.title
+                pathEntryKey = currentEntry.uiStateKey(),
+                pathSegments = parentSegments + current.title
             )
         }
         else -> null
     }
+}
+
+private fun artistChildTopBarRoute(
+    entries: List<SecondaryStackEntry>,
+    parentIdentity: ArtistDestinationIdentity,
+    pathSegments: List<String>
+): ArtistTopBarRoute? {
+    val currentEntry = entries.lastOrNull() ?: return null
+    val parentEntry = entries.dropLast(1).lastOrNull { entry ->
+        (entry.destination as? SecondaryDestination.Artist)
+            ?.identity?.stableId == parentIdentity.stableId
+    } ?: return null
+    return ArtistTopBarRoute(
+        artistEntryKey = parentEntry.uiStateKey(),
+        artist = parentEntry.destination as SecondaryDestination.Artist,
+        pathEntryKey = currentEntry.uiStateKey(),
+        pathSegments = pathSegments
+    )
+}
+
+internal fun artistPathIdentity(
+    destination: SecondaryDestination?
+): ArtistDestinationIdentity? = when (destination) {
+    is SecondaryDestination.Artist -> destination.identity
+    is SecondaryDestination.ArtistSongs -> destination.parentArtist
+    is SecondaryDestination.ArtistAlbums -> destination.parentArtist
+    is SecondaryDestination.Album -> destination.parentArtist
+    else -> null
 }
 
 internal data class SecondaryNavigationState(
@@ -239,7 +304,10 @@ internal fun providerArtistDestination(artist: ProviderArtist): SecondaryDestina
             artistId = artistId,
             displayName = displayName,
             avatar = artist.artwork ?: artist.largeArtwork,
-            profileMetadata = artist.profileMetadata?.sanitizedFor(displayName)
+            profileMetadata = artist.profileMetadata?.sanitizedFor(displayName),
+            songOrder = artist.songOrder?.displayTitleOrNull()?.let { title ->
+                artist.songOrder.copy(title = title)
+            }
         )
     )
 }
@@ -257,6 +325,8 @@ internal fun secondaryDestinationBreadcrumbs(
         )
         is SecondaryDestination.Playlist -> listOf(current.title)
         is SecondaryDestination.Standard -> nestedSegments
+        is SecondaryDestination.ArtistSongs,
+        is SecondaryDestination.ArtistAlbums -> emptyList()
         is SecondaryDestination.Artist,
         null -> emptyList()
     }

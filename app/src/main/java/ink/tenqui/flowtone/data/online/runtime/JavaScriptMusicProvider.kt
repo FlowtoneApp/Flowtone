@@ -8,6 +8,7 @@ import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.MusicProvider
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.ProviderAlbumRef
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderArtistRef
@@ -204,7 +205,8 @@ class JavaScriptMusicProvider internal constructor(
             artwork = parseArtwork(item, "artworkUrl"),
             largeArtwork = parseArtwork(item, "largeArtworkUrl"),
             metadata = parseMetadata(item),
-            profileMetadata = providerArtistMetadataFromJson(item, title, runtime.extensionId)
+            profileMetadata = providerArtistMetadataFromJson(item, title, runtime.extensionId),
+            songOrder = providerArtistSongOrderFromJson(item)
         )
     }
 
@@ -432,6 +434,22 @@ internal fun providerArtistMetadataFromJson(
     ).sanitizedFor(displayName)
 }
 
+internal fun providerArtistSongOrderFromJson(item: JSONObject): ArtistSongOrderInfo? {
+    val value = item.optJSONObject("artistSongOrder") ?: return null
+    val title = value.optString("title")
+        .trim()
+        .take(MaxProviderArtistOrderTextLength)
+        .takeIf(String::isNotEmpty)
+        ?: return null
+    return ArtistSongOrderInfo(
+        id = value.optString("id")
+            .trim()
+            .take(MaxProviderArtistOrderIdLength)
+            .takeIf(String::isNotEmpty),
+        title = title
+    )
+}
+
 private fun JSONObject.optNonNegativeInt(name: String): Int? {
     val value = opt(name) as? Number ?: return null
     val number = value.toDouble()
@@ -443,3 +461,5 @@ private fun JSONObject.optNonNegativeInt(name: String): Int? {
 private const val MaxProviderArtistAliases = 8
 private const val MaxProviderArtistTextLength = 120
 private const val MaxProviderArtistBiographyLength = 4_000
+private const val MaxProviderArtistOrderIdLength = 80
+private const val MaxProviderArtistOrderTextLength = 120

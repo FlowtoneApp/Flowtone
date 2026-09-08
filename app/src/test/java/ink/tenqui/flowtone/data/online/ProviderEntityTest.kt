@@ -85,6 +85,22 @@ class ProviderEntityTest {
     }
 
     @Test
+    fun artistFilteringPreservesProviderOrder() {
+        val songs = listOf("third", "first", "second").map { id ->
+            song(
+                provider = "a",
+                id = id,
+                artists = listOf(ProviderArtistRef("42", "Kou!"))
+            )
+        }
+
+        assertEquals(
+            listOf("third", "first", "second"),
+            providerSongsForArtist(songs, "a", "42", "Kou!").map(ProviderSong::id)
+        )
+    }
+
+    @Test
     fun artistNameFallbackIsNormalizedAndNeverCrossesProvider() {
         val sameProvider = song("a", "1", artist = "Other / KOU!")
         val otherProvider = song("b", "1", artist = "Kou!")

@@ -56,8 +56,8 @@ internal fun FlowtoneScaffoldTopLayer(
                     route = artistRoute,
                     scrollIdentityVisible = topBarStateOwner.visible
                 ),
-                albumEntryKey = artistRoute.albumEntryKey,
-                albumTitle = artistRoute.albumTitle,
+                pathEntryKey = artistRoute.pathEntryKey,
+                pathSegments = artistRoute.pathSegments,
                 onBack = {
                     if (heroOwner.focusRequested) {
                         heroOwner.focusRequested = false

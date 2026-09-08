@@ -165,15 +165,59 @@ class ArtistPageContentTest {
     }
 
     @Test
-    fun categoryUsesLightweightLabelsWithoutCountsOrIconPresentation() {
+    fun artistPreviewsKeepSourceOrderAndApplyOnlyTheirLimits() {
+        val songs = (0 until 14).toList()
+        val albums = (0 until 9).toList()
+
+        assertEquals(songs.take(10), artistSongPreview(songs))
+        assertEquals(albums.take(6), artistAlbumPreview(albums))
+        assertEquals((0 until 6).toList(), artistSongPreview((0 until 6).toList()))
+        assertEquals((0 until 4).toList(), artistAlbumPreview((0 until 4).toList()))
+        assertEquals((0 until 14).toList(), songs)
+    }
+
+    @Test
+    fun artistSongsSectionTitleUsesProviderDescriptionOrSongFallback() {
+        assertEquals("时间排序", artistSongsSectionTitle("  时间排序  "))
+        assertEquals("歌曲", artistSongsSectionTitle(null))
+        assertEquals("歌曲", artistSongsSectionTitle("   "))
+    }
+
+    @Test
+    fun infoCardTintKeepsTheBaseSurfaceAsTheDominantLayer() {
+        assertEquals(0.07f, ArtistInfoCardTintTopAlpha, 0f)
+        assertEquals(0.01f, ArtistInfoCardTintBottomAlpha, 0f)
+        assertTrue(ArtistInfoCardTintTopAlpha < 0.1f)
+        assertTrue(ArtistInfoCardTintBottomAlpha < ArtistInfoCardTintTopAlpha)
+    }
+
+    @Test
+    fun artistTintPrefersBannerAndNoBannerUsesTheSameArtistFallbackChain() {
         assertEquals(
-            listOf(ArtistContentCategory.Songs, ArtistContentCategory.Albums),
-            artistContentCategories(showSongs = true, showAlbums = true)
+            "banner",
+            artistTintArtworkData(
+                banner = "banner",
+                avatar = "avatar",
+                localArtwork = "local",
+                providerArtwork = "provider"
+            )
         )
-        assertEquals(listOf("歌曲", "专辑"), ArtistContentCategory.entries.map { it.label })
         assertEquals(
-            listOf(ArtistContentCategory.Songs),
-            artistContentCategories(showSongs = true, showAlbums = false)
+            "avatar",
+            artistTintArtworkData(
+                banner = null,
+                avatar = "avatar",
+                localArtwork = "local",
+                providerArtwork = "provider"
+            )
+        )
+        assertNull(
+            artistTintArtworkData(
+                banner = null,
+                avatar = null,
+                localArtwork = null,
+                providerArtwork = null
+            )
         )
     }
 
@@ -201,21 +245,42 @@ class ArtistPageContentTest {
     }
 
     @Test
-    fun biographyExpandOnlyAppearsForMeasuredPreviewOverflow() {
-        assertFalse(artistBiographyExpandVisible(null, previewHasVisualOverflow = true))
-        assertFalse(artistBiographyExpandVisible("  ", previewHasVisualOverflow = true))
+    fun biographyPreviewUsesTwoLines() {
+        assertEquals(2, ArtistBiographyPreviewMaxLines)
+    }
+
+    @Test
+    fun shortBiographyDoesNotShowExpand() {
         assertFalse(
             artistBiographyExpandVisible(
-                "Exactly three visible lines",
+                "Short biography",
                 previewHasVisualOverflow = false
             )
         )
+    }
+
+    @Test
+    fun longBiographyShowsExpand() {
         assertTrue(
             artistBiographyExpandVisible(
-                "A biography longer than its three-line preview",
+                "A biography longer than its two-line preview",
                 previewHasVisualOverflow = true
             )
         )
+    }
+
+    @Test
+    fun missingBiographyDoesNotReserveExpandSpace() {
+        assertFalse(artistBiographyExpandVisible(null, previewHasVisualOverflow = true))
+        assertFalse(artistBiographyExpandVisible("  ", previewHasVisualOverflow = true))
+    }
+
+    @Test
+    fun avatarOutlineDoesNotChangeTheMeasuredAvatarSize() {
+        val presentation = artistAvatarPresentation(100.dp)
+
+        assertEquals(100.dp, presentation.measuredSize)
+        assertEquals(1.5.dp, presentation.outlineWidth)
     }
 
     @Test
@@ -345,6 +410,17 @@ class ArtistPageContentTest {
 
         assertEquals(ArtistScrollPosition(4, 28), store.ownerFor("artist-1").position)
         assertEquals(ArtistScrollPosition(), store.ownerFor("artist-2").position)
+    }
+
+    @Test
+    fun artistScrollOwnerRetainsOneOverviewPosition() {
+        val owner = ArtistScrollStateOwner("artist")
+        owner.update(
+            firstVisibleItemIndex = 8,
+            firstVisibleItemScrollOffset = 12
+        )
+
+        assertEquals(ArtistScrollPosition(8, 12), owner.position)
     }
 
     @Test

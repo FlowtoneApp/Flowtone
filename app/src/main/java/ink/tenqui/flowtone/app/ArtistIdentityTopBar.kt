@@ -79,19 +79,19 @@ internal fun ArtistIdentityTopBar(
     avatarImage: ExtensionImage?,
     backgroundKind: ArtistHeroBackgroundKind,
     identityVisible: Boolean,
-    albumEntryKey: String?,
-    albumTitle: String?,
+    pathEntryKey: String?,
+    pathSegments: List<String>,
     onBack: () -> Unit,
     onFullTitleRequest: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var retainedAlbumEntryKey by remember { mutableStateOf(albumEntryKey) }
-    var retainedAlbumTitle by remember { mutableStateOf(albumTitle) }
-    val pathProgress = remember { Animatable(if (albumTitle == null) 0f else 1f) }
-    LaunchedEffect(albumEntryKey, albumTitle) {
-        if (albumEntryKey != null && albumTitle != null) {
-            retainedAlbumEntryKey = albumEntryKey
-            retainedAlbumTitle = albumTitle
+    var retainedPathEntryKey by remember { mutableStateOf(pathEntryKey) }
+    var retainedPathSegments by remember { mutableStateOf(pathSegments) }
+    val pathProgress = remember { Animatable(if (pathSegments.isEmpty()) 0f else 1f) }
+    LaunchedEffect(pathEntryKey, pathSegments) {
+        if (pathEntryKey != null && pathSegments.isNotEmpty()) {
+            retainedPathEntryKey = pathEntryKey
+            retainedPathSegments = pathSegments
             withFrameNanos { }
             pathProgress.animateTo(
                 targetValue = 1f,
@@ -108,11 +108,11 @@ internal fun ArtistIdentityTopBar(
                     easing = FlowtoneMotion.Easing
                 )
             )
-            retainedAlbumEntryKey = null
-            retainedAlbumTitle = null
+            retainedPathEntryKey = null
+            retainedPathSegments = emptyList()
         }
     }
-    val enteringPath = albumTitle != null
+    val enteringPath = pathSegments.isNotEmpty()
     val pathElementProgress = artistTopBarPathElementProgress(
         pathProgress = pathProgress.value,
         entering = enteringPath
@@ -182,11 +182,11 @@ internal fun ArtistIdentityTopBar(
             ArtistIdentityTopBarRow(
                 artistName = artistName,
                 avatarImage = avatarImage,
-                albumTitle = retainedAlbumTitle,
-                albumPresentationKey = retainedAlbumEntryKey,
-                albumBreadcrumbProgress = pathProgress.value,
-                albumSeparatorProgress = pathElementProgress.separator,
-                albumTitleProgress = pathElementProgress.title,
+                pathSegments = retainedPathSegments,
+                pathPresentationKey = retainedPathEntryKey,
+                pathProgress = pathProgress.value,
+                pathSeparatorProgress = pathElementProgress.separator,
+                pathTitleProgress = pathElementProgress.title,
                 avatarProgress = avatarProgress,
                 artistTitleProgress = artistTitleProgress,
                 identityMotionDistancePx = identityMotionDistancePx,

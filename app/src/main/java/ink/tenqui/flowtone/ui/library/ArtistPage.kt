@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -32,26 +33,24 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -60,6 +59,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -104,7 +104,6 @@ import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
 import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val ArtistInfoCardShape = RoundedCornerShape(
@@ -114,12 +113,10 @@ private val ArtistInfoCardShape = RoundedCornerShape(
     bottomStart = 8.dp
 )
 private val ArtistInfoCardSectionGap = 8.dp
-private val ArtistCategoryBarHeight = 48.dp
-private val ArtistSectionTitleTopSpacing = 12.dp
-private val ArtistSectionTitleBottomSpacing = 8.dp
 private val ArtistAlbumArtworkSize = 140.dp
-private const val ArtistBiographyPreviewMaxLines = 3
-private const val ArtistFirstSongListItemIndex = 3
+private val ArtistSectionHeaderTopSpacing = 12.dp
+private val ArtistSectionHeaderBottomSpacing = 8.dp
+private const val ArtistFirstSongListItemIndex = 2
 private const val ArtistLazyAheadViewportFraction = 0.75f
 private const val ArtistLazyBehindViewportFraction = 0.25f
 private const val ArtistHeroMotionOrderCount = 7
@@ -131,7 +128,7 @@ internal enum class ArtistHeroElement(val order: Int) {
     Name(3),
     Metadata(4),
     Biography(5),
-    Category(6)
+    Content(6)
 }
 
 internal fun artistHeroElementAlpha(
@@ -172,12 +169,15 @@ internal fun ArtistPage(
     providerSongs: List<ProviderSong> = emptyList(),
     providerAlbums: List<ProviderAlbum> = emptyList(),
     providerSongsLoaded: Boolean = true,
+    songOrderTitle: String? = null,
     currentSong: Song?,
     onNavigateBack: () -> Unit,
     onSongClick: (List<Song>, Int) -> Unit,
     onProviderSongClick: (List<ProviderSong>, Int) -> Unit = { _, _ -> },
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit = {},
+    onOpenAllSongs: () -> Unit,
+    onOpenAllAlbums: () -> Unit,
     pageTransition: PageTransitionScope,
     socialStats: ArtistSocialStats = ArtistSocialStats(),
     modifier: Modifier = Modifier
@@ -195,7 +195,7 @@ internal fun ArtistPage(
         initialFirstVisibleItemScrollOffset = initialScrollPosition.firstVisibleItemScrollOffset,
         cacheWindow = cacheWindow
     )
-    val albumListState = rememberLazyListState(cacheWindow = cacheWindow)
+    val albumPreviewState = rememberLazyListState(cacheWindow = cacheWindow)
     val artistSongs = remember(displayArtist, allSongs, hasLocalContent) {
         if (hasLocalContent) localSongsForArtist(allSongs, displayArtist) else emptyList()
     }
@@ -279,8 +279,6 @@ internal fun ArtistPage(
             hasStatistics = statistics != null
         )
     }
-    val showSongCategory = contentVisibility.showSongs
-    val showAlbumCategory = contentVisibility.showAlbums
     val songCount = artistMetadata?.songCount ?: presentedArtistSongs.size
     val albumCount = artistMetadata?.albumCount
         ?: if (hasLocalContent) artistAlbums.size else artistProviderAlbums.size
@@ -292,9 +290,25 @@ internal fun ArtistPage(
             artistProviderSongs.map { song -> "provider-song:${song.identity.stableKey}" }
         }
     }
-    val realSongPresentationKeys = remember(primaryContentPresentation, artistSongKeys) {
+    val previewSongs = remember(presentedArtistSongs) {
+        artistSongPreview(presentedArtistSongs)
+    }
+    val previewProviderSongs = remember(artistProviderSongs) {
+        artistSongPreview(artistProviderSongs)
+    }
+    val previewSongKeys = remember(artistSongKeys) {
+        artistSongPreview(artistSongKeys)
+    }
+    val previewLocalAlbums = remember(artistAlbums) { artistAlbumPreview(artistAlbums) }
+    val previewProviderAlbums = remember(artistProviderAlbums) {
+        artistAlbumPreview(artistProviderAlbums)
+    }
+    val songsSectionTitle = remember(songOrderTitle) {
+        artistSongsSectionTitle(songOrderTitle)
+    }
+    val realSongPresentationKeys = remember(primaryContentPresentation, previewSongKeys) {
         if (primaryContentPresentation == ArtistPrimaryContentPresentation.Ready) {
-            artistSongKeys
+            previewSongKeys
         } else {
             emptyList()
         }
@@ -357,15 +371,22 @@ internal fun ArtistPage(
                 .build()
         }
     }
-    val paletteArtworkData: Any? = artistAvatarImage
-        ?: artistSongs.firstOrNull()?.artworkUri
-        ?: artistProviderSongs.firstOrNull()?.artwork
+    val paletteArtworkData = artistTintArtworkData(
+        banner = banner,
+        avatar = artistAvatarImage,
+        localArtwork = artistSongs.firstOrNull()?.artworkUri,
+        providerArtwork = artistProviderSongs.firstOrNull()?.artwork
+    )
     val resolvedArtistColor = rememberArtworkBackgroundColor(
         artworkData = paletteArtworkData,
-        imageLoader = if (artistAvatarImage != null) extensionImageLoader else context.imageLoader,
-        fallbackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        imageLoader = if (paletteArtworkData is ExtensionImage) {
+            extensionImageLoader
+        } else {
+            context.imageLoader
+        },
+        fallbackColor = MaterialTheme.colorScheme.primaryContainer,
         isDarkTheme = isDarkTheme
-    ) ?: MaterialTheme.colorScheme.surfaceContainerHigh
+    ) ?: MaterialTheme.colorScheme.primaryContainer
     val artistColor by animateColorAsState(
         targetValue = resolvedArtistColor,
         animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
@@ -377,7 +398,6 @@ internal fun ArtistPage(
             backgroundKind = backgroundKind
         )
     }
-
     val heroFocused = heroStateOwner.focusRequested
     val focusProgress by animateFloatAsState(
         targetValue = if (heroFocused) 1f else 0f,
@@ -476,26 +496,6 @@ internal fun ArtistPage(
     val isolateArtistTopBarContent = artistTopBarStateOwner.visible ||
         pageTransition.phase == PageTransitionPhase.Outgoing
     var measuredHeroHeightPx by remember(entryKey) { mutableIntStateOf(0) }
-    val coroutineScope = rememberCoroutineScope()
-    val songSectionBodyCount = when (primaryContentPresentation) {
-        ArtistPrimaryContentPresentation.Loading -> ArtistLoadingSkeletonCount
-        ArtistPrimaryContentPresentation.Ready -> presentedArtistSongs.size
-        ArtistPrimaryContentPresentation.Empty -> 1
-    }
-    val songsSectionIndex = 2
-    val albumsSectionIndex = songsSectionIndex + if (contentVisibility.showSongs) {
-        1 + songSectionBodyCount
-    } else {
-        0
-    }
-    fun scrollToSection(index: Int) {
-        coroutineScope.launch {
-            listState.animateScrollToItem(
-                index = index,
-                scrollOffset = -artistTopBarHeightPx.roundToInt()
-            )
-        }
-    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -559,6 +559,7 @@ internal fun ArtistPage(
                     bannerImageRequest = bannerImageRequest,
                     extensionImageLoader = extensionImageLoader,
                     bannerFallbackColor = artistColor,
+                    accentColor = artistColor,
                     geometry = heroGeometry,
                     artistName = displayArtist,
                     avatarImage = artistAvatarImage,
@@ -572,140 +573,129 @@ internal fun ArtistPage(
                         .onSizeChanged { measuredHeroHeightPx = it.height }
                 )
             }
-            item(key = "artist-categories") {
-                ArtistCategoryBar(
-                    showSongs = showSongCategory,
-                    showAlbums = showAlbumCategory,
-                    onSongsClick = { scrollToSection(songsSectionIndex) },
-                    onAlbumsClick = { scrollToSection(albumsSectionIndex) },
-                    modifier = pageTransition.elementModifier(
-                        order = ArtistHeroElement.Category.order,
-                        orderCount = ArtistHeroMotionOrderCount
-                    )
-                )
-            }
             if (contentVisibility.showSongs) {
-                item(key = "artist-songs-title") {
-                    ArtistSectionTitle(
-                        title = "歌曲",
+                item(key = "artist-songs-header") {
+                    ArtistPreviewSectionHeader(
+                        title = songsSectionTitle,
+                        actionTitle = "全部歌曲".takeIf {
+                            presentedArtistSongs.size > ArtistSongPreviewLimit
+                        },
+                        onActionClick = onOpenAllSongs,
                         modifier = pageTransition.elementModifier(
-                            order = ArtistHeroElement.Category.order,
+                            order = ArtistHeroElement.Content.order,
                             orderCount = ArtistHeroMotionOrderCount
                         ).padding(
                             start = 20.dp,
-                            top = ArtistSectionTitleTopSpacing,
+                            top = ArtistSectionHeaderTopSpacing,
                             end = 20.dp,
-                            bottom = ArtistSectionTitleBottomSpacing
+                            bottom = ArtistSectionHeaderBottomSpacing
                         )
                     )
                 }
                 when (primaryContentPresentation) {
-                    ArtistPrimaryContentPresentation.Loading -> {
-                        items(
-                            items = artistLoadingSkeletonKeys(),
-                            key = { skeletonKey -> skeletonKey }
-                        ) { skeletonKey ->
-                            val index = skeletonKey.substringAfterLast('-').toIntOrNull() ?: 0
-                            SongListItemSkeleton(
-                                modifier = pageTransition.elementModifierAt(
-                                    pageProgress = pageTransition.progress,
-                                    order = index,
-                                    orderCount = ArtistLoadingSkeletonCount
-                                ).padding(horizontal = 8.dp)
-                            )
-                        }
+                    ArtistPrimaryContentPresentation.Loading -> items(
+                        items = artistLoadingSkeletonKeys(),
+                        key = { skeletonKey -> skeletonKey }
+                    ) { skeletonKey ->
+                        val index = skeletonKey.substringAfterLast('-').toIntOrNull() ?: 0
+                        SongListItemSkeleton(
+                            modifier = pageTransition.elementModifierAt(
+                                pageProgress = pageTransition.progress,
+                                order = index,
+                                orderCount = ArtistLoadingSkeletonCount
+                            ).padding(horizontal = 8.dp)
+                        )
                     }
 
-                    ArtistPrimaryContentPresentation.Empty -> {
-                        item(key = "artist-empty") {
-                            Text(
-                                text = "没有找到该艺术家的歌曲",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 18.dp)
-                            )
-                        }
+                    ArtistPrimaryContentPresentation.Empty -> item(key = "artist-empty") {
+                        Text(
+                            text = "没有找到该艺术家的歌曲",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 18.dp)
+                        )
                     }
 
-                    ArtistPrimaryContentPresentation.Ready -> {
-                        itemsIndexed(
-                            items = presentedArtistSongs,
-                            key = { index, _ -> artistSongKeys[index] }
-                        ) { index, song ->
-                            val songKey = artistSongKeys[index]
-                            val animationOrder = songListAnimationOrder(
-                                songKey = songKey,
-                                animationGroupKeys = animationGroupKeys
-                            )
-                            SongListItem(
-                                song = song,
-                                isCurrentSong = currentSong?.id == song.id ||
-                                    currentSong?.uri == song.uri,
-                                onClick = {
-                                    if (hasLocalContent) onSongClick(artistSongs, index)
-                                    else onProviderSongClick(artistProviderSongs, index)
-                                },
-                                extensionArtwork = artistProviderSongs.getOrNull(index)?.artwork,
-                                modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
-                                    readySongEnterScope.elementMotionModifier(songKey)
-                                } else if (enterGroupReady) {
-                                    pageTransition.elementModifierAt(
-                                        pageProgress = listProgress,
-                                        order = animationOrder.order,
-                                        orderCount = animationOrder.orderCount
-                                    )
-                                } else {
-                                    Modifier.graphicsLayer { alpha = 0f }
-                                }.padding(horizontal = 8.dp)
-                            )
-                        }
+                    ArtistPrimaryContentPresentation.Ready -> itemsIndexed(
+                        items = previewSongs,
+                        key = { index, _ -> previewSongKeys[index] }
+                    ) { index, song ->
+                        val songKey = previewSongKeys[index]
+                        val animationOrder = songListAnimationOrder(
+                            songKey = songKey,
+                            animationGroupKeys = animationGroupKeys
+                        )
+                        SongListItem(
+                            song = song,
+                            isCurrentSong = currentSong?.id == song.id ||
+                                currentSong?.uri == song.uri,
+                            onClick = {
+                                if (hasLocalContent) onSongClick(artistSongs, index)
+                                else onProviderSongClick(artistProviderSongs, index)
+                            },
+                            extensionArtwork = previewProviderSongs.getOrNull(index)?.artwork,
+                            modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
+                                readySongEnterScope.elementMotionModifier(songKey)
+                            } else if (enterGroupReady) {
+                                pageTransition.elementModifierAt(
+                                    pageProgress = listProgress,
+                                    order = animationOrder.order,
+                                    orderCount = animationOrder.orderCount
+                                )
+                            } else {
+                                Modifier.graphicsLayer { alpha = 0f }
+                            }.padding(horizontal = 8.dp)
+                        )
                     }
                 }
             }
             if (contentVisibility.showAlbums) {
-                item(key = "artist-albums") {
+                item(key = "artist-albums-preview") {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        ArtistSectionTitle(
+                        ArtistPreviewSectionHeader(
                             title = "专辑",
                             modifier = pageTransition.elementModifier(
-                                order = ArtistHeroElement.Category.order,
+                                order = ArtistHeroElement.Content.order,
                                 orderCount = ArtistHeroMotionOrderCount
                             ).padding(
                                 start = 20.dp,
-                                top = ArtistSectionTitleTopSpacing,
+                                top = ArtistSectionHeaderTopSpacing,
                                 end = 20.dp,
-                                bottom = ArtistSectionTitleBottomSpacing
+                                bottom = ArtistSectionHeaderBottomSpacing
                             )
                         )
                         LazyRow(
-                            state = albumListState,
+                            state = albumPreviewState,
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(artistAlbums, key = LocalAlbum::id) { album ->
+                            items(previewLocalAlbums, key = LocalAlbum::id) { album ->
                                 ArtistAlbumCard(
                                     album = album,
-                                    onClick = { onOpenAlbum(album.id) },
-                                    modifier = pageTransition.elementModifier(
-                                        order = ArtistHeroElement.Category.order,
-                                        orderCount = ArtistHeroMotionOrderCount
-                                    )
+                                    onClick = { onOpenAlbum(album.id) }
                                 )
                             }
-                            items(artistProviderAlbums, key = { it.identity.stableKey }) { album ->
+                            items(
+                                previewProviderAlbums,
+                                key = { album -> album.identity.stableKey }
+                            ) { album ->
                                 ArtistAlbumCard(
                                     title = album.title,
                                     supportingText = album.songCount?.let { "$it 首歌曲" }
                                         ?: album.artist.ifBlank { "未知艺术家" },
                                     extensionArtwork = album.artwork,
-                                    onClick = { onOpenProviderAlbum(album) },
-                                    modifier = pageTransition.elementModifier(
-                                        order = ArtistHeroElement.Category.order,
-                                        orderCount = ArtistHeroMotionOrderCount
-                                    )
+                                    onClick = { onOpenProviderAlbum(album) }
                                 )
+                            }
+                            if (
+                                artistAlbums.size > ArtistAlbumPreviewLimit ||
+                                artistProviderAlbums.size > ArtistAlbumPreviewLimit
+                            ) {
+                                item(key = "artist-albums-more") {
+                                    ArtistAlbumsMoreCard(onClick = onOpenAllAlbums)
+                                }
                             }
                         }
                     }
@@ -753,6 +743,7 @@ private fun ArtistHero(
     bannerImageRequest: ImageRequest?,
     extensionImageLoader: coil3.ImageLoader,
     bannerFallbackColor: Color,
+    accentColor: Color,
     geometry: ArtistHeroGeometry,
     artistName: String,
     avatarImage: ExtensionImage?,
@@ -787,6 +778,7 @@ private fun ArtistHero(
                 socialStats = socialStats,
                 statistics = statistics,
                 biography = biography,
+                accentColor = accentColor,
                 geometry = geometry,
                 pageTransition = pageTransition,
                 onExpandBiography = onExpandBiography,
@@ -885,6 +877,7 @@ private fun ArtistInfoCard(
     socialStats: ArtistSocialStats,
     statistics: String?,
     biography: String?,
+    accentColor: Color,
     geometry: ArtistHeroGeometry,
     pageTransition: PageTransitionScope,
     onExpandBiography: () -> Unit,
@@ -893,9 +886,7 @@ private fun ArtistInfoCard(
     var previewHasVisualOverflow by remember(biography) { mutableStateOf(false) }
     val socialText = remember(socialStats) { artistSocialStatsText(socialStats) }
     Box(modifier = modifier) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            shape = ArtistInfoCardShape,
+        Box(
             modifier = Modifier
                 .matchParentSize()
                 .then(
@@ -904,7 +895,26 @@ private fun ArtistInfoCard(
                         orderCount = ArtistHeroMotionOrderCount
                     )
                 )
-        ) {}
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = ArtistInfoCardShape,
+                modifier = Modifier.fillMaxSize()
+            ) {}
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(ArtistInfoCardShape)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                accentColor.copy(alpha = ArtistInfoCardTintTopAlpha),
+                                accentColor.copy(alpha = ArtistInfoCardTintBottomAlpha)
+                            )
+                        )
+                    )
+            )
+        }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -982,13 +992,16 @@ private fun ArtistInfoCard(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (artistBiographyExpandVisible(text, previewHasVisualOverflow)) {
-                        TextButton(
-                            onClick = onExpandBiography,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("展开")
-                        }
+                        Text(
+                            text = "展开",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .clickable(onClick = onExpandBiography)
+                                .padding(start = 8.dp, top = 2.dp, bottom = 2.dp)
+                        )
                     }
                 }
             }
@@ -997,45 +1010,67 @@ private fun ArtistInfoCard(
 }
 
 @Composable
-private fun ArtistCategoryBar(
-    showSongs: Boolean,
-    showAlbums: Boolean,
-    onSongsClick: () -> Unit,
-    onAlbumsClick: () -> Unit,
+private fun ArtistPreviewSectionHeader(
+    title: String,
+    actionTitle: String? = null,
+    onActionClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val categories = remember(showSongs, showAlbums) {
-        artistContentCategories(showSongs = showSongs, showAlbums = showAlbums)
-    }
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(ArtistCategoryBarHeight)
-                .padding(horizontal = 16.dp)
-        ) {
-            categories.forEach { category ->
-                TextButton(
-                    onClick = when (category) {
-                        ArtistContentCategory.Songs -> onSongsClick
-                        ArtistContentCategory.Albums -> onAlbumsClick
-                    },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                ) {
-                    Text(
-                        text = category.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 20.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+    Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold
         )
+        if (actionTitle != null) {
+            Text(
+                text = actionTitle,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable(onClick = onActionClick)
+                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistAlbumsMoreCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .size(ArtistAlbumArtworkSize)
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "继续左滑以查看更多",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
     }
 }
 
@@ -1110,18 +1145,7 @@ private fun ArtistBiographyFocus(
 }
 
 @Composable
-private fun ArtistSectionTitle(title: String, modifier: Modifier = Modifier) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        fontWeight = FontWeight.SemiBold,
-        modifier = modifier
-    )
-}
-
-@Composable
-private fun ArtistAlbumCard(
+internal fun ArtistAlbumCard(
     album: LocalAlbum,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -1136,7 +1160,7 @@ private fun ArtistAlbumCard(
 }
 
 @Composable
-private fun ArtistAlbumCard(
+internal fun ArtistAlbumCard(
     title: String,
     supportingText: String,
     artworkUri: android.net.Uri? = null,
@@ -1184,10 +1208,12 @@ internal fun ArtistAvatar(
     iconColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val presentation = artistAvatarPresentation(size)
     Box(
         modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(percent = 50))
+            .size(presentation.measuredSize)
+            .border(presentation.outlineWidth, MaterialTheme.colorScheme.surface, CircleShape)
+            .clip(CircleShape)
             .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {

@@ -8,6 +8,8 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
+import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.ui.components.FullTitleOverlayBackResult
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
@@ -322,8 +324,8 @@ class SecondaryNavigationTest {
 
         assertEquals(state.currentEntry?.uiStateKey(), route.artistEntryKey)
         assertEquals(artist, route.artist)
-        assertEquals(null, route.albumEntryKey)
-        assertEquals(null, route.albumTitle)
+        assertEquals(null, route.pathEntryKey)
+        assertEquals(emptyList<String>(), route.pathSegments)
     }
 
     @Test
@@ -336,8 +338,8 @@ class SecondaryNavigationTest {
         val route = checkNotNull(artistTopBarRoute(albumState.entries))
 
         assertEquals(artistState.currentEntry?.uiStateKey(), route.artistEntryKey)
-        assertEquals(albumState.currentEntry?.uiStateKey(), route.albumEntryKey)
-        assertEquals("Album", route.albumTitle)
+        assertEquals(albumState.currentEntry?.uiStateKey(), route.pathEntryKey)
+        assertEquals(listOf("Album"), route.pathSegments)
         assertTrue(artistTopBarIdentityVisible(route, scrollIdentityVisible = false))
     }
 
@@ -403,7 +405,57 @@ class SecondaryNavigationTest {
         val restoredRoute = checkNotNull(artistTopBarRoute(albumState.pop().entries))
 
         assertEquals(albumRoute.artistEntryKey, restoredRoute.artistEntryKey)
-        assertEquals(null, restoredRoute.albumTitle)
+        assertEquals(emptyList<String>(), restoredRoute.pathSegments)
+    }
+
+    @Test
+    fun providerArtistDestinationRetainsSanitizedSongOrderDescription() {
+        val destination = checkNotNull(
+            providerArtistDestination(
+                ProviderArtist(
+                    identity = ProviderEntityIdentity("provider-a", "42"),
+                    title = "Kou!",
+                    songOrder = ArtistSongOrderInfo("time", "  时间排序  ")
+                )
+            )
+        )
+        val identity = destination.identity as ArtistDestinationIdentity.Provider
+
+        assertEquals(ArtistSongOrderInfo("time", "时间排序"), identity.songOrder)
+    }
+
+    @Test
+    fun artistSongsAndAlbumsAreIndependentStackEntriesWithArtistBreadcrumbs() {
+        val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val artist = artistState.current as SecondaryDestination.Artist
+        val songsState = artistState.push(SecondaryDestination.ArtistSongs(artist.identity))
+        val albumsState = artistState.push(SecondaryDestination.ArtistAlbums(artist.identity))
+
+        assertEquals(listOf("全部歌曲"), artistTopBarRoute(songsState.entries)?.pathSegments)
+        assertEquals(listOf("全部专辑"), artistTopBarRoute(albumsState.entries)?.pathSegments)
+        assertEquals(artist, songsState.pop().current)
+        assertEquals(artist, albumsState.pop().current)
+    }
+
+    @Test
+    fun albumOpenedFromArtistAlbumsKeepsTheDeeperArtistPathAndRestoresCollection() {
+        val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val artist = artistState.current as SecondaryDestination.Artist
+        val albumsState = artistState.push(SecondaryDestination.ArtistAlbums(artist.identity))
+        val albumState = albumsState.push(
+            SecondaryDestination.Album(
+                albumId = 7L,
+                title = "A Very Long Album Name",
+                parentArtist = artist.identity
+            )
+        )
+
+        assertEquals(
+            listOf("全部专辑", "A Very Long Album Name"),
+            artistTopBarRoute(albumState.entries)?.pathSegments
+        )
+        assertEquals(albumsState.current, albumState.pop().current)
+        assertEquals(artist.identity, artistPathIdentity(albumsState.current))
     }
 
 }

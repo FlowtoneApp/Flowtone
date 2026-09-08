@@ -42,6 +42,15 @@ data class ProviderAlbumRef(
     val title: String? = null
 )
 
+/** Describes the order already applied by a Provider to its Artist song collection. */
+data class ArtistSongOrderInfo(
+    val id: String? = null,
+    val title: String
+)
+
+fun ArtistSongOrderInfo?.displayTitleOrNull(): String? =
+    this?.title?.trim()?.takeIf(String::isNotEmpty)
+
 sealed interface ProviderSearchItem {
     val identity: ProviderEntityIdentity
     val title: String
@@ -73,7 +82,8 @@ data class ProviderArtist(
     override val artwork: ExtensionImage? = null,
     val largeArtwork: ExtensionImage? = null,
     override val metadata: List<ProviderSearchMetadata>? = null,
-    val profileMetadata: ArtistMetadata? = null
+    val profileMetadata: ArtistMetadata? = null,
+    val songOrder: ArtistSongOrderInfo? = null
 ) : ProviderSearchItem {
     override val searchCategory: ProviderSearchCategory = ProviderSearchCategory.User
 }

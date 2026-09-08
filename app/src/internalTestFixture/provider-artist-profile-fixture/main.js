@@ -10,9 +10,10 @@ const artists = [
     artworkUrl: image(256, 256, '0F766E', 'Banner'),
     bannerUrl: image(1600, 620, '0F766E', 'Banner+Scroll'),
     aliases: ['Full Width Hero', 'Banner Fixture'],
-    biography: 'A deterministic medium-length biography for observing the full-width Banner, centered avatar, compact Artist Info Card, and three-line biography preview. It is long enough to expose the explicit expand action without requiring a large first viewport.',
-    songCount: 25,
-    albumCount: 4
+    biography: 'A deterministic medium-length biography for observing the full-width Banner, centered avatar, compact Artist Info Card, and two-line biography preview. It is long enough to expose the explicit expand action without requiring a large first viewport.',
+    artistSongOrder: { id: 'time', title: '时间排序' },
+    songCount: 28,
+    albumCount: 7
   },
   {
     id: 'no-banner-cloud',
@@ -89,6 +90,9 @@ const albums = [
   ),
   album('banner-many-tracks', 'Banner Many Tracks', 'banner-scroll', 15),
   album('banner-night-album', 'Night Signals', 'banner-scroll', 3),
+  album('banner-dawn-album', 'Dawn Signals', 'banner-scroll', 1),
+  album('banner-dusk-album', 'Dusk Signals', 'banner-scroll', 1),
+  album('banner-archive-album', 'Banner Archive', 'banner-scroll', 1),
   album('cloud-archive', 'Cloud Archive', 'no-banner-cloud', 5),
   album('long-title-record', 'A Reasonably Titled Record', 'long-artist-title', 18),
   album('biography-notes', 'Biography Notes', 'long-biography', 4),
@@ -109,6 +113,9 @@ addTracks(
 );
 addTracks('banner-scroll', 'banner-many-tracks', 15, 'Many Tracks');
 addTracks('banner-scroll', 'banner-night-album', 3, 'Night Signal');
+addTracks('banner-scroll', 'banner-dawn-album', 1, 'Dawn Signal');
+addTracks('banner-scroll', 'banner-dusk-album', 1, 'Dusk Signal');
+addTracks('banner-scroll', 'banner-archive-album', 1, 'Archive Signal');
 addTracks('no-banner-cloud', 'cloud-archive', 5, 'Cloud Archive Track');
 addTracks('long-artist-title', 'long-title-record', 18, 'Long Artist Track');
 addTracks('long-biography', 'biography-notes', 4, 'Biography Note');
@@ -180,6 +187,7 @@ function artistSearchResult(artist) {
     ...(artist.bannerUrl ? { bannerUrl: artist.bannerUrl } : {}),
     aliases: artist.aliases,
     biography: artist.biography,
+    ...(artist.artistSongOrder ? { artistSongOrder: artist.artistSongOrder } : {}),
     songCount: artist.songCount,
     albumCount: artist.albumCount
   };

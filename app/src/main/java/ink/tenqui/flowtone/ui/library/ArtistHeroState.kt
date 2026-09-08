@@ -83,23 +83,27 @@ internal fun artistHeroGeometry(availableWidth: Dp): ArtistHeroGeometry {
     )
 }
 
-internal enum class ArtistContentCategory(val label: String) {
-    Songs("歌曲"),
-    Albums("专辑")
-}
-
-internal fun artistContentCategories(
-    showSongs: Boolean,
-    showAlbums: Boolean
-): List<ArtistContentCategory> = buildList {
-    if (showSongs) add(ArtistContentCategory.Songs)
-    if (showAlbums) add(ArtistContentCategory.Albums)
-}
+internal const val ArtistInfoCardTintTopAlpha = 0.07f
+internal const val ArtistInfoCardTintBottomAlpha = 0.01f
 
 internal fun artistBiographyExpandVisible(
     biography: String?,
     previewHasVisualOverflow: Boolean
 ): Boolean = !biography.isNullOrBlank() && previewHasVisualOverflow
+
+internal const val ArtistBiographyPreviewMaxLines = 2
+internal val ArtistAvatarOutlineWidth = 1.5.dp
+
+internal data class ArtistAvatarPresentation(
+    val measuredSize: Dp,
+    val outlineWidth: Dp
+)
+
+internal fun artistAvatarPresentation(size: Dp): ArtistAvatarPresentation =
+    ArtistAvatarPresentation(
+        measuredSize = size,
+        outlineWidth = ArtistAvatarOutlineWidth
+    )
 
 @Stable
 internal class ArtistHeroStateOwner internal constructor(

@@ -59,6 +59,7 @@ class ProviderUiRegressionFixtureTest {
         assertTrue(searchResultPayload.contains("title: artist.title"))
         assertTrue(searchResultPayload.contains("category: 'user'"))
         assertTrue(searchResultPayload.contains("artworkUrl: artist.artworkUrl"))
+        assertTrue(searchResultPayload.contains("artistSongOrder: artist.artistSongOrder"))
         assertFalse(searchResultPayload.contains("...artist,"))
         listOf(
             "banner-scroll",
@@ -81,7 +82,11 @@ class ProviderUiRegressionFixtureTest {
         val cloudArtist = source.between("id: 'no-banner-cloud'", "id: 'long-artist-title'")
 
         assertTrue(bannerArtist.contains("bannerUrl:"))
+        assertTrue(bannerArtist.contains("artistSongOrder: { id: 'time', title: '时间排序' }"))
+        assertTrue(bannerArtist.contains("songCount: 28"))
+        assertTrue(bannerArtist.contains("albumCount: 7"))
         assertFalse(cloudArtist.contains("bannerUrl:"))
+        assertFalse(cloudArtist.contains("artistSongOrder:"))
         val cloudBiography = Regex("biography: '([^']+)'", RegexOption.DOT_MATCHES_ALL)
             .find(cloudArtist)
             ?.groupValues
@@ -106,6 +111,7 @@ class ProviderUiRegressionFixtureTest {
         assertTrue(source.contains("'long-album-title'"))
         assertTrue(source.contains("An Extremely Long Album Title Created Specifically"))
         assertTrue(source.contains("addTracks('banner-scroll', 'banner-many-tracks', 15"))
+        assertTrue(source.contains("addTracks('banner-scroll', 'banner-archive-album', 1"))
         assertTrue(source.contains("addTracks('long-artist-title', 'long-title-record', 18"))
         val longArtist = source.between("id: 'long-artist-title'", "id: 'long-biography'")
         assertTrue(longArtist.contains("songCount: 18"))

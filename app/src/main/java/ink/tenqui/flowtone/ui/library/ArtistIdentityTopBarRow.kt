@@ -44,17 +44,22 @@ internal fun artistTopBarTitlePresentation(
     showAvatarAndBreadcrumb = naturalContentWidthPx <= availableWidthPx.coerceAtLeast(0f)
 )
 
-internal enum class ArtistTopBarAlbumTitleLayout { Breadcrumb, AlbumOnly }
+internal enum class ArtistTopBarPathLayout {
+    FullPath,
+    CollapsedAncestors,
+    EllipsizedCurrent
+}
 
-internal fun artistTopBarAlbumTitleLayout(
-    breadcrumbNaturalWidthPx: Float,
+internal fun artistTopBarPathLayout(
+    fullPathNaturalWidthPx: Float,
+    collapsedPathNaturalWidthPx: Float,
     availableWidthPx: Float
-): ArtistTopBarAlbumTitleLayout = if (
-    breadcrumbNaturalWidthPx <= availableWidthPx.coerceAtLeast(0f)
-) {
-    ArtistTopBarAlbumTitleLayout.Breadcrumb
-} else {
-    ArtistTopBarAlbumTitleLayout.AlbumOnly
+): ArtistTopBarPathLayout = when {
+    fullPathNaturalWidthPx <= availableWidthPx.coerceAtLeast(0f) ->
+        ArtistTopBarPathLayout.FullPath
+    collapsedPathNaturalWidthPx <= availableWidthPx.coerceAtLeast(0f) ->
+        ArtistTopBarPathLayout.CollapsedAncestors
+    else -> ArtistTopBarPathLayout.EllipsizedCurrent
 }
 
 internal data class ArtistAlbumSuffixTransition(
@@ -95,11 +100,11 @@ internal fun artistAlbumReplacementTransition(
 internal fun ArtistIdentityTopBarRow(
     artistName: String,
     avatarImage: ExtensionImage?,
-    albumTitle: String?,
-    albumPresentationKey: String?,
-    albumBreadcrumbProgress: Float,
-    albumSeparatorProgress: Float,
-    albumTitleProgress: Float,
+    pathSegments: List<String>,
+    pathPresentationKey: String?,
+    pathProgress: Float,
+    pathSeparatorProgress: Float,
+    pathTitleProgress: Float,
     avatarProgress: Float,
     artistTitleProgress: Float,
     identityMotionDistancePx: Float,
@@ -111,15 +116,16 @@ internal fun ArtistIdentityTopBarRow(
     val textStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium)
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val bridgeProgress = albumBreadcrumbProgress.coerceIn(0f, 1f)
-    val separatorTransition = artistAlbumSuffixTransition(albumSeparatorProgress)
-    val titleTransition = artistAlbumSuffixTransition(albumTitleProgress)
+    val bridgeProgress = pathProgress.coerceIn(0f, 1f)
+    val separatorTransition = artistAlbumSuffixTransition(pathSeparatorProgress)
+    val titleTransition = artistAlbumSuffixTransition(pathTitleProgress)
     val replacementTransition = artistAlbumReplacementTransition(bridgeProgress)
     val pathMotionDistancePx = with(density) { 8.dp.toPx() }
     var artistHasVisualOverflow by remember(artistName) { mutableStateOf(false) }
-    var albumHasVisualOverflow by remember(albumTitle) { mutableStateOf(false) }
+    val currentTitle = pathSegments.lastOrNull()
+    var currentHasVisualOverflow by remember(currentTitle) { mutableStateOf(false) }
     val artistInteractionSource = remember(artistName) { MutableInteractionSource() }
-    val albumInteractionSource = remember(albumTitle) { MutableInteractionSource() }
+    val currentInteractionSource = remember(currentTitle) { MutableInteractionSource() }
 
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.CenterStart) {
         val avatarAndGapWidthPx = with(density) {
@@ -131,7 +137,7 @@ internal fun ArtistIdentityTopBarRow(
             naturalContentWidthPx = avatarAndGapWidthPx + artistWidthPx,
             availableWidthPx = availableWidthPx
         )
-        if (albumTitle == null) {
+        if (currentTitle == null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -177,15 +183,24 @@ internal fun ArtistIdentityTopBarRow(
                 )
             }
         } else {
-            val separatorWidthPx = textMeasurer.measure(" / ", textStyle).size.width.toFloat()
-            val albumWidthPx = textMeasurer.measure(albumTitle, textStyle).size.width.toFloat()
-            val albumLayout = artistTopBarAlbumTitleLayout(
-                breadcrumbNaturalWidthPx = avatarAndGapWidthPx + artistWidthPx +
-                    separatorWidthPx + albumWidthPx,
+            val separator = " / "
+            val collapsedPrefix = "… / "
+            val separatorWidthPx = textMeasurer.measure(separator, textStyle).size.width.toFloat()
+            val currentWidthPx = textMeasurer.measure(currentTitle, textStyle).size.width.toFloat()
+            val segmentWidthsPx = pathSegments.sumOf { segment ->
+                textMeasurer.measure(segment, textStyle).size.width.toDouble()
+            }.toFloat()
+            val fullPathWidthPx = avatarAndGapWidthPx + artistWidthPx +
+                separatorWidthPx * pathSegments.size + segmentWidthsPx
+            val collapsedPathWidthPx = avatarAndGapWidthPx +
+                textMeasurer.measure(collapsedPrefix, textStyle).size.width + currentWidthPx
+            val pathLayout = artistTopBarPathLayout(
+                fullPathNaturalWidthPx = fullPathWidthPx,
+                collapsedPathNaturalWidthPx = collapsedPathWidthPx,
                 availableWidthPx = availableWidthPx
             )
-            key(checkNotNull(albumPresentationKey)) {
-                if (albumLayout == ArtistTopBarAlbumTitleLayout.Breadcrumb) {
+            key(checkNotNull(pathPresentationKey)) {
+                if (pathLayout == ArtistTopBarPathLayout.FullPath) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -213,49 +228,38 @@ internal fun ArtistIdentityTopBarRow(
                                         (1f - artistTitleProgress)
                                 }
                         )
-                        Text(
-                            text = " / ",
-                            style = textStyle,
-                            color = contentColor.copy(alpha = 0.72f),
-                            maxLines = 1,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .graphicsLayer {
-                                    alpha = separatorTransition.alpha
-                                    translationX = pathMotionDistancePx *
-                                        separatorTransition.translationXFraction
-                                }
-                                .blur(
-                                    radius = PageMotion.PageBlurRadius *
-                                        separatorTransition.blurFraction,
-                                    edgeTreatment = BlurredEdgeTreatment.Unbounded
-                                )
-                        )
-                        Text(
-                            text = albumTitle,
-                            style = textStyle,
-                            color = contentColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            onTextLayout = { result -> albumHasVisualOverflow = result.hasVisualOverflow },
-                            modifier = Modifier
-                                .weight(1f)
                                 .graphicsLayer {
                                     alpha = titleTransition.alpha
                                     translationX = pathMotionDistancePx *
                                         titleTransition.translationXFraction
                                 }
                                 .blur(
-                                    radius = PageMotion.PageBlurRadius * titleTransition.blurFraction,
+                                    radius = PageMotion.PageBlurRadius *
+                                        titleTransition.blurFraction,
                                     edgeTreatment = BlurredEdgeTreatment.Unbounded
                                 )
-                                .clickable(
-                                    enabled = interactionEnabled &&
-                                        titleTransition.alpha >= 0.999f &&
-                                        canOpenFullTitleOverlay(albumHasVisualOverflow),
-                                    interactionSource = albumInteractionSource,
-                                    indication = null
-                                ) { onFullTitleRequest(albumTitle) }
-                        )
+                        ) {
+                            pathSegments.forEach { segment ->
+                                Text(
+                                    text = separator,
+                                    style = textStyle,
+                                    color = contentColor.copy(alpha = 0.72f),
+                                    maxLines = 1,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = separatorTransition.alpha
+                                    }
+                                )
+                                Text(
+                                    text = segment,
+                                    style = textStyle,
+                                    color = contentColor,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 } else {
                     Box(modifier = Modifier.fillMaxWidth()) {
@@ -309,13 +313,8 @@ internal fun ArtistIdentityTopBarRow(
                                     }
                             )
                         }
-                        Text(
-                            text = albumTitle,
-                            style = textStyle,
-                            color = contentColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            onTextLayout = { result -> albumHasVisualOverflow = result.hasVisualOverflow },
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .graphicsLayer {
@@ -328,14 +327,40 @@ internal fun ArtistIdentityTopBarRow(
                                         (1f - replacementTransition.albumAlpha),
                                     edgeTreatment = BlurredEdgeTreatment.Unbounded
                                 )
-                                .clickable(
-                                    enabled = interactionEnabled &&
-                                        replacementTransition.albumAlpha >= 0.999f &&
-                                        canOpenFullTitleOverlay(albumHasVisualOverflow),
-                                    interactionSource = albumInteractionSource,
-                                    indication = null
-                                ) { onFullTitleRequest(albumTitle) }
-                        )
+                        ) {
+                            ArtistAvatar(
+                                size = ArtistTopBarAvatarSize,
+                                image = avatarImage,
+                                backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                                iconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = collapsedPrefix,
+                                style = textStyle,
+                                color = contentColor.copy(alpha = 0.72f),
+                                maxLines = 1,
+                                modifier = Modifier.padding(start = ArtistTopBarTitleGap)
+                            )
+                            Text(
+                                text = currentTitle,
+                                style = textStyle,
+                                color = contentColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { result ->
+                                    currentHasVisualOverflow = result.hasVisualOverflow
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable(
+                                        enabled = interactionEnabled &&
+                                            replacementTransition.albumAlpha >= 0.999f &&
+                                            canOpenFullTitleOverlay(currentHasVisualOverflow),
+                                        interactionSource = currentInteractionSource,
+                                        indication = null
+                                    ) { onFullTitleRequest(currentTitle) }
+                            )
+                        }
                     }
                 }
             }

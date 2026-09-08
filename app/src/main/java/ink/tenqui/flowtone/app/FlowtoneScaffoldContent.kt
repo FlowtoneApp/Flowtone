@@ -569,6 +569,8 @@ internal fun FlowtoneScaffoldContent(
                     onProviderSongQueueClick = callbacks.onProviderSongQueueClick,
                     onOpenAlbum = callbacks.onOpenAlbum,
                     onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
+                    onOpenArtistSongs = callbacks.onOpenArtistSongs,
+                    onOpenArtistAlbums = callbacks.onOpenArtistAlbums,
                     onFullTitleRequest = onFullTitleRequest,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,

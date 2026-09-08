@@ -58,6 +58,17 @@ internal enum class ArtistPrimaryContentPresentation {
 }
 
 internal const val ArtistLoadingSkeletonCount = 7
+internal const val ArtistSongPreviewLimit = 10
+internal const val ArtistAlbumPreviewLimit = 6
+
+internal fun <T> artistSongPreview(items: List<T>): List<T> =
+    items.take(ArtistSongPreviewLimit)
+
+internal fun <T> artistAlbumPreview(items: List<T>): List<T> =
+    items.take(ArtistAlbumPreviewLimit)
+
+internal fun artistSongsSectionTitle(providerOrderTitle: String?): String =
+    providerOrderTitle?.trim()?.takeIf(String::isNotEmpty) ?: "歌曲"
 
 internal fun artistLoadingContentIdentity(entryKey: String): String =
     "$entryKey:artist-loading-content"
@@ -83,6 +94,13 @@ internal class ArtistScrollStateOwner internal constructor(
         )
     }
 }
+
+internal fun artistTintArtworkData(
+    banner: Any?,
+    avatar: Any?,
+    localArtwork: Any?,
+    providerArtwork: Any?
+): Any? = banner ?: avatar ?: localArtwork ?: providerArtwork
 
 internal class ArtistScrollStateStore {
     private val owners = mutableMapOf<String, ArtistScrollStateOwner>()
