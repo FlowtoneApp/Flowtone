@@ -67,6 +67,9 @@ internal fun <T> artistSongPreview(items: List<T>): List<T> =
 internal fun <T> artistAlbumPreview(items: List<T>): List<T> =
     items.take(ArtistAlbumPreviewLimit)
 
+internal fun artistAlbumPreviewHasTrailingAction(albumCount: Int): Boolean =
+    albumCount > ArtistAlbumPreviewLimit
+
 internal fun artistSongsSectionTitle(providerOrderTitle: String?): String =
     providerOrderTitle?.trim()?.takeIf(String::isNotEmpty) ?: "歌曲"
 
@@ -87,8 +90,21 @@ internal class ArtistScrollStateOwner internal constructor(
     var position: ArtistScrollPosition = ArtistScrollPosition()
         private set
 
+    var albumsPreviewPosition: ArtistScrollPosition = ArtistScrollPosition()
+        private set
+
     fun update(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int) {
         position = ArtistScrollPosition(
+            firstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
+            firstVisibleItemScrollOffset = firstVisibleItemScrollOffset.coerceAtLeast(0)
+        )
+    }
+
+    fun updateAlbumsPreview(
+        firstVisibleItemIndex: Int,
+        firstVisibleItemScrollOffset: Int
+    ) {
+        albumsPreviewPosition = ArtistScrollPosition(
             firstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
             firstVisibleItemScrollOffset = firstVisibleItemScrollOffset.coerceAtLeast(0)
         )

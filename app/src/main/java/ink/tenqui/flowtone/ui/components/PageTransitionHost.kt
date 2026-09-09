@@ -18,7 +18,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateMap
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
@@ -40,7 +39,8 @@ internal class PageTransitionScope internal constructor(
     val phase: PageTransitionPhase,
     val progress: Float,
     private val offsetYPx: Float,
-    val transitionId: Int
+    val transitionId: Int,
+    internal val appliedContainerAlpha: Float = 1f
 ) {
     fun elementModifier(
         order: Int,
@@ -65,7 +65,10 @@ internal class PageTransitionScope internal constructor(
             signedOffsetYPx = offsetYPx * translationOffsetScale
         )
         return Modifier.graphicsLayer {
-            alpha = visualState.alpha
+            alpha = pageTransitionCompensatedAlpha(
+                desiredAlpha = visualState.alpha,
+                appliedContainerAlpha = appliedContainerAlpha
+            )
             translationY = visualState.translationY
         }
     }
@@ -122,35 +125,81 @@ internal class PageTransitionScope internal constructor(
             )
     }
 
-    /** Only page backgrounds use this alpha; content keeps its own element alpha. */
+    /** Keeps the canonical background alpha after the Host's slot presentation is applied. */
     fun backgroundModifier(): Modifier {
-        val alpha = when (phase) {
+        val desiredAlpha = when (phase) {
             PageTransitionPhase.Incoming -> PageMotion.Easing.transform(progress)
             PageTransitionPhase.Outgoing,
             PageTransitionPhase.Current -> 1f
         }
-        return Modifier.graphicsLayer { this.alpha = alpha }
+        return Modifier.graphicsLayer {
+            alpha = pageTransitionCompensatedAlpha(
+                desiredAlpha = desiredAlpha,
+                appliedContainerAlpha = appliedContainerAlpha
+            )
+        }
     }
 
     internal fun combineWith(local: PageTransitionScope): PageTransitionScope {
+        val combinedContainerAlpha =
+            appliedContainerAlpha * local.appliedContainerAlpha
         return when {
-            phase == PageTransitionPhase.Outgoing -> this
-            local.phase == PageTransitionPhase.Outgoing -> local
+            phase == PageTransitionPhase.Outgoing -> PageTransitionScope(
+                phase = phase,
+                progress = progress,
+                offsetYPx = offsetYPx,
+                transitionId = maxOf(transitionId, local.transitionId),
+                appliedContainerAlpha = combinedContainerAlpha
+            )
+            local.phase == PageTransitionPhase.Outgoing -> PageTransitionScope(
+                phase = local.phase,
+                progress = local.progress,
+                offsetYPx = local.offsetYPx,
+                transitionId = maxOf(transitionId, local.transitionId),
+                appliedContainerAlpha = combinedContainerAlpha
+            )
             phase == PageTransitionPhase.Incoming -> PageTransitionScope(
                 phase = PageTransitionPhase.Incoming,
                 progress = minOf(progress, local.progress),
                 offsetYPx = offsetYPx,
-                transitionId = maxOf(transitionId, local.transitionId)
+                transitionId = maxOf(transitionId, local.transitionId),
+                appliedContainerAlpha = combinedContainerAlpha
             )
-            local.phase == PageTransitionPhase.Incoming -> local
+            local.phase == PageTransitionPhase.Incoming -> PageTransitionScope(
+                phase = local.phase,
+                progress = local.progress,
+                offsetYPx = local.offsetYPx,
+                transitionId = maxOf(transitionId, local.transitionId),
+                appliedContainerAlpha = combinedContainerAlpha
+            )
             else -> PageTransitionScope(
                 phase = PageTransitionPhase.Current,
                 progress = 1f,
                 offsetYPx = offsetYPx,
-                transitionId = maxOf(transitionId, local.transitionId)
+                transitionId = maxOf(transitionId, local.transitionId),
+                appliedContainerAlpha = combinedContainerAlpha
             )
         }
     }
+}
+
+internal fun pageTransitionSlotAlpha(
+    phase: PageTransitionPhase,
+    progress: Float
+): Float = when (phase) {
+    PageTransitionPhase.Incoming -> PageMotion.Easing.transform(progress.coerceIn(0f, 1f))
+    PageTransitionPhase.Outgoing,
+    PageTransitionPhase.Current -> 1f
+}
+
+internal fun pageTransitionCompensatedAlpha(
+    desiredAlpha: Float,
+    appliedContainerAlpha: Float
+): Float {
+    val desired = desiredAlpha.coerceIn(0f, 1f)
+    val applied = appliedContainerAlpha.coerceIn(0f, 1f)
+    if (desired <= 0f || applied <= 0f) return 0f
+    return (desired / applied).coerceIn(0f, 1f)
 }
 
 internal data class PageElementVisualState(
@@ -181,7 +230,8 @@ internal fun pageElementVisualState(
 internal data class PageTransitionPresentation(
     val phase: PageTransitionPhase,
     val progress: Float,
-    val transitionId: Int
+    val transitionId: Int,
+    private val appliedContainerAlpha: Float = 1f
 ) {
     fun elementAppearanceModifier(
         offsetYPx: Float,
@@ -192,7 +242,8 @@ internal data class PageTransitionPresentation(
         phase = phase,
         progress = progress,
         offsetYPx = offsetYPx,
-        transitionId = transitionId
+        transitionId = transitionId,
+        appliedContainerAlpha = appliedContainerAlpha
     ).elementAppearanceModifierAt(
         pageProgress = progress,
         order = order,
@@ -202,9 +253,9 @@ internal data class PageTransitionPresentation(
 }
 
 internal fun PageTransitionScope.presentation(): PageTransitionPresentation =
-    PageTransitionPresentation(phase, progress, transitionId)
+    PageTransitionPresentation(phase, progress, transitionId, appliedContainerAlpha)
 
-private data class PageSnapshot<T>(
+internal data class PageSnapshot<T>(
     val value: T,
     val identity: Int
 )
@@ -268,13 +319,19 @@ internal fun <T> pageTransitionEndpointStillRequested(
 }
 
 internal fun <T> pageTransitionCanCommitPair(
+    animationTransitionId: Int,
+    activeTransitionId: Int,
+    animationGeneration: Any,
+    activeGeneration: Any,
     currentProgress: Float,
     targetProgress: Float,
     latestTarget: T,
     outgoing: T,
     incoming: T,
     samePage: (T, T) -> Boolean
-): Boolean = pageTransitionEndpointReached(currentProgress, targetProgress) &&
+): Boolean = animationTransitionId == activeTransitionId &&
+    animationGeneration === activeGeneration &&
+    pageTransitionEndpointReached(currentProgress, targetProgress) &&
     pageTransitionEndpointStillRequested(
         targetProgress = targetProgress,
         latestTarget = latestTarget,
@@ -283,7 +340,7 @@ internal fun <T> pageTransitionCanCommitPair(
         samePage = samePage
     )
 
-private enum class PageSlot {
+internal enum class PageSlot {
     First,
     Second;
 
@@ -292,6 +349,103 @@ private enum class PageSlot {
         Second -> First
     }
 }
+
+internal data class PageTransitionPairState<T>(
+    val firstPage: PageSnapshot<T>?,
+    val secondPage: PageSnapshot<T>?,
+    val currentSlot: PageSlot,
+    val transitioning: Boolean,
+    val transitionId: Int,
+    val nextSnapshotIdentity: Int
+) {
+    fun page(slot: PageSlot): PageSnapshot<T>? = when (slot) {
+        PageSlot.First -> firstPage
+        PageSlot.Second -> secondPage
+    }
+
+    fun pageValue(slot: PageSlot): T = checkNotNull(page(slot)).value
+
+    fun begin(requestedTarget: T): PageTransitionPairState<T> {
+        check(!transitioning)
+        val incomingSlot = currentSlot.other()
+        val snapshot = PageSnapshot(requestedTarget, nextSnapshotIdentity)
+        return withPage(incomingSlot, snapshot).copy(
+            transitioning = true,
+            transitionId = transitionId + 1,
+            nextSnapshotIdentity = nextSnapshotIdentity + 1
+        )
+    }
+
+    fun replaceIncoming(requestedTarget: T): PageTransitionPairState<T> {
+        check(transitioning)
+        val incomingSlot = currentSlot.other()
+        val snapshot = PageSnapshot(requestedTarget, nextSnapshotIdentity)
+        return withPage(incomingSlot, snapshot).copy(
+            transitionId = transitionId + 1,
+            nextSnapshotIdentity = nextSnapshotIdentity + 1
+        )
+    }
+
+    fun commit(targetEndpoint: Float): PageTransitionPairState<T> {
+        check(transitioning)
+        val incomingSlot = currentSlot.other()
+        return if (targetEndpoint == 0f) {
+            withPage(incomingSlot, null).copy(transitioning = false)
+        } else {
+            withPage(currentSlot, null).copy(
+                currentSlot = incomingSlot,
+                transitioning = false
+            )
+        }
+    }
+
+    fun phaseFor(slot: PageSlot): PageTransitionPhase? = when {
+        !transitioning && currentSlot == slot -> PageTransitionPhase.Current
+        transitioning && currentSlot == slot -> PageTransitionPhase.Outgoing
+        transitioning && currentSlot.other() == slot -> PageTransitionPhase.Incoming
+        else -> null
+    }
+
+    fun slots(progress: Float): PageTransitionSlots<T> = if (transitioning) {
+        PageTransitionSlots(
+            outgoing = pageValue(currentSlot),
+            incoming = pageValue(currentSlot.other()),
+            progress = progress,
+            transitionId = transitionId
+        )
+    } else {
+        PageTransitionSlots(
+            current = pageValue(currentSlot),
+            progress = 1f,
+            transitionId = transitionId
+        )
+    }
+
+    private fun withPage(
+        slot: PageSlot,
+        snapshot: PageSnapshot<T>?
+    ): PageTransitionPairState<T> = when (slot) {
+        PageSlot.First -> copy(firstPage = snapshot)
+        PageSlot.Second -> copy(secondPage = snapshot)
+    }
+
+    companion object {
+        fun <T> initial(targetState: T): PageTransitionPairState<T> =
+            PageTransitionPairState(
+                firstPage = PageSnapshot(targetState, identity = 0),
+                secondPage = null,
+                currentSlot = PageSlot.First,
+                transitioning = false,
+                transitionId = 0,
+                nextSnapshotIdentity = 1
+            )
+    }
+}
+
+private data class PageTransitionTargetRequest<T>(
+    val target: T,
+    val generation: Any
+)
 
 @Composable
 internal fun <T> PageTransitionHost(
@@ -303,26 +457,17 @@ internal fun <T> PageTransitionHost(
     onSlotsChanged: (PageTransitionSlots<T>) -> Unit = {},
     content: @Composable PageTransitionScope.(T) -> Unit
 ) {
-    // Each slot keeps its identity while it is current and then outgoing.
-    // Only the other slot is created for the incoming page.
-    var nextSnapshotIdentity by remember { mutableStateOf(1) }
-    var firstPage by remember {
-        mutableStateOf<PageSnapshot<T>?>(PageSnapshot(targetState, identity = 0))
+    // Pair mutations are atomic: a composition can observe either the stable endpoint or a
+    // complete outgoing/incoming pair, never an intermediate half-cleared slot set.
+    var pairState by remember {
+        mutableStateOf(PageTransitionPairState.initial(targetState))
     }
-    var secondPage by remember { mutableStateOf<PageSnapshot<T>?>(null) }
-    var currentSlot by remember { mutableStateOf(PageSlot.First) }
-    var transitioning by remember { mutableStateOf(false) }
-    var transitionId by remember { mutableStateOf(0) }
     val progress = remember { Animatable(1f) }
-    val latestTargetState = rememberUpdatedState(targetState)
+    val targetGeneration = remember(targetState) { Any() }
+    val latestTargetRequest = rememberUpdatedState(
+        PageTransitionTargetRequest(targetState, targetGeneration)
+    )
     val offsetYPx = with(LocalDensity.current) { PageMotion.Offset.toPx() }
-
-    fun pageValue(slot: PageSlot): T {
-        return when (slot) {
-            PageSlot.First -> checkNotNull(firstPage).value
-            PageSlot.Second -> checkNotNull(secondPage).value
-        }
-    }
 
     fun samePage(first: T, second: T): Boolean {
         if (first == second) return true
@@ -330,13 +475,6 @@ internal fun <T> PageTransitionHost(
         val firstKey = keyProvider(first) ?: return false
         val secondKey = keyProvider(second) ?: return false
         return firstKey == secondKey
-    }
-
-    fun clearPage(slot: PageSlot) {
-        when (slot) {
-            PageSlot.First -> firstPage = null
-            PageSlot.Second -> secondPage = null
-        }
     }
 
     suspend fun animateProgressTo(targetValue: Float) {
@@ -354,76 +492,59 @@ internal fun <T> PageTransitionHost(
         )
     }
 
-    // Match the established TopBar transition ownership: the target itself keys the coroutine.
-    // A Back recomposition therefore cancels animateTo before this retained pair is retargeted.
-    LaunchedEffect(targetState) {
+    // A new request cancels animateTo, but not the retained pair. Reverse navigation therefore
+    // drives the same Animatable from its current value toward the opposite endpoint.
+    LaunchedEffect(targetGeneration) {
         val requestedTarget = targetState
         while (true) {
-            if (!transitioning) {
-                if (samePage(requestedTarget, pageValue(currentSlot))) {
+            if (!pairState.transitioning) {
+                if (samePage(requestedTarget, pairState.pageValue(pairState.currentSlot))) {
                     return@LaunchedEffect
                 }
-
-                val outgoingSlot = currentSlot
-                val incomingSlot = outgoingSlot.other()
-                val incomingPage = PageSnapshot(requestedTarget, nextSnapshotIdentity++)
-                when (incomingSlot) {
-                    PageSlot.First -> firstPage = incomingPage
-                    PageSlot.Second -> secondPage = incomingPage
-                }
-                transitionId += 1
-                transitioning = true
+                pairState = pairState.begin(requestedTarget)
                 progress.snapTo(0f)
             }
 
-            val outgoingSlot = currentSlot
+            val outgoingSlot = pairState.currentSlot
             val incomingSlot = outgoingSlot.other()
             val retargetAction = pageTransitionRetargetAction(
                 requestedTarget = requestedTarget,
-                outgoing = pageValue(outgoingSlot),
-                incoming = pageValue(incomingSlot),
+                outgoing = pairState.pageValue(outgoingSlot),
+                incoming = pairState.pageValue(incomingSlot),
                 samePage = ::samePage
             )
             if (retargetAction == PageTransitionRetargetAction.ReplaceIncoming) {
-                val replacement = PageSnapshot(requestedTarget, nextSnapshotIdentity++)
-                when (incomingSlot) {
-                    PageSlot.First -> firstPage = replacement
-                    PageSlot.Second -> secondPage = replacement
-                }
-                transitionId += 1
+                pairState = pairState.replaceIncoming(requestedTarget)
                 progress.snapTo(0f)
             }
             val targetEndpoint = pageTransitionTargetEndpoint(retargetAction)
+            val animationTransitionId = pairState.transitionId
+            val animationGeneration = targetGeneration
 
             animateProgressTo(targetEndpoint)
 
-            // Like animate*AsState in the TopBar, endpoint cleanup yields through the next
-            // composition frame. A Back/forward retarget that arrived on the final animation
-            // frame can then cancel this effect before either retained page is disposed.
-            withFrameNanos { }
-
+            val activeRequest = latestTargetRequest.value
+            val activePair = pairState
             if (
                 !pageTransitionCanCommitPair(
+                    animationTransitionId = animationTransitionId,
+                    activeTransitionId = activePair.transitionId,
+                    animationGeneration = animationGeneration,
+                    activeGeneration = activeRequest.generation,
                     currentProgress = progress.value,
                     targetProgress = targetEndpoint,
-                    latestTarget = latestTargetState.value,
-                    outgoing = pageValue(outgoingSlot),
-                    incoming = pageValue(incomingSlot),
+                    latestTarget = activeRequest.target,
+                    outgoing = activePair.pageValue(activePair.currentSlot),
+                    incoming = activePair.pageValue(activePair.currentSlot.other()),
                     samePage = ::samePage
                 )
             ) {
                 return@LaunchedEffect
             }
 
-            if (targetEndpoint == 0f) {
-                clearPage(incomingSlot)
-            } else {
-                clearPage(outgoingSlot)
-                currentSlot = incomingSlot
-            }
-            transitioning = false
+            pairState = activePair.commit(targetEndpoint)
 
-            if (samePage(requestedTarget, pageValue(currentSlot))) {
+            if (samePage(requestedTarget, pairState.pageValue(pairState.currentSlot))) {
                 return@LaunchedEffect
             }
             // A target that changes after endpoint cleanup starts a fresh pair here.
@@ -441,20 +562,31 @@ internal fun <T> PageTransitionHost(
         if (snapshot == null || phase == null) return
 
         key(slot, snapshot.identity) {
+            val localProgress = if (phase == PageTransitionPhase.Current) {
+                1f
+            } else {
+                transitionProgress
+            }
+            val slotAlpha = if (
+                parentScope == null || parentScope.phase == PageTransitionPhase.Current
+            ) {
+                pageTransitionSlotAlpha(phase, localProgress)
+            } else {
+                // The active parent transition owns the subtree's container presentation.
+                1f
+            }
             val localScope = PageTransitionScope(
                 phase = phase,
-                progress = if (phase == PageTransitionPhase.Current) {
-                    1f
-                } else {
-                    transitionProgress
-                },
+                progress = localProgress,
                 offsetYPx = offsetYPx,
-                transitionId = transitionId
+                transitionId = pairState.transitionId,
+                appliedContainerAlpha = slotAlpha
             )
             val scope = parentScope?.combineWith(localScope) ?: localScope
             val pageModifier = Modifier
                 .fillMaxSize()
                 .zIndex(if (phase == PageTransitionPhase.Incoming) 1f else 0f)
+                .graphicsLayer { alpha = slotAlpha }
 
             val visualModifier = if (
                 phase == PageTransitionPhase.Outgoing &&
@@ -475,40 +607,16 @@ internal fun <T> PageTransitionHost(
         }
     }
 
-    val firstPhase = when {
-        !transitioning && currentSlot == PageSlot.First -> PageTransitionPhase.Current
-        transitioning && currentSlot == PageSlot.First -> PageTransitionPhase.Outgoing
-        transitioning && currentSlot == PageSlot.Second -> PageTransitionPhase.Incoming
-        else -> null
-    }
-    val secondPhase = when {
-        !transitioning && currentSlot == PageSlot.Second -> PageTransitionPhase.Current
-        transitioning && currentSlot == PageSlot.Second -> PageTransitionPhase.Outgoing
-        transitioning && currentSlot == PageSlot.First -> PageTransitionPhase.Incoming
-        else -> null
-    }
-
-    val slots = if (transitioning) {
-        PageTransitionSlots(
-            outgoing = pageValue(currentSlot),
-            incoming = pageValue(currentSlot.other()),
-            progress = transitionProgress,
-            transitionId = transitionId
-        )
-    } else {
-        PageTransitionSlots(
-            current = pageValue(currentSlot),
-            progress = 1f,
-            transitionId = transitionId
-        )
-    }
+    val firstPhase = pairState.phaseFor(PageSlot.First)
+    val secondPhase = pairState.phaseFor(PageSlot.Second)
+    val slots = pairState.slots(transitionProgress)
     SideEffect { onSlotsChanged(slots) }
 
     Box(
         modifier = modifier
     ) {
-        RenderPageSlot(PageSlot.First, firstPage, firstPhase)
-        RenderPageSlot(PageSlot.Second, secondPage, secondPhase)
+        RenderPageSlot(PageSlot.First, pairState.firstPage, firstPhase)
+        RenderPageSlot(PageSlot.Second, pairState.secondPage, secondPhase)
     }
 }
 

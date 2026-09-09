@@ -1,11 +1,14 @@
 package ink.tenqui.flowtone.app
 
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.unit.Dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.key
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
@@ -47,16 +50,27 @@ internal fun FlowtoneScaffoldTopLayer(
             }
         )
         key(artistRoute.artistEntryKey) {
+            val identityVisible = artistTopBarIdentityVisible(
+                route = artistRoute,
+                scrollIdentityVisible = topBarStateOwner.visible
+            )
+            LaunchedEffect(topBarStateOwner, identityVisible) {
+                topBarStateOwner.presentationProgress.animateTo(
+                    targetValue = if (identityVisible) 1f else 0f,
+                    animationSpec = tween(
+                        durationMillis = FlowtoneMotion.ShortDurationMillis,
+                        easing = FlowtoneMotion.Easing
+                    )
+                )
+            }
+            val identityProgress = topBarStateOwner.presentationProgress.value
             ArtistIdentityTopBar(
                 artistName = artistRoute.artist.name,
                 avatarImage = heroOwner.resolvedAvatar
                     ?: artistRoute.artist.identity.avatar,
                 backgroundKind = heroOwner.backgroundKind,
-                identityVisible = artistTopBarIdentityVisible(
-                    route = artistRoute,
-                    scrollIdentityVisible = topBarStateOwner.visible
-                ),
-                pathEntryKey = artistRoute.pathEntryKey,
+                identityVisible = identityVisible,
+                identityProgress = identityProgress,
                 pathSegments = artistRoute.pathSegments,
                 onBack = {
                     if (heroOwner.focusRequested) {

@@ -180,6 +180,12 @@ class ArtistPageContentTest {
     }
 
     @Test
+    fun albumPreviewAddsTrailingActionOnlyWhenMoreThanSixAlbumsExist() {
+        assertFalse(artistAlbumPreviewHasTrailingAction(6))
+        assertTrue(artistAlbumPreviewHasTrailingAction(7))
+    }
+
+    @Test
     fun artistSongsSectionTitleUsesProviderDescriptionOrSongFallback() {
         assertEquals("时间排序", artistSongsSectionTitle("  时间排序  "))
         assertEquals("歌曲", artistSongsSectionTitle(null))
@@ -411,6 +417,31 @@ class ArtistPageContentTest {
     }
 
     @Test
+    fun artistScrollOwnerRetainsAlbumsPreviewPositionPerEntry() {
+        val store = ArtistScrollStateStore()
+        val artistA = store.ownerFor("artist-a")
+        val artistB = store.ownerFor("artist-b")
+        val repeatedArtistA = store.ownerFor("artist-a-second-entry")
+
+        artistA.updateAlbumsPreview(4, 19)
+
+        assertEquals(ArtistScrollPosition(4, 19), artistA.albumsPreviewPosition)
+        assertEquals(ArtistScrollPosition(), artistB.albumsPreviewPosition)
+        assertEquals(ArtistScrollPosition(), repeatedArtistA.albumsPreviewPosition)
+        assertEquals(artistA, store.ownerFor("artist-a"))
+    }
+
+    @Test
+    fun topBarReadabilityUsesSharedProgressOnlyForTheCurrentOwner() {
+        val presentation = artistTopBarVisualPresentation(0.4f)
+
+        assertEquals(0.4f, presentation.foregroundAlpha, 0f)
+        assertEquals(-0.6f, presentation.foregroundTranslationYFraction, 0.0001f)
+        assertEquals(0.4f, artistTopBarContentOcclusionProgress(0.4f, true), 0f)
+        assertEquals(0f, artistTopBarContentOcclusionProgress(1f, false), 0f)
+    }
+
+    @Test
     fun topBarThresholdsUseMeasuredHeroHeightAndHysteresis() {
         val thresholds = artistTopBarThresholds(
             heroHeightPx = 520,
@@ -424,34 +455,5 @@ class ArtistPageContentTest {
         assertTrue(artistTopBarVisible(false, 0, 440, thresholds))
         assertTrue(artistTopBarVisible(true, 0, 430, thresholds))
         assertFalse(artistTopBarVisible(true, 0, 416, thresholds))
-    }
-
-    @Test
-    fun longTopBarTitleDropsAvatarBeforeEllipsizing() {
-        assertTrue(
-            artistTopBarTitlePresentation(
-                naturalContentWidthPx = 220f,
-                availableWidthPx = 260f
-            ).showAvatarAndBreadcrumb
-        )
-        assertFalse(
-            artistTopBarTitlePresentation(
-                naturalContentWidthPx = 320f,
-                availableWidthPx = 260f
-            ).showAvatarAndBreadcrumb
-        )
-    }
-
-    @Test
-    fun albumSuffixAndReplacementRemainContinuous() {
-        val suffix = artistAlbumSuffixTransition(0.35f)
-        assertEquals(0.35f, suffix.alpha, 0f)
-        assertEquals(0.65f, suffix.translationXFraction, 0.0001f)
-
-        val replacement = artistAlbumReplacementTransition(0.35f)
-        assertEquals(0.65f, replacement.artistAlpha, 0.0001f)
-        assertEquals(0.35f, replacement.albumAlpha, 0f)
-        assertEquals(-0.35f, replacement.artistTranslationYFraction, 0f)
-        assertEquals(0.65f, replacement.albumTranslationYFraction, 0.0001f)
     }
 }

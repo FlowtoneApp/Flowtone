@@ -40,10 +40,10 @@ class ArtistIdentityTopBarPresentationTest {
     }
 
     @Test
-    fun backAvatarAndBreadcrumbShareOnePresentationLayer() {
+    fun backAndAvatarFormTheStableShell() {
         assertEquals(
-            ArtistTopBarPresentedElement.entries.toSet(),
-            ArtistTopBarUnifiedPresentedElements
+            ArtistTopBarStableShellElement.entries.toSet(),
+            ArtistTopBarStableShellElements
         )
     }
 

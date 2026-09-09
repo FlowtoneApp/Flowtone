@@ -1,12 +1,14 @@
 package ink.tenqui.flowtone.ui.components
 
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,9 +18,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -44,6 +48,7 @@ import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 
 internal val FlowtoneContentCardShape = RoundedCornerShape(8.dp)
 internal val FlowtoneCollectionCardWidth = 140.dp
+internal val FlowtoneCollectionTrailingActionCardWidth = 84.dp
 
 @Composable
 internal fun FlowtoneContentSectionTitle(
@@ -197,7 +202,50 @@ internal fun FlowtoneCollectionArtworkCard(
     }
 }
 
-/** A narrow terminal action which keeps the collection-card surface language. */
+/** A compact terminal action using the same shape and surface language as collection cards. */
+@Composable
+internal fun FlowtoneCollectionTrailingActionCard(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = FlowtoneContentCardShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.82f),
+        contentColor = MaterialTheme.colorScheme.primary,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)
+        ),
+        modifier = modifier
+            .width(FlowtoneCollectionTrailingActionCardWidth)
+            .height(FlowtoneCollectionCardWidth)
+    ) {
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .size(14.dp)
+            )
+        }
+    }
+}
+
 @Composable
 internal fun FlowtoneArtwork(
     song: Song,

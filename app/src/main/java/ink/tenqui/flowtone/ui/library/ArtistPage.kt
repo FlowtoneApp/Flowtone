@@ -57,10 +57,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
@@ -89,6 +87,7 @@ import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.FlowtoneCollectionArtworkCard
 import ink.tenqui.flowtone.ui.components.FlowtoneCollectionCardWidth
+import ink.tenqui.flowtone.ui.components.FlowtoneCollectionTrailingActionCard
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
@@ -98,7 +97,6 @@ import ink.tenqui.flowtone.ui.components.SongListItemSkeleton
 import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
 import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
 import ink.tenqui.flowtone.ui.components.rememberHorizontalCardPageMotion
-import ink.tenqui.flowtone.ui.components.horizontalEndDragAction
 import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
@@ -118,6 +116,7 @@ private const val ArtistFirstSongListItemIndex = 2
 private const val ArtistLazyAheadViewportFraction = 0.75f
 private const val ArtistLazyBehindViewportFraction = 0.25f
 private const val ArtistHeroMotionOrderCount = 7
+private const val ArtistAlbumsMoreCardKey = "artist-albums-more"
 
 internal enum class ArtistHeroElement(val order: Int) {
     Background(0),
@@ -139,6 +138,7 @@ internal fun ArtistPage(
     scrollStateOwner: ArtistScrollStateOwner,
     heroStateOwner: ArtistHeroStateOwner,
     artistTopBarStateOwner: ArtistTopBarStateOwner,
+    artistTopBarOcclusionProgress: Float,
     artistName: String,
     hasLocalContent: Boolean,
     providedAvatar: ExtensionImage?,
@@ -176,7 +176,13 @@ internal fun ArtistPage(
         initialFirstVisibleItemScrollOffset = initialScrollPosition.firstVisibleItemScrollOffset,
         cacheWindow = cacheWindow
     )
-    val albumPreviewState = rememberLazyListState(cacheWindow = cacheWindow)
+    val initialAlbumsPreviewPosition = scrollStateOwner.albumsPreviewPosition
+    val albumPreviewState = rememberLazyListState(
+        initialFirstVisibleItemIndex = initialAlbumsPreviewPosition.firstVisibleItemIndex,
+        initialFirstVisibleItemScrollOffset =
+            initialAlbumsPreviewPosition.firstVisibleItemScrollOffset,
+        cacheWindow = cacheWindow
+    )
     val artistSongs = remember(displayArtist, allSongs, hasLocalContent) {
         if (hasLocalContent) localSongsForArtist(allSongs, displayArtist) else emptyList()
     }
@@ -223,6 +229,14 @@ internal fun ArtistPage(
             listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
         }.distinctUntilChanged().collect { (index, offset) ->
             scrollStateOwner.update(index, offset)
+        }
+    }
+    LaunchedEffect(entryKey, albumPreviewState, scrollStateOwner) {
+        snapshotFlow {
+            albumPreviewState.firstVisibleItemIndex to
+                albumPreviewState.firstVisibleItemScrollOffset
+        }.distinctUntilChanged().collect { (index, offset) ->
+            scrollStateOwner.updateAlbumsPreview(index, offset)
         }
     }
 
@@ -284,7 +298,9 @@ internal fun ArtistPage(
     val previewProviderAlbums = remember(artistProviderAlbums) {
         artistAlbumPreview(artistProviderAlbums)
     }
-    val hasMoreAlbums = artistAlbums.size + artistProviderAlbums.size > ArtistAlbumPreviewLimit
+    val hasMoreAlbums = artistAlbumPreviewHasTrailingAction(
+        artistAlbums.size + artistProviderAlbums.size
+    )
     val albumPreviewMotion = rememberHorizontalCardPageMotion(
         sessionKey = "$entryKey:albums-preview",
         listState = albumPreviewState,
@@ -481,8 +497,6 @@ internal fun ArtistPage(
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     val artistTopBarHeight = statusBarTop + FlowtoneTopBarContentHeight
     val artistTopBarHeightPx = with(density) { artistTopBarHeight.toPx() }
-    val isolateArtistTopBarContent = artistTopBarStateOwner.visible ||
-        pageTransition.phase == PageTransitionPhase.Outgoing
     var measuredHeroHeightPx by remember(entryKey) { mutableIntStateOf(0) }
 
     BoxWithConstraints(
@@ -504,13 +518,10 @@ internal fun ArtistPage(
             verticalArrangement = Arrangement.spacedBy(StandardSongListItemSpacing),
             modifier = Modifier
                 .fillMaxSize()
-                .drawWithContent {
-                    clipRect(
-                        top = if (isolateArtistTopBarContent) artistTopBarHeightPx else 0f
-                    ) {
-                        this@drawWithContent.drawContent()
-                    }
-                }
+                .artistTopBarContentOcclusion(
+                    topBarHeight = artistTopBarHeight,
+                    progress = artistTopBarOcclusionProgress
+                )
                 .then(
                     if (focusPresentationActive) {
                         Modifier
@@ -644,11 +655,7 @@ internal fun ArtistPage(
                             state = albumPreviewState,
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier.horizontalEndDragAction(
-                                listState = albumPreviewState,
-                                enabled = hasMoreAlbums,
-                                onTriggered = onOpenAllAlbums
-                            )
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             items(previewLocalAlbums, key = LocalAlbum::id) { album ->
                                 FlowtoneCollectionArtworkCard(
@@ -676,6 +683,17 @@ internal fun ArtistPage(
                                         album.identity.stableKey
                                     ).width(FlowtoneCollectionCardWidth)
                                 )
+                            }
+                            if (hasMoreAlbums) {
+                                item(key = ArtistAlbumsMoreCardKey) {
+                                    FlowtoneCollectionTrailingActionCard(
+                                        label = "查看更多",
+                                        onClick = onOpenAllAlbums,
+                                        modifier = albumPreviewMotion.itemModifier(
+                                            ArtistAlbumsMoreCardKey
+                                        )
+                                    )
+                                }
                             }
                         }
                     }

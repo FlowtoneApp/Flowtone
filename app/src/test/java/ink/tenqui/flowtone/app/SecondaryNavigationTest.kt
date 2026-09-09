@@ -271,6 +271,10 @@ class SecondaryNavigationTest {
         )
         assertEquals(
             SecondaryTopPresentationOwner.ArtistTopBar,
+            secondaryTopPresentationOwner(SecondaryDestination.ArtistAlbums(artist))
+        )
+        assertEquals(
+            SecondaryTopPresentationOwner.ArtistTopBar,
             secondaryTopPresentationOwner(
                 SecondaryDestination.Album(1L, "Album", parentArtist = artist)
             )
@@ -365,15 +369,6 @@ class SecondaryNavigationTest {
     }
 
     @Test
-    fun albumPathStaggersSeparatorThenTitleAndReversesInTheOppositeOrder() {
-        val entering = artistTopBarPathElementProgress(pathProgress = 0.5f, entering = true)
-        val exiting = artistTopBarPathElementProgress(pathProgress = 0.5f, entering = false)
-
-        assertTrue(entering.separator > entering.title)
-        assertTrue(exiting.title < exiting.separator)
-    }
-
-    @Test
     fun artistParentedAlbumFindsItsMatchingArtistEntry() {
         val artistAState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
         val artistBState = artistAState.push(SecondaryDestination.Artist("B"))
@@ -435,6 +430,21 @@ class SecondaryNavigationTest {
         assertEquals(listOf("全部专辑"), artistTopBarRoute(albumsState.entries)?.pathSegments)
         assertEquals(artist, songsState.pop().current)
         assertEquals(artist, albumsState.pop().current)
+    }
+
+    @Test
+    fun artistAlbumsOnlyChangesPathContentAndKeepsTheParentTopBarCompositionKey() {
+        val artistState = SecondaryNavigationState().push(SecondaryDestination.Artist("A"))
+        val artist = artistState.current as SecondaryDestination.Artist
+        val albumsState = artistState.push(SecondaryDestination.ArtistAlbums(artist.identity))
+
+        val overviewRoute = checkNotNull(artistTopBarRoute(artistState.entries))
+        val albumsRoute = checkNotNull(artistTopBarRoute(albumsState.entries))
+
+        assertEquals(overviewRoute.artistEntryKey, albumsRoute.artistEntryKey)
+        assertEquals(overviewRoute.artist.identity, albumsRoute.artist.identity)
+        assertEquals(emptyList<String>(), overviewRoute.pathSegments)
+        assertEquals(listOf("全部专辑"), albumsRoute.pathSegments)
     }
 
     @Test

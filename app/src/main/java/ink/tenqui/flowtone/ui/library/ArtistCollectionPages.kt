@@ -54,6 +54,7 @@ internal fun ArtistSongsPage(
     onProviderSongClick: (List<ProviderSong>, Int) -> Unit,
     onBack: () -> Unit,
     pageTransition: PageTransitionScope,
+    artistTopBarOcclusionProgress: Float,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -69,6 +70,10 @@ internal fun ArtistSongsPage(
         contentPadding = PaddingValues(top = topPadding, bottom = ArtistCollectionBottomPadding),
         modifier = modifier
             .fillMaxSize()
+            .artistTopBarContentOcclusion(
+                topBarHeight = topPadding - ArtistCollectionTopGap,
+                progress = artistTopBarOcclusionProgress
+            )
             .rightSwipeBackGesture(onBack)
     ) {
         val displayOrderTitle = orderTitle?.trim()?.takeIf(String::isNotEmpty)
@@ -140,6 +145,7 @@ internal fun ArtistAlbumsPage(
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     onBack: () -> Unit,
     pageTransition: PageTransitionScope,
+    artistTopBarOcclusionProgress: Float,
     modifier: Modifier = Modifier
 ) {
     val gridState = rememberLazyGridState()
@@ -163,6 +169,10 @@ internal fun ArtistAlbumsPage(
                 contentAlignment = Alignment.TopStart,
                 modifier = Modifier
                     .fillMaxSize()
+                    .artistTopBarContentOcclusion(
+                        topBarHeight = topPadding - ArtistCollectionTopGap,
+                        progress = artistTopBarOcclusionProgress
+                    )
                     .padding(top = topPadding)
             ) {
                 ArtistCollectionEmptyText(
@@ -182,7 +192,12 @@ internal fun ArtistAlbumsPage(
                 ),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .artistTopBarContentOcclusion(
+                        topBarHeight = topPadding - ArtistCollectionTopGap,
+                        progress = artistTopBarOcclusionProgress
+                    )
             ) {
                 if (hasLocalContent) {
                     itemsIndexed(localAlbums, key = { _, album -> album.id }) { _, album ->

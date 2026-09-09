@@ -35,6 +35,7 @@ import ink.tenqui.flowtone.ui.library.ArtistAlbumsPage
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateOwner
 import ink.tenqui.flowtone.ui.library.ArtistSongsPage
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateOwner
+import ink.tenqui.flowtone.ui.library.artistTopBarContentOcclusion
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateOwner
 import ink.tenqui.flowtone.ui.library.artistAlbumsFor
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
@@ -109,6 +110,7 @@ internal fun SecondaryPageHost(
     artistScrollStateOwner: ArtistScrollStateOwner? = null,
     artistHeroStateOwner: ArtistHeroStateOwner? = null,
     artistTopBarStateOwner: ArtistTopBarStateOwner? = null,
+    artistTopBarOcclusionProgress: Float = 0f,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
@@ -368,6 +370,10 @@ internal fun SecondaryPageHost(
                 }
                 val albumContentModifier = Modifier
                     .fillMaxSize()
+                    .artistTopBarContentOcclusion(
+                        topBarHeight = artistAlbumTopInset,
+                        progress = artistTopBarOcclusionProgress
+                    )
                     .padding(top = artistAlbumTopInset)
                     .rightSwipeBackGesture(::closeSelectionOrPage)
                 when (val identity = navigationDestination.identity) {
@@ -447,6 +453,7 @@ internal fun SecondaryPageHost(
                             scrollStateOwner = checkNotNull(artistScrollStateOwner),
                             heroStateOwner = checkNotNull(artistHeroStateOwner),
                             artistTopBarStateOwner = checkNotNull(artistTopBarStateOwner),
+                            artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
                             artistName = artistDestination.name,
                             hasLocalContent = artistDestination.identity.hasLocalContent,
                             providedAvatar = artistDestination.identity.avatar,
@@ -551,6 +558,7 @@ internal fun SecondaryPageHost(
                             },
                             onBack = onCloseSecondaryPage,
                             pageTransition = pageScope,
+                            artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -591,6 +599,7 @@ internal fun SecondaryPageHost(
                             onOpenProviderAlbum = onOpenProviderAlbum,
                             onBack = onCloseSecondaryPage,
                             pageTransition = pageScope,
+                            artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
                             modifier = Modifier.fillMaxSize()
                         )
                     }

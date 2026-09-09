@@ -27,8 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
@@ -50,6 +49,7 @@ import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
+import ink.tenqui.flowtone.ui.library.artistTopBarContentOcclusionProgress
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
@@ -115,6 +115,13 @@ internal fun FlowtoneScaffoldContent(
     )
     val mainPagesCloudPalette = LocalMainPagesCloudPalette.current
     val mainPageCloudAccent = mainPagesCloudPalette.accentAt(pagePosition)
+    val artistPathCloudAccent = artistTopBarRoute(state.secondaryEntries)?.let { route ->
+        artistHeroStateStore.owner(route.artistEntryKey)?.resolvedCloudColor
+    }
+    val sharedCloudBaseAccent = resolveSharedCloudBaseAccent(
+        mainPageAccent = mainPageCloudAccent,
+        artistPathAccent = artistPathCloudAccent
+    )
     val cloudPlacement = topLevelCloudPlacementForPagePosition(pagePosition)
     val selectedPlaylistDestination = state.secondaryDestination as? SecondaryDestination.Playlist
     val selectedAlbumDestination = state.secondaryDestination as? SecondaryDestination.Album
@@ -151,7 +158,10 @@ internal fun FlowtoneScaffoldContent(
         )
     }
     val albumArtworkCloudPalette = rememberAlbumArtworkCloudPalette(
-        artworkUri = selectedAlbum?.artworkUri,
+        artworkData = albumCloudArtworkData(
+            destination = selectedAlbumDestination,
+            localArtwork = selectedAlbum?.artworkUri
+        ),
         fallbackPalette = defaultAlbumCloudPalette,
         isDarkTheme = isDarkTheme
     )
@@ -198,7 +208,7 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SharedCloudPrimaryColor"
     ) { usesDetailPalette ->
-        if (usesDetailPalette) targetCloudPalette.primary else mainPageCloudAccent
+        if (usesDetailPalette) targetCloudPalette.primary else sharedCloudBaseAccent
     }
     val animatedSecondaryCloudColor by detailCloudTransition.animateColor(
         transitionSpec = {
@@ -206,7 +216,7 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SharedCloudSecondaryColor"
     ) { usesDetailPalette ->
-        if (usesDetailPalette) targetCloudPalette.secondary else mainPageCloudAccent
+        if (usesDetailPalette) targetCloudPalette.secondary else sharedCloudBaseAccent
     }
     val animatedTertiaryCloudColor by detailCloudTransition.animateColor(
         transitionSpec = {
@@ -214,7 +224,7 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SharedCloudTertiaryColor"
     ) { usesDetailPalette ->
-        if (usesDetailPalette) targetCloudPalette.tertiary else mainPageCloudAccent
+        if (usesDetailPalette) targetCloudPalette.tertiary else sharedCloudBaseAccent
     }
     val animatedCloudPalette = if (
         detailCloudTransition.currentState || detailCloudTransition.targetState
@@ -225,7 +235,7 @@ internal fun FlowtoneScaffoldContent(
             tertiary = animatedTertiaryCloudColor
         )
     } else {
-        monochromeFlowtoneCloudPalette(mainPageCloudAccent)
+        monochromeFlowtoneCloudPalette(sharedCloudBaseAccent)
     }
     val playlistDetailDestination = selectedPlaylistDestination?.let { selectedDestination ->
         val playlistId = selectedDestination.playlistId
@@ -311,7 +321,8 @@ internal fun FlowtoneScaffoldContent(
                     pageUsesSharedCloud -> 0f
 
                     page is FlowtoneScaffoldPage.Secondary &&
-                        page.destination.page == SecondaryPage.Artist -> 0f
+                        secondaryTopPresentationOwner(page.destination) ==
+                            SecondaryTopPresentationOwner.ArtistTopBar -> 0f
 
                     page is FlowtoneScaffoldPage.MainTabs && state.searchActive -> 0f
                     else -> state.topBarBackgroundAlpha
@@ -436,10 +447,8 @@ internal fun FlowtoneScaffoldContent(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(
-                                    if (
-                                        page.destination.page == SecondaryPage.Artist ||
-                                        (page.destination as? SecondaryDestination.Album)
-                                            ?.parentArtist != null
+                                    if (secondaryTopPresentationOwner(page.destination) ==
+                                        SecondaryTopPresentationOwner.ArtistTopBar
                                     ) {
                                         // Artist owns its toolbar insets. The returning
                                         // parent's live TopBar must not move this outgoing slot.
@@ -451,20 +460,6 @@ internal fun FlowtoneScaffoldContent(
                                     }
                                 )
                                 .padding(bottom = state.miniPlayerContentBottomPadding)
-                                .drawWithContent {
-                                    val artistParentedAlbum =
-                                        (page.destination as? SecondaryDestination.Album)
-                                            ?.parentArtist != null
-                                    clipRect(
-                                        top = if (artistParentedAlbum) {
-                                            topBarBackgroundHeight.toPx()
-                                        } else {
-                                            0f
-                                        }
-                                    ) {
-                                        this@drawWithContent.drawContent()
-                                    }
-                                }
                         ) {
                             secondaryPageStateHolder.SaveableStateProvider(
                                 key = page.entry.uiStateKey()
@@ -478,6 +473,20 @@ internal fun FlowtoneScaffoldContent(
                                 }
                                 val artistDestination =
                                     page.destination as? SecondaryDestination.Artist
+                                val artistPathParentEntryKey = remember(
+                                    page.entry.uiStateKey(),
+                                    state.secondaryEntries
+                                ) {
+                                    if (artistDestination != null) {
+                                        page.entry.uiStateKey()
+                                    } else {
+                                        val parentIdentity = artistPathIdentity(page.destination)
+                                        state.secondaryEntries.lastOrNull { entry ->
+                                            (entry.destination as? SecondaryDestination.Artist)
+                                                ?.identity?.stableId == parentIdentity?.stableId
+                                        }?.uiStateKey()
+                                    }
+                                }
                                 val artistHeroStateOwner = remember(page.entry.uiStateKey()) {
                                     if (artistDestination != null) {
                                         artistHeroStateStore.ownerFor(
@@ -493,13 +502,7 @@ internal fun FlowtoneScaffoldContent(
                                             }
                                         )
                                     } else {
-                                        val parentIdentity = artistPathIdentity(page.destination)
-                                        val parentEntryKey = state.secondaryEntries
-                                            .lastOrNull { entry ->
-                                                (entry.destination as? SecondaryDestination.Artist)
-                                                    ?.identity?.stableId == parentIdentity?.stableId
-                                            }?.uiStateKey()
-                                        artistHeroStateStore.owner(parentEntryKey)
+                                        artistHeroStateStore.owner(artistPathParentEntryKey)
                                     }
                                 }
                                 val artistTopBarStateOwner =
@@ -511,14 +514,24 @@ internal fun FlowtoneScaffoldContent(
                                             ).position
                                         )
                                     } else {
-                                        null
+                                        artistTopBarStateStore.owner(artistPathParentEntryKey)
                                     }
+                                val artistTopBarOcclusionProgress =
+                                    artistTopBarContentOcclusionProgress(
+                                        presentationProgress = artistTopBarStateOwner
+                                            ?.presentationProgress?.value ?: 0f,
+                                        ownsOcclusion =
+                                            secondaryTopPresentationOwner(page.destination) ==
+                                                SecondaryTopPresentationOwner.ArtistTopBar &&
+                                                page.entry.id == state.secondaryEntry?.id
+                                    )
                                 SecondaryPageHost(
                         destination = page.destination,
                         navigationEntryKey = page.entry.uiStateKey(),
                         artistScrollStateOwner = artistScrollStateOwner,
                         artistHeroStateOwner = artistHeroStateOwner,
                         artistTopBarStateOwner = artistTopBarStateOwner,
+                        artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
                         pageScope = pageScope,
                         appPreferences = state.appPreferences,
                     themeMode = state.themeMode,
@@ -617,6 +630,20 @@ internal fun FlowtoneScaffoldContent(
             }
         }
 }
+
+internal fun albumCloudArtworkData(
+    destination: SecondaryDestination.Album?,
+    localArtwork: Any?
+): Any? = when (destination?.identity) {
+    is AlbumDestinationIdentity.Local -> localArtwork
+    is AlbumDestinationIdentity.Provider -> destination.providerAlbum?.artwork
+    null -> null
+}
+
+internal fun resolveSharedCloudBaseAccent(
+    mainPageAccent: Color,
+    artistPathAccent: Color?
+): Color = artistPathAccent ?: mainPageAccent
 @Composable
 private fun FlowtoneMainTabsSearchContent(
     state: FlowtoneAppScaffoldState,

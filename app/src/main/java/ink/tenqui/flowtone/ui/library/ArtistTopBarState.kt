@@ -1,9 +1,18 @@
 package ink.tenqui.flowtone.ui.library
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 
 internal data class ArtistTopBarThresholds(
     val showPx: Int,
@@ -39,6 +48,64 @@ internal fun artistTopBarVisible(
     }
 }
 
+internal data class ArtistTopBarVisualPresentation(
+    val foregroundAlpha: Float,
+    val foregroundTranslationYFraction: Float
+)
+
+internal fun artistTopBarVisualPresentation(
+    progress: Float
+): ArtistTopBarVisualPresentation {
+    val safeProgress = progress.coerceIn(0f, 1f)
+    return ArtistTopBarVisualPresentation(
+        foregroundAlpha = safeProgress,
+        foregroundTranslationYFraction = -(1f - safeProgress)
+    )
+}
+
+internal fun artistTopBarContentOcclusionProgress(
+    presentationProgress: Float,
+    ownsOcclusion: Boolean
+): Float = if (ownsOcclusion) {
+    presentationProgress.coerceIn(0f, 1f)
+} else {
+    0f
+}
+
+/**
+ * Keeps Artist-path foreground content out of the shared transparent TopBar while leaving the
+ * page's Cloud layer untouched. Partial progress uses a destination-out mask so threshold
+ * reversals remain continuous; a fully presented TopBar uses a direct clip.
+ */
+internal fun Modifier.artistTopBarContentOcclusion(
+    topBarHeight: Dp,
+    progress: Float
+): Modifier {
+    val safeProgress = progress.coerceIn(0f, 1f)
+    return then(
+        when {
+            safeProgress <= 0f -> Modifier
+            safeProgress >= 1f -> Modifier.drawWithContent {
+                clipRect(top = topBarHeight.toPx()) {
+                    this@drawWithContent.drawContent()
+                }
+            }
+            else -> Modifier
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
+                .drawWithContent {
+                    drawContent()
+                    drawRect(
+                        color = Color.Black.copy(alpha = safeProgress),
+                        size = size.copy(height = topBarHeight.toPx()),
+                        blendMode = BlendMode.DstOut
+                    )
+                }
+        }
+    )
+}
+
 @Stable
 internal class ArtistTopBarStateOwner internal constructor(
     val entryKey: String,
@@ -46,6 +113,8 @@ internal class ArtistTopBarStateOwner internal constructor(
 ) {
     var visible by mutableStateOf(initialScrollPosition.firstVisibleItemIndex > 0)
         private set
+
+    val presentationProgress = Animatable(if (visible) 1f else 0f)
 
     fun update(
         firstVisibleItemIndex: Int,

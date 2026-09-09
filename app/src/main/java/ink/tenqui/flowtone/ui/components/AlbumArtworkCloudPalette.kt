@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui.components
 
-import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,6 +17,7 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.toBitmap
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.player.CloudColorPath
 import ink.tenqui.flowtone.ui.player.extractMaterialYouSeedColors
 import ink.tenqui.flowtone.ui.player.materialYouCloudColors
@@ -78,14 +78,19 @@ internal object ArtworkPaletteMemoryCache {
 
 @Composable
 internal fun rememberAlbumArtworkCloudPalette(
-    artworkUri: Uri?,
+    artworkData: Any?,
     fallbackPalette: FlowtoneCloudPalette,
     isDarkTheme: Boolean
 ): FlowtoneCloudPalette {
     val context = LocalContext.current
+    val imageLoader = if (artworkData is ExtensionImage) {
+        remember(context) { ExtensionManager.get(context).extensionImageLoader }
+    } else {
+        context.imageLoader
+    }
     return rememberArtworkCloudPalette(
-        artworkData = artworkUri,
-        imageLoader = context.imageLoader,
+        artworkData = artworkData,
+        imageLoader = imageLoader,
         fallbackPalette = fallbackPalette,
         isDarkTheme = isDarkTheme
     )
