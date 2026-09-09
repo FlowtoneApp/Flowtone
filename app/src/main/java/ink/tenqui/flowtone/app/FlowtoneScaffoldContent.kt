@@ -42,9 +42,12 @@ import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
+import ink.tenqui.flowtone.ui.components.AlbumDetailCloudPlacement
+import ink.tenqui.flowtone.ui.components.TopLevelBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.albumDetailCloudPalette
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
-import ink.tenqui.flowtone.ui.components.rememberAlbumArtworkCloudPalette
+import ink.tenqui.flowtone.ui.components.rememberAlbumArtworkCloudColor
 import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
@@ -106,8 +109,7 @@ internal fun FlowtoneScaffoldContent(
         artistScrollStateStore.retainEntries(activeArtistEntryKeys)
         artistTopBarStateStore.retainEntries(activeArtistEntryKeys)
     }
-    val detailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
-        state.secondaryPage == SecondaryPage.Album ||
+    val paletteDetailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
         state.secondaryPage == SecondaryPage.LocalLibrary
     val pagePosition = topLevelContinuousPagePosition(
         currentPage = state.pagerState.currentPage,
@@ -149,20 +151,12 @@ internal fun FlowtoneScaffoldContent(
         state.uiState.albums.firstOrNull { album -> album.id == selectedLocalAlbumId }
     }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
-    val defaultAlbumCloudPalette = remember(isDarkTheme, mainPageCloudAccent) {
-        playlistDetailCloudPaletteFor(
-            visualType = PlaylistCardVisualType.Default,
-            appearanceColorKey = null,
-            isDarkTheme = isDarkTheme,
-            fallbackAccent = mainPageCloudAccent
-        )
-    }
-    val albumArtworkCloudPalette = rememberAlbumArtworkCloudPalette(
+    val albumArtworkCloudColor = rememberAlbumArtworkCloudColor(
         artworkData = albumCloudArtworkData(
             destination = selectedAlbumDestination,
             localArtwork = selectedAlbum?.artworkUri
         ),
-        fallbackPalette = defaultAlbumCloudPalette,
+        fallbackColor = mainPagesCloudPalette.libraryAccent,
         isDarkTheme = isDarkTheme
     )
     val targetCloudPalette = remember(
@@ -170,7 +164,6 @@ internal fun FlowtoneScaffoldContent(
         selectedPlaylistDestination,
         selectedPlaylistVisualType,
         selectedPlaylistAppearanceColorKey,
-        albumArtworkCloudPalette,
         isDarkTheme,
         mainPageCloudAccent
     ) {
@@ -189,8 +182,6 @@ internal fun FlowtoneScaffoldContent(
                 fallbackAccent = mainPageCloudAccent
             )
 
-            SecondaryPage.Album -> albumArtworkCloudPalette
-
             else -> FlowtoneCloudPalette(
                 primary = mainPageCloudAccent,
                 secondary = mainPageCloudAccent,
@@ -199,7 +190,7 @@ internal fun FlowtoneScaffoldContent(
         }
     }
     val detailCloudTransition = updateTransition(
-        targetState = detailUsesSharedCloud,
+        targetState = paletteDetailUsesSharedCloud,
         label = "SharedDetailCloudTransition"
     )
     val animatedPrimaryCloudColor by detailCloudTransition.animateColor(
@@ -226,7 +217,7 @@ internal fun FlowtoneScaffoldContent(
     ) { usesDetailPalette ->
         if (usesDetailPalette) targetCloudPalette.tertiary else sharedCloudBaseAccent
     }
-    val animatedCloudPalette = if (
+    val animatedPaletteCloudPalette = if (
         detailCloudTransition.currentState || detailCloudTransition.targetState
     ) {
         FlowtoneCloudPalette(
@@ -236,6 +227,29 @@ internal fun FlowtoneScaffoldContent(
         )
     } else {
         monochromeFlowtoneCloudPalette(sharedCloudBaseAccent)
+    }
+    val albumCloudTransition = updateTransition(
+        targetState = state.secondaryPage == SecondaryPage.Album,
+        label = "AlbumDetailCloudTransition"
+    )
+    val animatedAlbumCloudColor by albumCloudTransition.animateColor(
+        transitionSpec = {
+            tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
+        },
+        label = "AlbumDetailCloudColor"
+    ) { albumDetailActive ->
+        albumDetailCloudColorTarget(
+            albumDetailActive = albumDetailActive,
+            albumAccent = albumArtworkCloudColor,
+            nonAlbumAccent = sharedCloudBaseAccent
+        )
+    }
+    val animatedCloudPalette = if (
+        albumCloudTransition.currentState || albumCloudTransition.targetState
+    ) {
+        albumDetailCloudPalette(animatedAlbumCloudColor)
+    } else {
+        animatedPaletteCloudPalette
     }
     val playlistDetailDestination = selectedPlaylistDestination?.let { selectedDestination ->
         val playlistId = selectedDestination.playlistId
@@ -311,6 +325,11 @@ internal fun FlowtoneScaffoldContent(
                 }
                 val pageCloudAlpha = if (pageUsesSharedCloud) 1f else 0f
                 val pageSecondaryBackgroundAlpha = if (pageUsesSharedCloud) 0f else 1f
+                val pageCloudPlacement = sharedCloudPlacementForSecondaryPage(
+                    secondaryPage = (page as? FlowtoneScaffoldPage.Secondary)
+                        ?.destination?.page,
+                    topLevelPlacement = cloudPlacement
+                )
                 val pageTopBarSurfaceAlpha = when {
                     // FlowtoneAppEffects resets the shared scroll offset after navigation.
                     // An incoming slot must not briefly inherit the outgoing page's alpha
@@ -340,7 +359,7 @@ internal fun FlowtoneScaffoldContent(
                                         .topLevelPageBackground(
                                         cloudPalette = animatedCloudPalette,
                                         cloudAlpha = pageCloudAlpha,
-                                        cloudPlacement = cloudPlacement
+                                        cloudPlacement = pageCloudPlacement
                                     )
                             )
                             Box(
@@ -639,6 +658,21 @@ internal fun albumCloudArtworkData(
     is AlbumDestinationIdentity.Provider -> destination.providerAlbum?.artwork
     null -> null
 }
+
+internal fun sharedCloudPlacementForSecondaryPage(
+    secondaryPage: SecondaryPage?,
+    topLevelPlacement: TopLevelBackgroundCloudPlacement
+): TopLevelBackgroundCloudPlacement = if (secondaryPage == SecondaryPage.Album) {
+    AlbumDetailCloudPlacement
+} else {
+    topLevelPlacement
+}
+
+internal fun albumDetailCloudColorTarget(
+    albumDetailActive: Boolean,
+    albumAccent: Color,
+    nonAlbumAccent: Color
+): Color = if (albumDetailActive) albumAccent else nonAlbumAccent
 
 internal fun resolveSharedCloudBaseAccent(
     mainPageAccent: Color,

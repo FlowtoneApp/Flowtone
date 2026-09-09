@@ -4,6 +4,12 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import androidx.compose.ui.graphics.Color
+import ink.tenqui.flowtone.ui.components.AlbumDetailCloudPlacement
+import ink.tenqui.flowtone.ui.components.HomeBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.LibraryBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.MineBackgroundCloudPlacement
+import ink.tenqui.flowtone.ui.components.albumDetailCloudPalette
+import ink.tenqui.flowtone.ui.components.resolvedAlbumArtworkCloudColor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -46,6 +52,65 @@ class AlbumCloudArtworkSourceTest {
             )
         )
         assertNull(albumCloudArtworkData(destination = null, localArtwork = null))
+    }
+
+    @Test
+    fun albumCloudUsesOneAccentForEveryRendererChannel() {
+        val accent = Color(0xFF345678)
+        val palette = albumDetailCloudPalette(accent)
+
+        assertEquals(accent, palette.primary)
+        assertEquals(accent, palette.secondary)
+        assertEquals(accent, palette.tertiary)
+    }
+
+    @Test
+    fun missingOrFailedArtworkUsesTheCanonicalFallbackAccent() {
+        val fallback = Color(0xFF604675)
+
+        assertEquals(fallback, resolvedAlbumArtworkCloudColor(null, fallback))
+    }
+
+    @Test
+    fun everyAlbumEntryUsesTheSameTopCenterPlacement() {
+        listOf(
+            HomeBackgroundCloudPlacement,
+            LibraryBackgroundCloudPlacement,
+            MineBackgroundCloudPlacement
+        ).forEach { underlyingPlacement ->
+            assertEquals(
+                AlbumDetailCloudPlacement,
+                sharedCloudPlacementForSecondaryPage(
+                    secondaryPage = SecondaryPage.Album,
+                    topLevelPlacement = underlyingPlacement
+                )
+            )
+        }
+        assertEquals(0.5f, AlbumDetailCloudPlacement.cloudCenterWidthFraction, 0f)
+        assertEquals(0f, AlbumDetailCloudPlacement.cloudCenterRadiusOffsetXFactor, 0f)
+        assertEquals(-0.12f, AlbumDetailCloudPlacement.cloudCenterRadiusOffsetYFactor, 0f)
+    }
+
+    @Test
+    fun nonAlbumPagesKeepTheirOwnPlacement() {
+        assertEquals(
+            HomeBackgroundCloudPlacement,
+            sharedCloudPlacementForSecondaryPage(
+                secondaryPage = SecondaryPage.Artist,
+                topLevelPlacement = HomeBackgroundCloudPlacement
+            )
+        )
+    }
+
+    @Test
+    fun albumTargetDependsOnTheAlbumInsteadOfThePreviousRoute() {
+        val album = Color(0xFF123456)
+        val artist = Color(0xFF654321)
+        val library = Color(0xFFABCDEF)
+
+        assertEquals(album, albumDetailCloudColorTarget(true, album, artist))
+        assertEquals(album, albumDetailCloudColorTarget(true, album, library))
+        assertEquals(artist, albumDetailCloudColorTarget(false, album, artist))
     }
 
     @Test

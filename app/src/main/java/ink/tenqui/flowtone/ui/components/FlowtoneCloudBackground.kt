@@ -53,6 +53,15 @@ internal val LibraryBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy
     cloudCenterRadiusOffsetYFactor = -0.12f
 )
 
+internal val AlbumDetailCloudPlacement = HomeBackgroundCloudPlacement.copy(
+    cloudCenterWidthFraction = 0.5f,
+    cloudCenterRadiusOffsetXFactor = 0f,
+    cloudCenterRadiusOffsetYFactor = -0.12f
+)
+
+internal fun albumDetailCloudPalette(accentColor: Color): FlowtoneCloudPalette =
+    monochromeFlowtoneCloudPalette(accentColor)
+
 internal val MineBackgroundCloudPlacement = HomeBackgroundCloudPlacement.copy(
     cloudCenterWidthFraction = 1f,
     cloudCenterRadiusOffsetXFactor = 0.08f,

@@ -157,4 +157,125 @@ class ArtistIdentityTopBarRowTest {
         assertEquals(ArtistVisualBreadcrumbChange.Removed, reverse["separator:1"])
         assertEquals(ArtistVisualBreadcrumbChange.Removed, reverse["path:1"])
     }
+
+    @Test
+    fun identicalVisualBreadcrumbHasNoAnimatedSegments() {
+        val previous = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
+        val current = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
+
+        assertTrue(
+            artistVisualBreadcrumbDiff(previous, current).values.all { change ->
+                change == ArtistVisualBreadcrumbChange.Unchanged
+            }
+        )
+    }
+
+    @Test
+    fun artistToLongAlbumChangesAncestorAndInsertsTheFinalPath() {
+        val artist = artistVisualBreadcrumbModel("Kou!", emptyList())
+        val album = artistVisualBreadcrumbModel(
+            artistName = "Kou!",
+            pathSegments = listOf("Very Long Album"),
+            layout = ArtistTopBarPathLayout.CollapsedAncestors
+        )
+        val diff = artistVisualBreadcrumbDiff(artist, album)
+
+        assertEquals(ArtistVisualBreadcrumbChange.Changed, diff["ancestor"])
+        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["separator:0"])
+        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["path:0"])
+    }
+
+    @Test
+    fun collapsedSeparatorTargetsTheFinalEllipsisWidthAndUsesPlacementOnly() {
+        val full = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
+        val collapsed = artistVisualBreadcrumbModel(
+            artistName = "Kou!",
+            pathSegments = listOf("Album"),
+            layout = ArtistTopBarPathLayout.CollapsedAncestors
+        )
+        val fullPositions = artistVisualBreadcrumbTargetPositions(
+            visualModel = full,
+            renderedPathSlotCount = 1,
+            totalWidthPx = 320f,
+            avatarWidthPx = 36f,
+            titleGapPx = 10f,
+            leadingTextWidthPx = 40f,
+            separatorWidthPx = 12f,
+            pathTextWidthsPx = listOf(80f)
+        )
+        val collapsedPositions = artistVisualBreadcrumbTargetPositions(
+            visualModel = collapsed,
+            renderedPathSlotCount = 1,
+            totalWidthPx = 320f,
+            avatarWidthPx = 36f,
+            titleGapPx = 10f,
+            leadingTextWidthPx = 8f,
+            separatorWidthPx = 12f,
+            pathTextWidthsPx = listOf(80f)
+        )
+        val animation = artistBreadcrumbSegmentAnimation(
+            change = ArtistVisualBreadcrumbChange.Unchanged,
+            previousX = fullPositions.getValue("separator:0"),
+            targetX = collapsedPositions.getValue("separator:0")
+        )
+
+        assertEquals(54f, collapsedPositions.getValue("separator:0"), 0f)
+        assertEquals(66f, collapsedPositions.getValue("path:0"), 0f)
+        assertEquals(ArtistBreadcrumbAlphaAnimation.None, animation.alphaAnimation)
+        assertTrue(animation.animatePlacement)
+        assertFalse(animation.contentTranslation)
+    }
+
+    @Test
+    fun unchangedSegmentAtTheSamePositionHasNoAnimation() {
+        val animation = artistBreadcrumbSegmentAnimation(
+            change = ArtistVisualBreadcrumbChange.Unchanged,
+            previousX = 86f,
+            targetX = 86f
+        )
+
+        assertEquals(ArtistBreadcrumbAlphaAnimation.None, animation.alphaAnimation)
+        assertFalse(animation.animatePlacement)
+        assertFalse(animation.contentTranslation)
+        assertEquals(1f, artistBreadcrumbInitialContentProgress("Album", "Album"), 0f)
+    }
+
+    @Test
+    fun insertedAndRemovedSegmentsUseAlphaWithoutPlacementOrContentSlide() {
+        val inserted = artistBreadcrumbSegmentAnimation(
+            change = ArtistVisualBreadcrumbChange.Inserted,
+            previousX = null,
+            targetX = 54f
+        )
+        val removed = artistBreadcrumbSegmentAnimation(
+            change = ArtistVisualBreadcrumbChange.Removed,
+            previousX = 54f,
+            targetX = null
+        )
+
+        assertEquals(ArtistBreadcrumbAlphaAnimation.Enter, inserted.alphaAnimation)
+        assertEquals(ArtistBreadcrumbAlphaAnimation.Exit, removed.alphaAnimation)
+        assertFalse(inserted.animatePlacement)
+        assertFalse(removed.animatePlacement)
+        assertFalse(inserted.contentTranslation)
+        assertFalse(removed.contentTranslation)
+        assertEquals(0f, artistBreadcrumbInitialContentProgress(null, "Album"), 0f)
+        assertEquals(0f, artistBreadcrumbInitialContentProgress("Album", null), 0f)
+        assertEquals("Album", artistBreadcrumbOutgoingText("Album", null))
+    }
+
+    @Test
+    fun changedTextUsesAlphaReplacementWithoutContentSlide() {
+        val animation = artistBreadcrumbSegmentAnimation(
+            change = ArtistVisualBreadcrumbChange.Changed,
+            previousX = 100f,
+            targetX = 100f
+        )
+
+        assertEquals(ArtistBreadcrumbAlphaAnimation.Replace, animation.alphaAnimation)
+        assertFalse(animation.animatePlacement)
+        assertFalse(animation.contentTranslation)
+        assertEquals(0f, artistBreadcrumbInitialContentProgress("全部专辑", "Album"), 0f)
+        assertEquals("全部专辑", artistBreadcrumbOutgoingText("全部专辑", "Album"))
+    }
 }
