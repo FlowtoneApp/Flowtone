@@ -337,6 +337,19 @@ class ArtistPageContentTest {
     }
 
     @Test
+    fun artworkReadinessTargetsStayStableUntilTheResourceBecomesReady() {
+        assertEquals(0f, artistArtworkReadinessAlphaTarget(ready = false), 0f)
+        assertEquals(1f, artistArtworkReadinessAlphaTarget(ready = true), 0f)
+        assertEquals(1f, artistArtworkReadinessAlphaTarget(ready = true), 0f)
+    }
+
+    @Test
+    fun bannerAndCloudReadinessUseIndependentTargets() {
+        assertEquals(0f, artistArtworkReadinessAlphaTarget(ready = false), 0f)
+        assertEquals(1f, artistArtworkReadinessAlphaTarget(ready = true), 0f)
+    }
+
+    @Test
     fun heroStateIsIsolatedAndRetainedByNavigationEntry() {
         val store = ArtistHeroStateStore()
         val first = store.ownerFor(

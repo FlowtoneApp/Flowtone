@@ -380,7 +380,7 @@ internal fun ArtistPage(
         localArtwork = artistSongs.firstOrNull()?.artworkUri,
         providerArtwork = artistProviderSongs.firstOrNull()?.artwork
     )
-    val resolvedArtistColor = rememberArtworkBackgroundColor(
+    val resolvedArtistArtworkColor = rememberArtworkBackgroundColor(
         artworkData = paletteArtworkData,
         imageLoader = if (paletteArtworkData is ExtensionImage) {
             extensionImageLoader
@@ -389,7 +389,9 @@ internal fun ArtistPage(
         },
         fallbackColor = MaterialTheme.colorScheme.primaryContainer,
         isDarkTheme = isDarkTheme
-    ) ?: MaterialTheme.colorScheme.primaryContainer
+    )
+    val resolvedArtistColor = resolvedArtistArtworkColor
+        ?: MaterialTheme.colorScheme.primaryContainer
     val artistColor by animateColorAsState(
         targetValue = resolvedArtistColor,
         animationSpec = tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing),
@@ -509,7 +511,10 @@ internal fun ArtistPage(
     ) {
         val heroGeometry = artistHeroGeometry(maxWidth)
         if (artistCloudVisible(backgroundKind)) {
-            ArtistCloudBackground(accentColor = artistColor)
+            ArtistCloudBackground(
+                accentColor = artistColor,
+                ready = paletteArtworkData == null || resolvedArtistArtworkColor != null
+            )
         }
         LazyColumn(
             state = listState,
@@ -542,6 +547,7 @@ internal fun ArtistPage(
                 ArtistHero(
                     backgroundKind = backgroundKind,
                     bannerImageRequest = bannerImageRequest,
+                    bannerInitiallyReady = cachedBannerImage != null,
                     extensionImageLoader = extensionImageLoader,
                     bannerFallbackColor = artistColor,
                     accentColor = artistColor,
@@ -739,6 +745,7 @@ internal fun ArtistPage(
 private fun ArtistHero(
     backgroundKind: ArtistHeroBackgroundKind,
     bannerImageRequest: ImageRequest?,
+    bannerInitiallyReady: Boolean,
     extensionImageLoader: coil3.ImageLoader,
     bannerFallbackColor: Color,
     accentColor: Color,
@@ -758,6 +765,7 @@ private fun ArtistHero(
             ArtistHeroBackground(
                 kind = backgroundKind,
                 bannerImageRequest = bannerImageRequest,
+                bannerInitiallyReady = bannerInitiallyReady,
                 extensionImageLoader = extensionImageLoader,
                 bannerFallbackColor = bannerFallbackColor,
                 modifier = Modifier
@@ -847,6 +855,7 @@ private fun ArtistHero(
 private fun ArtistHeroBackground(
     kind: ArtistHeroBackgroundKind,
     bannerImageRequest: ImageRequest?,
+    bannerInitiallyReady: Boolean,
     extensionImageLoader: coil3.ImageLoader,
     bannerFallbackColor: Color,
     modifier: Modifier = Modifier
@@ -861,12 +870,22 @@ private fun ArtistHeroBackground(
         )
     ) {
         if (kind == ArtistHeroBackgroundKind.Banner && bannerImageRequest != null) {
+            var bannerReady by remember(bannerImageRequest) {
+                mutableStateOf(bannerInitiallyReady)
+            }
+            val readinessAlpha = rememberArtistArtworkReadinessAlpha(
+                ready = bannerReady,
+                label = "ArtistBannerReadinessFade"
+            )
             AsyncImage(
                 model = bannerImageRequest,
                 imageLoader = extensionImageLoader,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                onSuccess = { bannerReady = true },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = readinessAlpha }
             )
         }
     }

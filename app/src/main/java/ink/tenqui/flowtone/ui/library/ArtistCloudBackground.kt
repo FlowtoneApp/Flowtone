@@ -14,13 +14,19 @@ internal fun artistCloudVisible(backgroundKind: ArtistHeroBackgroundKind): Boole
 @Composable
 internal fun ArtistCloudBackground(
     accentColor: Color,
+    ready: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val readinessAlpha = rememberArtistArtworkReadinessAlpha(
+        ready = ready,
+        label = "ArtistCloudReadinessFade"
+    )
     Box(
         modifier = modifier
             .fillMaxSize()
             .topLevelPageBackground(
                 cloudPalette = monochromeFlowtoneCloudPalette(accentColor),
+                cloudAlpha = readinessAlpha,
                 cloudPlacement = HomeBackgroundCloudPlacement
             )
     )
