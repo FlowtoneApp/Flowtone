@@ -66,8 +66,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -75,6 +77,7 @@ import coil3.imageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
@@ -95,6 +98,7 @@ import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.SongListItemSkeleton
 import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
+import ink.tenqui.flowtone.ui.components.pageViewportStaggerOrder
 import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
 import ink.tenqui.flowtone.ui.components.rememberHorizontalCardPageMotion
 import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
@@ -117,6 +121,44 @@ private const val ArtistLazyAheadViewportFraction = 0.75f
 private const val ArtistLazyBehindViewportFraction = 0.25f
 private const val ArtistHeroMotionOrderCount = 7
 private const val ArtistAlbumsMoreCardKey = "artist-albums-more"
+internal const val ArtistSongsHeaderItemKey = "artist-songs-header"
+
+internal fun artistPreviewSongMotionKeys(
+    visibleItemKeys: List<Any>,
+    songKeys: List<String>
+): List<String> {
+    val songKeySet = songKeys.toSet()
+    return visibleItemKeys.mapNotNull { key ->
+        when {
+            key == ArtistSongsHeaderItemKey -> ArtistSongsHeaderItemKey
+            key is String && key in songKeySet -> key
+            else -> null
+        }
+    }.distinct()
+}
+
+internal data class ArtistPreviewItemMotionOrder(
+    val visibleOrdinal: Int,
+    val order: Int,
+    val orderCount: Int
+)
+
+internal fun artistPreviewItemMotionOrder(
+    key: String,
+    animationGroupKeys: List<String>,
+    phase: PageTransitionPhase
+): ArtistPreviewItemMotionOrder {
+    val visualOrder = songListAnimationOrder(key, animationGroupKeys)
+    return ArtistPreviewItemMotionOrder(
+        visibleOrdinal = visualOrder.order,
+        order = pageViewportStaggerOrder(
+            phase = phase,
+            visibleOrdinal = visualOrder.order,
+            visibleCount = visualOrder.orderCount
+        ),
+        orderCount = visualOrder.orderCount
+    )
+}
 
 internal enum class ArtistHeroElement(val order: Int) {
     Background(0),
@@ -427,6 +469,16 @@ internal fun ArtistPage(
             }
         }
     }
+    val visibleSongMotionKeys by remember(listState, realSongPresentationKeys) {
+        derivedStateOf {
+            artistPreviewSongMotionKeys(
+                visibleItemKeys = listState.layoutInfo.visibleItemsInfo
+                    .sortedWith(compareBy({ item -> item.offset }, { item -> item.index }))
+                    .map { item -> item.key },
+                songKeys = realSongPresentationKeys
+            )
+        }
+    }
     val initiallyReadySongKeys = remember(entryKey) {
         if (primaryContentPresentation == ArtistPrimaryContentPresentation.Ready) {
             realSongPresentationKeys.toSet()
@@ -463,7 +515,7 @@ internal fun ArtistPage(
     LaunchedEffect(
         pageTransition.transitionId,
         pageTransition.phase,
-        visibleSongKeys
+        visibleSongMotionKeys
     ) {
         if (pageTransition.phase == PageTransitionPhase.Current) {
             frozenTransitionId = null
@@ -471,19 +523,19 @@ internal fun ArtistPage(
             capturedPageProgress = 0f
         } else if (
             frozenTransitionId != pageTransition.transitionId &&
-            visibleSongKeys.isNotEmpty()
+            visibleSongMotionKeys.isNotEmpty()
         ) {
             frozenTransitionId = pageTransition.transitionId
-            frozenViewportKeys = visibleSongKeys
+            frozenViewportKeys = visibleSongMotionKeys
             capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
         }
     }
     val animationGroupKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
-        visibleSongKeys
+        visibleSongMotionKeys
     } else if (pageTransition.phase == PageTransitionPhase.Incoming) {
         frozenViewportKeys
     } else {
-        frozenViewportKeys.ifEmpty { visibleSongKeys }
+        frozenViewportKeys.ifEmpty { visibleSongMotionKeys }
     }
     val listProgress = when {
         pageTransition.phase != PageTransitionPhase.Incoming -> pageTransition.progress
@@ -500,6 +552,7 @@ internal fun ArtistPage(
     val artistTopBarHeight = statusBarTop + FlowtoneTopBarContentHeight
     val artistTopBarHeightPx = with(density) { artistTopBarHeight.toPx() }
     var measuredHeroHeightPx by remember(entryKey) { mutableIntStateOf(0) }
+    var measuredInfoCardHeightPx by remember(entryKey) { mutableIntStateOf(0) }
 
     BoxWithConstraints(
         modifier = modifier
@@ -510,6 +563,104 @@ internal fun ArtistPage(
             }
     ) {
         val heroGeometry = artistHeroGeometry(maxWidth)
+        if (BuildConfig.DEBUG) {
+            val diagnosticSongSamples = listState.layoutInfo.visibleItemsInfo
+            .mapNotNull { item ->
+                val songIndex = item.index - ArtistFirstSongListItemIndex
+                val songKey = previewSongKeys.getOrNull(songIndex) ?: return@mapNotNull null
+                val animationOrder = artistPreviewItemMotionOrder(
+                    key = songKey,
+                    animationGroupKeys = animationGroupKeys,
+                    phase = pageTransition.phase
+                )
+                ItemMotionDiagnosticSample(
+                    key = songKey,
+                    lazyIndex = item.index,
+                    ordinal = animationOrder.visibleOrdinal,
+                    order = animationOrder.order,
+                    orderCount = animationOrder.orderCount,
+                    motionProgress = listProgress,
+                    layoutXPx = 0,
+                    layoutYPx = item.offset,
+                    widthPx = listState.layoutInfo.viewportSize.width,
+                    heightPx = item.size
+                )
+            }
+            .take(5)
+        val diagnosticSongsHeaderSample = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { item -> item.key == ArtistSongsHeaderItemKey }
+            ?.let { item ->
+                val animationOrder = artistPreviewItemMotionOrder(
+                    key = ArtistSongsHeaderItemKey,
+                    animationGroupKeys = animationGroupKeys,
+                    phase = pageTransition.phase
+                )
+                ItemMotionDiagnosticSample(
+                    key = item.key,
+                    lazyIndex = item.index,
+                    ordinal = animationOrder.visibleOrdinal,
+                    order = animationOrder.order,
+                    orderCount = animationOrder.orderCount,
+                    motionProgress = listProgress,
+                    layoutXPx = 0,
+                    layoutYPx = item.offset,
+                    widthPx = listState.layoutInfo.viewportSize.width,
+                    heightPx = item.size
+                )
+            }
+        ItemMotionDiagnostic(
+            sessionKey = "$entryKey:artist-preview",
+            page = "ArtistPreview",
+            transition = pageTransition,
+            samples = listOfNotNull(diagnosticSongsHeaderSample) + diagnosticSongSamples,
+            snapshotSource = when {
+                frozenViewportKeys.isNotEmpty() -> "real-viewport-frozen"
+                visibleSongMotionKeys.isNotEmpty() -> "real-viewport-pending-freeze"
+                else -> "awaiting-real-viewport"
+            },
+            frozenKeys = frozenViewportKeys
+        )
+        ArtistOverviewGeometryDiagnostic(
+            sessionKey = entryKey,
+            transition = pageTransition,
+            metadataState = "metadataPresent=${artistMetadata != null} " +
+                "biographyReady=${biography != null} bannerPresent=${banner != null} " +
+                "songCountReady=${artistMetadata?.songCount != null} " +
+                "albumCountReady=${artistMetadata?.albumCount != null}",
+            infoCardHeightPx = measuredInfoCardHeightPx,
+            heroHeightPx = measuredHeroHeightPx,
+            songLayouts = diagnosticSongSamples,
+            bannerInitiallyCached = cachedBannerImage != null
+        )
+
+        val diagnosticAlbumSamples = albumPreviewState.layoutInfo.visibleItemsInfo
+            .sortedWith(compareBy({ item -> item.offset }, { item -> item.index }))
+            .mapNotNull { item ->
+                val state = albumPreviewMotion.diagnosticState(item.key) ?: return@mapNotNull null
+                ItemMotionDiagnosticSample(
+                    key = item.key,
+                    lazyIndex = item.index,
+                    ordinal = state.visibleOrdinal,
+                    order = state.order,
+                    orderCount = state.orderCount,
+                    motionProgress = state.pageProgress,
+                    layoutXPx = item.offset,
+                    layoutYPx = 0,
+                    widthPx = item.size,
+                    heightPx = -1
+                )
+            }
+            .take(5)
+            ItemMotionDiagnostic(
+                sessionKey = "$entryKey:albums-preview",
+                page = "ArtistAlbumsPreview",
+                transition = pageTransition,
+                samples = diagnosticAlbumSamples,
+                snapshotSource = albumPreviewMotion.diagnosticSnapshotSource(),
+                frozenKeys = albumPreviewMotion.diagnosticKeys()
+            )
+        }
+
         if (artistCloudVisible(backgroundKind)) {
             ArtistCloudBackground(
                 accentColor = artistColor,
@@ -559,23 +710,57 @@ internal fun ArtistPage(
                     biography = biography,
                     pageTransition = pageTransition,
                     onExpandBiography = { heroStateOwner.focusRequested = true },
+                    onInfoCardHeightChanged = { measuredInfoCardHeightPx = it },
+                    diagnosticSessionKey = entryKey,
                     modifier = Modifier
                         .fillMaxWidth()
                         .onSizeChanged { measuredHeroHeightPx = it.height }
                 )
             }
             if (contentVisibility.showSongs) {
-                item(key = "artist-songs-header") {
+                item(key = ArtistSongsHeaderItemKey) {
+                    val animationOrder = artistPreviewItemMotionOrder(
+                        key = ArtistSongsHeaderItemKey,
+                        animationGroupKeys = animationGroupKeys,
+                        phase = pageTransition.phase
+                    )
+                    val sectionMotionModifier = if (enterGroupReady) {
+                        pageTransition.elementModifierAt(
+                            pageProgress = listProgress,
+                            order = animationOrder.order,
+                            orderCount = animationOrder.orderCount
+                        )
+                    } else {
+                        Modifier.graphicsLayer { alpha = 0f }
+                    }
+                    val actionTitle = "全部歌曲".takeIf {
+                        presentedArtistSongs.size > ArtistSongPreviewLimit
+                    }
+                    val headerDiagnosticInput = if (BuildConfig.DEBUG) {
+                        val headerInfo = listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                            item.key == ArtistSongsHeaderItemKey
+                        }
+                        ArtistSongsHeaderDiagnosticInput(
+                            session = entryKey,
+                            phase = pageTransition.phase,
+                            progress = pageTransition.progress,
+                            transitionId = pageTransition.transitionId,
+                            hasAction = actionTitle != null,
+                            actionTitleState = if (actionTitle == null) "null" else "non-null",
+                            songsPresent = previewSongs.isNotEmpty(),
+                            songCount = presentedArtistSongs.size,
+                            contentPresentation = primaryContentPresentation.name,
+                            headerHeight = headerInfo?.size
+                        )
+                    } else {
+                        null
+                    }
                     ArtistPreviewSectionHeader(
                         title = songsSectionTitle,
-                        actionTitle = "全部歌曲".takeIf {
-                            presentedArtistSongs.size > ArtistSongPreviewLimit
-                        },
+                        actionTitle = actionTitle,
                         onActionClick = onOpenAllSongs,
-                        modifier = pageTransition.elementModifier(
-                            order = ArtistHeroElement.Content.order,
-                            orderCount = ArtistHeroMotionOrderCount
-                        ).padding(
+                        diagnosticInput = headerDiagnosticInput,
+                        modifier = sectionMotionModifier.padding(
                             start = 20.dp,
                             top = ArtistSectionHeaderTopSpacing,
                             end = 20.dp,
@@ -614,9 +799,10 @@ internal fun ArtistPage(
                         key = { index, _ -> previewSongKeys[index] }
                     ) { index, song ->
                         val songKey = previewSongKeys[index]
-                        val animationOrder = songListAnimationOrder(
-                            songKey = songKey,
-                            animationGroupKeys = animationGroupKeys
+                        val animationOrder = artistPreviewItemMotionOrder(
+                            key = songKey,
+                            animationGroupKeys = animationGroupKeys,
+                            phase = pageTransition.phase
                         )
                         SongListItem(
                             song = song,
@@ -757,6 +943,8 @@ private fun ArtistHero(
     biography: String?,
     pageTransition: PageTransitionScope,
     onExpandBiography: () -> Unit,
+    onInfoCardHeightChanged: (Int) -> Unit,
+    diagnosticSessionKey: String,
     modifier: Modifier = Modifier
 ) {
     Layout(
@@ -766,6 +954,7 @@ private fun ArtistHero(
                 kind = backgroundKind,
                 bannerImageRequest = bannerImageRequest,
                 bannerInitiallyReady = bannerInitiallyReady,
+                diagnosticSessionKey = diagnosticSessionKey,
                 extensionImageLoader = extensionImageLoader,
                 bannerFallbackColor = bannerFallbackColor,
                 modifier = Modifier
@@ -791,6 +980,7 @@ private fun ArtistHero(
                 geometry = geometry,
                 pageTransition = pageTransition,
                 onExpandBiography = onExpandBiography,
+                onMeasuredHeightChanged = onInfoCardHeightChanged,
                 modifier = Modifier.fillMaxWidth()
             )
             ArtistAvatar(
@@ -856,6 +1046,7 @@ private fun ArtistHeroBackground(
     kind: ArtistHeroBackgroundKind,
     bannerImageRequest: ImageRequest?,
     bannerInitiallyReady: Boolean,
+    diagnosticSessionKey: String,
     extensionImageLoader: coil3.ImageLoader,
     bannerFallbackColor: Color,
     modifier: Modifier = Modifier
@@ -882,7 +1073,13 @@ private fun ArtistHeroBackground(
                 imageLoader = extensionImageLoader,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                onSuccess = { bannerReady = true },
+                onSuccess = {
+                    bannerReady = true
+                    logItemMotionDiagnosticEvent(
+                        "page=ArtistPreview event=banner_ready " +
+                            "session=$diagnosticSessionKey initiallyCached=$bannerInitiallyReady"
+                    )
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = readinessAlpha }
@@ -901,11 +1098,40 @@ private fun ArtistInfoCard(
     geometry: ArtistHeroGeometry,
     pageTransition: PageTransitionScope,
     onExpandBiography: () -> Unit,
+    onMeasuredHeightChanged: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var previewHasVisualOverflow by remember(biography) { mutableStateOf(false) }
     val socialText = remember(socialStats) { artistSocialStatsText(socialStats) }
-    Box(modifier = modifier) {
+    val biographyTextStyle = MaterialTheme.typography.bodyMedium
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val observedModifier = if (BuildConfig.DEBUG) {
+        modifier.onSizeChanged { onMeasuredHeightChanged(it.height) }
+    } else {
+        modifier
+    }
+    BoxWithConstraints(modifier = observedModifier) {
+        val biographyWidthPx = with(density) {
+            (maxWidth - geometry.infoCardHorizontalPadding * 2 -
+                geometry.biographyHorizontalInset * 2)
+                .coerceAtLeast(0.dp)
+                .roundToPx()
+        }
+        val previewHasVisualOverflow = remember(
+            biography,
+            biographyTextStyle,
+            biographyWidthPx,
+            textMeasurer
+        ) {
+            !biography.isNullOrBlank() && biographyWidthPx > 0 &&
+                textMeasurer.measure(
+                    text = biography,
+                    style = biographyTextStyle,
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = ArtistBiographyPreviewMaxLines,
+                    constraints = Constraints(maxWidth = biographyWidthPx)
+                ).hasVisualOverflow
+        }
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -1001,14 +1227,11 @@ private fun ArtistInfoCard(
                 ) {
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = biographyTextStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Start,
                         maxLines = ArtistBiographyPreviewMaxLines,
                         overflow = TextOverflow.Ellipsis,
-                        onTextLayout = { result ->
-                            previewHasVisualOverflow = result.hasVisualOverflow
-                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (artistBiographyExpandVisible(text, previewHasVisualOverflow)) {
@@ -1034,8 +1257,10 @@ private fun ArtistPreviewSectionHeader(
     title: String,
     actionTitle: String? = null,
     onActionClick: () -> Unit = {},
+    diagnosticInput: ArtistSongsHeaderDiagnosticInput? = null,
     modifier: Modifier = Modifier
 ) {
+    ArtistSongsHeaderDiagnostic(diagnosticInput)
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,

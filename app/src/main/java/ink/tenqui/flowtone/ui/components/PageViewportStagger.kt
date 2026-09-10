@@ -101,6 +101,11 @@ internal fun rememberPageViewportStaggerMotion(
                 capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
             )
         }
+    val diagnosticSnapshotSource = when {
+        frozenViewport?.transitionId == pageTransition.transitionId -> "frozen"
+        activeViewport != null -> "live-pending-freeze"
+        else -> "awaiting-viewport"
+    }
     val motionProgress = if (
         pageTransition.phase == PageTransitionPhase.Incoming && activeViewport != null
     ) {
@@ -119,7 +124,8 @@ internal fun rememberPageViewportStaggerMotion(
         orderByKey = orderByKey,
         visibleCount = orderByKey.size,
         pageProgress = motionProgress,
-        awaitingViewport = activeViewport == null
+        awaitingViewport = activeViewport == null,
+        diagnosticSnapshotSource = diagnosticSnapshotSource
     )
 }
 
@@ -128,8 +134,39 @@ internal class PageViewportStaggerMotionScope internal constructor(
     private val orderByKey: Map<Any, Int>,
     private val visibleCount: Int,
     private val pageProgress: Float,
-    private val awaitingViewport: Boolean
+    private val awaitingViewport: Boolean,
+    private val diagnosticSnapshotSource: String
 ) {
+    internal fun diagnosticSnapshotSource(): String = diagnosticSnapshotSource
+
+    internal fun diagnosticKeys(): List<Any> = orderByKey.entries
+        .sortedBy(Map.Entry<Any, Int>::value)
+        .map(Map.Entry<Any, Int>::key)
+
+    internal fun diagnosticState(key: Any): PageViewportStaggerDiagnosticState? {
+        if (pageTransition == null) {
+            return PageViewportStaggerDiagnosticState(
+                visibleOrdinal = 0,
+                order = 0,
+                orderCount = 1,
+                pageProgress = 1f,
+                awaitingViewport = false
+            )
+        }
+        val visibleOrdinal = orderByKey[key] ?: return null
+        return PageViewportStaggerDiagnosticState(
+            visibleOrdinal = visibleOrdinal,
+            order = pageViewportStaggerOrder(
+                phase = pageTransition.phase,
+                visibleOrdinal = visibleOrdinal,
+                visibleCount = visibleCount
+            ),
+            orderCount = visibleCount.coerceAtLeast(1),
+            pageProgress = pageProgress,
+            awaitingViewport = awaitingViewport
+        )
+    }
+
     fun itemModifier(key: Any): Modifier {
         val transition = pageTransition ?: return Modifier
         if (awaitingViewport) {
@@ -158,7 +195,16 @@ internal class PageViewportStaggerMotionScope internal constructor(
             orderByKey = emptyMap(),
             visibleCount = 0,
             pageProgress = 1f,
-            awaitingViewport = false
+            awaitingViewport = false,
+            diagnosticSnapshotSource = "current"
         )
     }
 }
+
+internal data class PageViewportStaggerDiagnosticState(
+    val visibleOrdinal: Int,
+    val order: Int,
+    val orderCount: Int,
+    val pageProgress: Float,
+    val awaitingViewport: Boolean
+)

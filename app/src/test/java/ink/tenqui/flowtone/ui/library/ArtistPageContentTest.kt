@@ -14,6 +14,115 @@ import org.junit.Test
 
 class ArtistPageContentTest {
     @Test
+    fun artistPreviewSongMotionKeysFollowVisibleLazyOrder() {
+        val songKeys = listOf("songA", "songB", "songC")
+        val frozenKeys = artistPreviewSongMotionKeys(
+            visibleItemKeys = listOf(
+                "artist-hero",
+                ArtistSongsHeaderItemKey,
+                "songA",
+                "songB",
+                "songC"
+            ),
+            songKeys = songKeys
+        )
+
+        assertEquals(
+            listOf(ArtistSongsHeaderItemKey, "songA", "songB", "songC"),
+            frozenKeys
+        )
+        val header = artistPreviewItemMotionOrder(
+            ArtistSongsHeaderItemKey,
+            frozenKeys,
+            PageTransitionPhase.Incoming
+        )
+        val songA = artistPreviewItemMotionOrder(
+            "songA",
+            frozenKeys,
+            PageTransitionPhase.Incoming
+        )
+        val songB = artistPreviewItemMotionOrder(
+            "songB",
+            frozenKeys,
+            PageTransitionPhase.Incoming
+        )
+        assertTrue(header.visibleOrdinal < songA.visibleOrdinal)
+        assertTrue(songA.visibleOrdinal < songB.visibleOrdinal)
+    }
+
+    @Test
+    fun artistPreviewViewportStartingAtSongDoesNotReserveHeaderOrdinal() {
+        val frozenKeys = artistPreviewSongMotionKeys(
+            visibleItemKeys = listOf("songA", "songB", "songC"),
+            songKeys = listOf("songA", "songB", "songC")
+        )
+
+        assertEquals(listOf("songA", "songB", "songC"), frozenKeys)
+        assertEquals(
+            0,
+            artistPreviewItemMotionOrder(
+                "songA",
+                frozenKeys,
+                PageTransitionPhase.Incoming
+            ).visibleOrdinal
+        )
+        assertEquals(
+            1,
+            artistPreviewItemMotionOrder(
+                "songB",
+                frozenKeys,
+                PageTransitionPhase.Incoming
+            ).visibleOrdinal
+        )
+        assertEquals(
+            2,
+            artistPreviewItemMotionOrder(
+                "songC",
+                frozenKeys,
+                PageTransitionPhase.Incoming
+            ).visibleOrdinal
+        )
+    }
+
+    @Test
+    fun artistPreviewHeaderAndFirstSongDoNotCrossDuringPageMotion() {
+        val frozenKeys = listOf(ArtistSongsHeaderItemKey, "songA", "songB", "songC")
+
+        listOf(PageTransitionPhase.Incoming, PageTransitionPhase.Outgoing).forEach { phase ->
+            val header = artistPreviewItemMotionOrder(
+                ArtistSongsHeaderItemKey,
+                frozenKeys,
+                phase
+            )
+            val song = artistPreviewItemMotionOrder("songA", frozenKeys, phase)
+            listOf(0f, 0.15f, 0.3f, 0.5f, 0.8f, 1f).forEach { pageProgress ->
+                val headerProgress = PageMotion.elementProgress(
+                    pageProgress,
+                    header.order,
+                    header.orderCount
+                )
+                val songProgress = PageMotion.elementProgress(
+                    pageProgress,
+                    song.order,
+                    song.orderCount
+                )
+                val headerTranslation = pageElementVisualState(
+                    phase,
+                    headerProgress,
+                    signedOffsetYPx = 24f
+                ).translationY
+                val songTranslation = pageElementVisualState(
+                    phase,
+                    songProgress,
+                    signedOffsetYPx = 24f
+                ).translationY
+
+                assertTrue(11f + songTranslation - headerTranslation >= 0f)
+            }
+        }
+    }
+
+    @Test
     fun providerCountsWithoutEntitiesDoNotCreateContentSections() {
         val visibility = artistPageContentVisibility(
             hasLocalContent = false,

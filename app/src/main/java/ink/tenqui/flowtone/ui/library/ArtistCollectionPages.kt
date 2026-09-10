@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderAlbum
@@ -32,6 +33,7 @@ import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.FlowtoneCollectionArtworkCard
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
+import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.SongListItemSkeleton
@@ -64,6 +66,39 @@ internal fun ArtistSongsPage(
     val density = LocalDensity.current
     val topPadding = with(density) { WindowInsets.statusBars.getTop(this).toDp() } +
         FlowtoneTopBarContentHeight + ArtistCollectionTopGap
+    if (BuildConfig.DEBUG) {
+        val diagnosticHeaderCount = if (orderTitle?.trim()?.isNotEmpty() == true) 1 else 0
+        val diagnosticSongSamples = listState.layoutInfo.visibleItemsInfo
+        .mapNotNull { item ->
+            val songIndex = item.index - diagnosticHeaderCount
+            val song = songs.getOrNull(songIndex) ?: return@mapNotNull null
+            val key = if (hasLocalContent) {
+                "local-song:${song.id}:$songIndex"
+            } else {
+                "provider-song:${providerSongs[songIndex].identity.stableKey}"
+            }
+            ItemMotionDiagnosticSample(
+                key = key,
+                lazyIndex = item.index,
+                ordinal = songIndex,
+                order = songIndex + 1,
+                orderCount = PageMotion.DefaultOrderCount,
+                motionProgress = pageTransition.progress,
+                layoutXPx = 0,
+                layoutYPx = item.offset,
+                widthPx = listState.layoutInfo.viewportSize.width,
+                heightPx = item.size
+            )
+        }
+        .take(5)
+        ItemMotionDiagnostic(
+            sessionKey = "artist-songs:${if (hasLocalContent) "local" else "provider"}",
+            page = "ArtistSongs",
+            transition = pageTransition,
+            samples = diagnosticSongSamples,
+            snapshotSource = "global-index/default-24"
+        )
+    }
 
     LazyColumn(
         state = listState,
@@ -157,6 +192,34 @@ internal fun ArtistAlbumsPage(
     val density = LocalDensity.current
     val topPadding = with(density) { WindowInsets.statusBars.getTop(this).toDp() } +
         FlowtoneTopBarContentHeight + ArtistCollectionTopGap
+    if (BuildConfig.DEBUG) {
+        val diagnosticAlbumSamples = gridState.layoutInfo.visibleItemsInfo
+        .sortedWith(compareBy({ item -> item.offset.y }, { item -> item.offset.x }, { item -> item.index }))
+        .mapNotNull { item ->
+            val state = gridMotion.diagnosticState(item.key) ?: return@mapNotNull null
+            ItemMotionDiagnosticSample(
+                key = item.key,
+                lazyIndex = item.index,
+                ordinal = state.visibleOrdinal,
+                order = state.order,
+                orderCount = state.orderCount,
+                motionProgress = state.pageProgress,
+                layoutXPx = item.offset.x,
+                layoutYPx = item.offset.y,
+                widthPx = item.size.width,
+                heightPx = item.size.height
+            )
+        }
+        .take(5)
+        ItemMotionDiagnostic(
+            sessionKey = "$entryKey:artist-albums",
+            page = "ArtistAlbums",
+            transition = pageTransition,
+            samples = diagnosticAlbumSamples,
+            snapshotSource = gridMotion.diagnosticSnapshotSource(),
+            frozenKeys = gridMotion.diagnosticKeys()
+        )
+    }
 
     Box(
         modifier = modifier
