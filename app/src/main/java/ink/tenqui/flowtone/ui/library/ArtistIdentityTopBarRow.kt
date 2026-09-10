@@ -49,6 +49,9 @@ internal val ArtistTopBarLayout = ArtistTopBarLayoutContract(
 
 private val ArtistTopBarTitleGap = 10.dp
 
+// Breadcrumb 内容层进入与退出时使用的短距离水平位移，不改变 slot 的 layout X。
+private val ArtistTopBarBreadcrumbContentMotionDistance = 8.dp
+
 internal enum class ArtistTopBarPathLayout {
     FullPath,
     CollapsedAncestors,
@@ -235,6 +238,9 @@ internal fun ArtistIdentityTopBarRow(
             separatorWidthPx = separatorWidthPx,
             pathTextWidthsPx = pathTextWidthsPx
         )
+        val contentMotionDistancePx = with(density) {
+            ArtistTopBarBreadcrumbContentMotionDistance.toPx()
+        }
         var settledVisualState by remember { mutableStateOf(targetVisualState) }
         var activeTransition by remember {
             mutableStateOf<ArtistTopBarTransitionRun?>(null)
@@ -248,11 +254,16 @@ internal fun ArtistIdentityTopBarRow(
 
             val currentRun = activeTransition
             val transition = if (currentRun == null) {
-                artistTopBarVisualTransition(settledVisualState, targetVisualState)
+                artistTopBarVisualTransition(
+                    oldState = settledVisualState,
+                    targetState = targetVisualState,
+                    contentMotionDistancePx = contentMotionDistancePx
+                )
             } else {
                 artistTopBarRetargetedVisualTransition(
                     startPresentation = currentRun.presentation(masterProgress.value),
-                    targetState = targetVisualState
+                    targetState = targetVisualState,
+                    contentMotionDistancePx = contentMotionDistancePx
                 )
             }
             if (!transition.hasAnimation) {
@@ -448,6 +459,7 @@ private fun ArtistTopBarVisualLayout(
                         .layoutId(ArtistTopBarLayoutId.Breadcrumb(index))
                         .graphicsLayer {
                             alpha = presented.alpha
+                            translationX = presented.contentTranslationX
                         }
                 ) {
                     ArtistTopBarVisualText(
