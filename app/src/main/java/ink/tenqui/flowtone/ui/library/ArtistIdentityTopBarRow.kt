@@ -6,18 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +33,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarPathBaselineCorrection
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
+import kotlin.math.roundToInt
 
 internal data class ArtistTopBarLayoutContract(
     val contentHeight: Dp,
@@ -152,58 +148,17 @@ internal fun artistVisualBreadcrumbModel(
     )
 }
 
-internal enum class ArtistVisualBreadcrumbChange { Unchanged, Changed, Inserted, Removed }
-
-internal enum class ArtistBreadcrumbAlphaAnimation { None, Enter, Exit, Replace }
-
-internal data class ArtistBreadcrumbSegmentAnimation(
-    val alphaAnimation: ArtistBreadcrumbAlphaAnimation,
-    val animatePlacement: Boolean,
-    val contentTranslation: Boolean = false
-)
-
-internal fun artistBreadcrumbSegmentAnimation(
-    change: ArtistVisualBreadcrumbChange,
-    previousX: Float?,
-    targetX: Float?
-): ArtistBreadcrumbSegmentAnimation = ArtistBreadcrumbSegmentAnimation(
-    alphaAnimation = when (change) {
-        ArtistVisualBreadcrumbChange.Unchanged -> ArtistBreadcrumbAlphaAnimation.None
-        ArtistVisualBreadcrumbChange.Changed -> ArtistBreadcrumbAlphaAnimation.Replace
-        ArtistVisualBreadcrumbChange.Inserted -> ArtistBreadcrumbAlphaAnimation.Enter
-        ArtistVisualBreadcrumbChange.Removed -> ArtistBreadcrumbAlphaAnimation.Exit
-    },
-    animatePlacement = change != ArtistVisualBreadcrumbChange.Inserted &&
-        change != ArtistVisualBreadcrumbChange.Removed &&
-        previousX != null &&
-        targetX != null &&
-        previousX != targetX
-)
-
-internal fun artistBreadcrumbInitialContentProgress(
-    settledText: String?,
-    targetText: String?
-): Float = if (settledText == targetText) 1f else 0f
-
-internal fun artistBreadcrumbOutgoingText(
-    settledText: String?,
-    targetText: String?
-): String? = settledText.takeIf { it != targetText }
-
-internal fun artistVisualBreadcrumbDiff(
-    previous: ArtistVisualBreadcrumbModel,
-    current: ArtistVisualBreadcrumbModel
-): Map<String, ArtistVisualBreadcrumbChange> {
-    val previousText = previous.segments.associate { it.stableKey to it.text }
-    val currentText = current.segments.associate { it.stableKey to it.text }
-    return (previousText.keys + currentText.keys).associateWith { key ->
-        when {
-            key !in previousText -> ArtistVisualBreadcrumbChange.Inserted
-            key !in currentText -> ArtistVisualBreadcrumbChange.Removed
-            previousText.getValue(key) == currentText.getValue(key) ->
-                ArtistVisualBreadcrumbChange.Unchanged
-            else -> ArtistVisualBreadcrumbChange.Changed
+private data class ArtistTopBarTransitionRun(
+    val transition: ArtistTopBarVisualTransition,
+    val masterStart: Float,
+    val masterEnd: Float
+) {
+    fun presentation(masterProgress: Float): List<ArtistTopBarPresentedElement> {
+        val duration = masterEnd - masterStart
+        val progress = if (duration == 0f) 1f else {
+            (masterProgress - masterStart) / duration
         }
+        return transition.presentation(progress)
     }
 }
 
@@ -228,13 +183,6 @@ internal fun ArtistIdentityTopBarRow(
     var currentHasVisualOverflow by remember(currentTitle) { mutableStateOf(false) }
     val artistInteractionSource = remember(artistName) { MutableInteractionSource() }
     val currentInteractionSource = remember(currentTitle) { MutableInteractionSource() }
-    var maximumPathSlotCount by remember { mutableIntStateOf(pathSegments.size) }
-    val renderedPathSlotCount = maxOf(maximumPathSlotCount, pathSegments.size)
-    SideEffect {
-        if (pathSegments.size > maximumPathSlotCount) {
-            maximumPathSlotCount = pathSegments.size
-        }
-    }
 
     BoxWithConstraints(
         modifier = modifier.height(ArtistTopBarLayout.contentHeight),
@@ -273,14 +221,13 @@ internal fun ArtistIdentityTopBarRow(
         } else {
             artistWidthPx
         }
-        val pathTextWidthsPx = List(renderedPathSlotCount) { index ->
+        val pathTextWidthsPx = List(visualModel.pathSlots.size) { index ->
             visualModel.pathSlots.getOrNull(index)?.let { title ->
                 textMeasurer.measure(title, textStyle).size.width.toFloat()
             } ?: 0f
         }
-        val targetPositions = artistVisualBreadcrumbTargetPositions(
+        val targetVisualState = artistTopBarVisualState(
             visualModel = visualModel,
-            renderedPathSlotCount = renderedPathSlotCount,
             totalWidthPx = availableWidthPx,
             avatarWidthPx = with(density) { ArtistTopBarLayout.avatarSize.toPx() },
             titleGapPx = with(density) { ArtistTopBarTitleGap.toPx() },
@@ -288,126 +235,143 @@ internal fun ArtistIdentityTopBarRow(
             separatorWidthPx = separatorWidthPx,
             pathTextWidthsPx = pathTextWidthsPx
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            ArtistAvatar(
-                size = ArtistTopBarLayout.avatarSize,
-                image = avatarImage,
-                backgroundColor = MaterialTheme.colorScheme.primaryContainer,
-                iconColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            ArtistBreadcrumbSegmentTransition(
-                stableKey = "ancestor",
-                targetText = visualModel.leadingText,
-                targetX = targetPositions.getValue("ancestor"),
-                animateInitial = false,
-                modifier = Modifier
-                    .padding(start = ArtistTopBarTitleGap)
-                    .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
-                    .then(if (currentTitle == null) Modifier.weight(1f) else Modifier)
-            ) { leadingText ->
-                Text(
-                    text = leadingText,
-                    style = textStyle,
-                    color = if (leadingText == "…") {
-                        contentColor.copy(alpha = 0.72f)
-                    } else {
-                        contentColor
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { result ->
-                        if (currentTitle == null) {
-                            artistHasVisualOverflow = result.hasVisualOverflow
-                        }
-                    },
-                    modifier = Modifier.clickable(
-                        enabled = interactionEnabled && currentTitle == null &&
-                            canOpenFullTitleOverlay(artistHasVisualOverflow),
-                        interactionSource = artistInteractionSource,
-                        indication = null
-                    ) { onFullTitleRequest(artistName) }
-                )
+        var settledVisualState by remember { mutableStateOf(targetVisualState) }
+        var activeTransition by remember {
+            mutableStateOf<ArtistTopBarTransitionRun?>(null)
+        }
+        val masterProgress = remember { Animatable(0f) }
+
+        LaunchedEffect(targetVisualState) {
+            if (activeTransition == null && settledVisualState == targetVisualState) {
+                return@LaunchedEffect
             }
 
-            repeat(renderedPathSlotCount) { index ->
-                val targetText = visualModel.pathSlots.getOrNull(index)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .offset(y = ArtistTopBarLayout.breadcrumbBaselineOffsetY)
-                        .then(
-                            if (index == visualModel.currentSlotIndex) {
-                                Modifier.weight(1f)
-                            } else {
-                                Modifier
-                            }
-                        )
-                ) {
-                    ArtistBreadcrumbSegmentTransition(
+            val currentRun = activeTransition
+            val transition = if (currentRun == null) {
+                artistTopBarVisualTransition(settledVisualState, targetVisualState)
+            } else {
+                artistTopBarRetargetedVisualTransition(
+                    startPresentation = currentRun.presentation(masterProgress.value),
+                    targetState = targetVisualState
+                )
+            }
+            if (!transition.hasAnimation) {
+                settledVisualState = targetVisualState
+                activeTransition = null
+                return@LaunchedEffect
+            }
+
+            val masterStart = masterProgress.value
+            val run = ArtistTopBarTransitionRun(
+                transition = transition,
+                masterStart = masterStart,
+                masterEnd = masterStart + 1f
+            )
+            activeTransition = run
+            masterProgress.animateTo(
+                targetValue = run.masterEnd,
+                animationSpec = tween(
+                    durationMillis = FlowtoneMotion.ShortDurationMillis,
+                    easing = FlowtoneMotion.Easing
+                )
+            )
+            settledVisualState = targetVisualState
+            activeTransition = null
+            masterProgress.snapTo(0f)
+        }
+
+        val presentedElements = activeTransition?.presentation(masterProgress.value)
+            ?: settledVisualState.asPresentation()
+        ArtistTopBarVisualLayout(
+            presentedElements = presentedElements,
+            targetVisualState = targetVisualState,
+            avatarImage = avatarImage,
+            currentTitle = currentTitle,
+            contentColor = contentColor,
+            interactionEnabled = interactionEnabled,
+            artistName = artistName,
+            artistHasVisualOverflow = artistHasVisualOverflow,
+            currentHasVisualOverflow = currentHasVisualOverflow,
+            artistInteractionSource = artistInteractionSource,
+            currentInteractionSource = currentInteractionSource,
+            onArtistOverflowChange = { artistHasVisualOverflow = it },
+            onCurrentOverflowChange = { currentHasVisualOverflow = it },
+            onFullTitleRequest = onFullTitleRequest,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+internal fun artistTopBarVisualState(
+    visualModel: ArtistVisualBreadcrumbModel,
+    totalWidthPx: Float,
+    avatarWidthPx: Float,
+    titleGapPx: Float,
+    leadingTextWidthPx: Float,
+    separatorWidthPx: Float,
+    pathTextWidthsPx: List<Float>
+): ArtistTopBarVisualState {
+    val positions = artistVisualBreadcrumbTargetPositions(
+        visualModel = visualModel,
+        renderedPathSlotCount = visualModel.pathSlots.size,
+        totalWidthPx = totalWidthPx,
+        avatarWidthPx = avatarWidthPx,
+        titleGapPx = titleGapPx,
+        leadingTextWidthPx = leadingTextWidthPx,
+        separatorWidthPx = separatorWidthPx,
+        pathTextWidthsPx = pathTextWidthsPx
+    )
+    return ArtistTopBarVisualState(
+        elements = buildList {
+            val leadingX = positions.getValue("ancestor")
+            add(
+                ArtistTopBarVisualElement(
+                    stableKey = "ancestor",
+                    text = visualModel.leadingText,
+                    role = ArtistVisualBreadcrumbRole.Ancestor,
+                    x = leadingX,
+                    width = if (visualModel.currentSlotIndex == null) {
+                        (totalWidthPx - leadingX).coerceAtLeast(0f)
+                    } else {
+                        leadingTextWidthPx
+                    },
+                    ellipsize = visualModel.currentSlotIndex == null
+                )
+            )
+            visualModel.pathSlots.forEachIndexed { index, title ->
+                if (title == null) return@forEachIndexed
+                add(
+                    ArtistTopBarVisualElement(
                         stableKey = "separator:$index",
-                        targetText = separator.takeIf { targetText != null },
-                        targetX = targetPositions.getValue("separator:$index")
-                    ) { value ->
-                        Text(
-                            text = value,
-                            style = textStyle,
-                            color = contentColor.copy(alpha = 0.72f),
-                            maxLines = 1
-                        )
-                    }
-                    ArtistBreadcrumbSegmentTransition(
+                        text = " / ",
+                        role = ArtistVisualBreadcrumbRole.Separator,
+                        x = positions.getValue("separator:$index"),
+                        width = separatorWidthPx
+                    )
+                )
+                val titleX = positions.getValue("path:$index")
+                val isCurrent = index == visualModel.currentSlotIndex
+                add(
+                    ArtistTopBarVisualElement(
                         stableKey = "path:$index",
-                        targetText = targetText,
-                        targetX = targetPositions.getValue("path:$index"),
-                        modifier = if (index == visualModel.currentSlotIndex) {
-                            Modifier.weight(1f)
+                        text = title,
+                        role = if (isCurrent) {
+                            ArtistVisualBreadcrumbRole.Current
                         } else {
-                            Modifier
-                        }
-                    ) { title ->
-                        Text(
-                            text = title,
-                            style = textStyle,
-                            color = contentColor,
-                            maxLines = 1,
-                            overflow = if (
-                                index == visualModel.currentSlotIndex &&
-                                visualModel.ellipsizeCurrent
-                            ) {
-                                TextOverflow.Ellipsis
-                            } else {
-                                TextOverflow.Clip
-                            },
-                            onTextLayout = { result ->
-                                if (index == visualModel.currentSlotIndex) {
-                                    currentHasVisualOverflow = result.hasVisualOverflow
-                                }
-                            },
-                            modifier = Modifier
-                                .then(
-                                    if (index == visualModel.currentSlotIndex) {
-                                        Modifier.fillMaxWidth()
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                                .clickable(
-                                    enabled = interactionEnabled &&
-                                        index == visualModel.currentSlotIndex &&
-                                        title == currentTitle &&
-                                        canOpenFullTitleOverlay(currentHasVisualOverflow),
-                                    interactionSource = currentInteractionSource,
-                                    indication = null
-                                ) { onFullTitleRequest(title) }
-                        )
-                    }
-                }
+                            ArtistVisualBreadcrumbRole.Ancestor
+                        },
+                        x = titleX,
+                        width = if (isCurrent) {
+                            (totalWidthPx - titleX).coerceAtLeast(0f)
+                        } else {
+                            pathTextWidthsPx.getOrElse(index) { 0f }
+                        },
+                        ellipsize = isCurrent && visualModel.ellipsizeCurrent
+                    )
+                )
             }
         }
-    }
+    )
 }
 
 internal fun artistVisualBreadcrumbTargetPositions(
@@ -420,7 +384,7 @@ internal fun artistVisualBreadcrumbTargetPositions(
     separatorWidthPx: Float,
     pathTextWidthsPx: List<Float>
 ): Map<String, Float> = buildMap {
-    put("ancestor", avatarWidthPx)
+    put("ancestor", avatarWidthPx + titleGapPx)
     var x = if (visualModel.currentSlotIndex == null) {
         totalWidthPx
     } else {
@@ -441,109 +405,174 @@ internal fun artistVisualBreadcrumbTargetPositions(
 }
 
 @Composable
-private fun ArtistBreadcrumbSegmentTransition(
-    stableKey: String,
-    targetText: String?,
-    targetX: Float,
+private fun ArtistTopBarVisualLayout(
+    presentedElements: List<ArtistTopBarPresentedElement>,
+    targetVisualState: ArtistTopBarVisualState,
+    avatarImage: ExtensionImage?,
+    currentTitle: String?,
+    artistName: String,
+    contentColor: Color,
+    interactionEnabled: Boolean,
+    artistHasVisualOverflow: Boolean,
+    currentHasVisualOverflow: Boolean,
+    artistInteractionSource: MutableInteractionSource,
+    currentInteractionSource: MutableInteractionSource,
+    onArtistOverflowChange: (Boolean) -> Unit,
+    onCurrentOverflowChange: (Boolean) -> Unit,
+    onFullTitleRequest: (String) -> Unit,
     modifier: Modifier = Modifier,
-    animateInitial: Boolean = true,
-    content: @Composable (String) -> Unit
 ) {
-    var settledText by remember(stableKey) {
-        mutableStateOf(if (animateInitial) null else targetText)
+    val density = LocalDensity.current
+    val baselineOffsetPx = with(density) {
+        ArtistTopBarLayout.breadcrumbBaselineOffsetY.roundToPx()
     }
-    val contentProgress = remember(stableKey, targetText) {
-        Animatable(artistBreadcrumbInitialContentProgress(settledText, targetText))
-    }
-    val targetVisible = targetText != null
-    val placementX = remember(stableKey) { Animatable(targetX) }
-    var placementVisible by remember(stableKey) {
-        mutableStateOf(!animateInitial && targetVisible)
-    }
-    val visualX = when {
-        !placementVisible && targetVisible -> targetX
-        placementVisible -> placementX.value
-        else -> targetX
-    }
-
-    LaunchedEffect(stableKey, targetX, targetVisible) {
-        when {
-            targetVisible && placementVisible -> placementX.animateTo(
-                targetValue = targetX,
-                animationSpec = tween(
-                    durationMillis = FlowtoneMotion.ShortDurationMillis,
-                    easing = FlowtoneMotion.Easing
-                )
-            )
-
-            targetVisible -> {
-                placementX.snapTo(targetX)
-                placementVisible = true
-            }
-
-            else -> placementX.stop()
-        }
-    }
-    LaunchedEffect(stableKey, targetText) {
-        if (settledText != targetText) {
-            contentProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = FlowtoneMotion.ShortDurationMillis,
-                    easing = FlowtoneMotion.Easing
-                )
-            )
-            settledText = targetText
-            if (targetText == null) placementVisible = false
-        }
-    }
-
-    val outgoingText = artistBreadcrumbOutgoingText(settledText, targetText)
-    val outgoingAlpha = if (outgoingText == null) 0f else 1f - contentProgress.value
-    val incomingAlpha = if (settledText == targetText) 1f else contentProgress.value
-    val placementDeltaX = visualX - targetX
+    val avatarSizePx = with(density) { ArtistTopBarLayout.avatarSize.roundToPx() }
+    val targetLayerKeys = targetVisualState.elements
+        .map { it.stableKey to it.text }
+        .toSet()
     Layout(
         content = {
-            outgoingText?.let { text ->
-                Box(
-                    modifier = Modifier
-                        .layoutId("outgoing")
-                        .graphicsLayer {
-                            alpha = outgoingAlpha
-                            translationX = placementDeltaX
-                        }
-                ) {
-                    content(text)
-                }
+            Box(modifier = Modifier.layoutId(ArtistTopBarLayoutId.Avatar)) {
+                ArtistAvatar(
+                    size = ArtistTopBarLayout.avatarSize,
+                    image = avatarImage,
+                    backgroundColor = MaterialTheme.colorScheme.primaryContainer,
+                    iconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
-            targetText?.let { text ->
+            presentedElements.forEachIndexed { index, presented ->
+                val isTargetElement =
+                    (presented.element.stableKey to presented.element.text) in targetLayerKeys
                 Box(
                     modifier = Modifier
-                        .layoutId("target")
+                        .layoutId(ArtistTopBarLayoutId.Breadcrumb(index))
                         .graphicsLayer {
-                            alpha = incomingAlpha
-                            translationX = placementDeltaX
+                            alpha = presented.alpha
                         }
                 ) {
-                    content(text)
+                    ArtistTopBarVisualText(
+                        element = presented.element,
+                        isTargetElement = isTargetElement,
+                        currentTitle = currentTitle,
+                        artistName = artistName,
+                        contentColor = contentColor,
+                        interactionEnabled = interactionEnabled,
+                        artistHasVisualOverflow = artistHasVisualOverflow,
+                        currentHasVisualOverflow = currentHasVisualOverflow,
+                        artistInteractionSource = artistInteractionSource,
+                        currentInteractionSource = currentInteractionSource,
+                        onArtistOverflowChange = onArtistOverflowChange,
+                        onCurrentOverflowChange = onCurrentOverflowChange,
+                        onFullTitleRequest = onFullTitleRequest
+                    )
                 }
             }
         },
-        modifier = modifier
+        modifier = modifier.height(ArtistTopBarLayout.contentHeight)
     ) { measurables, constraints ->
-        val childConstraints = constraints.copy(minWidth = 0, minHeight = 0)
-        val placeables = measurables.associate { measurable ->
-            measurable.layoutId to measurable.measure(childConstraints)
+        val avatarPlaceable = measurables
+            .first { it.layoutId == ArtistTopBarLayoutId.Avatar }
+            .measure(
+                constraints.copy(
+                    minWidth = avatarSizePx,
+                    maxWidth = avatarSizePx,
+                    minHeight = avatarSizePx,
+                    maxHeight = avatarSizePx
+                )
+            )
+        val breadcrumbPlaceables = presentedElements.mapIndexed { index, presented ->
+            val elementWidth = presented.element.width.roundToInt()
+                .coerceIn(0, constraints.maxWidth)
+            measurables
+                .first { it.layoutId == ArtistTopBarLayoutId.Breadcrumb(index) }
+                .measure(
+                    constraints.copy(
+                        minWidth = elementWidth,
+                        maxWidth = elementWidth,
+                        minHeight = 0
+                    )
+                )
         }
-        val targetPlaceable = placeables["target"]
-        val width = (if (targetText == null) 0 else targetPlaceable?.width ?: 0)
-            .coerceIn(constraints.minWidth, constraints.maxWidth)
-        val height = (placeables.values.maxOfOrNull { it.height } ?: 0)
-            .coerceIn(constraints.minHeight, constraints.maxHeight)
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
         layout(width, height) {
-            placeables.values.forEach { placeable ->
-                placeable.placeRelative(x = 0, y = (height - placeable.height) / 2)
+            avatarPlaceable.placeRelative(
+                x = 0,
+                y = (height - avatarPlaceable.height) / 2
+            )
+            breadcrumbPlaceables.forEachIndexed { index, placeable ->
+                placeable.placeRelative(
+                    x = presentedElements[index].x.roundToInt(),
+                    y = (height - placeable.height) / 2 + baselineOffsetPx
+                )
             }
         }
     }
+}
+
+private sealed interface ArtistTopBarLayoutId {
+    data object Avatar : ArtistTopBarLayoutId
+    data class Breadcrumb(val index: Int) : ArtistTopBarLayoutId
+}
+
+@Composable
+private fun ArtistTopBarVisualText(
+    element: ArtistTopBarVisualElement,
+    isTargetElement: Boolean,
+    currentTitle: String?,
+    artistName: String,
+    contentColor: Color,
+    interactionEnabled: Boolean,
+    artistHasVisualOverflow: Boolean,
+    currentHasVisualOverflow: Boolean,
+    artistInteractionSource: MutableInteractionSource,
+    currentInteractionSource: MutableInteractionSource,
+    onArtistOverflowChange: (Boolean) -> Unit,
+    onCurrentOverflowChange: (Boolean) -> Unit,
+    onFullTitleRequest: (String) -> Unit
+) {
+    val textStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium)
+    val isArtist = element.stableKey == "ancestor" && currentTitle == null
+    val isCurrent = element.role == ArtistVisualBreadcrumbRole.Current
+    val interactionSource = if (isArtist) {
+        artistInteractionSource
+    } else {
+        currentInteractionSource
+    }
+    val canOpenOverlay = when {
+        !isTargetElement -> false
+        isArtist -> canOpenFullTitleOverlay(artistHasVisualOverflow)
+        isCurrent && element.text == currentTitle ->
+            canOpenFullTitleOverlay(currentHasVisualOverflow)
+        else -> false
+    }
+    Text(
+        text = element.text,
+        style = textStyle,
+        color = if (
+            element.role == ArtistVisualBreadcrumbRole.Separator || element.text == "…"
+        ) {
+            contentColor.copy(alpha = 0.72f)
+        } else {
+            contentColor
+        },
+        maxLines = 1,
+        overflow = if (element.ellipsize) TextOverflow.Ellipsis else TextOverflow.Clip,
+        onTextLayout = { result ->
+            if (isTargetElement && isArtist) {
+                onArtistOverflowChange(result.hasVisualOverflow)
+            } else if (isTargetElement && isCurrent) {
+                onCurrentOverflowChange(result.hasVisualOverflow)
+            }
+        },
+        modifier = Modifier
+            .then(if (isCurrent) Modifier.fillMaxWidth() else Modifier)
+            .clickable(
+                enabled = interactionEnabled && canOpenOverlay,
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                onFullTitleRequest(if (isArtist) artistName else element.text)
+            }
+    )
 }

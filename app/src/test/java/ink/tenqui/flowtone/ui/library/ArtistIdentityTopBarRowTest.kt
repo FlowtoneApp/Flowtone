@@ -22,11 +22,7 @@ class ArtistIdentityTopBarRowTest {
     fun measuredFullPathIsUsedWhenItFits() {
         assertEquals(
             ArtistTopBarPathLayout.FullPath,
-            artistTopBarPathLayout(
-                fullPathNaturalWidthPx = 260f,
-                collapsedPathNaturalWidthPx = 180f,
-                availableWidthPx = 300f
-            )
+            artistTopBarPathLayout(260f, 180f, 300f)
         )
     }
 
@@ -34,11 +30,7 @@ class ArtistIdentityTopBarRowTest {
     fun measuredAncestorPathCollapsesBeforeCurrentTitle() {
         assertEquals(
             ArtistTopBarPathLayout.CollapsedAncestors,
-            artistTopBarPathLayout(
-                fullPathNaturalWidthPx = 480f,
-                collapsedPathNaturalWidthPx = 280f,
-                availableWidthPx = 300f
-            )
+            artistTopBarPathLayout(480f, 280f, 300f)
         )
     }
 
@@ -46,11 +38,7 @@ class ArtistIdentityTopBarRowTest {
     fun currentTitleEllipsizesOnlyWhenCollapsedPathStillCannotFit() {
         assertEquals(
             ArtistTopBarPathLayout.EllipsizedCurrent,
-            artistTopBarPathLayout(
-                fullPathNaturalWidthPx = 620f,
-                collapsedPathNaturalWidthPx = 360f,
-                availableWidthPx = 300f
-            )
+            artistTopBarPathLayout(620f, 360f, 300f)
         )
     }
 
@@ -94,188 +82,281 @@ class ArtistIdentityTopBarRowTest {
     }
 
     @Test
+    fun visualStateDiffClassifiesEveryStableElementCase() {
+        val old = visualState(
+            element("static", "Kou!", 10f),
+            element("moved", "/", 20f),
+            element("changed", "全部专辑", 30f),
+            element("removed", "old", 40f)
+        )
+        val target = visualState(
+            element("static", "Kou!", 10f),
+            element("moved", "/", 15f),
+            element("changed", "Album", 30f),
+            element("inserted", "new", 50f)
+        )
+        val diff = artistTopBarVisualDiff(old, target).associateBy { it.stableKey }
+
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["static"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Moved, diff["moved"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Changed, diff["changed"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Inserted, diff["inserted"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Removed, diff["removed"]?.change)
+    }
+
+    @Test
+    fun unchangedTextAtTheSamePositionCreatesNoAnimatedProperty() {
+        val old = visualState(element("ancestor", "Kou!", 46f))
+        val target = visualState(element("ancestor", "Kou!", 46f))
+        val transition = artistTopBarVisualTransition(old, target)
+
+        assertFalse(transition.hasAnimation)
+        assertEquals(1f, transition.presentation(0f).single().alpha, 0f)
+        assertEquals(46f, transition.presentation(0.5f).single().x, 0f)
+        assertEquals(transition.presentation(0f), transition.presentation(1f))
+    }
+
+    @Test
+    fun oneProgressDerivesAllContentAndPlacementPresentation() {
+        val old = visualState(
+            element("static", "Kou!", 10f),
+            element("moved", "/", 30f),
+            element("changed", "全部专辑", 40f),
+            element("removed", "old", 60f)
+        )
+        val target = visualState(
+            element("static", "Kou!", 10f),
+            element("moved", "/", 20f),
+            element("changed", "Album", 35f),
+            element("inserted", "new", 70f)
+        )
+        val transition = artistTopBarVisualTransition(old, target)
+
+        listOf(0f, 0.5f, 1f).forEach { progress ->
+            val presentation = transition.presentation(progress)
+            val static = presentation.element("static", "Kou!")
+            val moved = presentation.element("moved", "/")
+            val changedOld = presentation.element("changed", "全部专辑")
+            val changedNew = presentation.element("changed", "Album")
+            val inserted = presentation.element("inserted", "new")
+            val removed = presentation.element("removed", "old")
+
+            assertEquals(1f, static.alpha, 0f)
+            assertEquals(10f, static.x, 0f)
+            assertEquals(1f, moved.alpha, 0f)
+            assertEquals(30f - 10f * progress, moved.x, 0.0001f)
+            assertEquals(1f - progress, changedOld.alpha, 0.0001f)
+            assertEquals(progress, changedNew.alpha, 0.0001f)
+            assertEquals(changedOld.x, changedNew.x, 0.0001f)
+            assertEquals(40f - 5f * progress, changedOld.x, 0.0001f)
+            assertEquals(progress, inserted.alpha, 0.0001f)
+            assertEquals(70f, inserted.x, 0f)
+            assertEquals(1f - progress, removed.alpha, 0.0001f)
+            assertEquals(60f, removed.x, 0f)
+        }
+    }
+
+    @Test
     fun artistToShortAlbumOnlyInsertsSeparatorAndCurrent() {
-        val artist = artistVisualBreadcrumbModel("Kou!", emptyList())
-        val album = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
-        val diff = artistVisualBreadcrumbDiff(artist, album)
+        val artist = stateFor("Kou!", emptyList(), ArtistTopBarPathLayout.FullPath, 40f, emptyList())
+        val album = stateFor(
+            "Kou!",
+            listOf("Album"),
+            ArtistTopBarPathLayout.FullPath,
+            40f,
+            listOf(80f)
+        )
+        val diff = artistTopBarVisualDiff(artist, album).associateBy { it.stableKey }
 
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["ancestor"])
-        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["separator:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["path:0"])
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["ancestor"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Inserted, diff["separator:0"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Inserted, diff["path:0"]?.change)
     }
 
     @Test
-    fun artistAlbumsToAlbumPreservesCommonPathAndAnimatesTheInsertedLeaf() {
-        val albums = artistVisualBreadcrumbModel("Kou!", listOf("全部专辑"))
-        val album = artistVisualBreadcrumbModel("Kou!", listOf("全部专辑", "Album"))
-        val diff = artistVisualBreadcrumbDiff(albums, album)
+    fun artistToLongAlbumUsesFinalInsertedPositionsFromTheFirstFrame() {
+        val artist = stateFor("Kou!", emptyList(), ArtistTopBarPathLayout.FullPath, 40f, emptyList())
+        val album = stateFor(
+            "Kou!",
+            listOf("Very Long Album"),
+            ArtistTopBarPathLayout.CollapsedAncestors,
+            8f,
+            listOf(160f)
+        )
+        val start = artistTopBarVisualTransition(artist, album).presentation(0f)
 
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["ancestor"])
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["separator:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["path:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["separator:1"])
-        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["path:1"])
+        assertEquals(1f, start.element("ancestor", "Kou!").alpha, 0f)
+        assertEquals(0f, start.element("ancestor", "…").alpha, 0f)
+        assertEquals(54f, start.element("separator:0", " / ").x, 0f)
+        assertEquals(0f, start.element("separator:0", " / ").alpha, 0f)
+        assertEquals(66f, start.element("path:0", "Very Long Album").x, 0f)
+        assertEquals(0f, start.element("path:0", "Very Long Album").alpha, 0f)
     }
 
     @Test
-    fun longAlbumCollapseChangesOnlyAncestorWhileKeepingExistingCurrent() {
-        val full = artistVisualBreadcrumbModel(
-            artistName = "Kou!",
-            pathSegments = listOf("Album"),
-            layout = ArtistTopBarPathLayout.FullPath
+    fun nestedArtistAlbumKeepsTheCommonPathAndInsertsOnlyTheLeaf() {
+        val albums = stateFor(
+            "Kou!",
+            listOf("全部专辑"),
+            ArtistTopBarPathLayout.FullPath,
+            40f,
+            listOf(80f)
         )
-        val collapsed = artistVisualBreadcrumbModel(
-            artistName = "Kou!",
-            pathSegments = listOf("Album"),
-            layout = ArtistTopBarPathLayout.CollapsedAncestors
+        val album = stateFor(
+            "Kou!",
+            listOf("全部专辑", "Album"),
+            ArtistTopBarPathLayout.FullPath,
+            40f,
+            listOf(80f, 80f)
         )
-        val diff = artistVisualBreadcrumbDiff(full, collapsed)
+        val diff = artistTopBarVisualDiff(albums, album).associateBy { it.stableKey }
 
-        assertEquals(ArtistVisualBreadcrumbChange.Changed, diff["ancestor"])
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["separator:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["path:0"])
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["ancestor"]?.change)
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["separator:0"]?.change)
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["path:0"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Inserted, diff["separator:1"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Inserted, diff["path:1"]?.change)
     }
 
     @Test
-    fun changedCurrentIsTheOnlyReplacementForSiblingDestinations() {
-        val albums = artistVisualBreadcrumbModel("Kou!", listOf("全部专辑"))
-        val album = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
-        val diff = artistVisualBreadcrumbDiff(albums, album)
+    fun changedCurrentReplacesTextWhileSeparatorRemainsStatic() {
+        val albums = stateFor(
+            "Kou!",
+            listOf("全部专辑"),
+            ArtistTopBarPathLayout.FullPath,
+            40f,
+            listOf(80f)
+        )
+        val album = stateFor(
+            "Kou!",
+            listOf("Album"),
+            ArtistTopBarPathLayout.FullPath,
+            40f,
+            listOf(80f)
+        )
+        val diff = artistTopBarVisualDiff(albums, album).associateBy { it.stableKey }
 
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["ancestor"])
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, diff["separator:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Changed, diff["path:0"])
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["ancestor"]?.change)
+        assertEquals(ArtistTopBarVisualChange.UnchangedStatic, diff["separator:0"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Changed, diff["path:0"]?.change)
     }
 
     @Test
-    fun backUsesTheSameSegmentDiffInReverse() {
-        val albums = artistVisualBreadcrumbModel("Kou!", listOf("全部专辑"))
-        val album = artistVisualBreadcrumbModel("Kou!", listOf("全部专辑", "Album"))
-        val reverse = artistVisualBreadcrumbDiff(album, albums)
+    fun removedElementsRemainInPresentationUntilTheSharedEndpoint() {
+        val old = visualState(
+            element("ancestor", "Kou!", 46f),
+            element("separator:0", " / ", 86f),
+            element("path:0", "Album", 98f)
+        )
+        val target = visualState(element("ancestor", "Kou!", 46f))
+        val transition = artistTopBarVisualTransition(old, target)
 
-        assertEquals(ArtistVisualBreadcrumbChange.Unchanged, reverse["path:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Removed, reverse["separator:1"])
-        assertEquals(ArtistVisualBreadcrumbChange.Removed, reverse["path:1"])
+        assertEquals(0.5f, transition.presentation(0.5f).element("path:0", "Album").alpha, 0f)
+        assertEquals(0f, transition.presentation(1f).element("path:0", "Album").alpha, 0f)
     }
 
     @Test
-    fun identicalVisualBreadcrumbHasNoAnimatedSegments() {
-        val previous = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
-        val current = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
-
-        assertTrue(
-            artistVisualBreadcrumbDiff(previous, current).values.all { change ->
-                change == ArtistVisualBreadcrumbChange.Unchanged
-            }
+    fun midFlightRetargetStartsFromOneCapturedPresentation() {
+        val artist = visualState(element("ancestor", "Kou!", 46f))
+        val album = visualState(
+            element("ancestor", "…", 46f),
+            element("separator:0", " / ", 54f),
+            element("path:0", "Album", 66f)
         )
+        val snapshot = artistTopBarVisualTransition(artist, album).presentation(0.4f)
+        val retargetedStart = artistTopBarRetargetedVisualTransition(snapshot, artist)
+            .presentation(0f)
+
+        snapshot.forEach { element ->
+            val resumed = retargetedStart.element(
+                element.element.stableKey,
+                element.element.text
+            )
+            assertEquals(element.alpha, resumed.alpha, 0f)
+            assertEquals(element.x, resumed.x, 0f)
+        }
     }
 
     @Test
-    fun artistToLongAlbumChangesAncestorAndInsertsTheFinalPath() {
-        val artist = artistVisualBreadcrumbModel("Kou!", emptyList())
-        val album = artistVisualBreadcrumbModel(
-            artistName = "Kou!",
-            pathSegments = listOf("Very Long Album"),
-            layout = ArtistTopBarPathLayout.CollapsedAncestors
+    fun collapsedTargetGeometryStartsAfterFinalEllipsisWidth() {
+        val collapsed = stateFor(
+            "Kou!",
+            listOf("Long Album"),
+            ArtistTopBarPathLayout.CollapsedAncestors,
+            8f,
+            listOf(120f)
         )
-        val diff = artistVisualBreadcrumbDiff(artist, album)
+        val elements = collapsed.elements.associateBy { it.stableKey }
 
-        assertEquals(ArtistVisualBreadcrumbChange.Changed, diff["ancestor"])
-        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["separator:0"])
-        assertEquals(ArtistVisualBreadcrumbChange.Inserted, diff["path:0"])
+        assertEquals(46f, elements.getValue("ancestor").x, 0f)
+        assertEquals(54f, elements.getValue("separator:0").x, 0f)
+        assertEquals(66f, elements.getValue("path:0").x, 0f)
     }
 
     @Test
-    fun collapsedSeparatorTargetsTheFinalEllipsisWidthAndUsesPlacementOnly() {
-        val full = artistVisualBreadcrumbModel("Kou!", listOf("Album"))
-        val collapsed = artistVisualBreadcrumbModel(
-            artistName = "Kou!",
-            pathSegments = listOf("Album"),
-            layout = ArtistTopBarPathLayout.CollapsedAncestors
+    fun collapseMovesStableSeparatorWithTheSameTransitionProgress() {
+        val full = stateFor(
+            "Kou!",
+            listOf("全部专辑"),
+            ArtistTopBarPathLayout.FullPath,
+            40f,
+            listOf(80f)
         )
-        val fullPositions = artistVisualBreadcrumbTargetPositions(
-            visualModel = full,
-            renderedPathSlotCount = 1,
-            totalWidthPx = 320f,
-            avatarWidthPx = 36f,
-            titleGapPx = 10f,
-            leadingTextWidthPx = 40f,
-            separatorWidthPx = 12f,
-            pathTextWidthsPx = listOf(80f)
+        val collapsed = stateFor(
+            "Kou!",
+            listOf("Very Long Album"),
+            ArtistTopBarPathLayout.CollapsedAncestors,
+            8f,
+            listOf(160f)
         )
-        val collapsedPositions = artistVisualBreadcrumbTargetPositions(
-            visualModel = collapsed,
-            renderedPathSlotCount = 1,
-            totalWidthPx = 320f,
-            avatarWidthPx = 36f,
-            titleGapPx = 10f,
-            leadingTextWidthPx = 8f,
-            separatorWidthPx = 12f,
-            pathTextWidthsPx = listOf(80f)
-        )
-        val animation = artistBreadcrumbSegmentAnimation(
-            change = ArtistVisualBreadcrumbChange.Unchanged,
-            previousX = fullPositions.getValue("separator:0"),
-            targetX = collapsedPositions.getValue("separator:0")
-        )
+        val diff = artistTopBarVisualDiff(full, collapsed).associateBy { it.stableKey }
+        val halfway = artistTopBarVisualTransition(full, collapsed).presentation(0.5f)
 
-        assertEquals(54f, collapsedPositions.getValue("separator:0"), 0f)
-        assertEquals(66f, collapsedPositions.getValue("path:0"), 0f)
-        assertEquals(ArtistBreadcrumbAlphaAnimation.None, animation.alphaAnimation)
-        assertTrue(animation.animatePlacement)
-        assertFalse(animation.contentTranslation)
+        assertEquals(ArtistTopBarVisualChange.Changed, diff["ancestor"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Moved, diff["separator:0"]?.change)
+        assertEquals(ArtistTopBarVisualChange.Changed, diff["path:0"]?.change)
+        assertEquals(70f, halfway.element("separator:0", " / ").x, 0f)
+        assertEquals(1f, halfway.element("separator:0", " / ").alpha, 0f)
+        assertEquals(0.5f, halfway.element("ancestor", "Kou!").alpha, 0f)
+        assertEquals(0.5f, halfway.element("ancestor", "…").alpha, 0f)
     }
 
-    @Test
-    fun unchangedSegmentAtTheSamePositionHasNoAnimation() {
-        val animation = artistBreadcrumbSegmentAnimation(
-            change = ArtistVisualBreadcrumbChange.Unchanged,
-            previousX = 86f,
-            targetX = 86f
-        )
+    private fun stateFor(
+        artistName: String,
+        pathSegments: List<String>,
+        layout: ArtistTopBarPathLayout,
+        leadingWidth: Float,
+        pathWidths: List<Float>
+    ): ArtistTopBarVisualState = artistTopBarVisualState(
+        visualModel = artistVisualBreadcrumbModel(artistName, pathSegments, layout),
+        totalWidthPx = 320f,
+        avatarWidthPx = 36f,
+        titleGapPx = 10f,
+        leadingTextWidthPx = leadingWidth,
+        separatorWidthPx = 12f,
+        pathTextWidthsPx = pathWidths
+    )
 
-        assertEquals(ArtistBreadcrumbAlphaAnimation.None, animation.alphaAnimation)
-        assertFalse(animation.animatePlacement)
-        assertFalse(animation.contentTranslation)
-        assertEquals(1f, artistBreadcrumbInitialContentProgress("Album", "Album"), 0f)
-    }
+    private fun visualState(
+        vararg elements: ArtistTopBarVisualElement
+    ): ArtistTopBarVisualState = ArtistTopBarVisualState(elements.toList())
 
-    @Test
-    fun insertedAndRemovedSegmentsUseAlphaWithoutPlacementOrContentSlide() {
-        val inserted = artistBreadcrumbSegmentAnimation(
-            change = ArtistVisualBreadcrumbChange.Inserted,
-            previousX = null,
-            targetX = 54f
-        )
-        val removed = artistBreadcrumbSegmentAnimation(
-            change = ArtistVisualBreadcrumbChange.Removed,
-            previousX = 54f,
-            targetX = null
-        )
+    private fun element(
+        stableKey: String,
+        text: String,
+        x: Float
+    ): ArtistTopBarVisualElement = ArtistTopBarVisualElement(
+        stableKey = stableKey,
+        text = text,
+        role = ArtistVisualBreadcrumbRole.Ancestor,
+        x = x,
+        width = 20f
+    )
 
-        assertEquals(ArtistBreadcrumbAlphaAnimation.Enter, inserted.alphaAnimation)
-        assertEquals(ArtistBreadcrumbAlphaAnimation.Exit, removed.alphaAnimation)
-        assertFalse(inserted.animatePlacement)
-        assertFalse(removed.animatePlacement)
-        assertFalse(inserted.contentTranslation)
-        assertFalse(removed.contentTranslation)
-        assertEquals(0f, artistBreadcrumbInitialContentProgress(null, "Album"), 0f)
-        assertEquals(0f, artistBreadcrumbInitialContentProgress("Album", null), 0f)
-        assertEquals("Album", artistBreadcrumbOutgoingText("Album", null))
-    }
-
-    @Test
-    fun changedTextUsesAlphaReplacementWithoutContentSlide() {
-        val animation = artistBreadcrumbSegmentAnimation(
-            change = ArtistVisualBreadcrumbChange.Changed,
-            previousX = 100f,
-            targetX = 100f
-        )
-
-        assertEquals(ArtistBreadcrumbAlphaAnimation.Replace, animation.alphaAnimation)
-        assertFalse(animation.animatePlacement)
-        assertFalse(animation.contentTranslation)
-        assertEquals(0f, artistBreadcrumbInitialContentProgress("全部专辑", "Album"), 0f)
-        assertEquals("全部专辑", artistBreadcrumbOutgoingText("全部专辑", "Album"))
+    private fun List<ArtistTopBarPresentedElement>.element(
+        stableKey: String,
+        text: String
+    ): ArtistTopBarPresentedElement = single { presented ->
+        presented.element.stableKey == stableKey && presented.element.text == text
     }
 }
