@@ -1,7 +1,6 @@
 package ink.tenqui.flowtone.ui.components
 
 import androidx.compose.animation.animateColor
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDp
@@ -59,10 +58,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
+import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
 
 internal data class SongListItemLayoutSpec(
     val rowMinHeight: Dp,
@@ -77,6 +78,27 @@ internal data class SongListItemLayoutSpec(
 )
 
 internal val StandardSongListItemSpacing = 4.dp
+
+internal enum class SongArtworkLoadState {
+    Loading,
+    Success,
+    Failure
+}
+
+/**
+ * The cached image itself remains owned by Coil. This only decides whether the
+ * fallback glyph is visible while Coil resolves the current artwork identity.
+ */
+internal fun shouldShowSongArtworkPlaceholder(
+    hasArtworkSource: Boolean,
+    loadState: SongArtworkLoadState,
+    hasKnownCachedArtwork: Boolean
+): Boolean = when {
+    !hasArtworkSource -> true
+    loadState == SongArtworkLoadState.Failure -> true
+    loadState == SongArtworkLoadState.Success -> false
+    else -> !hasKnownCachedArtwork
+}
 
 internal fun songListItemLayoutSpec(
     compact: Boolean,
@@ -613,20 +635,44 @@ private fun AlbumArtwork(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var extensionArtworkLoaded by remember(extensionArtwork) { mutableStateOf(false) }
-    val extensionArtworkAlpha by animateFloatAsState(
-        targetValue = if (extensionArtworkLoaded) 1f else 0f,
-        animationSpec = tween(durationMillis = 300),
-        label = "PlaylistOnlineArtworkFade"
-    )
+    val extensionArtworkCacheKey = remember(extensionArtwork) {
+        extensionArtwork?.let(ExtensionImageKeyer::cacheKey)
+    }
+    val hasKnownCachedArtwork = remember(context, extensionArtworkCacheKey) {
+        extensionArtworkCacheKey?.let { cacheKey ->
+            ExtensionManager.get(context).extensionImageLoader.memoryCache
+                ?.get(MemoryCache.Key(cacheKey)) != null
+        } ?: false
+    }
+    val extensionImageRequest = remember(context, extensionArtwork, extensionArtworkCacheKey) {
+        extensionArtwork?.let { artwork ->
+            ImageRequest.Builder(context)
+                .data(artwork)
+                .memoryCacheKey(requireNotNull(extensionArtworkCacheKey))
+                .placeholderMemoryCacheKey(requireNotNull(extensionArtworkCacheKey))
+                .build()
+        }
+    }
     val imageRequest: ImageRequest? = remember(song.artworkUri, context) {
         song.artworkUri?.let { artworkUri ->
             ImageRequest.Builder(context)
                 .data(artworkUri)
                 .size(96, 96)
+                .placeholderMemoryCacheKey(artworkUri.toString())
                 .build()
         }
     }
+    val artworkIdentity = extensionArtworkCacheKey ?: song.artworkUri?.toString()
+    var artworkLoadState by remember(artworkIdentity) {
+        mutableStateOf(
+            if (hasKnownCachedArtwork) SongArtworkLoadState.Success else SongArtworkLoadState.Loading
+        )
+    }
+    val showPlaceholder = shouldShowSongArtworkPlaceholder(
+        hasArtworkSource = artworkIdentity != null,
+        loadState = artworkLoadState,
+        hasKnownCachedArtwork = hasKnownCachedArtwork
+    )
     val shape = MaterialTheme.shapes.medium
     val isSystemDark = isSystemInDarkTheme()
     val placeholderColor = if (isSystemDark) {
@@ -647,28 +693,30 @@ private fun AlbumArtwork(
             .background(placeholderColor),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.MusicNote,
-            contentDescription = null,
-            tint = iconColor
-        )
-        extensionArtwork?.let { artwork ->
+        if (showPlaceholder) {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = iconColor
+            )
+        }
+        extensionImageRequest?.let { request ->
             AsyncImage(
-                model = artwork,
+                model = request,
                 imageLoader = ExtensionManager.get(context).extensionImageLoader,
                 contentDescription = "专辑封面",
                 contentScale = ContentScale.Crop,
-                onSuccess = { extensionArtworkLoaded = true },
-                onError = { extensionArtworkLoaded = false },
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer { alpha = extensionArtworkAlpha }
+                onSuccess = { artworkLoadState = SongArtworkLoadState.Success },
+                onError = { artworkLoadState = SongArtworkLoadState.Failure },
+                modifier = Modifier.matchParentSize()
             )
         } ?: imageRequest?.let { request ->
             AsyncImage(
                 model = request,
                 contentDescription = "\u4e13\u8f91\u5c01\u9762",
                 contentScale = ContentScale.Crop,
+                onSuccess = { artworkLoadState = SongArtworkLoadState.Success },
+                onError = { artworkLoadState = SongArtworkLoadState.Failure },
                 modifier = Modifier.matchParentSize()
             )
         }
