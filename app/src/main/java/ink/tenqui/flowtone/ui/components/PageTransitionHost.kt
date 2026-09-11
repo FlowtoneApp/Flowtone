@@ -54,14 +54,11 @@ internal class PageTransitionScope internal constructor(
         orderCount: Int = PageMotion.DefaultOrderCount,
         translationOffsetScale: Float = 1f
     ): Modifier {
-        val elementProgress = PageMotion.elementProgress(
+        val visualState = pageElementVisualStateAt(
+            phase = phase,
             pageProgress = pageProgress,
             order = order,
-            orderCount = orderCount
-        )
-        val visualState = pageElementVisualState(
-            phase = phase,
-            elementProgress = elementProgress,
+            orderCount = orderCount,
             signedOffsetYPx = offsetYPx * translationOffsetScale
         )
         return Modifier.graphicsLayer {
@@ -205,6 +202,22 @@ internal fun pageTransitionCompensatedAlpha(
 internal data class PageElementVisualState(
     val alpha: Float,
     val translationY: Float
+)
+
+private fun pageElementVisualStateAt(
+    phase: PageTransitionPhase,
+    pageProgress: Float,
+    order: Int,
+    orderCount: Int,
+    signedOffsetYPx: Float
+): PageElementVisualState = pageElementVisualState(
+    phase = phase,
+    elementProgress = PageMotion.elementProgress(
+        pageProgress = pageProgress,
+        order = order,
+        orderCount = orderCount
+    ),
+    signedOffsetYPx = signedOffsetYPx
 )
 
 internal fun pageElementVisualState(
@@ -750,16 +763,29 @@ internal class PageElementEnterScope internal constructor(
     fun elementMotionModifier(key: Any): Modifier {
         if (key in enteredKeys) return Modifier
 
+        val visualState = elementMotionPresentation(key)
+        return Modifier.graphicsLayer {
+            alpha = visualState.alpha
+            translationY = visualState.translationY
+        }
+    }
+
+    fun elementMotionPresentation(key: Any): PageElementVisualState {
+        if (key in enteredKeys) {
+            return PageElementVisualState(alpha = 1f, translationY = 0f)
+        }
+
         val batch = activeBatchesByKey[key]
         val progress = batch?.progress?.value ?: 0f
         val orderCount = batch?.orderCount ?: 1
         val order = batch?.orderByKey?.get(key) ?: orderCount - 1
-        return PageTransitionScope(
+        return pageElementVisualStateAt(
             phase = PageTransitionPhase.Incoming,
-            progress = progress,
-            offsetYPx = offsetYPx,
-            transitionId = 0
-        ).elementModifierAt(progress, order, orderCount)
+            pageProgress = progress,
+            order = order,
+            orderCount = orderCount,
+            signedOffsetYPx = offsetYPx
+        )
     }
 }
 

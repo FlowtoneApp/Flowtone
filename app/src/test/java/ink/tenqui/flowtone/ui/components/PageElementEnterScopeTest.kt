@@ -1,9 +1,55 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.mutableStateMapOf
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PageElementEnterScopeTest {
+    @Test
+    fun enteredElementMotionPresentationIsIdentity() {
+        val scope = PageElementEnterScope(
+            enteredKeys = mutableStateMapOf<Any, Unit>("song" to Unit),
+            activeBatchesByKey = mutableStateMapOf(),
+            offsetYPx = 24f
+        )
+
+        val presentation = scope.elementMotionPresentation("song")
+
+        assertEquals(1f, presentation.alpha, 0.0001f)
+        assertEquals(0f, presentation.translationY, 0.0001f)
+    }
+
+    @Test
+    fun activeElementMotionPresentationUsesCanonicalPageElementMotion() {
+        val key = "song"
+        val progress = 0.5f
+        val order = 1
+        val orderCount = 3
+        val offsetYPx = 24f
+        val batch = PageElementEnterBatch(
+            keys = listOf(key),
+            orderByKey = mapOf(key to order),
+            orderCount = orderCount,
+            progress = Animatable(progress)
+        )
+        val scope = PageElementEnterScope(
+            enteredKeys = mutableStateMapOf(),
+            activeBatchesByKey = mutableStateMapOf<Any, PageElementEnterBatch>(key to batch),
+            offsetYPx = offsetYPx
+        )
+        val expected = pageElementVisualState(
+            phase = PageTransitionPhase.Incoming,
+            elementProgress = PageMotion.elementProgress(progress, order, orderCount),
+            signedOffsetYPx = offsetYPx
+        )
+
+        val presentation = scope.elementMotionPresentation(key)
+
+        assertEquals(expected.alpha, presentation.alpha, 0.0001f)
+        assertEquals(expected.translationY, presentation.translationY, 0.0001f)
+    }
+
     @Test
     fun onlyUnseenKeysJoinTheNextEntryBatchInVisualOrder() {
         assertEquals(

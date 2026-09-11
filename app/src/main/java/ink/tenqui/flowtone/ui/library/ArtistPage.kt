@@ -501,11 +501,15 @@ internal fun ArtistPage(
         initiallyEnteredKeys = initiallyReadySongKeys,
         durationMillis = FlowtoneMotion.ShortDurationMillis
     )
+    val pageTransitionPresentedSongKeys = remember(entryKey) { mutableSetOf<String>() }
     if (
         pageTransition.phase != PageTransitionPhase.Current &&
         primaryContentPresentation == ArtistPrimaryContentPresentation.Ready
     ) {
-        SideEffect { readySongEnterScope.markEntered(realSongPresentationKeys) }
+        SideEffect {
+            pageTransitionPresentedSongKeys.addAll(realSongPresentationKeys)
+            readySongEnterScope.markEntered(realSongPresentationKeys)
+        }
     }
     var frozenTransitionId by remember(entryKey) { mutableStateOf<Int?>(null) }
     var frozenViewportKeys by remember(entryKey) {
@@ -774,13 +778,15 @@ internal fun ArtistPage(
                         key = { skeletonKey -> skeletonKey }
                     ) { skeletonKey ->
                         val index = skeletonKey.substringAfterLast('-').toIntOrNull() ?: 0
-                        SongListItemSkeleton(
-                            modifier = pageTransition.elementModifierAt(
-                                pageProgress = pageTransition.progress,
-                                order = index,
-                                orderCount = ArtistLoadingSkeletonCount
-                            ).padding(horizontal = 8.dp)
-                        )
+                        ArtistPreviewSongRow {
+                            SongListItemSkeleton(
+                                modifier = pageTransition.elementModifierAt(
+                                    pageProgress = pageTransition.progress,
+                                    order = index,
+                                    orderCount = ArtistLoadingSkeletonCount
+                                )
+                            )
+                        }
                     }
 
                     ArtistPrimaryContentPresentation.Empty -> item(key = "artist-empty") {
@@ -804,27 +810,49 @@ internal fun ArtistPage(
                             animationGroupKeys = animationGroupKeys,
                             phase = pageTransition.phase
                         )
-                        SongListItem(
-                            song = song,
-                            isCurrentSong = currentSong?.id == song.id ||
-                                currentSong?.uri == song.uri,
-                            onClick = {
-                                if (hasLocalContent) onSongClick(artistSongs, index)
-                                else onProviderSongClick(artistProviderSongs, index)
-                            },
-                            extensionArtwork = previewProviderSongs.getOrNull(index)?.artwork,
-                            modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
-                                readySongEnterScope.elementMotionModifier(songKey)
-                            } else if (enterGroupReady) {
-                                pageTransition.elementModifierAt(
-                                    pageProgress = listProgress,
-                                    order = animationOrder.order,
-                                    orderCount = animationOrder.orderCount
-                                )
-                            } else {
-                                Modifier.graphicsLayer { alpha = 0f }
-                            }.padding(horizontal = 8.dp)
-                        )
+                        val readyEnterPresentation = if (
+                            pageTransition.phase == PageTransitionPhase.Current &&
+                            songKey !in pageTransitionPresentedSongKeys
+                        ) {
+                            readySongEnterScope.elementMotionPresentation(songKey)
+                        } else {
+                            null
+                        }
+                        ArtistPreviewSongRow {
+                            SongListItem(
+                                song = song,
+                                isCurrentSong = currentSong?.id == song.id ||
+                                    currentSong?.uri == song.uri,
+                                onClick = {
+                                    if (hasLocalContent) onSongClick(artistSongs, index)
+                                    else onProviderSongClick(artistProviderSongs, index)
+                                },
+                                extensionArtwork = previewProviderSongs.getOrNull(index)?.artwork,
+                                modifier = if (readyEnterPresentation != null) {
+                                    Modifier.graphicsLayer {
+                                        alpha = readyEnterPresentation.alpha
+                                        translationY = readyEnterPresentation.translationY
+                                    }
+                                } else if (
+                                    pageTransition.phase == PageTransitionPhase.Current ||
+                                    enterGroupReady
+                                ) {
+                                    pageTransition.elementModifierAt(
+                                        pageProgress = if (
+                                            pageTransition.phase == PageTransitionPhase.Current
+                                        ) {
+                                            1f
+                                        } else {
+                                            listProgress
+                                        },
+                                        order = animationOrder.order,
+                                        orderCount = animationOrder.orderCount
+                                    )
+                                } else {
+                                    Modifier.graphicsLayer { alpha = 0f }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -924,6 +952,19 @@ internal fun ArtistPage(
                 modifier = Modifier.fillMaxSize()
             )
         }
+    }
+}
+
+@Composable
+private fun ArtistPreviewSongRow(
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+    ) {
+        content()
     }
 }
 
