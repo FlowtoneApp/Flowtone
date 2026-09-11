@@ -8,3 +8,4 @@ internal val FlowtoneTopBarTitleStartPadding: Dp = 20.dp
 internal val FlowtoneTopBarNavigationTitleShift: Dp = 40.dp
 internal val FlowtoneTopBarRootTitleOffsetY: Dp = (-3).dp
 internal val FlowtoneTopBarChildTitleOffsetY: Dp = 3.dp
+internal val FlowtoneTopBarPathBaselineCorrection: Dp = 1.dp

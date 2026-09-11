@@ -108,6 +108,8 @@ class ExtensionImageFetcher private constructor(
 
 /** 将扩展 ID 纳入 Coil 缓存键，防止相同 URL 的权限上下文串用。 */
 object ExtensionImageKeyer : Keyer<ExtensionImage> {
-    override fun key(data: ExtensionImage, options: Options): String =
+    fun cacheKey(data: ExtensionImage): String =
         "extension-image:${data.extensionId}:${data.url}"
+
+    override fun key(data: ExtensionImage, options: Options): String = cacheKey(data)
 }

@@ -2,9 +2,12 @@ package ink.tenqui.flowtone.app
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -12,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,10 +32,12 @@ import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarChildTitleOffsetY
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarPathBaselineCorrection
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarRootTitleOffsetY
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 
 @Composable
 internal fun FlowtonePathTitle(
@@ -37,6 +45,7 @@ internal fun FlowtonePathTitle(
     rootPage: TopLevelPage,
     segments: List<String>,
     navigationShiftPx: Float,
+    onFullTitleRequest: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val retainedSegments = remember { mutableStateListOf<String>() }
@@ -68,6 +77,9 @@ internal fun FlowtonePathTitle(
         }
     }
     val levelProgress = levelAnimations.map { it.value }
+    val currentTitle = segments.lastOrNull() ?: rootPage.title
+    var currentTitleHasVisualOverflow by remember(currentTitle) { mutableStateOf(false) }
+    val titleInteractionSource = remember { MutableInteractionSource() }
 
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
@@ -82,7 +94,9 @@ internal fun FlowtonePathTitle(
     val rootOpticalOffsetXPx = with(density) { 1.dp.toPx() }
     val childRestingOffsetYPx = with(density) { FlowtoneTopBarChildTitleOffsetY.toPx() }
     val childHiddenOffsetYPx = with(density) { 48.dp.toPx() }
-    val pathBaselineCorrectionPx = with(density) { 1.dp.toPx() }
+    val pathBaselineCorrectionPx = with(density) {
+        FlowtoneTopBarPathBaselineCorrection.toPx()
+    }
     val pathGapPx = with(density) { 2.dp.toPx() }
     val separatorEnterDistancePx = with(density) { 16.dp.toPx() }
     val ancestorYPx = titleBaseOffsetYPx + ancestorOffsetYPx + pathBaselineCorrectionPx
@@ -114,10 +128,13 @@ internal fun FlowtonePathTitle(
         pathCursorX = segmentX + width
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.CenterStart
     ) {
+        val leafAvailableWidth = (maxWidth - with(density) {
+            navigationShiftPx.coerceAtLeast(0f).toDp()
+        }).coerceAtLeast(0.dp)
         TopLevelPage.entries.forEach { page ->
             val distance = page.index - pagePosition
             val isRoot = page == rootPage
@@ -234,8 +251,27 @@ internal fun FlowtonePathTitle(
                     MaterialTheme.colorScheme.onSurfaceVariant,
                     promotionProgress
                 ),
+                onTextLayout = { result ->
+                    if (index == segments.lastIndex) {
+                        currentTitleHasVisualOverflow = result.hasVisualOverflow
+                    }
+                },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .then(
+                        if (index == segments.lastIndex) {
+                            Modifier
+                                .width(leafAvailableWidth)
+                                .clickable(
+                                    enabled = canOpenFullTitleOverlay(
+                                        currentTitleHasVisualOverflow
+                                    ),
+                                    interactionSource = titleInteractionSource,
+                                    indication = null
+                                ) { onFullTitleRequest(currentTitle) }
+                        } else {
+                            Modifier.fillMaxWidth()
+                        }
+                    )
                     .graphicsLayer {
                     translationX = navigationShiftPx +
                         (segmentAncestorTargetX[index] - navigationShiftPx) *

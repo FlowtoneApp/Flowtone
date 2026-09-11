@@ -4,6 +4,8 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
@@ -46,14 +48,18 @@ internal data class FlowtoneAppCallbacks(
     val onOpenLocalLibrary: () -> Unit,
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     val onOpenAlbum: (Long) -> Unit,
+    val onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    val onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
+    val onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     val onOpenArtist: (String) -> Unit,
-    val onOpenProviderArtist: (ProviderSong) -> Unit,
+    val onOpenProviderArtist: (ProviderArtist) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     val onOpenSource: () -> Unit,
     val onOpenSourceBack: () -> Unit,
     val onRequestPermission: () -> Unit,
     val onSongClick: (Song) -> Unit,
     val onOnlineSongClick: (ProviderSong) -> Unit,
+    val onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     val onDismissExpandedPlayer: () -> Unit,
     val onExpandedChange: (Boolean) -> Unit,
     val onFullscreenChange: (Boolean) -> Unit,
@@ -93,13 +99,17 @@ internal fun flowtoneAppCallbacks(
     onThemeModeChange: (AppThemeMode) -> Unit,
     onNavigateBack: () -> Unit,
     onOpenArtist: (String) -> Unit,
-    onOpenProviderArtist: (ProviderSong) -> Unit,
+    onOpenProviderArtist: (ProviderArtist) -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
+    onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
+    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
+    onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayPrevious: () -> Unit,
@@ -254,6 +264,9 @@ internal fun flowtoneAppCallbacks(
             )
         },
         onOpenAlbum = onOpenAlbum,
+        onOpenProviderAlbum = onOpenProviderAlbum,
+        onOpenArtistSongs = onOpenArtistSongs,
+        onOpenArtistAlbums = onOpenArtistAlbums,
         onOpenArtist = onOpenArtist,
         onOpenProviderArtist = onOpenProviderArtist,
         onOpenListeningRecords = { initialTab ->
@@ -278,6 +291,7 @@ internal fun flowtoneAppCallbacks(
         onRequestPermission = onRequestPermission,
         onSongClick = onSongClick,
         onOnlineSongClick = onOnlineSongClick,
+        onProviderSongQueueClick = onProviderSongQueueClick,
         onDismissExpandedPlayer = {
             if (appState.miniPlayerFullscreen) {
                 onExitMiniPlayerFullscreen()

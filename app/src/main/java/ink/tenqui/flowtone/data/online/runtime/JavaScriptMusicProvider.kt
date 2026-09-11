@@ -7,6 +7,15 @@ import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.MusicProvider
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
+import ink.tenqui.flowtone.data.online.ProviderAlbumRef
+import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ProviderArtistRef
+import ink.tenqui.flowtone.data.online.ProviderEntityCapability
+import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
+import ink.tenqui.flowtone.data.online.ProviderSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchPage
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
 import ink.tenqui.flowtone.data.online.ProviderSearchMetadata
@@ -22,12 +31,17 @@ import ink.tenqui.flowtone.data.online.SearchLandingItem
 import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 /** music_provider capability 的最小 JS bridge，不包含任何 Provider 专用协议。 */
 class JavaScriptMusicProvider internal constructor(
     private val runtime: JavaScriptExtensionRuntime,
-    override val musicSources: Set<String> = emptySet()
+    override val musicSources: Set<String> = emptySet(),
+    override val entityCapabilities: Set<ProviderEntityCapability> = emptySet()
 ) : MusicProvider {
+    private val songEntities = ConcurrentHashMap<String, ProviderSong>()
+    private val albumEntities = ConcurrentHashMap<String, ProviderAlbum>()
+
     override suspend fun searchPage(request: ProviderSearchRequest): ProviderSearchPage {
         require(request.keyword.isNotBlank()) { "keyword must not be blank" }
         val raw = runtime.invokeJson(
@@ -44,13 +58,13 @@ class JavaScriptMusicProvider internal constructor(
         val results = buildList {
             repeat(values.length()) { index ->
                 val item = values.optJSONObject(index) ?: return@repeat
-                val song = parseSong(item) ?: return@repeat
-                if (song.searchCategory == request.category) {
-                    add(song)
+                val result = parseSearchItem(item) ?: return@repeat
+                if (result.searchCategory == request.category) {
+                    add(result)
                 } else {
                     Log.w(
                         "FlowtoneExtension",
-                        "search.page.category_mismatch extension=${runtime.extensionId} expected=${request.category} actual=${song.searchCategory}"
+                        "search.page.category_mismatch extension=${runtime.extensionId} expected=${request.category} actual=${result.searchCategory}"
                     )
                 }
             }
@@ -69,6 +83,26 @@ class JavaScriptMusicProvider internal constructor(
         val raw = runCatching { runtime.invokeJson("getSearchLanding", JSONObject()) }.getOrNull()
             ?: return null
         return parseSearchLanding(raw)
+    }
+
+    override suspend fun getSongs(): List<ProviderSong>? {
+        if (ProviderEntityCapability.Song !in entityCapabilities) return null
+        val values = JSONArray(runtime.invokeJson("getSongs"))
+        return buildList {
+            repeat(values.length()) { index ->
+                parseSong(values.optJSONObject(index), ProviderSearchCategory.Single)?.let(::add)
+            }
+        }.distinctBy(ProviderSong::identity)
+    }
+
+    override suspend fun getAlbums(): List<ProviderAlbum>? {
+        if (ProviderEntityCapability.Album !in entityCapabilities) return null
+        val values = JSONArray(runtime.invokeJson("getAlbums"))
+        return buildList {
+            repeat(values.length()) { index ->
+                parseAlbum(values.optJSONObject(index))?.let(::add)
+            }
+        }.distinctBy(ProviderAlbum::identity)
     }
 
     override suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource? {
@@ -99,13 +133,24 @@ class JavaScriptMusicProvider internal constructor(
             "resolvePersistentSong",
             JSONObject().put("persistentId", normalizedId)
         )
-        return parseSong(result)
+        return parseSong(result, ProviderSearchCategory.Single)
     }
 
-    private fun parseSong(item: JSONObject): ProviderSong? {
+    private fun parseSearchItem(item: JSONObject): ProviderSearchItem? {
+        return when (val category = providerSearchCategoryFromWire(item.optString("category"))) {
+            ProviderSearchCategory.Single -> parseSong(item, category)
+            ProviderSearchCategory.Album -> parseAlbum(item)
+            ProviderSearchCategory.User -> parseArtist(item)
+            ProviderSearchCategory.Playlist -> parsePlaylist(item)
+        }
+    }
+
+    private fun parseSong(item: JSONObject?, category: ProviderSearchCategory): ProviderSong? {
+        item ?: return null
         val opaqueId = item.optString("id").trim().takeIf(String::isNotEmpty) ?: return null
         val title = item.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
-        val artist = item.optString("artist").trim().takeIf(String::isNotEmpty) ?: return null
+        val artists = parseArtists(item)
+        val artist = displayArtist(item, artists)
         val duration = item.optLong("durationMs", -1L).takeIf { it >= 0L }
         val artwork = item.optString("artworkUrl").trim().takeIf { it.startsWith("https://") }
             ?.let { ExtensionImage(runtime.extensionId, it) }
@@ -114,8 +159,7 @@ class JavaScriptMusicProvider internal constructor(
             ?.let { ExtensionImage(runtime.extensionId, it) }
         val persistentId = item.optString("persistentId").trim().takeIf(String::isNotEmpty)
         val sourceHost = boundSourceHost(item)
-        val searchCategory = providerSearchCategoryFromWire(item.optString("category"))
-        return ProviderSong(
+        val incoming = ProviderSong(
             trackRef = ExtensionTrackRef(runtime.extensionId, opaqueId),
             title = title,
             artist = artist,
@@ -124,13 +168,129 @@ class JavaScriptMusicProvider internal constructor(
             largeArtwork = largeArtwork,
             persistentId = persistentId,
             sourceHost = sourceHost,
-            searchCategory = searchCategory,
+            searchCategory = category,
             metadata = parseMetadata(item),
-            artistMetadata = if (searchCategory == ProviderSearchCategory.User) {
-                providerArtistMetadataFromJson(item, title, runtime.extensionId)
-            } else {
-                null
+            artists = artists,
+            album = parseAlbumRef(item)
+        )
+        return songEntities.compute(opaqueId) { _, existing -> mergeProviderSong(existing, incoming) }
+    }
+
+    private fun parseAlbum(item: JSONObject?): ProviderAlbum? {
+        item ?: return null
+        val remoteId = item.optString("id").trim().takeIf(String::isNotEmpty) ?: return null
+        val title = item.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
+        val artists = parseArtists(item)
+        val incoming = ProviderAlbum(
+            identity = ProviderEntityIdentity(runtime.extensionId, remoteId),
+            title = title,
+            artist = displayArtist(item, artists),
+            artists = artists,
+            artwork = parseArtwork(item, "artworkUrl"),
+            songCount = item.optNonNegativeInt("songCount")
+                ?: parseMetadata(item)?.firstOrNull { it.type == "track_count" }?.value?.toInt(),
+            releaseMetadata = item.optString("releaseMetadata").trim().takeIf(String::isNotEmpty),
+            metadata = parseMetadata(item)
+        )
+        return albumEntities.compute(remoteId) { _, existing -> mergeProviderAlbum(existing, incoming) }
+    }
+
+    private fun parseArtist(item: JSONObject): ProviderArtist? {
+        val remoteId = item.optString("id").trim().takeIf(String::isNotEmpty) ?: return null
+        val title = item.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
+        return ProviderArtist(
+            identity = ProviderEntityIdentity(runtime.extensionId, remoteId),
+            title = title,
+            artist = item.optString("artist").trim(),
+            artwork = parseArtwork(item, "artworkUrl"),
+            largeArtwork = parseArtwork(item, "largeArtworkUrl"),
+            metadata = parseMetadata(item),
+            profileMetadata = providerArtistMetadataFromJson(item, title, runtime.extensionId),
+            songOrder = providerArtistSongOrderFromJson(item)
+        )
+    }
+
+    private fun parsePlaylist(item: JSONObject): ProviderPlaylistSearchItem? {
+        val remoteId = item.optString("id").trim().takeIf(String::isNotEmpty) ?: return null
+        val title = item.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
+        return ProviderPlaylistSearchItem(
+            identity = ProviderEntityIdentity(runtime.extensionId, remoteId),
+            title = title,
+            artist = item.optString("artist").trim(),
+            artwork = parseArtwork(item, "artworkUrl"),
+            metadata = parseMetadata(item)
+        )
+    }
+
+    private fun parseArtists(item: JSONObject): List<ProviderArtistRef> {
+        val values = item.optJSONArray("artists")
+        if (values != null) {
+            return buildList {
+                repeat(values.length()) { index ->
+                    when (val raw = values.opt(index)) {
+                        is String -> raw.trim().takeIf(String::isNotEmpty)?.let { add(ProviderArtistRef(name = it)) }
+                        is JSONObject -> {
+                            val name = raw.optString("name").trim().takeIf(String::isNotEmpty) ?: return@repeat
+                            add(ProviderArtistRef(raw.optString("id").trim().takeIf(String::isNotEmpty), name))
+                        }
+                    }
+                }
             }
+        }
+        val artistObject = item.optJSONObject("artist")
+        if (artistObject != null) {
+            val name = artistObject.optString("name").trim().takeIf(String::isNotEmpty) ?: return emptyList()
+            return listOf(ProviderArtistRef(artistObject.optString("id").trim().takeIf(String::isNotEmpty), name))
+        }
+        return emptyList()
+    }
+
+    private fun displayArtist(item: JSONObject, artists: List<ProviderArtistRef>): String =
+        (item.opt("artist") as? String)?.trim()?.takeIf(String::isNotEmpty)
+            ?: artists.joinToString(" / ", transform = ProviderArtistRef::name)
+
+    private fun parseAlbumRef(item: JSONObject): ProviderAlbumRef? {
+        val album = item.optJSONObject("album")
+        if (album != null) {
+            return ProviderAlbumRef(
+                remoteId = album.optString("id").trim().takeIf(String::isNotEmpty),
+                title = album.optString("title").trim().takeIf(String::isNotEmpty)
+            ).takeIf { it.remoteId != null || it.title != null }
+        }
+        return ProviderAlbumRef(
+            remoteId = item.optString("albumId").trim().takeIf(String::isNotEmpty),
+            title = item.optString("albumTitle").trim().takeIf(String::isNotEmpty)
+        ).takeIf { it.remoteId != null || it.title != null }
+    }
+
+    private fun parseArtwork(item: JSONObject, field: String): ExtensionImage? =
+        item.optString(field).trim().takeIf { it.startsWith("https://") }
+            ?.let { ExtensionImage(runtime.extensionId, it) }
+
+    private fun mergeProviderSong(existing: ProviderSong?, incoming: ProviderSong): ProviderSong {
+        existing ?: return incoming
+        return incoming.copy(
+            artist = incoming.artist.ifBlank { existing.artist },
+            durationMs = incoming.durationMs ?: existing.durationMs,
+            artwork = incoming.artwork ?: existing.artwork,
+            largeArtwork = incoming.largeArtwork ?: existing.largeArtwork,
+            persistentId = incoming.persistentId ?: existing.persistentId,
+            sourceHost = incoming.sourceHost ?: existing.sourceHost,
+            metadata = incoming.metadata ?: existing.metadata,
+            artists = incoming.artists.ifEmpty { existing.artists },
+            album = incoming.album ?: existing.album
+        )
+    }
+
+    private fun mergeProviderAlbum(existing: ProviderAlbum?, incoming: ProviderAlbum): ProviderAlbum {
+        existing ?: return incoming
+        return incoming.copy(
+            artist = incoming.artist.ifBlank { existing.artist },
+            artists = incoming.artists.ifEmpty { existing.artists },
+            artwork = incoming.artwork ?: existing.artwork,
+            songCount = incoming.songCount ?: existing.songCount,
+            releaseMetadata = incoming.releaseMetadata ?: existing.releaseMetadata,
+            metadata = incoming.metadata ?: existing.metadata
         )
     }
 
@@ -274,6 +434,22 @@ internal fun providerArtistMetadataFromJson(
     ).sanitizedFor(displayName)
 }
 
+internal fun providerArtistSongOrderFromJson(item: JSONObject): ArtistSongOrderInfo? {
+    val value = item.optJSONObject("artistSongOrder") ?: return null
+    val title = value.optString("title")
+        .trim()
+        .take(MaxProviderArtistOrderTextLength)
+        .takeIf(String::isNotEmpty)
+        ?: return null
+    return ArtistSongOrderInfo(
+        id = value.optString("id")
+            .trim()
+            .take(MaxProviderArtistOrderIdLength)
+            .takeIf(String::isNotEmpty),
+        title = title
+    )
+}
+
 private fun JSONObject.optNonNegativeInt(name: String): Int? {
     val value = opt(name) as? Number ?: return null
     val number = value.toDouble()
@@ -285,3 +461,5 @@ private fun JSONObject.optNonNegativeInt(name: String): Int? {
 private const val MaxProviderArtistAliases = 8
 private const val MaxProviderArtistTextLength = 120
 private const val MaxProviderArtistBiographyLength = 4_000
+private const val MaxProviderArtistOrderIdLength = 80
+private const val MaxProviderArtistOrderTextLength = 120

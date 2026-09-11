@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui.components
 
-import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,17 +17,17 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.toBitmap
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.player.CloudColorPath
 import ink.tenqui.flowtone.ui.player.extractMaterialYouSeedColors
 import ink.tenqui.flowtone.ui.player.materialYouCloudColors
 import ink.tenqui.flowtone.ui.player.neutralCloudColorsFromCover
 import ink.tenqui.flowtone.ui.player.normalizeBackdropColors
-import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private const val AlbumArtworkPaletteCacheLimit = 12
+private const val ArtworkColorCacheLimit = 12
 
 internal data class ArtworkPaletteCacheKey(
     val artworkUri: String,
@@ -41,16 +40,9 @@ internal fun artworkPaletteCacheIdentity(artworkData: Any): String = when (artwo
 }
 
 internal object ArtworkPaletteMemoryCache {
-    private val palettes = LinkedHashMap<ArtworkPaletteCacheKey, FlowtoneCloudPalette>(16, 0.75f, true)
     private val colors = LinkedHashMap<ArtworkPaletteCacheKey, Color>(16, 0.75f, true)
 
-    @Synchronized fun palette(key: ArtworkPaletteCacheKey): FlowtoneCloudPalette? = palettes[key]
     @Synchronized fun color(key: ArtworkPaletteCacheKey): Color? = colors[key]
-
-    @Synchronized fun putPalette(key: ArtworkPaletteCacheKey, value: FlowtoneCloudPalette) {
-        palettes[key] = value
-        trim(palettes)
-    }
 
     @Synchronized fun putColor(key: ArtworkPaletteCacheKey, value: Color) {
         colors[key] = value
@@ -67,112 +59,41 @@ internal object ArtworkPaletteMemoryCache {
     }
 
     @Synchronized internal fun clearForTest() {
-        palettes.clear()
         colors.clear()
     }
 
     private fun <T> trim(values: LinkedHashMap<ArtworkPaletteCacheKey, T>) {
-        while (values.size > AlbumArtworkPaletteCacheLimit) values.remove(values.keys.first())
+        while (values.size > ArtworkColorCacheLimit) values.remove(values.keys.first())
     }
 }
 
 @Composable
-internal fun rememberAlbumArtworkCloudPalette(
-    artworkUri: Uri?,
-    fallbackPalette: FlowtoneCloudPalette,
+internal fun rememberAlbumArtworkCloudColor(
+    artworkData: Any?,
+    fallbackColor: Color,
     isDarkTheme: Boolean
-): FlowtoneCloudPalette {
+): Color {
     val context = LocalContext.current
-    return rememberArtworkCloudPalette(
-        artworkData = artworkUri,
-        imageLoader = context.imageLoader,
-        fallbackPalette = fallbackPalette,
-        isDarkTheme = isDarkTheme
+    val imageLoader = if (artworkData is ExtensionImage) {
+        remember(context) { ExtensionManager.get(context).extensionImageLoader }
+    } else {
+        context.imageLoader
+    }
+    return resolvedAlbumArtworkCloudColor(
+        resolvedColor = rememberArtworkBackgroundColor(
+            artworkData = artworkData,
+            imageLoader = imageLoader,
+            fallbackColor = fallbackColor,
+            isDarkTheme = isDarkTheme
+        ),
+        fallbackColor = fallbackColor
     )
 }
 
-@Composable
-internal fun rememberArtworkCloudPalette(
-    artworkData: Any?,
-    imageLoader: ImageLoader,
-    fallbackPalette: FlowtoneCloudPalette,
-    isDarkTheme: Boolean
-): FlowtoneCloudPalette {
-    val context = LocalContext.current
-    val cacheKey = remember(artworkData, isDarkTheme) {
-        artworkData?.let { data ->
-            ArtworkPaletteCacheKey(
-                artworkUri = artworkPaletteCacheIdentity(data),
-                isDarkTheme = isDarkTheme
-            )
-        }
-    }
-    var resolvedPalette by remember(cacheKey) {
-        mutableStateOf(cacheKey?.let(ArtworkPaletteMemoryCache::palette))
-    }
-
-    LaunchedEffect(cacheKey) {
-        val key = cacheKey ?: run {
-            resolvedPalette = null
-            return@LaunchedEffect
-        }
-        ArtworkPaletteMemoryCache.palette(key)?.let { cached ->
-            resolvedPalette = cached
-            return@LaunchedEffect
-        }
-
-        val request = ImageRequest.Builder(context)
-            .data(artworkData)
-            .size(96, 96)
-            .allowHardware(false)
-            .crossfade(false)
-            .build()
-        val palette = try {
-            withContext(Dispatchers.Default) {
-                val bitmap = (imageLoader.execute(request) as? SuccessResult)
-                    ?.image
-                    ?.toBitmap(96, 96)
-                    ?: return@withContext null
-                val seedResult = extractMaterialYouSeedColors(
-                    bitmap = bitmap,
-                    fallbackColor = fallbackPalette.primary.toArgb(),
-                    count = 3
-                )
-                val colors = when (seedResult.colorPath) {
-                    CloudColorPath.MaterialYouSeeds -> materialYouCloudColors(
-                        seedColors = seedResult.seedColors,
-                        isDarkTheme = isDarkTheme
-                    )
-
-                    CloudColorPath.NeutralLowChroma -> neutralCloudColorsFromCover(
-                        averageLuminance = seedResult.averageLuminance,
-                        isDarkTheme = isDarkTheme
-                    )
-
-                    CloudColorPath.ThemeFallback -> return@withContext null
-                }
-                normalizeBackdropColors(colors, isDarkTheme).let { normalized ->
-                    FlowtoneCloudPalette(
-                        primary = normalized[0],
-                        secondary = normalized[1],
-                        tertiary = normalized[2]
-                    )
-                }
-            }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Throwable) {
-            null
-        }
-
-        resolvedPalette = palette
-        if (palette != null) {
-            ArtworkPaletteMemoryCache.putPalette(key, palette)
-        }
-    }
-
-    return resolvedPalette ?: fallbackPalette
-}
+internal fun resolvedAlbumArtworkCloudColor(
+    resolvedColor: Color?,
+    fallbackColor: Color
+): Color = resolvedColor ?: fallbackColor
 
 @Composable
 internal fun rememberArtworkBackgroundColor(

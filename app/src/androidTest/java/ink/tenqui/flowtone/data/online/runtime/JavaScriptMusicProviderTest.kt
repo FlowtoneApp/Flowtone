@@ -4,8 +4,12 @@ import android.content.Context
 import androidx.javascriptengine.JavaScriptSandbox
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ProviderEntityCapability
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
@@ -75,9 +79,10 @@ class JavaScriptMusicProviderTest {
             ], nextCursor:null }; } };
         """.trimIndent())
 
-        val song = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.User)).results.single()
-        assertNull(song.artwork)
-        assertNull(song.largeArtwork)
+        val artist = provider.searchPage(ProviderSearchRequest("miku", ProviderSearchCategory.User))
+            .results.single() as ProviderArtist
+        assertNull(artist.artwork)
+        assertNull(artist.largeArtwork)
     }
 
     @Test fun searchPageIgnoresMalformedAndWrongCategoryItems() = runBlocking {
@@ -121,14 +126,85 @@ class JavaScriptMusicProviderTest {
         assertEquals(listOf("track_count", "creator", "text"), result.metadata?.map { it.type })
     }
 
-    private suspend fun provider(script: String): JavaScriptMusicProvider {
+    @Test fun entityCollectionsUseNoArgumentMethodsAndStructuredModels() = runBlocking {
+        val provider = provider(
+            script = """
+                globalThis.flowtoneExtension = {
+                  async getSongs() { return [
+                    {id:'song-1',title:'Song',artists:[{id:'artist-1',name:'Artist'}],album:{id:'album-1',title:'Album'},durationMs:1234},
+                    {id:'song-1',title:'Duplicate'}
+                  ]; },
+                  async getAlbums() { return [
+                    {id:'album-1',title:'Album',artists:[{id:'artist-1',name:'Artist'}],songCount:1},
+                    {id:'album-1',title:'Duplicate'}
+                  ]; }
+                };
+            """.trimIndent(),
+            entityCapabilities = setOf(
+                ProviderEntityCapability.Song,
+                ProviderEntityCapability.Album
+            )
+        )
+
+        val song = provider.getSongs()?.single() as ProviderSong
+        val album = provider.getAlbums()?.single() as ProviderAlbum
+
+        assertEquals("song-1", song.id)
+        assertEquals("artist-1", song.artists.single().remoteId)
+        assertEquals("album-1", song.album?.remoteId)
+        assertEquals(1234L, song.durationMs)
+        assertEquals("album-1", album.id)
+        assertEquals("artist-1", album.artists.single().remoteId)
+        assertEquals(1, album.songCount)
+    }
+
+    @Test fun unavailableCollectionsDoNotInvokeMissingMethods() = runBlocking {
+        val provider = provider("globalThis.flowtoneExtension = {};")
+
+        assertNull(provider.getSongs())
+        assertNull(provider.getAlbums())
+    }
+
+    @Test fun searchAndCollectionMergeEntityMetadataByField() = runBlocking {
+        val provider = provider(
+            script = """
+                globalThis.flowtoneExtension = {
+                  async searchPage() { return {results:[
+                    {id:'song-1',title:'Song',artist:'Artist',artworkUrl:'https://example.com/song.jpg',category:'single'}
+                  ],nextCursor:null}; },
+                  async getSongs() { return [
+                    {id:'song-1',title:'Song',artist:'Artist',durationMs:9876}
+                  ]; }
+                };
+            """.trimIndent(),
+            entityCapabilities = setOf(ProviderEntityCapability.Song)
+        )
+
+        val searchSong = provider.searchPage(
+            ProviderSearchRequest("song", ProviderSearchCategory.Single)
+        ).results.single() as ProviderSong
+        val collectionSong = provider.getSongs()?.single() as ProviderSong
+
+        assertEquals(searchSong.identity, collectionSong.identity)
+        assertEquals(searchSong.artwork, collectionSong.artwork)
+        assertEquals(9876L, collectionSong.durationMs)
+    }
+
+    private suspend fun provider(
+        script: String,
+        entityCapabilities: Set<ProviderEntityCapability> = emptySet()
+    ): JavaScriptMusicProvider {
         val directory = Files.createTempDirectory(context.cacheDir.toPath(), "js-music-provider").toFile()
         directory.resolve("main.js").writeText(script)
         val manifest = ExtensionManifest(1, "example.music", "Example", "1", "Test", "", "main.js", listOf("music_provider"), listOf("example.com"), listOf("example.com"))
         val runtime = JavaScriptExtensionRuntime(InstalledExtension(manifest, directory, true), requireNotNull(host.createIsolate()), unusedNetwork(), ExtensionPrivateCache(cacheRoot))
         runtime.start()
         runtimes += runtime
-        return JavaScriptMusicProvider(runtime, manifest.musicSources.toSet())
+        return JavaScriptMusicProvider(
+            runtime = runtime,
+            musicSources = manifest.musicSources.toSet(),
+            entityCapabilities = entityCapabilities
+        )
     }
 
     private fun unusedNetwork() = object : ExtensionNetworkClient {

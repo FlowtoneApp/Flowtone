@@ -3,6 +3,11 @@ package ink.tenqui.flowtone.app
 import ink.tenqui.flowtone.data.local.localArtistStableId
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
+import ink.tenqui.flowtone.data.online.displayTitleOrNull
+import ink.tenqui.flowtone.data.online.sanitizedFor
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
 internal sealed interface ArtistDestinationIdentity {
@@ -11,6 +16,8 @@ internal sealed interface ArtistDestinationIdentity {
     val avatar: ExtensionImage?
     val hasLocalContent: Boolean
     val profileMetadata: ArtistMetadata?
+        get() = null
+    val songOrder: ArtistSongOrderInfo?
         get() = null
 
     data class Local(
@@ -29,11 +36,28 @@ internal sealed interface ArtistDestinationIdentity {
         val artistId: String,
         override val displayName: String,
         override val avatar: ExtensionImage?,
-        override val profileMetadata: ArtistMetadata? = null
+        override val profileMetadata: ArtistMetadata? = null,
+        override val songOrder: ArtistSongOrderInfo? = null
     ) : ArtistDestinationIdentity {
         override val stableId: String
             get() = "provider:${providerId.trim()}\u0000${artistId.trim()}"
         override val hasLocalContent: Boolean = false
+    }
+}
+
+internal sealed interface AlbumDestinationIdentity {
+    val stableId: String
+
+    data class Local(val albumId: Long) : AlbumDestinationIdentity {
+        override val stableId: String = "local:$albumId"
+    }
+
+    data class Provider(
+        val providerId: String,
+        val albumId: String
+    ) : AlbumDestinationIdentity {
+        override val stableId: String
+            get() = "provider:${providerId.trim()}\u0000${albumId.trim()}"
     }
 }
 
@@ -55,11 +79,40 @@ internal sealed interface SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Playlist
     }
 
-    data class Album(
-        val albumId: Long,
-        val title: String
+    class Album(
+        val identity: AlbumDestinationIdentity,
+        val title: String,
+        val providerAlbum: ProviderAlbum? = null,
+        val parentArtist: ArtistDestinationIdentity? = null
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Album
+        val stableId: String get() = identity.stableId
+
+        constructor(
+            albumId: Long,
+            title: String,
+            parentArtist: ArtistDestinationIdentity? = null
+        ) : this(
+            identity = AlbumDestinationIdentity.Local(albumId),
+            title = title,
+            parentArtist = parentArtist
+        )
+
+        constructor(
+            album: ProviderAlbum,
+            parentArtist: ArtistDestinationIdentity? = null
+        ) : this(
+            identity = AlbumDestinationIdentity.Provider(album.providerId, album.id),
+            title = album.title,
+            providerAlbum = album,
+            parentArtist = parentArtist
+        )
+
+        override fun equals(other: Any?): Boolean = other is Album && stableId == other.stableId
+
+        override fun hashCode(): Int = stableId.hashCode()
+
+        override fun toString(): String = "Album(identity=$identity, title=$title)"
     }
 
     class Artist(
@@ -81,12 +134,122 @@ internal sealed interface SecondaryDestination {
 
         override fun toString(): String = "Artist(identity=$identity)"
     }
+
+    data class ArtistSongs(
+        val parentArtist: ArtistDestinationIdentity
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.Artist
+    }
+
+    data class ArtistAlbums(
+        val parentArtist: ArtistDestinationIdentity
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.Artist
+    }
+}
+
+internal enum class SecondaryTopPresentationOwner { ArtistTopBar, StandardTopBar }
+
+internal fun secondaryTopPresentationOwner(
+    destination: SecondaryDestination?
+): SecondaryTopPresentationOwner = when (destination) {
+    is SecondaryDestination.Artist,
+    is SecondaryDestination.ArtistSongs,
+    is SecondaryDestination.ArtistAlbums -> SecondaryTopPresentationOwner.ArtistTopBar
+    is SecondaryDestination.Album -> if (destination.parentArtist != null) {
+        SecondaryTopPresentationOwner.ArtistTopBar
+    } else {
+        SecondaryTopPresentationOwner.StandardTopBar
+    }
+    else -> SecondaryTopPresentationOwner.StandardTopBar
 }
 
 internal data class SecondaryStackEntry(
     val id: Long,
     val destination: SecondaryDestination
 )
+
+internal data class ArtistTopBarRoute(
+    val artistEntryKey: String,
+    val artist: SecondaryDestination.Artist,
+    val pathEntryKey: String? = null,
+    val pathSegments: List<String> = emptyList()
+)
+
+internal fun artistTopBarIdentityVisible(
+    route: ArtistTopBarRoute,
+    scrollIdentityVisible: Boolean
+): Boolean = route.pathSegments.isNotEmpty() || scrollIdentityVisible
+
+internal fun artistTopBarRoute(entries: List<SecondaryStackEntry>): ArtistTopBarRoute? {
+    val currentEntry = entries.lastOrNull() ?: return null
+    return when (val current = currentEntry.destination) {
+        is SecondaryDestination.Artist -> ArtistTopBarRoute(
+            artistEntryKey = currentEntry.uiStateKey(),
+            artist = current
+        )
+        is SecondaryDestination.ArtistSongs -> artistChildTopBarRoute(
+            entries = entries,
+            parentIdentity = current.parentArtist,
+            pathSegments = listOf("全部歌曲")
+        )
+        is SecondaryDestination.ArtistAlbums -> artistChildTopBarRoute(
+            entries = entries,
+            parentIdentity = current.parentArtist,
+            pathSegments = listOf("全部专辑")
+        )
+        is SecondaryDestination.Album -> {
+            val parentIdentity = current.parentArtist ?: return null
+            val parentIndex = entries.dropLast(1).indexOfLast { entry ->
+                (entry.destination as? SecondaryDestination.Artist)
+                    ?.identity?.stableId == parentIdentity.stableId
+            }.takeIf { it >= 0 } ?: return null
+            val parentEntry = entries[parentIndex]
+            val parentSegments = entries.subList(parentIndex + 1, entries.lastIndex)
+                .mapNotNull { entry ->
+                    when (entry.destination) {
+                        is SecondaryDestination.ArtistAlbums -> "全部专辑"
+                        else -> null
+                    }
+                }
+            ArtistTopBarRoute(
+                artistEntryKey = parentEntry.uiStateKey(),
+                artist = parentEntry.destination as SecondaryDestination.Artist,
+                pathEntryKey = currentEntry.uiStateKey(),
+                pathSegments = parentSegments + current.title
+            )
+        }
+        else -> null
+    }
+}
+
+private fun artistChildTopBarRoute(
+    entries: List<SecondaryStackEntry>,
+    parentIdentity: ArtistDestinationIdentity,
+    pathSegments: List<String>
+): ArtistTopBarRoute? {
+    val currentEntry = entries.lastOrNull() ?: return null
+    val parentEntry = entries.dropLast(1).lastOrNull { entry ->
+        (entry.destination as? SecondaryDestination.Artist)
+            ?.identity?.stableId == parentIdentity.stableId
+    } ?: return null
+    return ArtistTopBarRoute(
+        artistEntryKey = parentEntry.uiStateKey(),
+        artist = parentEntry.destination as SecondaryDestination.Artist,
+        pathEntryKey = currentEntry.uiStateKey(),
+        pathSegments = pathSegments
+    )
+}
+
+internal fun artistPathIdentity(
+    destination: SecondaryDestination?
+): ArtistDestinationIdentity? = when (destination) {
+    is SecondaryDestination.Artist -> destination.identity
+    is SecondaryDestination.ArtistSongs -> destination.parentArtist
+    is SecondaryDestination.ArtistAlbums -> destination.parentArtist
+    is SecondaryDestination.Album -> destination.parentArtist
+    else -> null
+}
 
 internal data class SecondaryNavigationState(
     val entries: List<SecondaryStackEntry> = emptyList(),
@@ -127,6 +290,28 @@ internal fun SecondaryStackEntry.uiStateKey(): String {
     return "secondary-entry:$id:${destination.page.name}"
 }
 
+/** PageTransition slots must distinguish repeated pushes of the same entity. */
+internal fun SecondaryStackEntry.transitionIdentityKey(): Long = id
+
+internal fun providerArtistDestination(artist: ProviderArtist): SecondaryDestination.Artist? {
+    val displayName = artist.title.trim()
+    val providerId = artist.identity.providerId.trim()
+    val artistId = artist.identity.remoteId.trim()
+    if (displayName.isBlank() || providerId.isBlank() || artistId.isBlank()) return null
+    return SecondaryDestination.Artist(
+        ArtistDestinationIdentity.Provider(
+            providerId = providerId,
+            artistId = artistId,
+            displayName = displayName,
+            avatar = artist.artwork ?: artist.largeArtwork,
+            profileMetadata = artist.profileMetadata?.sanitizedFor(displayName),
+            songOrder = artist.songOrder?.displayTitleOrNull()?.let { title ->
+                artist.songOrder.copy(title = title)
+            }
+        )
+    )
+}
+
 internal fun secondaryDestinationBreadcrumbs(
     current: SecondaryDestination?,
     previous: SecondaryDestination?,
@@ -134,11 +319,14 @@ internal fun secondaryDestinationBreadcrumbs(
 ): List<String> {
     return when (current) {
         is SecondaryDestination.Album -> listOfNotNull(
-            (previous as? SecondaryDestination.Artist)?.name,
+            current.parentArtist?.displayName
+                ?: (previous as? SecondaryDestination.Artist)?.name,
             current.title
         )
         is SecondaryDestination.Playlist -> listOf(current.title)
         is SecondaryDestination.Standard -> nestedSegments
+        is SecondaryDestination.ArtistSongs,
+        is SecondaryDestination.ArtistAlbums -> emptyList()
         is SecondaryDestination.Artist,
         null -> emptyList()
     }

@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
@@ -294,6 +295,46 @@ internal fun SelectablePlaylistSongList(
     fun animationOrderFor(key: String): Pair<Int, Int> {
         val order = animationOrderByKey[key] ?: 0
         return order to animationGroupKeys.size.coerceAtLeast(1)
+    }
+
+    if (BuildConfig.DEBUG) {
+        val diagnosticSongSamples = listState.layoutInfo.visibleItemsInfo
+        .mapNotNull { item ->
+            val entry = renderedEntries.getOrNull(item.index - headerItemCount)
+                ?: return@mapNotNull null
+            val (order, orderCount) = animationOrderFor(entry.selectionKey)
+            ItemMotionDiagnosticSample(
+                key = entry.selectionKey,
+                lazyIndex = item.index,
+                ordinal = order,
+                order = order,
+                orderCount = orderCount,
+                motionProgress = listProgress,
+                layoutXPx = 0,
+                layoutYPx = item.offset,
+                widthPx = listState.layoutInfo.viewportSize.width,
+                heightPx = item.size
+            )
+        }
+        .take(5)
+    val diagnosticPage = when (source) {
+        PlaylistSelectionSource.LocalLibrary -> "NormalLocalLibrary"
+        PlaylistSelectionSource.LikedSongs -> "NormalLikedSongs"
+        PlaylistSelectionSource.UserPlaylist -> "NormalPlaylist"
+        PlaylistSelectionSource.ReadOnly -> "NormalAlbum"
+    }
+        ItemMotionDiagnostic(
+            sessionKey = "$sourceKey:normal-song-list",
+            page = diagnosticPage,
+            transition = pageTransition,
+            samples = diagnosticSongSamples,
+            snapshotSource = when {
+                pageTransition.phase == PageTransitionPhase.Current -> "current"
+                frozenViewportKeys.isNotEmpty() -> "frozen-real-viewport"
+                else -> "awaiting-real-viewport"
+            },
+            frozenKeys = frozenViewportKeys
+        )
     }
 
     LaunchedEffect(entries) {

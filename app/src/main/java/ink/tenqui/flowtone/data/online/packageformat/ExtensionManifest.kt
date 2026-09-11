@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
 import org.json.JSONObject
+import ink.tenqui.flowtone.data.online.ProviderEntityCapability
 
 data class ExtensionManifest(
     val formatVersion: Int,
@@ -22,6 +23,8 @@ data class ExtensionManifest(
     val supportsArtistAvatar: Boolean get() = "artist_avatar" in capabilities
     val supportsArtistMetadata: Boolean get() = "artist_metadata" in capabilities
     val supportsMusicProvider: Boolean get() = "music_provider" in capabilities
+    val providerEntityCapabilities: Set<ProviderEntityCapability>
+        get() = capabilities.mapNotNullTo(linkedSetOf(), ProviderEntityCapability::fromWireValue)
 }
 
 object ExtensionManifestParser {

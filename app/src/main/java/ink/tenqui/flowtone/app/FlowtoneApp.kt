@@ -47,7 +47,7 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ProviderSong
-import ink.tenqui.flowtone.data.online.sanitizedFor
+import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.permissions.currentAudioPermission
 import ink.tenqui.flowtone.permissions.hasAudioPermission
 import ink.tenqui.flowtone.permissions.openAppPermissionSettings
@@ -373,29 +373,16 @@ fun FlowtoneApp(
         )
     }
 
-    fun openProviderArtist(artist: ProviderSong) {
-        val displayName = artist.title.trim()
-        val providerId = artist.trackRef.extensionId.trim()
-        val artistId = artist.trackRef.opaqueId.trim()
-        if (displayName.isBlank() || providerId.isBlank() || artistId.isBlank()) {
-            return
-        }
+    fun openProviderArtist(artist: ProviderArtist) {
+        val destination = providerArtistDestination(artist) ?: return
+        val providerIdentity = destination.identity as ArtistDestinationIdentity.Provider
+        musicViewModel.loadProviderEntityCollections(providerIdentity.providerId)
         if (appState.searchActive) {
             appState.searchInputFocused = false
             appState.searchFocusRequest = 0
             appState.searchKeyboardDismissRequest += 1
         }
-        appState.secondaryNavigation = appState.secondaryNavigation.push(
-            SecondaryDestination.Artist(
-                ArtistDestinationIdentity.Provider(
-                    providerId = providerId,
-                    artistId = artistId,
-                    displayName = displayName,
-                    avatar = artist.artwork ?: artist.largeArtwork,
-                    profileMetadata = artist.artistMetadata?.sanitizedFor(displayName)
-                )
-            )
-        )
+        appState.secondaryNavigation = appState.secondaryNavigation.push(destination)
     }
 
     LaunchedEffect(appState.searchActive, imeVisible) {
@@ -513,6 +500,7 @@ fun FlowtoneApp(
                 musicViewModel.playSong(song, PlaybackSource.LocalLibrary)
             },
             onOnlineSongClick = musicViewModel::playProviderSong,
+            onProviderSongQueueClick = musicViewModel::playProviderSongQueue,
             onPlaylistSongClick = { songs, startIndex, source ->
                 musicViewModel.playSongQueue(songs, startIndex, source)
             },
@@ -527,9 +515,37 @@ fun FlowtoneApp(
                         appState.searchFocusRequest = 0
                         appState.searchKeyboardDismissRequest += 1
                     }
-                    val destination = SecondaryDestination.Album(album.id, album.title)
+                    val parentArtist = artistPathIdentity(
+                        appState.secondaryNavigation.current
+                    )
+                    val destination = SecondaryDestination.Album(
+                        album.id,
+                        album.title,
+                        parentArtist
+                    )
                     appState.secondaryNavigation = appState.secondaryNavigation.push(destination)
                 }
+            },
+            onOpenProviderAlbum = { album ->
+                musicViewModel.loadProviderEntityCollections(album.providerId)
+                appState.secondaryNavigation = appState.secondaryNavigation.push(
+                    SecondaryDestination.Album(
+                        album,
+                        parentArtist = artistPathIdentity(
+                            appState.secondaryNavigation.current
+                        )
+                    )
+                )
+            },
+            onOpenArtistSongs = { artist ->
+                appState.secondaryNavigation = appState.secondaryNavigation.push(
+                    SecondaryDestination.ArtistSongs(artist)
+                )
+            },
+            onOpenArtistAlbums = { artist ->
+                appState.secondaryNavigation = appState.secondaryNavigation.push(
+                    SecondaryDestination.ArtistAlbums(artist)
+                )
             },
             onOpenArtist = { artistName -> openArtist(artistName) },
             onOpenProviderArtist = ::openProviderArtist,

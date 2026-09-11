@@ -3,6 +3,10 @@ package ink.tenqui.flowtone.app
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -10,17 +14,33 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.displayTitleOrNull
+import ink.tenqui.flowtone.data.online.providerAlbumsForArtist
+import ink.tenqui.flowtone.data.online.providerSongsForArtist
+import ink.tenqui.flowtone.data.online.providerSongsForAlbum
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.library.ArtistPage
+import ink.tenqui.flowtone.ui.library.ArtistAlbumsPage
+import ink.tenqui.flowtone.ui.library.ArtistHeroStateOwner
+import ink.tenqui.flowtone.ui.library.ArtistSongsPage
+import ink.tenqui.flowtone.ui.library.ArtistTopBarStateOwner
+import ink.tenqui.flowtone.ui.library.artistTopBarContentOcclusion
+import ink.tenqui.flowtone.ui.library.ArtistScrollStateOwner
+import ink.tenqui.flowtone.ui.library.artistAlbumsFor
+import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
+import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
@@ -33,6 +53,7 @@ import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
+import ink.tenqui.flowtone.ui.player.localSongsForArtist
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
@@ -85,6 +106,11 @@ internal class AlbumDetailDestination(
 @Composable
 internal fun SecondaryPageHost(
     destination: SecondaryDestination,
+    navigationEntryKey: String,
+    artistScrollStateOwner: ArtistScrollStateOwner? = null,
+    artistHeroStateOwner: ArtistHeroStateOwner? = null,
+    artistTopBarStateOwner: ArtistTopBarStateOwner? = null,
+    artistTopBarOcclusionProgress: Float = 0f,
     pageScope: PageTransitionScope,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
@@ -126,8 +152,6 @@ internal fun SecondaryPageHost(
     playlistBatchActions: PlaylistBatchActions,
     onUpdatePlaylistDescription: (String, String?) -> Unit,
     onPlaylistBackActionChange: ((() -> Unit)?) -> Unit,
-    onArtistProfileBackActionChange: ((() -> Unit)?) -> Unit,
-    onArtistPageTransitionPresentationChange: (PageTransitionPresentation?) -> Unit,
     onDetailHeaderCollapseProgressStateChange: (State<Float>?) -> Unit,
     playlistSongSort: PlaylistSongSort,
     playlistSortPanelOpen: Boolean,
@@ -137,8 +161,12 @@ internal fun SecondaryPageHost(
     onSongClick: (Song) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
+    onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
-    onArtistToolbarContentVisibleChange: (Boolean) -> Unit,
+    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
+    onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
+    onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
@@ -171,6 +199,14 @@ internal fun SecondaryPageHost(
     }
 
     fun playlistItemModifier(
+        pageProgress: Float,
+        order: Int,
+        orderCount: Int
+    ): Modifier {
+        return pageScope.elementAppearanceModifierAt(pageProgress, order, orderCount)
+    }
+
+    fun songItemMotionModifier(
         pageProgress: Float,
         order: Int,
         orderCount: Int
@@ -322,61 +358,254 @@ internal fun SecondaryPageHost(
             }
 
             SecondaryPage.Album -> {
-                val destination = albumDetailDestination ?: return@Box
-                AlbumDetailScreen(
-                    albumId = destination.albumId,
-                    album = destination.album,
-                    currentSong = currentSong,
-                    isPlaying = isPlaying,
-                    pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
-                    songSort = playlistSongSort,
-                    onSongClick = { songs, index ->
-                        onPlaylistSongClick(
-                            songs,
-                            index,
-                            PlaybackSource.album(
-                                albumId = destination.albumId,
-                                displayName = destination.album?.title.orEmpty()
-                            )
+                val navigationDestination =
+                    destination as? SecondaryDestination.Album ?: return@Box
+                val parentArtist = navigationDestination.parentArtist
+                val artistAlbumTopInset = if (parentArtist == null) {
+                    0.dp
+                } else {
+                    with(LocalDensity.current) {
+                        WindowInsets.statusBars.getTop(this).toDp()
+                    } + FlowtoneTopBarContentHeight
+                }
+                val albumContentModifier = Modifier
+                    .fillMaxSize()
+                    .artistTopBarContentOcclusion(
+                        topBarHeight = artistAlbumTopInset,
+                        progress = artistTopBarOcclusionProgress
+                    )
+                    .padding(top = artistAlbumTopInset)
+                    .rightSwipeBackGesture(::closeSelectionOrPage)
+                when (val identity = navigationDestination.identity) {
+                    is AlbumDestinationIdentity.Local -> {
+                        val detail = albumDetailDestination ?: return@Box
+                        AlbumDetailScreen(
+                            albumId = detail.albumId,
+                            album = detail.album,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                            songSort = playlistSongSort,
+                            onSongClick = { songs, index ->
+                                onPlaylistSongClick(
+                                    songs,
+                                    index,
+                                    PlaybackSource.album(
+                                        albumId = detail.albumId,
+                                        displayName = detail.album?.title.orEmpty()
+                                    )
+                                )
+                            },
+                            playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                            playbackErrorEventId = uiState.trackPlaybackErrorEventId,
+                            batchActions = activeBatchActions,
+                            pageTransition = pageScope,
+                            itemModifier = ::songItemMotionModifier,
+                            onCollapseProgressStateChange =
+                                onDetailHeaderCollapseProgressStateChange,
+                            headerModifier = elementModifier(0),
+                            modifier = albumContentModifier
                         )
-                    },
-                    playbackErrorMessage = uiState.trackPlaybackErrorMessage,
-                    playbackErrorEventId = uiState.trackPlaybackErrorEventId,
-                    batchActions = activeBatchActions,
-                    pageTransition = pageScope,
-                    itemModifier = ::playlistItemModifier,
-                    onCollapseProgressStateChange =
-                        onDetailHeaderCollapseProgressStateChange,
-                    headerModifier = elementModifier(0),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .rightSwipeBackGesture(::closeSelectionOrPage)
-                )
+                    }
+
+                    is AlbumDestinationIdentity.Provider -> {
+                        val album = navigationDestination.providerAlbum ?: return@Box
+                        val songs = providerSongsForAlbum(
+                            uiState.providerSongs[identity.providerId].orEmpty(),
+                            album
+                        )
+                        ProviderAlbumDetailScreen(
+                            album = album,
+                            songs = songs,
+                            presentationSessionKey = navigationEntryKey,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                            onSongClick = { queue, index ->
+                                onProviderSongQueueClick(
+                                    queue,
+                                    index,
+                                    PlaybackSource.providerAlbum(
+                                        identity.providerId,
+                                        identity.albumId,
+                                        album.title
+                                    )
+                                )
+                            },
+                            pageTransition = pageScope,
+                            itemModifier = ::songItemMotionModifier,
+                            onCollapseProgressStateChange =
+                                onDetailHeaderCollapseProgressStateChange,
+                            headerModifier = elementModifier(0),
+                            modifier = albumContentModifier
+                        )
+                    }
+                }
             }
 
             SecondaryPage.Artist -> {
-                val artist = destination as? SecondaryDestination.Artist ?: return@Box
-                  ArtistPage(
-                    artistName = artist.name,
-                    hasLocalContent = artist.identity.hasLocalContent,
-                    providedAvatar = artist.identity.avatar,
-                    providedMetadata = artist.identity.profileMetadata,
-                    allSongs = uiState.songs,
-                    albums = uiState.albums,
-                    currentSong = currentSong,
-                    onToolbarContentVisibleChange = onArtistToolbarContentVisibleChange,
-                    onProfileBackActionChange = onArtistProfileBackActionChange,
-                    onPageTransitionPresentationChange =
-                        onArtistPageTransitionPresentationChange,
-                    onNavigateBack = onCloseSecondaryPage,
-                    onSongClick = { songs, index ->
-                        onPlaylistSongClick(songs, index, PlaybackSource.artist(artist.name))
-                    },
-                    onOpenAlbum = onOpenAlbum,
-                    pageTransition = pageScope,
-                    itemModifier = ::playlistItemModifier,
-                    modifier = Modifier.fillMaxSize()
-                )
+                when (val artistDestination = destination) {
+                    is SecondaryDestination.Artist -> {
+                        val providerIdentity = artistDestination.identity
+                            as? ArtistDestinationIdentity.Provider
+                        ArtistPage(
+                            entryKey = navigationEntryKey,
+                            scrollStateOwner = checkNotNull(artistScrollStateOwner),
+                            heroStateOwner = checkNotNull(artistHeroStateOwner),
+                            artistTopBarStateOwner = checkNotNull(artistTopBarStateOwner),
+                            artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
+                            artistName = artistDestination.name,
+                            hasLocalContent = artistDestination.identity.hasLocalContent,
+                            providedAvatar = artistDestination.identity.avatar,
+                            providedMetadata = artistDestination.identity.profileMetadata,
+                            allSongs = uiState.songs,
+                            albums = uiState.albums,
+                            providerId = providerIdentity?.providerId,
+                            providerArtistId = providerIdentity?.artistId,
+                            providerSongs = providerIdentity?.providerId
+                                ?.let { uiState.providerSongs[it] }.orEmpty(),
+                            providerAlbums = providerIdentity?.providerId
+                                ?.let { uiState.providerAlbums[it] }.orEmpty(),
+                            providerSongsLoaded = providerIdentity?.providerId
+                                ?.let(uiState.providerSongs::containsKey) ?: true,
+                            songOrderTitle = providerIdentity?.songOrder.displayTitleOrNull(),
+                            currentSong = currentSong,
+                            onNavigateBack = onCloseSecondaryPage,
+                            onSongClick = { songs, index ->
+                                onPlaylistSongClick(
+                                    songs,
+                                    index,
+                                    PlaybackSource.artist(artistDestination.name)
+                                )
+                            },
+                            onProviderSongClick = { songs, index ->
+                                providerIdentity?.let { identity ->
+                                    onProviderSongQueueClick(
+                                        songs,
+                                        index,
+                                        PlaybackSource.providerArtist(
+                                            identity.providerId,
+                                            identity.artistId,
+                                            identity.displayName
+                                        )
+                                    )
+                                }
+                            },
+                            onOpenAlbum = onOpenAlbum,
+                            onOpenProviderAlbum = onOpenProviderAlbum,
+                            onOpenAllSongs = {
+                                onOpenArtistSongs(artistDestination.identity)
+                            },
+                            onOpenAllAlbums = {
+                                onOpenArtistAlbums(artistDestination.identity)
+                            },
+                            pageTransition = pageScope,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    is SecondaryDestination.ArtistSongs -> {
+                        val identity = artistDestination.parentArtist
+                        val providerIdentity = identity as? ArtistDestinationIdentity.Provider
+                        val providerCollection = providerIdentity?.providerId
+                            ?.let { uiState.providerSongs[it] }.orEmpty()
+                        val localSongs = remember(identity, uiState.songs) {
+                            if (identity.hasLocalContent) {
+                                localSongsForArtist(uiState.songs, identity.displayName)
+                            } else {
+                                emptyList()
+                            }
+                        }
+                        val providerSongs = remember(providerIdentity, providerCollection) {
+                            if (providerIdentity != null) {
+                                providerSongsForArtist(
+                                    providerCollection,
+                                    providerIdentity.providerId,
+                                    providerIdentity.artistId,
+                                    providerIdentity.displayName
+                                )
+                            } else {
+                                emptyList()
+                            }
+                        }
+                        ArtistSongsPage(
+                            hasLocalContent = identity.hasLocalContent,
+                            localSongs = localSongs,
+                            providerSongs = providerSongs,
+                            providerSongsLoaded = providerIdentity?.providerId
+                                ?.let(uiState.providerSongs::containsKey) ?: true,
+                            orderTitle = providerIdentity?.songOrder.displayTitleOrNull(),
+                            currentSong = currentSong,
+                            onLocalSongClick = { songs, index ->
+                                onPlaylistSongClick(
+                                    songs,
+                                    index,
+                                    PlaybackSource.artist(identity.displayName)
+                                )
+                            },
+                            onProviderSongClick = { songs, index ->
+                                providerIdentity?.let { provider ->
+                                    onProviderSongQueueClick(
+                                        songs,
+                                        index,
+                                        PlaybackSource.providerArtist(
+                                            provider.providerId,
+                                            provider.artistId,
+                                            provider.displayName
+                                        )
+                                    )
+                                }
+                            },
+                            onBack = onCloseSecondaryPage,
+                            pageTransition = pageScope,
+                            artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    is SecondaryDestination.ArtistAlbums -> {
+                        val identity = artistDestination.parentArtist
+                        val providerIdentity = identity as? ArtistDestinationIdentity.Provider
+                        val providerCollection = providerIdentity?.providerId
+                            ?.let { uiState.providerAlbums[it] }.orEmpty()
+                        val localAlbums = remember(identity, uiState.albums) {
+                            if (identity.hasLocalContent) {
+                                artistAlbumsFor(uiState.albums, identity.displayName)
+                            } else {
+                                emptyList()
+                            }
+                        }
+                        val providerAlbums = remember(providerIdentity, providerCollection) {
+                            if (providerIdentity != null) {
+                                providerAlbumsForArtist(
+                                    providerCollection,
+                                    providerIdentity.providerId,
+                                    providerIdentity.artistId,
+                                    providerIdentity.displayName
+                                )
+                            } else {
+                                emptyList()
+                            }
+                        }
+                        ArtistAlbumsPage(
+                            entryKey = navigationEntryKey,
+                            artistCloudColor = checkNotNull(artistHeroStateOwner)
+                                .resolvedCloudColor
+                                ?: MaterialTheme.colorScheme.primaryContainer,
+                            hasLocalContent = identity.hasLocalContent,
+                            localAlbums = localAlbums,
+                            providerAlbums = providerAlbums,
+                            onOpenAlbum = onOpenAlbum,
+                            onOpenProviderAlbum = onOpenProviderAlbum,
+                            onBack = onCloseSecondaryPage,
+                            pageTransition = pageScope,
+                            artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    else -> return@Box
+                }
             }
 
             SecondaryPage.ListeningRecords -> ListeningRecordsScreen(

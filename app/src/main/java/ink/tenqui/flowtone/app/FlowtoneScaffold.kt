@@ -24,11 +24,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,7 +45,10 @@ import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import ink.tenqui.flowtone.ui.components.PageTransitionPresentation
+import ink.tenqui.flowtone.ui.components.FullTitleOverlay
+import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
+import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
+import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
@@ -69,6 +70,9 @@ internal fun FlowtoneScaffold(
     val coroutineScope = rememberCoroutineScope()
     val homeScrollState = rememberScrollState()
     val libraryPlaylistController = rememberLibraryPlaylistController()
+    val artistHeroStateStore = remember { ArtistHeroStateStore() }
+    val artistScrollStateStore = remember { ArtistScrollStateStore() }
+    val artistTopBarStateStore = remember { ArtistTopBarStateStore() }
     val topLevelPageCollapseProgress = rememberTopLevelPageCollapseProgress(
         homeScrollState = homeScrollState,
         libraryListState = libraryPlaylistController.listState
@@ -76,21 +80,10 @@ internal fun FlowtoneScaffold(
     var detailHeaderCollapseProgressState by remember {
         mutableStateOf<State<Float>?>(null)
     }
-    val artistToolbarVisibilityByEntry = remember { mutableStateMapOf<Long, Boolean>() }
-    val artistPageTransitionByEntry = remember {
-        mutableStateMapOf<Long, PageTransitionPresentation>()
-    }
-    val activeSecondaryEntryIds = remember(state.secondaryEntries) {
-        state.secondaryEntries.mapTo(mutableSetOf(), SecondaryStackEntry::id)
-    }
-    SideEffect {
-        artistToolbarVisibilityByEntry.keys.retainAll(activeSecondaryEntryIds)
-    }
     var songSelectionTopBarState by remember {
         mutableStateOf<PlaylistSelectionTopBarState?>(null)
     }
     var playlistBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var artistProfileBackAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var clearSongSelectionRequest by remember { mutableStateOf(0) }
     var playlistSongSort by remember { mutableStateOf(PlaylistSongSort()) }
     var playlistSortPanelOpen by remember { mutableStateOf(false) }
@@ -164,7 +157,7 @@ internal fun FlowtoneScaffold(
             libraryPlaylistController.clearVisualPlaylistEditing()
         }
     }
-    val scaffoldBlurRadius = if (playlistEditingBlurRadius > state.backgroundBlurRadius) {
+    val baseScaffoldBlurRadius = if (playlistEditingBlurRadius > state.backgroundBlurRadius) {
         playlistEditingBlurRadius
     } else {
         state.backgroundBlurRadius
@@ -174,6 +167,28 @@ internal fun FlowtoneScaffold(
         animationSpec = tween(180, easing = FlowtoneMotion.Easing),
         label = "PlaylistDescriptionFocusBlur"
     )
+    var fullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
+    var retainedFullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
+    val fullTitleOverlayProgress by animateFloatAsState(
+        targetValue = if (fullTitleOverlayTitle != null) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = FlowtoneMotion.DurationMillis,
+            easing = FlowtoneMotion.Easing
+        ),
+        finishedListener = { progress ->
+            if (progress <= 0.001f && fullTitleOverlayTitle == null) {
+                retainedFullTitleOverlayTitle = null
+            }
+        },
+        label = "FullTitleOverlayProgress"
+    )
+    val fullTitleOverlayBlurRadius = 14.dp * fullTitleOverlayProgress
+    val scaffoldBlurRadius = maxOf(baseScaffoldBlurRadius, fullTitleOverlayBlurRadius)
+    val showFullTitle: (String) -> Unit = { title ->
+        retainedFullTitleOverlayTitle = title
+        fullTitleOverlayTitle = title
+    }
+    val dismissFullTitle = { fullTitleOverlayTitle = null }
 
     val libraryPlaylistSyncKey = remember(libraryPlaylistController.playlists) {
         libraryPlaylistController.playlists.map(LibraryPlaylistCard::repositorySyncKey)
@@ -309,19 +324,16 @@ internal fun FlowtoneScaffold(
                 FlowtoneScaffoldTopLayer(
                     state = state,
                     callbacks = callbacks,
-                    isArtistToolbarContentVisible = { entryId ->
-                        artistToolbarVisibilityByEntry[entryId] == true
-                    },
                     detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
                     songSelectionState = songSelectionTopBarState,
                     onCloseSongSelection = { clearSongSelectionRequest += 1 },
                     playlistBackAction = playlistBackAction,
-                    artistProfileBackAction = artistProfileBackAction,
-                    artistPageTransitionPresentation = { entryId ->
-                        artistPageTransitionByEntry[entryId]
-                    },
                     playlistSortProgress = playlistSortProgress,
-                    descriptionBlurRadius = descriptionBlurRadius
+                    descriptionBlurRadius = descriptionBlurRadius,
+                    onFullTitleRequest = showFullTitle,
+                    artistHeroStateStore = artistHeroStateStore,
+                    artistScrollStateStore = artistScrollStateStore,
+                    artistTopBarStateStore = artistTopBarStateStore
                 )
             }
         ) { innerPadding ->
@@ -359,26 +371,17 @@ internal fun FlowtoneScaffold(
                 onPlaylistBackActionChange = { action ->
                     playlistBackAction = action
                 },
-                onArtistProfileBackActionChange = { action ->
-                    artistProfileBackAction = action
-                },
-                onArtistPageTransitionPresentationChange = { entryId, presentation ->
-                    if (presentation == null) {
-                        artistPageTransitionByEntry.remove(entryId)
-                    } else {
-                        artistPageTransitionByEntry[entryId] = presentation
-                    }
-                },
                 onDetailHeaderCollapseProgressStateChange =
                     onDetailHeaderCollapseProgressStateChange,
-                onArtistToolbarContentVisibleChange = { entryId, visible ->
-                    artistToolbarVisibilityByEntry[entryId] = visible
-                },
                 playlistSongSort = playlistSongSort,
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
+                onFullTitleRequest = showFullTitle,
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
+                artistHeroStateStore = artistHeroStateStore,
+                artistScrollStateStore = artistScrollStateStore,
+                artistTopBarStateStore = artistTopBarStateStore,
                 modifier = Modifier.blur(
                     PlaylistSortContentBlurRadius *
                         playlistSortProgress.coerceIn(0f, 1f)
@@ -462,6 +465,14 @@ internal fun FlowtoneScaffold(
                 refreshLibraryPlaylistsFromRepository(createdPlaylistId)
             }
         )
+        retainedFullTitleOverlayTitle?.let { title ->
+            FullTitleOverlay(
+                title = title,
+                progress = fullTitleOverlayProgress,
+                onDismiss = dismissFullTitle,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         }
     }
 }

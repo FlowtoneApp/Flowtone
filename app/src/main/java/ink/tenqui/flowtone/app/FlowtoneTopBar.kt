@@ -94,6 +94,7 @@ internal fun FlowtoneTopBar(
     onSearchKeyboardDismissRequestConsumed: () -> Unit,
     onSearchInputFocusChange: (Boolean) -> Unit,
     onSearchImeAction: () -> Unit,
+    onFullTitleRequest: (String) -> Unit = {},
     playlistSortProgress: Float = 0f,
     modifier: Modifier = Modifier
 ) {
@@ -201,6 +202,7 @@ internal fun FlowtoneTopBar(
                 rootPage = selectedTopLevelPage,
                 segments = pathSegments,
                 navigationShiftPx = navigationShiftPx,
+                onFullTitleRequest = onFullTitleRequest,
                 modifier = Modifier.fillMaxSize()
             )
         }

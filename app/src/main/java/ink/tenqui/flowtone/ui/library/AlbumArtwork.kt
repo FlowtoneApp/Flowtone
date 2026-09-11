@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import kotlinx.coroutines.isActive
 import kotlin.math.cos
 import kotlin.math.sin
@@ -61,6 +62,7 @@ private val VinylMeteorArcs = VinylMeteorArcPattern.flatMap { arc ->
 @Composable
 internal fun AlbumArtwork(
     artworkUri: Uri?,
+    extensionArtwork: ExtensionImage? = null,
     vinylMotionActive: Boolean = false,
     vinylSeed: Long = 0L,
     modifier: Modifier = Modifier
@@ -79,6 +81,7 @@ internal fun AlbumArtwork(
         )
         FlowtoneArtwork(
             artworkUri = artworkUri,
+            extensionArtwork = extensionArtwork,
             modifier = Modifier
                 .size(AlbumArtworkCoverSize)
                 .align(Alignment.CenterEnd)

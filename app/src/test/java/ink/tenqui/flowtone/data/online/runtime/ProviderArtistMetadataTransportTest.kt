@@ -8,6 +8,38 @@ import org.junit.Test
 
 class ProviderArtistMetadataTransportTest {
     @Test
+    fun oldArtistPayloadWithoutSongOrderRemainsCompatible() {
+        assertNull(providerArtistSongOrderFromJson(JSONObject()))
+    }
+
+    @Test
+    fun artistSongOrderIsOptionalDescriptiveCollectionMetadata() {
+        val order = providerArtistSongOrderFromJson(
+            JSONObject().put(
+                "artistSongOrder",
+                JSONObject().put("id", " time ").put("title", " 时间排序 ")
+            )
+        )
+
+        assertEquals("time", order?.id)
+        assertEquals("时间排序", order?.title)
+    }
+
+    @Test
+    fun malformedOrBlankArtistSongOrderFallsBackToMissing() {
+        assertNull(
+            providerArtistSongOrderFromJson(
+                JSONObject().put("artistSongOrder", "time")
+            )
+        )
+        assertNull(
+            providerArtistSongOrderFromJson(
+                JSONObject().put("artistSongOrder", JSONObject().put("title", "  "))
+            )
+        )
+    }
+
+    @Test
     fun legacyPayloadKeepsOptionalBannerNull() {
         assertNull(providerArtistMetadataFromJson(JSONObject().put("songCount", 1), "Artist")?.banner)
     }

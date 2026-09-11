@@ -1,10 +1,12 @@
 package ink.tenqui.flowtone.ui.components
 
 import androidx.compose.animation.animateColor
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
@@ -56,10 +58,65 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
+import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
+
+internal data class SongListItemLayoutSpec(
+    val rowMinHeight: Dp,
+    val outerMinHeight: Dp,
+    val artworkSize: Dp,
+    val verticalPadding: Dp,
+    val horizontalPadding: Dp,
+    val titleToArtistSpacing: Dp,
+    val artworkToTextSpacing: Dp,
+    val textToTrailingSpacing: Dp,
+    val trailingWidth: Dp
+)
+
+internal val StandardSongListItemSpacing = 4.dp
+
+internal enum class SongArtworkLoadState {
+    Loading,
+    Success,
+    Failure
+}
+
+/**
+ * The cached image itself remains owned by Coil. This only decides whether the
+ * fallback glyph is visible while Coil resolves the current artwork identity.
+ */
+internal fun shouldShowSongArtworkPlaceholder(
+    hasArtworkSource: Boolean,
+    loadState: SongArtworkLoadState,
+    hasKnownCachedArtwork: Boolean
+): Boolean = when {
+    !hasArtworkSource -> true
+    loadState == SongArtworkLoadState.Failure -> true
+    loadState == SongArtworkLoadState.Success -> false
+    else -> !hasKnownCachedArtwork
+}
+
+internal fun songListItemLayoutSpec(
+    compact: Boolean,
+    selectionSlotPadding: Dp = 0.dp
+): SongListItemLayoutSpec {
+    val rowMinHeight = if (compact) 64.dp else 72.dp
+    return SongListItemLayoutSpec(
+        rowMinHeight = rowMinHeight,
+        outerMinHeight = rowMinHeight + selectionSlotPadding * 2,
+        artworkSize = if (compact) 48.dp else 56.dp,
+        verticalPadding = if (compact) 6.dp else 8.dp,
+        horizontalPadding = 12.dp,
+        titleToArtistSpacing = if (compact) 0.dp else 2.dp,
+        artworkToTextSpacing = 12.dp,
+        textToTrailingSpacing = 12.dp,
+        trailingWidth = 96.dp
+    )
+}
 
 @Composable
 fun SongListItem(
@@ -103,10 +160,7 @@ fun SongListItem(
             onClick = { onClick(song) }
         )
     }
-    val itemMinHeight = if (compact) 64.dp else 72.dp
-    val itemVerticalPadding = if (compact) 6.dp else 8.dp
-    val artworkSize = if (compact) 48.dp else 56.dp
-    val artistTopPadding = if (compact) 0.dp else 2.dp
+    val layoutSpec = songListItemLayoutSpec(compact, selectionSlotPadding)
     val contentColor = if (isCurrentSong) {
         MaterialTheme.colorScheme.onSecondaryContainer
     } else {
@@ -206,7 +260,7 @@ fun SongListItem(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = itemMinHeight + selectionSlotPadding * 2)
+            .heightIn(min = layoutSpec.outerMinHeight)
     ) {
         val selectionTopInset =
             selectionSlotPadding * (1f - topConnectionProgress)
@@ -257,11 +311,14 @@ fun SongListItem(
                         }
                     }
                 }
-                .heightIn(min = itemMinHeight)
-                .padding(horizontal = 12.dp, vertical = itemVerticalPadding),
+                .heightIn(min = layoutSpec.rowMinHeight)
+                .padding(
+                    horizontal = layoutSpec.horizontalPadding,
+                    vertical = layoutSpec.verticalPadding
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.size(artworkSize)) {
+            Box(modifier = Modifier.size(layoutSpec.artworkSize)) {
                 AlbumArtwork(
                     song = song,
                     isCurrentSong = isCurrentSong,
@@ -276,7 +333,10 @@ fun SongListItem(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 12.dp, end = 12.dp)
+                    .padding(
+                        start = layoutSpec.artworkToTextSpacing,
+                        end = layoutSpec.textToTrailingSpacing
+                    )
             ) {
                 Text(
                     text = song.title,
@@ -296,11 +356,11 @@ fun SongListItem(
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = artistTopPadding)
+                    modifier = Modifier.padding(top = layoutSpec.titleToArtistSpacing)
                 )
             }
             Box(
-                modifier = Modifier.width(96.dp)
+                modifier = Modifier.width(layoutSpec.trailingWidth)
             ) {
                 if (isPendingPlayback) {
                     androidx.compose.material3.CircularProgressIndicator(
@@ -332,6 +392,78 @@ fun SongListItem(
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
+        }
+    }
+}
+
+/**
+ * A standalone loading visual. It owns no real-song identity, state, placement or geometry;
+ * the caller supplies only the LoadingContent presentation modifier.
+ */
+@Composable
+internal fun SongListItemSkeleton(
+    modifier: Modifier = Modifier
+) {
+    val breathingTransition = rememberInfiniteTransition(label = "SongListItemSkeleton")
+    val breathingProgress by breathingTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1_600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "SongListItemSkeletonBreathing"
+    )
+    val placeholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+        alpha = 0.18f + 0.08f * breathingProgress
+    )
+    val placeholderShape = RoundedCornerShape(percent = 50)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .background(placeholderColor)
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp, end = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.78f)
+                    .heightIn(min = 16.dp)
+                    .clip(placeholderShape)
+                    .background(placeholderColor)
+            )
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth(0.52f)
+                    .heightIn(min = 12.dp)
+                    .clip(placeholderShape)
+                    .background(placeholderColor.copy(alpha = placeholderColor.alpha * 0.82f))
+            )
+        }
+        Box(
+            modifier = Modifier.width(96.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(38.dp)
+                    .heightIn(min = 12.dp)
+                    .clip(placeholderShape)
+                    .background(placeholderColor.copy(alpha = placeholderColor.alpha * 0.82f))
+            )
         }
     }
 }
@@ -503,20 +635,44 @@ private fun AlbumArtwork(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var extensionArtworkLoaded by remember(extensionArtwork) { mutableStateOf(false) }
-    val extensionArtworkAlpha by animateFloatAsState(
-        targetValue = if (extensionArtworkLoaded) 1f else 0f,
-        animationSpec = tween(durationMillis = 300),
-        label = "PlaylistOnlineArtworkFade"
-    )
+    val extensionArtworkCacheKey = remember(extensionArtwork) {
+        extensionArtwork?.let(ExtensionImageKeyer::cacheKey)
+    }
+    val hasKnownCachedArtwork = remember(context, extensionArtworkCacheKey) {
+        extensionArtworkCacheKey?.let { cacheKey ->
+            ExtensionManager.get(context).extensionImageLoader.memoryCache
+                ?.get(MemoryCache.Key(cacheKey)) != null
+        } ?: false
+    }
+    val extensionImageRequest = remember(context, extensionArtwork, extensionArtworkCacheKey) {
+        extensionArtwork?.let { artwork ->
+            ImageRequest.Builder(context)
+                .data(artwork)
+                .memoryCacheKey(requireNotNull(extensionArtworkCacheKey))
+                .placeholderMemoryCacheKey(requireNotNull(extensionArtworkCacheKey))
+                .build()
+        }
+    }
     val imageRequest: ImageRequest? = remember(song.artworkUri, context) {
         song.artworkUri?.let { artworkUri ->
             ImageRequest.Builder(context)
                 .data(artworkUri)
                 .size(96, 96)
+                .placeholderMemoryCacheKey(artworkUri.toString())
                 .build()
         }
     }
+    val artworkIdentity = extensionArtworkCacheKey ?: song.artworkUri?.toString()
+    var artworkLoadState by remember(artworkIdentity) {
+        mutableStateOf(
+            if (hasKnownCachedArtwork) SongArtworkLoadState.Success else SongArtworkLoadState.Loading
+        )
+    }
+    val showPlaceholder = shouldShowSongArtworkPlaceholder(
+        hasArtworkSource = artworkIdentity != null,
+        loadState = artworkLoadState,
+        hasKnownCachedArtwork = hasKnownCachedArtwork
+    )
     val shape = MaterialTheme.shapes.medium
     val isSystemDark = isSystemInDarkTheme()
     val placeholderColor = if (isSystemDark) {
@@ -537,28 +693,30 @@ private fun AlbumArtwork(
             .background(placeholderColor),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.MusicNote,
-            contentDescription = null,
-            tint = iconColor
-        )
-        extensionArtwork?.let { artwork ->
+        if (showPlaceholder) {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = iconColor
+            )
+        }
+        extensionImageRequest?.let { request ->
             AsyncImage(
-                model = artwork,
+                model = request,
                 imageLoader = ExtensionManager.get(context).extensionImageLoader,
                 contentDescription = "专辑封面",
                 contentScale = ContentScale.Crop,
-                onSuccess = { extensionArtworkLoaded = true },
-                onError = { extensionArtworkLoaded = false },
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer { alpha = extensionArtworkAlpha }
+                onSuccess = { artworkLoadState = SongArtworkLoadState.Success },
+                onError = { artworkLoadState = SongArtworkLoadState.Failure },
+                modifier = Modifier.matchParentSize()
             )
         } ?: imageRequest?.let { request ->
             AsyncImage(
                 model = request,
                 contentDescription = "\u4e13\u8f91\u5c01\u9762",
                 contentScale = ContentScale.Crop,
+                onSuccess = { artworkLoadState = SongArtworkLoadState.Success },
+                onError = { artworkLoadState = SongArtworkLoadState.Failure },
                 modifier = Modifier.matchParentSize()
             )
         }

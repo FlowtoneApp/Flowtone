@@ -10,7 +10,7 @@ data class ProviderSearchRequest(
 
 /** Provider 搜索的一页结果。分页状态不属于单个 ProviderSong。 */
 data class ProviderSearchPage(
-    val results: List<ProviderSong>,
+    val results: List<ProviderSearchItem>,
     val nextCursor: String? = null
 )
 

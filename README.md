@@ -96,6 +96,18 @@ Flowtone 已包含实验性的扩展运行体系。
     * 提供持久歌曲身份
     * 解析在线播放资源
 
+* `song`
+
+    * 通过无参数 `getSongs()` 提供结构化的全量歌曲 collection
+    * 只声明 Song entity 能力，不代表歌曲一定可以播放
+
+* `album`
+
+    * 通过无参数 `getAlbums()` 提供结构化的全量专辑 collection
+    * 只声明 Album entity 能力，不代表 Provider 提供专辑详情 endpoint
+
+`song` 与 `album` 是可选能力。未声明这些能力、也未实现对应方法的旧 Provider 仍可继续使用搜索、Artist Profile 与既有播放能力。
+
 音乐 Provider 可以与 Flowtone 的搜索、播放、喜欢和歌单系统连接，而播放器本身不需要直接适配特定音乐平台。
 
 ### 扩展运行环境

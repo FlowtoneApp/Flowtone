@@ -2,7 +2,7 @@ package ink.tenqui.flowtone.data.search
 
 import android.net.Uri
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSearchPage
 import ink.tenqui.flowtone.data.online.ProviderSearchLandingState
@@ -79,7 +79,7 @@ data class GlobalSearchUiState(
 }
 
 data class ProviderSearchCategoryState(
-    val items: List<ProviderSong> = emptyList(),
+    val items: List<ProviderSearchItem> = emptyList(),
     val nextCursor: String? = null,
     val isInitialLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
@@ -103,7 +103,7 @@ internal fun ProviderSearchCategoryState.acceptPage(
     page: ProviderSearchPage,
     allowNextPage: Boolean
 ): ProviderSearchCategoryState = copy(
-    items = (items + page.results).distinctBy { "${it.trackRef.extensionId}:${it.trackRef.opaqueId}" },
+    items = (items + page.results).distinctBy { it.identity },
     nextCursor = if (allowNextPage) page.nextCursor else null,
     isInitialLoading = false,
     isLoadingMore = false,

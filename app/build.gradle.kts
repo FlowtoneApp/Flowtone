@@ -110,6 +110,11 @@ android {
             "PERFORMANCE_SAMPLING_ENABLED",
             "false"
         )
+        buildConfigField(
+            "boolean",
+            "UI_TEST_FIXTURE_ENABLED",
+            "false"
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -126,6 +131,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField(
+                "boolean",
+                "UI_TEST_FIXTURE_ENABLED",
+                "true"
+            )
+        }
+
         release {
             if (hasReleaseSigningConfig) {
                 signingConfig = signingConfigs.getByName("release")
@@ -178,6 +191,11 @@ android {
                 "PERFORMANCE_SAMPLING_ENABLED",
                 isPerformanceSamplingEnabled.toString()
             )
+            buildConfigField(
+                "boolean",
+                "UI_TEST_FIXTURE_ENABLED",
+                "true"
+            )
 
             matchingFallbacks += listOf("debug")
         }
@@ -195,22 +213,34 @@ android {
 
 }
 
+val providerArtistProfileFixtureAssets =
+    layout.buildDirectory.dir("generated/assets/providerArtistProfileFixture/internal")
 val providerArtistProfileFixturePackage = tasks.register<Zip>("providerArtistProfileFixturePackage") {
-    from("src/debug/provider-artist-profile-fixture")
+    from("src/internalTestFixture/provider-artist-profile-fixture")
     archiveFileName.set("provider-artist-profile-fixture.flowtone")
-    destinationDirectory.set(
-        layout.buildDirectory.dir("generated/assets/providerArtistProfileFixture/debug")
+    destinationDirectory.set(providerArtistProfileFixtureAssets)
+}
+
+listOf("debug", "fast").forEach { buildTypeName ->
+    android.sourceSets.getByName(buildTypeName).assets.directories.add(
+        providerArtistProfileFixtureAssets.get().asFile.absolutePath
     )
 }
 
-android.sourceSets.getByName("debug").assets.srcDir(
-    layout.buildDirectory.dir("generated/assets/providerArtistProfileFixture/debug").get().asFile
-)
-
 tasks.configureEach {
-    if (name.contains("Debug", ignoreCase = true) && name.contains("Assets")) {
+    if (
+        (name.contains("Debug", ignoreCase = true) ||
+            name.contains("Fast", ignoreCase = true)) &&
+        name.contains("Assets")
+    ) {
         dependsOn(providerArtistProfileFixturePackage)
     }
+}
+
+tasks.register("verifyUiTestFixtureVariantBoundaries") {
+    group = "verification"
+    description = "Runs the static Debug/Fast/Release fixture boundary regression test."
+    dependsOn("testDebugUnitTest")
 }
 
 dependencies {
