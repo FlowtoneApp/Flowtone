@@ -394,6 +394,11 @@ class ArtistPageContentTest {
     }
 
     @Test
+    fun biographyUsesTheInfoCardsCanonicalEnterOrder() {
+        assertEquals(ArtistHeroElement.CardSurface.order, ArtistInfoCardEnterOrder)
+    }
+
+    @Test
     fun avatarOutlineDoesNotChangeTheMeasuredAvatarSize() {
         val presentation = artistAvatarPresentation(100.dp)
 

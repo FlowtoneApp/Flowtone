@@ -114,6 +114,7 @@ private val ArtistInfoCardShape = RoundedCornerShape(
     bottomStart = 8.dp
 )
 private val ArtistInfoCardSectionGap = 8.dp
+internal val ArtistInfoCardEnterOrder = ArtistHeroElement.CardSurface.order
 private val ArtistSectionHeaderTopSpacing = 12.dp
 private val ArtistSectionHeaderBottomSpacing = 8.dp
 private const val ArtistFirstSongListItemIndex = 2
@@ -1178,7 +1179,7 @@ private fun ArtistInfoCard(
                 .matchParentSize()
                 .then(
                     pageTransition.elementModifier(
-                        order = ArtistHeroElement.CardSurface.order,
+                        order = ArtistInfoCardEnterOrder,
                         orderCount = ArtistHeroMotionOrderCount
                     )
                 )
@@ -1256,7 +1257,7 @@ private fun ArtistInfoCard(
             biography?.let { text ->
                 Column(
                     modifier = pageTransition.elementModifier(
-                        order = ArtistHeroElement.Biography.order,
+                        order = ArtistInfoCardEnterOrder,
                         orderCount = ArtistHeroMotionOrderCount
                     )
                         .fillMaxWidth()
