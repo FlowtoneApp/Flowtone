@@ -290,6 +290,69 @@ class SecondaryNavigationTest {
     }
 
     @Test
+    fun artistTopBarOcclusionStaysWithEverySlotInTheActiveArtistLineage() {
+        val artist = SecondaryDestination.Artist("A")
+        val route = ArtistTopBarRoute(
+            artistEntryKey = "artist-entry",
+            artist = artist
+        )
+
+        assertTrue(artistTopBarOcclusionOwnsTransitionSlot(artist, route))
+        assertTrue(
+            artistTopBarOcclusionOwnsTransitionSlot(
+                SecondaryDestination.ArtistSongs(artist.identity),
+                route
+            )
+        )
+        assertTrue(
+            artistTopBarOcclusionOwnsTransitionSlot(
+                SecondaryDestination.ArtistAlbums(artist.identity),
+                route
+            )
+        )
+        assertTrue(
+            artistTopBarOcclusionOwnsTransitionSlot(
+                SecondaryDestination.Album(1L, "Album", parentArtist = artist.identity),
+                route
+            )
+        )
+    }
+
+    @Test
+    fun artistTopBarOcclusionDoesNotEscapeTheActiveArtistLineage() {
+        val artist = SecondaryDestination.Artist("A")
+        val otherArtist = SecondaryDestination.Artist("B")
+        val route = ArtistTopBarRoute(
+            artistEntryKey = "artist-entry",
+            artist = artist
+        )
+
+        assertFalse(
+            artistTopBarOcclusionOwnsTransitionSlot(
+                SecondaryDestination.ArtistSongs(otherArtist.identity),
+                route
+            )
+        )
+        assertFalse(
+            artistTopBarOcclusionOwnsTransitionSlot(SecondaryDestination.Album(1L, "Album"), route)
+        )
+        assertFalse(
+            artistTopBarOcclusionOwnsTransitionSlot(
+                SecondaryDestination.Playlist("playlist", "Playlist"),
+                route
+            )
+        )
+        assertFalse(
+            artistTopBarOcclusionOwnsTransitionSlot(
+                SecondaryDestination.Standard(SecondaryPage.Settings),
+                route
+            )
+        )
+        // Search is not a SecondaryDestination, so it reaches this helper as no slot.
+        assertFalse(artistTopBarOcclusionOwnsTransitionSlot(null, route))
+    }
+
+    @Test
     fun reopeningTheSameArtistCreatesAFreshNavigationEntrySession() {
         val artist = SecondaryDestination.Artist("A")
         val firstOpen = SecondaryNavigationState().push(artist)

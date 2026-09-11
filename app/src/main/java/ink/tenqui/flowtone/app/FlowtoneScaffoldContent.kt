@@ -117,7 +117,8 @@ internal fun FlowtoneScaffoldContent(
     )
     val mainPagesCloudPalette = LocalMainPagesCloudPalette.current
     val mainPageCloudAccent = mainPagesCloudPalette.accentAt(pagePosition)
-    val artistPathCloudAccent = artistTopBarRoute(state.secondaryEntries)?.let { route ->
+    val activeArtistTopBarRoute = artistTopBarRoute(state.secondaryEntries)
+    val artistPathCloudAccent = activeArtistTopBarRoute?.let { route ->
         artistHeroStateStore.owner(route.artistEntryKey)?.resolvedCloudColor
     }
     val sharedCloudBaseAccent = resolveSharedCloudBaseAccent(
@@ -539,10 +540,10 @@ internal fun FlowtoneScaffoldContent(
                                     artistTopBarContentOcclusionProgress(
                                         presentationProgress = artistTopBarStateOwner
                                             ?.presentationProgress?.value ?: 0f,
-                                        ownsOcclusion =
-                                            secondaryTopPresentationOwner(page.destination) ==
-                                                SecondaryTopPresentationOwner.ArtistTopBar &&
-                                                page.entry.id == state.secondaryEntry?.id
+                                        ownsOcclusion = artistTopBarOcclusionOwnsTransitionSlot(
+                                            slotDestination = page.destination,
+                                            activeArtistRoute = activeArtistTopBarRoute
+                                        )
                                     )
                                 SecondaryPageHost(
                         destination = page.destination,
@@ -648,6 +649,16 @@ internal fun FlowtoneScaffoldContent(
                 artistHeroStateStore.retainEntries(activeArtistEntryKeys)
             }
         }
+}
+
+internal fun artistTopBarOcclusionOwnsTransitionSlot(
+    slotDestination: SecondaryDestination?,
+    activeArtistRoute: ArtistTopBarRoute?
+): Boolean {
+    val activeArtistIdentity = activeArtistRoute?.artist?.identity ?: return false
+    return secondaryTopPresentationOwner(slotDestination) ==
+        SecondaryTopPresentationOwner.ArtistTopBar &&
+        artistPathIdentity(slotDestination)?.stableId == activeArtistIdentity.stableId
 }
 
 internal fun albumCloudArtworkData(
