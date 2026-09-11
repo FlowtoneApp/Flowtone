@@ -21,12 +21,25 @@ internal fun ArtistCloudBackground(
         ready = ready,
         label = "ArtistCloudReadinessFade"
     )
+    ArtistCloudBackdrop(
+        accentColor = accentColor,
+        cloudAlpha = readinessAlpha,
+        modifier = modifier
+    )
+}
+
+@Composable
+internal fun ArtistCloudBackdrop(
+    accentColor: Color,
+    cloudAlpha: Float = 1f,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
             .topLevelPageBackground(
                 cloudPalette = monochromeFlowtoneCloudPalette(accentColor),
-                cloudAlpha = readinessAlpha,
+                cloudAlpha = cloudAlpha,
                 cloudPlacement = HomeBackgroundCloudPlacement
             )
     )
