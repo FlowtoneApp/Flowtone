@@ -5,8 +5,10 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
@@ -34,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import coil3.compose.AsyncImage
+import coil3.decode.DataSource
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
@@ -86,18 +90,47 @@ internal enum class SongArtworkLoadState {
 }
 
 /**
+ * This records presentation only, never image data. It lets a Lazy item keep its
+ * already-seen artwork stable when it leaves and re-enters composition.
+ */
+private object SongArtworkPresentationRegistry {
+    private val successfulArtworkIdentities = mutableSetOf<String>()
+
+    fun hasSuccessfulPresentation(artworkIdentity: String?): Boolean {
+        return artworkIdentity != null && artworkIdentity in successfulArtworkIdentities
+    }
+
+    fun markSuccessfulPresentation(artworkIdentity: String?) {
+        artworkIdentity?.let(successfulArtworkIdentities::add)
+    }
+}
+
+/**
  * The cached image itself remains owned by Coil. This only decides whether the
  * fallback glyph is visible while Coil resolves the current artwork identity.
  */
 internal fun shouldShowSongArtworkPlaceholder(
     hasArtworkSource: Boolean,
     loadState: SongArtworkLoadState,
-    hasKnownCachedArtwork: Boolean
+    hasKnownCachedArtwork: Boolean,
+    revealInProgress: Boolean = false
 ): Boolean = when {
     !hasArtworkSource -> true
     loadState == SongArtworkLoadState.Failure -> true
-    loadState == SongArtworkLoadState.Success -> false
+    loadState == SongArtworkLoadState.Success -> revealInProgress
     else -> !hasKnownCachedArtwork
+}
+
+internal fun shouldRevealSongArtwork(
+    hasArtworkSource: Boolean,
+    loadState: SongArtworkLoadState,
+    dataSource: DataSource?,
+    hasSuccessfulPresentation: Boolean
+): Boolean {
+    return hasArtworkSource &&
+        loadState == SongArtworkLoadState.Success &&
+        dataSource == DataSource.NETWORK &&
+        !hasSuccessfulPresentation
 }
 
 internal fun songListItemLayoutSpec(
@@ -662,16 +695,38 @@ private fun AlbumArtwork(
                 .build()
         }
     }
-    val artworkIdentity = extensionArtworkCacheKey ?: song.artworkUri?.toString()
+    val artworkIdentity = extensionArtworkCacheKey?.let { "extension:$it" }
+        ?: song.artworkUri?.toString()?.let { "local:$it" }
+    val hasSuccessfulPresentation = remember(artworkIdentity) {
+        SongArtworkPresentationRegistry.hasSuccessfulPresentation(artworkIdentity)
+    }
     var artworkLoadState by remember(artworkIdentity) {
         mutableStateOf(
-            if (hasKnownCachedArtwork) SongArtworkLoadState.Success else SongArtworkLoadState.Loading
+            if (hasKnownCachedArtwork || hasSuccessfulPresentation) {
+                SongArtworkLoadState.Success
+            } else {
+                SongArtworkLoadState.Loading
+            }
         )
     }
+    var shouldRevealArtwork by remember(artworkIdentity) { mutableStateOf(false) }
+    val artworkAlpha by animateFloatAsState(
+        targetValue = if (artworkLoadState == SongArtworkLoadState.Success) 1f else 0f,
+        animationSpec = if (shouldRevealArtwork) {
+            tween(
+                durationMillis = FlowtoneMotion.ShortDurationMillis,
+                easing = FlowtoneMotion.Easing
+            )
+        } else {
+            snap()
+        },
+        label = "SongArtworkReveal"
+    )
     val showPlaceholder = shouldShowSongArtworkPlaceholder(
         hasArtworkSource = artworkIdentity != null,
         loadState = artworkLoadState,
-        hasKnownCachedArtwork = hasKnownCachedArtwork
+        hasKnownCachedArtwork = hasKnownCachedArtwork,
+        revealInProgress = shouldRevealArtwork && artworkAlpha < 1f
     )
     val shape = MaterialTheme.shapes.medium
     val isSystemDark = isSystemInDarkTheme()
@@ -700,25 +755,41 @@ private fun AlbumArtwork(
                 tint = iconColor
             )
         }
-        extensionImageRequest?.let { request ->
-            AsyncImage(
-                model = request,
-                imageLoader = ExtensionManager.get(context).extensionImageLoader,
-                contentDescription = "专辑封面",
-                contentScale = ContentScale.Crop,
-                onSuccess = { artworkLoadState = SongArtworkLoadState.Success },
-                onError = { artworkLoadState = SongArtworkLoadState.Failure },
-                modifier = Modifier.matchParentSize()
+        val onArtworkSuccess: (DataSource) -> Unit = { dataSource ->
+            shouldRevealArtwork = shouldRevealSongArtwork(
+                hasArtworkSource = artworkIdentity != null,
+                loadState = SongArtworkLoadState.Success,
+                dataSource = dataSource,
+                hasSuccessfulPresentation = hasSuccessfulPresentation
             )
-        } ?: imageRequest?.let { request ->
-            AsyncImage(
-                model = request,
-                contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                contentScale = ContentScale.Crop,
-                onSuccess = { artworkLoadState = SongArtworkLoadState.Success },
-                onError = { artworkLoadState = SongArtworkLoadState.Failure },
-                modifier = Modifier.matchParentSize()
-            )
+            artworkLoadState = SongArtworkLoadState.Success
+            SongArtworkPresentationRegistry.markSuccessfulPresentation(artworkIdentity)
+        }
+        key(artworkIdentity) {
+            extensionImageRequest?.let { request ->
+                AsyncImage(
+                    model = request,
+                    imageLoader = ExtensionManager.get(context).extensionImageLoader,
+                    contentDescription = "专辑封面",
+                    contentScale = ContentScale.Crop,
+                    onSuccess = { onArtworkSuccess(it.result.dataSource) },
+                    onError = { artworkLoadState = SongArtworkLoadState.Failure },
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer { alpha = artworkAlpha }
+                )
+            } ?: imageRequest?.let { request ->
+                AsyncImage(
+                    model = request,
+                    contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                    contentScale = ContentScale.Crop,
+                    onSuccess = { onArtworkSuccess(it.result.dataSource) },
+                    onError = { artworkLoadState = SongArtworkLoadState.Failure },
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer { alpha = artworkAlpha }
+                )
+            }
         }
     }
 }
