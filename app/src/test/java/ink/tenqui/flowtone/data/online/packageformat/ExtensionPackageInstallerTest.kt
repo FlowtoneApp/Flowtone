@@ -90,6 +90,21 @@ class ExtensionPackageInstallerTest {
         }
     }
 
+    @Test fun `覆盖安装和删除后的扫描只反映当前磁盘状态`() {
+        val root = Files.createTempDirectory("flowtone-reload-test").toFile()
+        val installer = ExtensionPackageInstaller(root)
+
+        installer.install("test.flowtone", zip(validEntries(main = "globalThis.version='old';")))
+        installer.install("test.flowtone", zip(validEntries(main = "globalThis.version='new';")))
+
+        val afterUpdate = installer.scan()
+        assertEquals(1, afterUpdate.size)
+        assertEquals("globalThis.version='new';", afterUpdate.single().directory.resolve("main.js").readText())
+        assertTrue(installer.uninstall("example.avatar"))
+        assertTrue(installer.scan().isEmpty())
+        root.deleteRecursively()
+    }
+
     @Test fun `缺文件 不支持版本 非法 id 和损坏 zip 被拒绝`() {
         val cases = listOf(
             zip(mapOf("main.js" to "x")),

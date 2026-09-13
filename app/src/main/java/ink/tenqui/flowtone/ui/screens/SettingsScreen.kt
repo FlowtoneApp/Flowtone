@@ -331,9 +331,18 @@ internal fun SettingsScreen(
                     },
                     onUninstall = { id ->
                         extensionScope.launch {
-                            extensionManager.uninstall(id)
+                            val result = runCatching {
+                                check(extensionManager.uninstall(id)) { "扩展删除失败" }
+                            }
                             refreshExtensions()
-                            Toast.makeText(context, "扩展已删除", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                result.fold(
+                                    onSuccess = { "扩展已删除" },
+                                    onFailure = { it.message ?: "扩展删除失败" }
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     },
                     elementModifier = ::viewElementModifier

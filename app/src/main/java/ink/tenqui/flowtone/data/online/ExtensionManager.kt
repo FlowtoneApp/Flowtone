@@ -31,11 +31,17 @@ import ink.tenqui.flowtone.data.search.SearchProviderOption
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
+import ink.tenqui.flowtone.core.online.ArtistAvatar
+import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaDataSource
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaSourceFactory
 import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackResourceStore
 import ink.tenqui.flowtone.data.online.playback.ExtensionStreamNetworkHost
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -43,6 +49,22 @@ import coil3.ImageLoader
 import coil3.svg.SvgDecoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
+
+enum class ExtensionRuntimeReloadReason(val logValue: String) {
+    Initialize("initialize"),
+    Install("install"),
+    Update("update"),
+    Delete("delete"),
+    Manual("manual")
+}
+
+data class ExtensionRuntimeState(
+    val generation: Long = 0L,
+    val isReloading: Boolean = false,
+    val installedExtensionCount: Int = 0,
+    val providerIds: Set<String> = emptySet(),
+    val lastReloadErrorType: String? = null
+)
 
 /** 安装、扫描、运行和卸载外部脚本扩展的应用级所有者。 */
 class ExtensionManager private constructor(context: Context) : AutoCloseable {
@@ -57,6 +79,13 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     )
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val mutex = Mutex()
+    private val runtimeLifecycle = ExtensionRuntimeLifecycle { requestGeneration, currentGeneration ->
+        Log.d(
+            LogTag,
+            "extension.runtime.result.discarded requestGeneration=$requestGeneration currentGeneration=$currentGeneration"
+        )
+    }
+    private val _runtimeState = MutableStateFlow(ExtensionRuntimeState())
     private val runtimes = mutableMapOf<String, JavaScriptExtensionRuntime>()
     private val musicProviders = ConcurrentHashMap<String, JavaScriptMusicProvider>()
     private val networkClients = ConcurrentHashMap<String, ExtensionNetworkClient>()
@@ -67,11 +96,12 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val songCollectionCache = ProviderCollectionSessionCache<ProviderSong>()
     private val albumCollectionCache = ProviderCollectionSessionCache<ProviderAlbum>()
     private var initialized = false
-    val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
+    val runtimeState: StateFlow<ExtensionRuntimeState> = _runtimeState.asStateFlow()
+    private val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
         resultCache = avatarResultCache,
         persistentCache = persistentAvatarCache
     )
-    val artistMetadataRegistry = ArtistMetadataExtensionRegistry(
+    private val artistMetadataRegistry = ArtistMetadataExtensionRegistry(
         persistentCache = persistentArtistMetadataCache
     )
     val extensionImageLoader: ImageLoader by lazy {
@@ -87,20 +117,29 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     suspend fun initialize() = mutex.withLock {
         if (initialized) return@withLock
         installBundledUiTestExtensions()
-        installer.scan().forEach { load(it) }
+        check(reloadRuntimeLocked(ExtensionRuntimeReloadReason.Initialize)) {
+            "扩展运行环境初始化失败"
+        }
         initialized = true
     }
 
     suspend fun install(uri: Uri): InstalledExtension = mutex.withLock {
         val name = requireNotNull(displayName(uri)) { "无法确认扩展包文件名" }
         require(name.endsWith(".flowtone", ignoreCase = true)) { "请选择 .flowtone 扩展包" }
-        val installed = withContext(Dispatchers.IO) {
-            val input = requireNotNull(appContext.contentResolver.openInputStream(uri)) { "无法读取扩展包" }
-            installer.install(name, input)
+        withContext(NonCancellable) {
+            val installedIdsBefore = installer.scan().mapTo(mutableSetOf()) { it.manifest.id }
+            val installed = withContext(Dispatchers.IO) {
+                requireNotNull(appContext.contentResolver.openInputStream(uri)) { "无法读取扩展包" }
+                    .use { input -> installer.install(name, input) }
+            }
+            val reason = if (installed.manifest.id in installedIdsBefore) {
+                ExtensionRuntimeReloadReason.Update
+            } else {
+                ExtensionRuntimeReloadReason.Install
+            }
+            check(reloadRuntimeLocked(reason)) { "扩展已写入，但运行环境重载失败" }
+            installed.copy(runtimeAvailable = runtimes.containsKey(installed.manifest.id))
         }
-        stop(installed.manifest.id)
-        load(installed)
-        installed.copy(runtimeAvailable = runtimes.containsKey(installed.manifest.id))
     }
 
     fun installedExtensions(): List<InstalledExtension> = installer.scan().map {
@@ -108,9 +147,22 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     suspend fun uninstall(extensionId: String): Boolean = mutex.withLock {
-        stop(extensionId, clearExtensionData = true)
-        withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
+        withContext(NonCancellable) {
+            val removed = withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
+            if (!removed) return@withContext false
+            check(
+                reloadRuntimeLocked(
+                    reason = ExtensionRuntimeReloadReason.Delete,
+                    clearExtensionDataFor = setOf(extensionId)
+                )
+            ) { "扩展已删除，但运行环境重载失败" }
+            true
+        }
     }
+
+    suspend fun reloadRuntime(
+        reason: ExtensionRuntimeReloadReason = ExtensionRuntimeReloadReason.Manual
+    ): Boolean = mutex.withLock { reloadRuntimeLocked(reason) }
 
     /** 由 Flowtone Host 调用；JS 只提供资源字段，扩展身份不从 JS 参数读取。 */
     internal fun createPlaybackMediaItem(
@@ -152,57 +204,59 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     /** 在线曲目只保存 Host 绑定的 track ref；每次播放重新向所属 runtime 解析短期播放资源。 */
-    internal suspend fun createPlaybackMediaItem(song: ProviderSong): MediaItem? {
-        val provider = musicProviders[song.trackRef.extensionId] ?: return null
-        val resource = runCatching { provider.getPlaybackResource(song) }
-            .onFailure { error ->
-                Log.w(LogTag, "extension.playback.resolve.failed extension=${song.trackRef.extensionId} type=${error.javaClass.simpleName}")
-            }
-            .getOrNull() ?: return null
-        return createPlaybackMediaItem(
-            extensionId = song.trackRef.extensionId,
-            url = resource.url,
-            headers = resource.headers,
-            mimeType = resource.mimeType,
-            type = resource.type,
-            mediaId = song.trackRef.opaqueId
-        )
-    }
+    internal suspend fun createPlaybackMediaItem(song: ProviderSong): MediaItem? =
+        runtimeLifecycle.execute {
+            val provider = musicProviders[song.trackRef.extensionId] ?: return@execute null
+            val resource = providerCall { provider.getPlaybackResource(song) }
+                .onFailure { error ->
+                    Log.w(LogTag, "extension.playback.resolve.failed extension=${song.trackRef.extensionId} type=${error.javaClass.simpleName}")
+                }
+                .getOrNull() ?: return@execute null
+            createPlaybackMediaItem(
+                extensionId = song.trackRef.extensionId,
+                url = resource.url,
+                headers = resource.headers,
+                mimeType = resource.mimeType,
+                type = resource.type,
+                mediaId = song.trackRef.opaqueId
+            )
+        }
 
     /** All 仅合并每个 Provider 的第一页；跨 Provider cursor 留待后续设计。 */
-    internal suspend fun searchMusicProviders(request: ProviderSearchRequest): ProviderSearchCallResult {
-        val calls = musicProviders.map { (extensionId, provider) ->
-            extensionId to runCatching { provider.searchPage(request) }
-        }
-        val pages = calls.mapNotNull { (extensionId, result) ->
-            result.onFailure { error ->
-                Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
-            }.getOrNull()?.also { page ->
-                Log.d(
-                    LogTag,
-                    "extension.music.search.page.success extension=$extensionId " +
-                        "category=${request.category} results=${page.results.size} " +
-                        "hasNextCursor=${page.nextCursor != null} " +
-                        "nextCursorLength=${page.nextCursor?.length ?: 0}"
-                )
+    internal suspend fun searchMusicProviders(request: ProviderSearchRequest): ProviderSearchCallResult =
+        runtimeLifecycle.execute {
+            val calls = musicProviders.toMap().map { (extensionId, provider) ->
+                extensionId to providerCall { provider.searchPage(request) }
             }
+            val pages = calls.mapNotNull { (extensionId, result) ->
+                result.onFailure { error ->
+                    Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
+                }.getOrNull()?.also { page ->
+                    Log.d(
+                        LogTag,
+                        "extension.music.search.page.success extension=$extensionId " +
+                            "category=${request.category} results=${page.results.size} " +
+                            "hasNextCursor=${page.nextCursor != null} " +
+                            "nextCursorLength=${page.nextCursor?.length ?: 0}"
+                    )
+                }
+            }
+            if (pages.isEmpty() && calls.isNotEmpty()) {
+                val failure = calls.firstNotNullOfOrNull { it.second.exceptionOrNull() }
+                if (failure != null) return@execute ProviderSearchCallResult.Failure(failure)
+            }
+            ProviderSearchCallResult.Success(
+                ProviderSearchPage(results = pages.flatMap(ProviderSearchPage::results))
+            )
         }
-        if (pages.isEmpty() && calls.isNotEmpty()) {
-            val failure = calls.firstNotNullOfOrNull { it.second.exceptionOrNull() }
-            if (failure != null) return ProviderSearchCallResult.Failure(failure)
-        }
-        return ProviderSearchCallResult.Success(
-            ProviderSearchPage(results = pages.flatMap(ProviderSearchPage::results))
-        )
-    }
 
     internal suspend fun searchMusicProvider(
         extensionId: String,
         request: ProviderSearchRequest
-    ): ProviderSearchCallResult {
+    ): ProviderSearchCallResult = runtimeLifecycle.execute {
         val provider = musicProviders[extensionId]
-            ?: return ProviderSearchCallResult.Failure(NoSuchElementException("Provider not found"))
-        return runCatching { provider.searchPage(request) }
+            ?: return@execute ProviderSearchCallResult.Failure(NoSuchElementException("Provider not found"))
+        providerCall { provider.searchPage(request) }
             .fold(
                 onSuccess = { page ->
                     Log.d(
@@ -237,51 +291,55 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             .sortedBy(SearchProviderOption::name)
             .toList()
 
-    internal suspend fun getSearchLanding(extensionId: String): ProviderSearchLanding? {
-        searchLandingCache[extensionId]?.let { return it }
-        val provider = musicProviders[extensionId] ?: return null
-        return provider.getSearchLanding()?.also { searchLandingCache[extensionId] = it }
-    }
+    internal suspend fun getSearchLanding(extensionId: String): ProviderSearchLanding? =
+        runtimeLifecycle.execute {
+            searchLandingCache[extensionId]?.let { return@execute it }
+            val provider = musicProviders[extensionId] ?: return@execute null
+            provider.getSearchLanding()?.also { searchLandingCache[extensionId] = it }
+        }
 
     internal fun providerEntityCapabilities(extensionId: String): Set<ProviderEntityCapability> =
-        musicProviders[extensionId]?.entityCapabilities.orEmpty()
+        if (_runtimeState.value.isReloading) emptySet()
+        else musicProviders[extensionId]?.entityCapabilities.orEmpty()
 
-    internal suspend fun getProviderSongs(extensionId: String): List<ProviderSong>? {
-        val provider = musicProviders[extensionId] ?: return null
-        if (ProviderEntityCapability.Song !in provider.entityCapabilities) return null
-        return try {
-            songCollectionCache.getOrLoad(extensionId) {
-                provider.getSongs()?.let(::dedupeProviderSongs)
+    internal suspend fun getProviderSongs(extensionId: String): List<ProviderSong>? =
+        runtimeLifecycle.execute {
+            val provider = musicProviders[extensionId] ?: return@execute null
+            if (ProviderEntityCapability.Song !in provider.entityCapabilities) return@execute null
+            try {
+                songCollectionCache.getOrLoad(extensionId) {
+                    provider.getSongs()?.let(::dedupeProviderSongs)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(LogTag, "extension.music.songs.failed extension=$extensionId type=${error.javaClass.simpleName}")
+                null
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            Log.w(LogTag, "extension.music.songs.failed extension=$extensionId type=${error.javaClass.simpleName}")
-            null
         }
-    }
 
-    internal suspend fun getProviderAlbums(extensionId: String): List<ProviderAlbum>? {
-        val provider = musicProviders[extensionId] ?: return null
-        if (ProviderEntityCapability.Album !in provider.entityCapabilities) return null
-        return try {
-            albumCollectionCache.getOrLoad(extensionId) {
-                provider.getAlbums()?.let(::dedupeProviderAlbums)
+    internal suspend fun getProviderAlbums(extensionId: String): List<ProviderAlbum>? =
+        runtimeLifecycle.execute {
+            val provider = musicProviders[extensionId] ?: return@execute null
+            if (ProviderEntityCapability.Album !in provider.entityCapabilities) return@execute null
+            try {
+                albumCollectionCache.getOrLoad(extensionId) {
+                    provider.getAlbums()?.let(::dedupeProviderAlbums)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(LogTag, "extension.music.albums.failed extension=$extensionId type=${error.javaClass.simpleName}")
+                null
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            Log.w(LogTag, "extension.music.albums.failed extension=$extensionId type=${error.javaClass.simpleName}")
-            null
         }
-    }
 
     internal suspend fun getProviderPlaylistSongs(
         extensionId: String,
         playlistId: String
-    ): List<ProviderSong>? {
-        val provider = musicProviders[extensionId] ?: return null
-        return try {
+    ): List<ProviderSong>? = runtimeLifecycle.execute {
+        val provider = musicProviders[extensionId] ?: return@execute null
+        try {
             provider.getPlaylistSongs(playlistId)?.let(::dedupeProviderSongs)
         } catch (error: CancellationException) {
             throw error
@@ -294,6 +352,12 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         }
     }
 
+    internal suspend fun findArtistAvatar(songTitle: String, artistName: String): ArtistAvatar? =
+        runtimeLifecycle.execute { artistAvatarRegistry.findArtistAvatar(songTitle, artistName) }
+
+    internal suspend fun findArtistMetadata(artistName: String): ArtistMetadata? =
+        runtimeLifecycle.execute { artistMetadataRegistry.findArtistMetadata(artistName) }
+
     @UnstableApi
     fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
         val extensionDataSourceFactory = extensionMediaDataSourceFactory()
@@ -305,13 +369,95 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         )
     }
 
-    private suspend fun load(installed: InstalledExtension) {
+    private suspend fun reloadRuntimeLocked(
+        reason: ExtensionRuntimeReloadReason,
+        clearExtensionDataFor: Set<String> = emptySet()
+    ): Boolean = withContext(NonCancellable) {
+        val oldProviderCount = musicProviders.size
+        val generation = runtimeLifecycle.beginReload()
+        _runtimeState.value = ExtensionRuntimeState(
+            generation = generation,
+            isReloading = true
+        )
+        Log.i(
+            LogTag,
+            "extension.runtime.reload.started generation=$generation reason=${reason.logValue} oldProviders=$oldProviderCount"
+        )
+        try {
+            disposeRuntime(clearExtensionDataFor, clearPlaybackResources = false)
+            sandboxHost.close()
+            Log.i(
+                LogTag,
+                "extension.runtime.dispose.completed generation=$generation oldProviders=$oldProviderCount"
+            )
+            val installed = withContext(Dispatchers.IO) { installer.scan() }
+            var createdRuntimes = 0
+            installed.forEach { extension ->
+                if (load(extension)) createdRuntimes += 1
+            }
+            runtimeLifecycle.completeReload(generation)
+            _runtimeState.value = ExtensionRuntimeState(
+                generation = generation,
+                installedExtensionCount = installed.size,
+                providerIds = musicProviders.keys.toSet()
+            )
+            Log.i(
+                LogTag,
+                "extension.runtime.reload.succeeded generation=$generation reason=${reason.logValue} " +
+                    "scanned=${installed.size} runtimes=$createdRuntimes providers=${musicProviders.size}"
+            )
+            true
+        } catch (error: Throwable) {
+            disposeRuntime(clearExtensionDataFor = emptySet(), clearPlaybackResources = false)
+            sandboxHost.close()
+            runtimeLifecycle.completeReload(generation)
+            _runtimeState.value = ExtensionRuntimeState(
+                generation = generation,
+                lastReloadErrorType = error.javaClass.simpleName
+            )
+            Log.e(
+                LogTag,
+                "extension.runtime.reload.failed generation=$generation reason=${reason.logValue} " +
+                    "type=${error.javaClass.simpleName}"
+            )
+            false
+        }
+    }
+
+    private fun disposeRuntime(
+        clearExtensionDataFor: Set<String>,
+        clearPlaybackResources: Boolean
+    ) {
+        val extensionIds = buildSet {
+            addAll(runtimes.keys)
+            addAll(musicProviders.keys)
+            addAll(networkClients.keys)
+            addAll(streamClients.keys)
+            addAll(clearExtensionDataFor)
+        }
+        extensionIds.forEach { id ->
+            runCatching {
+                stop(
+                    id = id,
+                    clearExtensionData = id in clearExtensionDataFor,
+                    clearPlaybackResources = clearPlaybackResources
+                )
+            }.onFailure { error ->
+                Log.w(
+                    LogTag,
+                    "extension.runtime.dispose.item.failed extension=$id type=${error.javaClass.simpleName}"
+                )
+            }
+        }
+    }
+
+    private suspend fun load(installed: InstalledExtension): Boolean {
         if (
             !installed.manifest.supportsArtistAvatar &&
             !installed.manifest.supportsArtistMetadata &&
             !installed.manifest.supportsMusicProvider
-        ) return
-        val isolate = sandboxHost.createIsolate() ?: return
+        ) return false
+        val isolate = sandboxHost.createIsolate() ?: return false
         val networkClient = gateway.createClientFor(
             extensionId = installed.manifest.id,
             capability = when {
@@ -327,7 +473,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             allowedHosts = installed.manifest.networkHosts
         )
         val runtime = JavaScriptExtensionRuntime(installed, isolate, networkClient, privateCache)
-        runCatching { runtime.start() }
+        return runCatching { runtime.start() }
             .onSuccess {
                 runtimes[installed.manifest.id] = runtime
                 networkClients[installed.manifest.id] = networkClient
@@ -346,22 +492,48 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     )
                 }
             }
-            .onFailure { runtime.close() }
+            .onFailure { error ->
+                Log.w(
+                    LogTag,
+                    "extension.runtime.load.failed extension=${installed.manifest.id} type=${error.javaClass.simpleName}"
+                )
+                runtime.close()
+            }
+            .isSuccess
     }
 
-    private fun stop(id: String, clearExtensionData: Boolean = false) {
-        artistAvatarRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
-        artistMetadataRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
-        runtimes.remove(id)?.close()
+    private fun stop(
+        id: String,
+        clearExtensionData: Boolean = false,
+        clearPlaybackResources: Boolean = true
+    ) {
+        disposeStep(id, "artistAvatar") {
+            artistAvatarRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
+        }
+        disposeStep(id, "artistMetadata") {
+            artistMetadataRegistry.uninstall(id, clearPersistentCache = clearExtensionData)
+        }
         musicProviders.remove(id)
         networkClients.remove(id)
         streamClients.remove(id)
-        playbackResources.clear(id)
+        disposeStep(id, "runtime") { runtimes.remove(id)?.close() }
+        if (clearPlaybackResources) playbackResources.clear(id)
         presentationCache.entries.removeIf { (_, song) -> song.trackRef.extensionId == id }
         searchLandingCache.remove(id)
         songCollectionCache.clear(id)
         albumCollectionCache.clear(id)
-        if (clearExtensionData) privateCache.deleteForUninstall(id)
+        if (clearExtensionData) {
+            disposeStep(id, "privateCache") { privateCache.deleteForUninstall(id) }
+        }
+    }
+
+    private inline fun disposeStep(id: String, step: String, block: () -> Unit) {
+        runCatching(block).onFailure { error ->
+            Log.w(
+                LogTag,
+                "extension.runtime.dispose.step.failed extension=$id step=$step type=${error.javaClass.simpleName}"
+            )
+        }
     }
 
     private fun networkClientFor(extensionId: String): ExtensionNetworkClient? = networkClients[extensionId]
@@ -375,9 +547,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     internal suspend fun resolvePersistentSong(
         sourceHost: String,
         persistentId: String
-    ): ProviderSong? {
-        val provider = selectMusicProviderForSource(musicProviders, sourceHost) ?: return null
-        return runCatching { provider.resolvePersistentSong(persistentId) }
+    ): ProviderSong? = runtimeLifecycle.execute {
+        val provider = selectMusicProviderForSource(musicProviders.toMap(), sourceHost)
+            ?: return@execute null
+        providerCall { provider.resolvePersistentSong(persistentId) }
             .onFailure { error ->
                 Log.w(LogTag, "extension.music.persistent.resolve.failed type=${error.javaClass.simpleName}")
             }
@@ -386,22 +559,32 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     internal suspend fun resolvePersistentPlaylistSong(
         entry: ink.tenqui.flowtone.core.model.PersistentTrack.Online
-    ): PersistentSongResolution = resolvePersistentSongWithProviders(musicProviders, entry)
+    ): PersistentSongResolution = runtimeLifecycle.execute {
+        resolvePersistentSongWithProviders(musicProviders.toMap(), entry)
+    }
 
     /** 只 hydrate presentation，不会获取播放资源。 */
     internal suspend fun hydratePersistentPresentation(
         entry: ink.tenqui.flowtone.core.model.PersistentTrack.Online
-    ): ProviderSong? {
-        presentationCache[entry.identityKey]?.let { return it }
-        val resolution = resolvePersistentPlaylistSong(entry)
-        return (resolution as? PersistentSongResolution.Resolved)?.song?.also {
+    ): ProviderSong? = runtimeLifecycle.execute {
+        presentationCache[entry.identityKey]?.let { return@execute it }
+        val resolution = resolvePersistentSongWithProviders(musicProviders.toMap(), entry)
+        (resolution as? PersistentSongResolution.Resolved)?.song?.also {
             presentationCache[entry.identityKey] = it
         }
     }
 
     /** Runtime provider 引用只能在所属扩展仍运行时复用。 */
     internal fun isMusicProviderRuntimeAvailable(extensionId: String): Boolean =
-        musicProviders.containsKey(extensionId)
+        !_runtimeState.value.isReloading && musicProviders.containsKey(extensionId)
+
+    private suspend fun <T> providerCall(block: suspend () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
 
     private fun displayName(uri: Uri): String? {
         return appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -424,7 +607,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     override fun close() {
-        runtimes.keys.toList().forEach(::stop)
+        runtimeLifecycle.close()
+        disposeRuntime(clearExtensionDataFor = emptySet(), clearPlaybackResources = true)
         privateCache.flushDirty()
         extensionImageLoader.shutdown()
         sandboxHost.close()
@@ -460,7 +644,13 @@ internal suspend fun resolvePersistentSongWithProviders(
 ): PersistentSongResolution {
     val provider = selectMusicProviderForSource(providers, track.sourceHost)
         ?: return PersistentSongResolution.ProviderMissing(track)
-    val song = runCatching { provider.resolvePersistentSong(track.persistentId) }.getOrNull()
+    val song = try {
+        provider.resolvePersistentSong(track.persistentId)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Throwable) {
+        null
+    }
     return song?.let(PersistentSongResolution::Resolved)
         ?: PersistentSongResolution.Unresolved(track).also {
             // TODO: Future persistent track recovery:

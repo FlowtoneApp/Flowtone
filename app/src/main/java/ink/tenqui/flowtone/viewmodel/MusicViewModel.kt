@@ -203,6 +203,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var playbackOrderModeJob: Job? = null
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
     private val providerCollectionLoads = mutableSetOf<String>()
+    private val requestedProviderCollectionIds = mutableSetOf<String>()
+    private val requestedProviderPlaylists = mutableMapOf<String, ProviderPlaylistSearchItem>()
+    private var observedExtensionRuntimeGeneration = extensionManager.runtimeState.value.generation
+    private var extensionRuntimeRefreshPending = extensionManager.runtimeState.value.isReloading
 
     val uiState: StateFlow<MusicUiState> = _uiState.asStateFlow()
     val searchUiState: StateFlow<GlobalSearchUiState> = _searchUiState.asStateFlow()
@@ -253,12 +257,73 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     init {
+        observeExtensionRuntime()
         startProgressTicker()
         startConfirmedPlaybackPositionTicker()
         observeControllerConnection()
         observeListeningStats()
         observeLyrics()
         refreshSearchSources()
+    }
+
+    private fun observeExtensionRuntime() {
+        viewModelScope.launch {
+            extensionManager.runtimeState.collect { runtimeState ->
+                if (runtimeState.generation != observedExtensionRuntimeGeneration) {
+                    observedExtensionRuntimeGeneration = runtimeState.generation
+                    extensionRuntimeRefreshPending = true
+                    invalidateExtensionRuntimeRequests()
+                }
+                if (!runtimeState.isReloading && extensionRuntimeRefreshPending) {
+                    extensionRuntimeRefreshPending = false
+                    val queryText = _searchUiState.value.queryText
+                    refreshSearchSources()
+                    reloadRequestedProviderData()
+                    if (runtimeState.lastReloadErrorType == null && queryText.isNotBlank()) {
+                        updateSearchQuery(queryText)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun invalidateExtensionRuntimeRequests() {
+        searchJob?.cancel()
+        providerSearchJob?.cancel()
+        searchLandingJob?.cancel()
+        searchLandingGeneration += 1L
+        pendingPlaybackJob?.cancel()
+        playbackRequestGeneration += 1L
+        onlineArtworkPreloadJob?.cancel()
+        onlinePreloadGeneration += 1L
+        providerCollectionLoads.clear()
+        onlinePresentationCache.clear()
+        _uiState.update { state ->
+            state.copy(
+                pendingPlayback = null,
+                pendingQueueIndex = null,
+                providerSongs = emptyMap(),
+                providerAlbums = emptyMap(),
+                providerPlaylistDetails = emptyMap()
+            )
+        }
+        _searchUiState.update { state ->
+            state.copy(
+                scope = if (state.scope is SearchScope.Provider) SearchScope.All else state.scope,
+                providerOptions = emptyList(),
+                providerCategoryStates = emptyProviderSearchCategoryStates(),
+                landingState = ProviderSearchLandingState.Idle,
+                isSearching = false,
+                searchGeneration = state.searchGeneration + 1L
+            )
+        }
+    }
+
+    private fun reloadRequestedProviderData() {
+        requestedProviderCollectionIds.toList().forEach(::loadProviderEntityCollections)
+        requestedProviderPlaylists.values.toList()
+            .filter { extensionManager.isMusicProviderRuntimeAvailable(it.providerId) }
+            .forEach { playlist -> loadProviderPlaylist(playlist, preferEmbeddedSongs = false) }
     }
 
     fun setPermissionStatus(hasPermission: Boolean) {
@@ -739,11 +804,14 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     fun loadProviderEntityCollections(providerId: String) {
         val normalizedProviderId = providerId.trim()
         if (normalizedProviderId.isEmpty()) return
+        requestedProviderCollectionIds += normalizedProviderId
         val capabilities = extensionManager.providerEntityCapabilities(normalizedProviderId)
+        val runtimeGeneration = extensionManager.runtimeState.value.generation
+        val songLoadKey = "$runtimeGeneration:song:$normalizedProviderId"
         if (
             ProviderEntityCapability.Song in capabilities &&
             normalizedProviderId !in _uiState.value.providerSongs &&
-            providerCollectionLoads.add("song:$normalizedProviderId")
+            providerCollectionLoads.add(songLoadKey)
         ) {
             viewModelScope.launch {
                 try {
@@ -753,14 +821,15 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                         }
                     }
                 } finally {
-                    providerCollectionLoads.remove("song:$normalizedProviderId")
+                    providerCollectionLoads.remove(songLoadKey)
                 }
             }
         }
+        val albumLoadKey = "$runtimeGeneration:album:$normalizedProviderId"
         if (
             ProviderEntityCapability.Album in capabilities &&
             normalizedProviderId !in _uiState.value.providerAlbums &&
-            providerCollectionLoads.add("album:$normalizedProviderId")
+            providerCollectionLoads.add(albumLoadKey)
         ) {
             viewModelScope.launch {
                 try {
@@ -770,7 +839,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                         }
                     }
                 } finally {
-                    providerCollectionLoads.remove("album:$normalizedProviderId")
+                    providerCollectionLoads.remove(albumLoadKey)
                 }
             }
         }
@@ -778,8 +847,17 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
     fun loadProviderPlaylist(playlist: ProviderPlaylistSearchItem) {
         val detailKey = playlist.identity.stableKey
+        requestedProviderPlaylists[detailKey] = playlist
+        loadProviderPlaylist(playlist, preferEmbeddedSongs = true)
+    }
+
+    private fun loadProviderPlaylist(
+        playlist: ProviderPlaylistSearchItem,
+        preferEmbeddedSongs: Boolean
+    ) {
+        val detailKey = playlist.identity.stableKey
         if (detailKey in _uiState.value.providerPlaylistDetails) return
-        if (playlist.songs.isNotEmpty()) {
+        if (preferEmbeddedSongs && playlist.songs.isNotEmpty()) {
             _uiState.update { state ->
                 state.copy(
                     providerPlaylistDetails = state.providerPlaylistDetails +
@@ -788,7 +866,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             }
             return
         }
-        val loadKey = "playlist:$detailKey"
+        val loadKey = "${extensionManager.runtimeState.value.generation}:playlist:$detailKey"
         if (!providerCollectionLoads.add(loadKey)) return
         _uiState.update { state ->
             state.copy(
@@ -802,12 +880,13 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     playlist.providerId,
                     playlist.id
                 )
+                val effectiveSongs = songs ?: playlist.songs.takeIf { it.isNotEmpty() }
                 _uiState.update { state ->
                     state.copy(
                         providerPlaylistDetails = state.providerPlaylistDetails +
                             (detailKey to ProviderPlaylistDetailState(
-                                songs = songs.orEmpty(),
-                                loadFailed = songs == null
+                                songs = effectiveSongs.orEmpty(),
+                                loadFailed = effectiveSongs == null
                             ))
                     )
                 }

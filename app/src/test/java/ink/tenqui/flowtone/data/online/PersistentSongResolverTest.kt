@@ -57,6 +57,25 @@ class PersistentSongResolverTest {
         assertEquals(0, provider.playbackRequests)
     }
 
+    @Test
+    fun `stable track identity resolves through replacement provider after reload`() = runBlocking {
+        val oldProvider = FakeProvider(
+            setOf("soundcloud.com"),
+            ProviderSong(ExtensionTrackRef("provider", "old-runtime"), "Old", "Artist")
+        )
+        val newProvider = FakeProvider(
+            setOf("soundcloud.com"),
+            ProviderSong(ExtensionTrackRef("provider", "new-runtime"), "New", "Artist")
+        )
+
+        resolvePersistentSongWithProviders(mapOf("provider" to oldProvider), onlineTrack())
+        val reloaded = resolvePersistentSongWithProviders(mapOf("provider" to newProvider), onlineTrack())
+
+        assertEquals("new-runtime", (reloaded as PersistentSongResolution.Resolved).song.trackRef.opaqueId)
+        assertEquals(listOf("stable-id"), oldProvider.resolvedIds)
+        assertEquals(listOf("stable-id"), newProvider.resolvedIds)
+    }
+
     private fun onlineTrack() = PersistentTrack.Online(
         "soundcloud.com",
         "stable-id",

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,18 +78,22 @@ internal fun rememberExperimentalArtistAvatarImage(
     artistName: String
 ): ExtensionImage? {
     val context = LocalContext.current
-    val registry = remember(context) { ExtensionManager.get(context).artistAvatarRegistry }
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
+    val runtimeState by extensionManager.runtimeState.collectAsState()
     val queryKey = remember(songTitle, artistName) {
         ArtistAvatarUiMemoryCache.queryKey(songTitle, artistName)
     }
-    var image by remember(queryKey) {
-        mutableStateOf(ArtistAvatarUiMemoryCache.resolvedImage(queryKey))
+    val generationQueryKey = remember(queryKey, runtimeState.generation) {
+        "$queryKey\n${runtimeState.generation}"
+    }
+    var image by remember(generationQueryKey) {
+        mutableStateOf(ArtistAvatarUiMemoryCache.resolvedImage(generationQueryKey))
     }
 
-    LaunchedEffect(queryKey) {
-        if (image == null) {
-            image = registry.findArtistAvatar(songTitle, artistName)?.image?.also { resolved ->
-                ArtistAvatarUiMemoryCache.rememberResolvedImage(queryKey, resolved)
+    LaunchedEffect(generationQueryKey, runtimeState.isReloading) {
+        if (!runtimeState.isReloading && image == null) {
+            image = extensionManager.findArtistAvatar(songTitle, artistName)?.image?.also { resolved ->
+                ArtistAvatarUiMemoryCache.rememberResolvedImage(generationQueryKey, resolved)
             }
         }
     }
@@ -101,20 +106,21 @@ internal fun rememberArtistMetadata(
     providedMetadata: ArtistMetadata? = null
 ): ArtistMetadata? {
     val context = LocalContext.current
-    val registry = remember(context) { ExtensionManager.get(context).artistMetadataRegistry }
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
+    val runtimeState by extensionManager.runtimeState.collectAsState()
     val normalizedProvidedMetadata = remember(artistName, providedMetadata) {
         providedMetadata?.sanitizedFor(artistName)
     }
     val needsResolver = remember(artistName, normalizedProvidedMetadata) {
         artistMetadataNeedsResolver(artistName, normalizedProvidedMetadata)
     }
-    var resolvedMetadata by remember(artistName, needsResolver) {
+    var resolvedMetadata by remember(artistName, needsResolver, runtimeState.generation) {
         mutableStateOf<ArtistMetadata?>(null)
     }
 
-    LaunchedEffect(artistName, needsResolver) {
-        resolvedMetadata = if (needsResolver) {
-            registry.findArtistMetadata(artistName)
+    LaunchedEffect(artistName, needsResolver, runtimeState.generation, runtimeState.isReloading) {
+        resolvedMetadata = if (needsResolver && !runtimeState.isReloading) {
+            extensionManager.findArtistMetadata(artistName)
         } else {
             null
         }
