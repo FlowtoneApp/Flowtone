@@ -195,6 +195,35 @@ class LyricsTimelineHighlightTest {
     }
 
     @Test
+    fun longDistanceBounceStartsOnlyBeyondOneViewport() {
+        assertEquals(0f, lyricLongDistanceBounceDistancePx(800f, 800, 6f, 18f))
+        assertEquals(
+            6.0075f,
+            lyricLongDistanceBounceDistancePx(801f, 800, 6f, 18f),
+            0.0001f
+        )
+    }
+
+    @Test
+    fun longDistanceBounceGrowsWithDistanceAndFollowsScrollDirection() {
+        assertEquals(12f, lyricLongDistanceBounceDistancePx(1_600f, 800, 6f, 18f))
+        assertEquals(-18f, lyricLongDistanceBounceDistancePx(-2_400f, 800, 6f, 18f))
+    }
+
+    @Test
+    fun longDistanceBounceMagnitudeIsCapped() {
+        assertEquals(18f, lyricLongDistanceBounceDistancePx(4_800f, 800, 6f, 18f))
+    }
+
+    @Test
+    fun consumedBounceUsesOnlyDistanceBeyondTheOriginalTarget() {
+        assertEquals(12f, consumedLyricBounceDistancePx(100f, 112f, 12f))
+        assertEquals(5f, consumedLyricBounceDistancePx(100f, 105f, 12f))
+        assertEquals(0f, consumedLyricBounceDistancePx(100f, 98f, 12f))
+        assertEquals(-12f, consumedLyricBounceDistancePx(-100f, -112f, -12f))
+    }
+
+    @Test
     fun shortLyricUsesTimeUntilNextLineAsVisualTransitionDuration() {
         val shortLines = listOf(
             LyricLine(timestampMs = 1_000L, text = "短促歌词"),

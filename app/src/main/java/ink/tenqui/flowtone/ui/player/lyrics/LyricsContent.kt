@@ -306,6 +306,12 @@ private fun LyricsList(
     val activeLineTargetYPx = with(density) {
         activeLineTargetY.roundToPx()
     }
+    val longDistanceBounceMinimumMagnitudePx = with(density) {
+        LyricsLongDistanceBounceMinimumMagnitude.toPx()
+    }
+    val longDistanceBounceMaximumMagnitudePx = with(density) {
+        LyricsLongDistanceBounceMaximumMagnitude.toPx()
+    }
     val lyricTextStyle = MaterialTheme.typography.headlineSmall.copy(
         fontSize = 32.sp,
         lineHeight = 42.sp,
@@ -741,6 +747,10 @@ private fun LyricsList(
                     onSubpixelOffsetChanged = { offsetPx ->
                         trackingSubpixelOffsetY = offsetPx
                     },
+                    longDistanceBounceMinimumMagnitudePx =
+                        longDistanceBounceMinimumMagnitudePx,
+                    longDistanceBounceMaximumMagnitudePx =
+                        longDistanceBounceMaximumMagnitudePx,
                     transitionDurationMs = if (contentVisible && !shouldSnapToFirstLine) {
                         activeLineTransitionDurationMs
                     } else {
@@ -1207,6 +1217,8 @@ private val LyricsStartPadding = 16.dp
 private val LyricsEndPadding = 48.dp
 private val LyricsLineSpacing = 38.dp
 private val BlankLyricLineHeight = 12.dp
+private val LyricsLongDistanceBounceMinimumMagnitude = 6.dp
+private val LyricsLongDistanceBounceMaximumMagnitude = 18.dp
 internal val LyricsEdgeFadeHeight = 64.dp
 private val LyricsTrackSwitchDistance = 16.dp
 private const val LyricsTrackSwitchStaggerMillis = 8

@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.snapshotFlow
 import ink.tenqui.flowtone.lyrics.LyricLine
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 
@@ -15,6 +16,7 @@ internal const val LyricsReturnToCurrentLineDelayMs = 3_000L
 internal const val LyricsActiveLineScreenYFraction = 0.312f
 internal const val LyricsLineTransitionDurationMs = 700
 internal const val LyricsInstantTrackingThresholdMs = 300
+private const val LyricsLongDistanceBounceSettleDurationMs = 300
 internal val LyricsLineTransitionEasing = CubicBezierEasing(
     a = 0.2f,
     b = 0f,
@@ -111,6 +113,40 @@ internal fun lazyListInitialScrollOffsetForTarget(
 internal fun shouldInstantlyTrackLyric(transitionDurationMs: Int): Boolean =
     transitionDurationMs < LyricsInstantTrackingThresholdMs
 
+internal fun lyricLongDistanceBounceDistancePx(
+    scrollDistancePx: Float,
+    viewportHeightPx: Int,
+    minimumBounceMagnitudePx: Float,
+    maximumBounceMagnitudePx: Float
+): Float {
+    if (
+        viewportHeightPx <= 0 ||
+        abs(scrollDistancePx) <= viewportHeightPx ||
+        minimumBounceMagnitudePx <= 0f
+    ) {
+        return 0f
+    }
+    val safeMaximumMagnitudePx = maximumBounceMagnitudePx
+        .coerceAtLeast(minimumBounceMagnitudePx)
+    val distanceInViewports = abs(scrollDistancePx) / viewportHeightPx
+    val bounceMagnitudePx = (minimumBounceMagnitudePx * distanceInViewports)
+        .coerceAtMost(safeMaximumMagnitudePx)
+    return if (scrollDistancePx > 0f) bounceMagnitudePx else -bounceMagnitudePx
+}
+
+internal fun consumedLyricBounceDistancePx(
+    targetScrollDistancePx: Float,
+    consumedScrollDistancePx: Float,
+    requestedBounceDistancePx: Float
+): Float {
+    if (requestedBounceDistancePx == 0f) return 0f
+    val direction = if (requestedBounceDistancePx > 0f) 1f else -1f
+    val consumedBeyondTargetPx =
+        (consumedScrollDistancePx - targetScrollDistancePx) * direction
+    return consumedBeyondTargetPx
+        .coerceIn(0f, abs(requestedBounceDistancePx)) * direction
+}
+
 internal suspend fun LazyListState.animateScrollToItemAtY(
     index: Int,
     targetYPx: Int,
@@ -119,6 +155,8 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
     itemStartOffsetsPx: IntArray,
     initialSubpixelOffsetPx: Float = 0f,
     onSubpixelOffsetChanged: (Float) -> Unit = {},
+    longDistanceBounceMinimumMagnitudePx: Float = 0f,
+    longDistanceBounceMaximumMagnitudePx: Float = 0f,
     transitionDurationMs: Int = LyricsLineTransitionDurationMs
 ) {
     snapshotFlow {
@@ -174,6 +212,12 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
                 itemStartOffsetsPx = itemStartOffsetsPx,
                 initialSubpixelOffsetPx = initialSubpixelOffsetPx,
                 transitionDurationMs = transitionDurationMs,
+                bounceDistancePx = lyricLongDistanceBounceDistancePx(
+                    scrollDistancePx = distanceToTarget,
+                    viewportHeightPx = viewportHeight,
+                    minimumBounceMagnitudePx = longDistanceBounceMinimumMagnitudePx,
+                    maximumBounceMagnitudePx = longDistanceBounceMaximumMagnitudePx
+                ),
                 onSubpixelOffsetChanged = onSubpixelOffsetChanged
             )
         }
@@ -199,6 +243,12 @@ internal suspend fun LazyListState.animateScrollToItemAtY(
                 itemStartOffsetsPx = itemStartOffsetsPx,
                 initialSubpixelOffsetPx = initialSubpixelOffsetPx,
                 transitionDurationMs = transitionDurationMs,
+                bounceDistancePx = lyricLongDistanceBounceDistancePx(
+                    scrollDistancePx = distanceToTarget.toFloat(),
+                    viewportHeightPx = viewportHeight,
+                    minimumBounceMagnitudePx = longDistanceBounceMinimumMagnitudePx,
+                    maximumBounceMagnitudePx = longDistanceBounceMaximumMagnitudePx
+                ),
                 onSubpixelOffsetChanged = onSubpixelOffsetChanged
             )
         }
@@ -212,6 +262,7 @@ private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
     itemStartOffsetsPx: IntArray,
     initialSubpixelOffsetPx: Float,
     transitionDurationMs: Int,
+    bounceDistancePx: Float,
     onSubpixelOffsetChanged: (Float) -> Unit
 ) {
     val initialAbsolutePosition = absoluteLazyListScrollPositionPx(
@@ -221,17 +272,32 @@ private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
     )
     if (initialAbsolutePosition == null) {
         onSubpixelOffsetChanged(0f)
-        animateScrollBy(
-            value = value,
+        val consumedMainDistance = animateScrollBy(
+            value = value + bounceDistancePx,
             animationSpec = tween(
                 durationMillis = transitionDurationMs,
                 easing = LyricsLineTransitionEasing
             )
         )
+        val consumedBounceDistance = consumedLyricBounceDistancePx(
+            targetScrollDistancePx = value,
+            consumedScrollDistancePx = consumedMainDistance,
+            requestedBounceDistancePx = bounceDistancePx
+        )
+        if (consumedBounceDistance != 0f) {
+            animateScrollBy(
+                value = -consumedBounceDistance,
+                animationSpec = tween(
+                    durationMillis = LyricsLongDistanceBounceSettleDurationMs,
+                    easing = FlowtoneMotion.Easing
+                )
+            )
+        }
         return
     }
 
     var consumedValue = 0f
+    val mainAnimationDistance = value + bounceDistancePx
     scroll {
         animate(
             initialValue = 0f,
@@ -241,7 +307,7 @@ private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
                 easing = LyricsLineTransitionEasing
             )
         ) { animationProgress, _ ->
-            val idealValue = value * animationProgress
+            val idealValue = mainAnimationDistance * animationProgress
             consumedValue += scrollBy(idealValue - consumedValue)
             val actualAbsolutePosition = absoluteLazyListScrollPositionPx(
                 firstVisibleItemIndex = firstVisibleItemIndex,
@@ -258,6 +324,24 @@ private suspend fun LazyListState.animateScrollByWithSubpixelCompensation(
                         animationProgress = animationProgress
                     )
                 )
+            }
+        }
+        val consumedBounceDistance = consumedLyricBounceDistancePx(
+            targetScrollDistancePx = value,
+            consumedScrollDistancePx = consumedValue,
+            requestedBounceDistancePx = bounceDistancePx
+        )
+        if (consumedBounceDistance != 0f) {
+            var bouncePositionPx = consumedBounceDistance
+            animate(
+                initialValue = bouncePositionPx,
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = LyricsLongDistanceBounceSettleDurationMs,
+                    easing = FlowtoneMotion.Easing
+                )
+            ) { targetBouncePositionPx, _ ->
+                bouncePositionPx += scrollBy(targetBouncePositionPx - bouncePositionPx)
             }
         }
     }
