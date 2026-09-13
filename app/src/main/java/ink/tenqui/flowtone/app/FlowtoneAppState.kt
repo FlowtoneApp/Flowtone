@@ -38,7 +38,6 @@ internal class FlowtoneAppState(
     permissionDeniedState: MutableState<Boolean>,
     miniPlayerExpandedState: MutableState<Boolean>,
     miniPlayerFullscreenState: MutableState<Boolean>,
-    miniPlayerFullscreenEnteredFromCollapsedState: MutableState<Boolean>,
     miniPlayerMinimizedState: MutableState<Boolean>,
     showSwipeHintState: MutableState<Boolean>,
     secondaryNavigationState: MutableState<SecondaryNavigationState>,
@@ -48,8 +47,7 @@ internal class FlowtoneAppState(
     secondaryPathSegmentsState: MutableState<List<String>>,
     hideSecondaryBackButtonState: MutableState<Boolean>,
     resumePlaybackAfterCallState: MutableState<Boolean>,
-    allowFullscreenFromCollapsedState: MutableState<Boolean>,
-    openExpandedMiniPlayerOnMediaClickState: MutableState<Boolean>,
+    skipExpandedMiniPlayerState: MutableState<Boolean>,
     disablePausedArtworkTiltState: MutableState<Boolean>,
     strictProgressBarState: MutableState<Boolean>,
     allowScreenOffOnLyricsPageState: MutableState<Boolean>,
@@ -77,7 +75,6 @@ internal class FlowtoneAppState(
     var permissionDenied by permissionDeniedState
     var miniPlayerExpanded by miniPlayerExpandedState
     var miniPlayerFullscreen by miniPlayerFullscreenState
-    var miniPlayerFullscreenEnteredFromCollapsed by miniPlayerFullscreenEnteredFromCollapsedState
     var miniPlayerMinimized by miniPlayerMinimizedState
     var showSwipeHint by showSwipeHintState
     var secondaryNavigation by secondaryNavigationState
@@ -89,8 +86,7 @@ internal class FlowtoneAppState(
     var secondaryPathSegments by secondaryPathSegmentsState
     var hideSecondaryBackButton by hideSecondaryBackButtonState
     var resumePlaybackAfterCall by resumePlaybackAfterCallState
-    var allowFullscreenFromCollapsed by allowFullscreenFromCollapsedState
-    var openExpandedMiniPlayerOnMediaClick by openExpandedMiniPlayerOnMediaClickState
+    var skipExpandedMiniPlayer by skipExpandedMiniPlayerState
     var disablePausedArtworkTilt by disablePausedArtworkTiltState
     var strictProgressBar by strictProgressBarState
     var allowScreenOffOnLyricsPage by allowScreenOffOnLyricsPageState
@@ -126,9 +122,6 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val miniPlayerFullscreen = rememberSaveable {
         mutableStateOf(false)
     }
-    val miniPlayerFullscreenEnteredFromCollapsed = rememberSaveable {
-        mutableStateOf(false)
-    }
     val miniPlayerMinimized = rememberSaveable {
         mutableStateOf(false)
     }
@@ -156,11 +149,8 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val resumePlaybackAfterCall = rememberSaveable {
         mutableStateOf(appPreferences.shouldResumePlaybackAfterCall())
     }
-    val allowFullscreenFromCollapsed = rememberSaveable {
-        mutableStateOf(appPreferences.shouldAllowFullscreenFromCollapsed())
-    }
-    val openExpandedMiniPlayerOnMediaClick = rememberSaveable {
-        mutableStateOf(appPreferences.shouldOpenExpandedMiniPlayerOnMediaClick())
+    val skipExpandedMiniPlayer = rememberSaveable {
+        mutableStateOf(appPreferences.shouldSkipExpandedMiniPlayer())
     }
     val disablePausedArtworkTilt = rememberSaveable {
         mutableStateOf(appPreferences.shouldDisablePausedArtworkTilt())
@@ -234,7 +224,6 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         permissionDeniedState = permissionDenied,
         miniPlayerExpandedState = miniPlayerExpanded,
         miniPlayerFullscreenState = miniPlayerFullscreen,
-        miniPlayerFullscreenEnteredFromCollapsedState = miniPlayerFullscreenEnteredFromCollapsed,
         miniPlayerMinimizedState = miniPlayerMinimized,
         showSwipeHintState = showSwipeHint,
         secondaryNavigationState = secondaryNavigation,
@@ -244,8 +233,7 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         secondaryPathSegmentsState = secondaryPathSegments,
         hideSecondaryBackButtonState = hideSecondaryBackButton,
         resumePlaybackAfterCallState = resumePlaybackAfterCall,
-        allowFullscreenFromCollapsedState = allowFullscreenFromCollapsed,
-        openExpandedMiniPlayerOnMediaClickState = openExpandedMiniPlayerOnMediaClick,
+        skipExpandedMiniPlayerState = skipExpandedMiniPlayer,
         disablePausedArtworkTiltState = disablePausedArtworkTilt,
         strictProgressBarState = strictProgressBar,
         allowScreenOffOnLyricsPageState = allowScreenOffOnLyricsPage,
@@ -293,8 +281,7 @@ internal data class FlowtoneAppScaffoldState(
     val secondaryPathSegments: List<String>,
     val hideSecondaryBackButton: Boolean,
     val resumePlaybackAfterCall: Boolean,
-    val allowFullscreenFromCollapsed: Boolean,
-    val openExpandedMiniPlayerOnMediaClick: Boolean,
+    val skipExpandedMiniPlayer: Boolean,
     val preloadSongMetadataCount: Int,
     val preloadLyricsCount: Int,
     val songRecordThresholdSeconds: Int,
@@ -366,8 +353,7 @@ internal fun flowtoneAppScaffoldState(
         secondaryPathSegments = appState.secondaryPathSegments,
         hideSecondaryBackButton = appState.hideSecondaryBackButton,
         resumePlaybackAfterCall = appState.resumePlaybackAfterCall,
-        allowFullscreenFromCollapsed = appState.allowFullscreenFromCollapsed,
-        openExpandedMiniPlayerOnMediaClick = appState.openExpandedMiniPlayerOnMediaClick,
+        skipExpandedMiniPlayer = appState.skipExpandedMiniPlayer,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         preloadLyricsCount = appState.preloadLyricsCount,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,

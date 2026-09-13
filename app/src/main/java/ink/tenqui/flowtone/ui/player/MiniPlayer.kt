@@ -67,9 +67,8 @@ fun MiniPlayer(
     fullscreen: Boolean,
     onFullscreenChange: (Boolean) -> Unit,
     fullscreenHeight: Dp,
-    allowFullscreenFromCollapsed: Boolean = false,
+    skipExpandedMiniPlayer: Boolean = false,
     allowFullscreenFromExpanded: Boolean = true,
-    openExpandedOnMediaClick: Boolean = true,
     disablePausedArtworkTilt: Boolean = false,
     strictProgressBar: Boolean = false,
     allowScreenOffOnLyricsPage: Boolean = false,
@@ -556,12 +555,10 @@ fun MiniPlayer(
         fullscreenContentMode = state.fullscreenContentMode,
         fullscreenContentExitProgress = fullscreenContentExitProgress,
         artistPlaceholderProgress = artistPlaceholderProgress,
-        allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
         transitions = transitions,
         callbacks = callbacks,
         onAddSongToPlaylist = onAddSongToPlaylist,
-        onFullscreenChange = onFullscreenChange,
-        onExpandedChange = onExpandedChange
+        onFullscreenChange = onFullscreenChange
     )
     MiniPlayerSongTransitionEffects(
         currentSong = currentSong,
@@ -625,7 +622,7 @@ fun MiniPlayer(
             minimized,
             swipeThresholdPx,
             fullscreenSwipeThresholdPx,
-            allowFullscreenFromCollapsed,
+            skipExpandedMiniPlayer,
             allowFullscreenFromExpanded
         ) {
             detectVerticalDragGestures(
@@ -649,7 +646,7 @@ fun MiniPlayer(
                         minimized = minimized,
                         expanded = expanded,
                         fullscreenInteractionActive = fullscreenInteractionActive,
-                        allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
+                        skipExpandedMiniPlayer = skipExpandedMiniPlayer,
                         allowFullscreenFromExpanded = allowFullscreenFromExpanded,
                         onMinimizedChange = onMinimizedChange,
                         onFullscreenChange = onFullscreenChange,
@@ -745,7 +742,7 @@ fun MiniPlayer(
                 onMinimizedChange = onMinimizedChange,
                 onExpandedChange = onExpandedChange,
                 onFullscreenChange = onFullscreenChange,
-                openExpandedOnMediaClick = openExpandedOnMediaClick
+                skipExpandedMiniPlayer = skipExpandedMiniPlayer
             )
         },
         modifier = modifier.performanceSample("MiniPlayer") {

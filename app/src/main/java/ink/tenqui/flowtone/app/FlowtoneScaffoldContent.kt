@@ -569,13 +569,9 @@ internal fun FlowtoneScaffoldContent(
                     onHideSecondaryBackButtonChange = callbacks.onHideSecondaryBackButtonChange,
                     resumePlaybackAfterCall = state.resumePlaybackAfterCall,
                     onResumePlaybackAfterCallChange = callbacks.onResumePlaybackAfterCallChange,
-                    allowFullscreenFromCollapsed = state.allowFullscreenFromCollapsed,
-                    onAllowFullscreenFromCollapsedChange =
-                        callbacks.onAllowFullscreenFromCollapsedChange,
-                    openExpandedMiniPlayerOnMediaClick =
-                        state.openExpandedMiniPlayerOnMediaClick,
-                    onOpenExpandedMiniPlayerOnMediaClickChange =
-                        callbacks.onOpenExpandedMiniPlayerOnMediaClickChange,
+                    skipExpandedMiniPlayer = state.skipExpandedMiniPlayer,
+                    onSkipExpandedMiniPlayerChange =
+                        callbacks.onSkipExpandedMiniPlayerChange,
                     preloadSongMetadataCount = state.preloadSongMetadataCount,
                     onPreloadSongMetadataCountChange =
                         callbacks.onPreloadSongMetadataCountChange,

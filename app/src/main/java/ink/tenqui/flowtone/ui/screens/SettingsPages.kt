@@ -257,10 +257,8 @@ internal fun GeneralSettingsPage(
     onStartPageSelected: (TopLevelPage) -> Unit,
     hideSecondaryBackButton: Boolean,
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
-    allowFullscreenFromCollapsed: Boolean,
-    onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
-    openExpandedMiniPlayerOnMediaClick: Boolean,
-    onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
+    skipExpandedMiniPlayer: Boolean,
+    onSkipExpandedMiniPlayerChange: (Boolean) -> Unit,
     onOpenOnlineSettings: () -> Unit,
     onOpenLyricsSettings: () -> Unit,
     elementModifier: (Int) -> Modifier,
@@ -306,17 +304,10 @@ internal fun GeneralSettingsPage(
             modifier = elementModifier(2).padding(top = 24.dp)
         ) {
             SettingSwitchRow(
-                title = "正常态上滑直达全屏",
-                subtitle = "关闭后需要先展开 MiniPlayer，再上滑进入全屏",
-                checked = allowFullscreenFromCollapsed,
-                onCheckedChange = onAllowFullscreenFromCollapsedChange,
-            )
-            SettingSwitchRow(
-                title = "\u5355\u51fb\u5a92\u4f53\u63a7\u4ef6\u8fdb\u5165\u5c55\u5f00\u6001 MiniPlayer",
-                subtitle = "\u5173\u95ed\u540e\uff0c\u5355\u51fb\u5a92\u4f53\u63a7\u4ef6\u5c06\u8fdb\u5165\u5168\u5c4f\u6001",
-                checked = openExpandedMiniPlayerOnMediaClick,
-                onCheckedChange = onOpenExpandedMiniPlayerOnMediaClickChange,
-                modifier = Modifier.padding(top = 12.dp)
+                title = "取消展开态",
+                subtitle = "开启后 MiniPlayer 仅在收起态和全屏态之间切换",
+                checked = skipExpandedMiniPlayer,
+                onCheckedChange = onSkipExpandedMiniPlayerChange,
             )
         }
     }

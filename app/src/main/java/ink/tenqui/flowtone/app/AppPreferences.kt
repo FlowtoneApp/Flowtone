@@ -103,23 +103,22 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
-    fun shouldAllowFullscreenFromCollapsed(): Boolean {
-        return prefs.getBoolean(ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY, false)
-    }
-
-    fun setAllowFullscreenFromCollapsed(allow: Boolean) {
+    fun shouldSkipExpandedMiniPlayer(): Boolean {
+        if (prefs.contains(SKIP_EXPANDED_MINI_PLAYER_KEY)) {
+            return prefs.getBoolean(SKIP_EXPANDED_MINI_PLAYER_KEY, false)
+        }
+        val migratedValue =
+            prefs.getBoolean(ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY, false) ||
+                !prefs.getBoolean(OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY, true)
         prefs.edit()
-            .putBoolean(ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY, allow)
+            .putBoolean(SKIP_EXPANDED_MINI_PLAYER_KEY, migratedValue)
             .apply()
+        return migratedValue
     }
 
-    fun shouldOpenExpandedMiniPlayerOnMediaClick(): Boolean {
-        return prefs.getBoolean(OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY, true)
-    }
-
-    fun setOpenExpandedMiniPlayerOnMediaClick(openExpanded: Boolean) {
+    fun setSkipExpandedMiniPlayer(skip: Boolean) {
         prefs.edit()
-            .putBoolean(OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY, openExpanded)
+            .putBoolean(SKIP_EXPANDED_MINI_PLAYER_KEY, skip)
             .apply()
     }
 
@@ -251,6 +250,7 @@ class AppPreferences(context: Context) {
             "allow_screen_off_on_lyrics_page"
         const val HIDE_SECONDARY_BACK_BUTTON_KEY = "hide_secondary_back_button"
         const val RESUME_PLAYBACK_AFTER_CALL_KEY = "resume_playback_after_call"
+        const val SKIP_EXPANDED_MINI_PLAYER_KEY = "skip_expanded_mini_player"
         const val ALLOW_FULLSCREEN_FROM_COLLAPSED_KEY = "allow_fullscreen_from_collapsed"
         const val OPEN_EXPANDED_MINI_PLAYER_ON_MEDIA_CLICK_KEY =
             "open_expanded_mini_player_on_media_click"

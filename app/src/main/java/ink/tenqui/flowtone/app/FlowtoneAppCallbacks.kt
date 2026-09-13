@@ -23,8 +23,7 @@ internal data class FlowtoneAppCallbacks(
     val onAllowScreenOffOnLyricsPageChange: (Boolean) -> Unit,
     val onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     val onResumePlaybackAfterCallChange: (Boolean) -> Unit,
-    val onAllowFullscreenFromCollapsedChange: (Boolean) -> Unit,
-    val onOpenExpandedMiniPlayerOnMediaClickChange: (Boolean) -> Unit,
+    val onSkipExpandedMiniPlayerChange: (Boolean) -> Unit,
     val onPreloadSongMetadataCountChange: (Int) -> Unit,
     val onPreloadLyricsCountChange: (Int) -> Unit,
     val onSongRecordThresholdSecondsChange: (Int) -> Unit,
@@ -158,13 +157,12 @@ internal fun flowtoneAppCallbacks(
             appState.resumePlaybackAfterCall = resume
             appPreferences.setResumePlaybackAfterCall(resume)
         },
-        onAllowFullscreenFromCollapsedChange = { allow ->
-            appState.allowFullscreenFromCollapsed = allow
-            appPreferences.setAllowFullscreenFromCollapsed(allow)
-        },
-        onOpenExpandedMiniPlayerOnMediaClickChange = { openExpanded ->
-            appState.openExpandedMiniPlayerOnMediaClick = openExpanded
-            appPreferences.setOpenExpandedMiniPlayerOnMediaClick(openExpanded)
+        onSkipExpandedMiniPlayerChange = { skip ->
+            appState.skipExpandedMiniPlayer = skip
+            appPreferences.setSkipExpandedMiniPlayer(skip)
+            if (skip && appState.miniPlayerExpanded && !appState.miniPlayerFullscreen) {
+                appState.miniPlayerExpanded = false
+            }
         },
         onPreloadSongMetadataCountChange = { count ->
             appState.preloadSongMetadataCount = count
@@ -304,7 +302,11 @@ internal fun flowtoneAppCallbacks(
             }
         },
         onExpandedChange = { expanded ->
-            if (!expanded && appState.miniPlayerFullscreen) {
+            if (expanded && appState.skipExpandedMiniPlayer) {
+                appState.miniPlayerExpanded = true
+                appState.miniPlayerMinimized = false
+                appState.miniPlayerFullscreen = true
+            } else if (!expanded && appState.miniPlayerFullscreen) {
                 onExitMiniPlayerFullscreen()
             } else {
                 if (expanded) {
@@ -315,8 +317,6 @@ internal fun flowtoneAppCallbacks(
         },
         onFullscreenChange = { fullscreen ->
             if (fullscreen) {
-                appState.miniPlayerFullscreenEnteredFromCollapsed =
-                    !appState.miniPlayerExpanded
                 appState.miniPlayerExpanded = true
                 appState.miniPlayerMinimized = false
                 appState.miniPlayerFullscreen = true
@@ -328,7 +328,6 @@ internal fun flowtoneAppCallbacks(
             if (minimized) {
                 appState.miniPlayerFullscreen = false
                 appState.miniPlayerExpanded = false
-                appState.miniPlayerFullscreenEnteredFromCollapsed = false
             }
             appState.miniPlayerMinimized = minimized
         },

@@ -37,12 +37,10 @@ internal fun miniPlayerFullscreenInteractionHandlers(
     fullscreenContentMode: FullscreenContentMode,
     fullscreenContentExitProgress: Float,
     artistPlaceholderProgress: Float,
-    allowFullscreenFromCollapsed: Boolean,
     transitions: MiniPlayerTransitions,
     callbacks: MiniPlayerCallbacks,
     onAddSongToPlaylist: (LibraryPlaylistCard, () -> Unit) -> Unit,
-    onFullscreenChange: (Boolean) -> Unit,
-    onExpandedChange: (Boolean) -> Unit
+    onFullscreenChange: (Boolean) -> Unit
 ): MiniPlayerFullscreenInteractionHandlers =
     MiniPlayerFullscreenInteractionHandlers(
         onArtistClick = { rawArtist ->
@@ -117,9 +115,7 @@ internal fun miniPlayerFullscreenInteractionHandlers(
             handleMiniPlayerCollapseClick(
                 fullscreenContentMode = fullscreenContentMode,
                 transitions = transitions,
-                allowFullscreenFromCollapsed = allowFullscreenFromCollapsed,
-                onFullscreenChange = onFullscreenChange,
-                onExpandedChange = onExpandedChange
+                onFullscreenChange = onFullscreenChange
             )
         }
     )
@@ -129,9 +125,9 @@ internal fun handleMiniPlayerActivate(
     onMinimizedChange: (Boolean) -> Unit,
     onExpandedChange: (Boolean) -> Unit,
     onFullscreenChange: (Boolean) -> Unit,
-    openExpandedOnMediaClick: Boolean
+    skipExpandedMiniPlayer: Boolean
 ) {
-    if (!openExpandedOnMediaClick) {
+    if (skipExpandedMiniPlayer) {
         onFullscreenChange(true)
     } else if (minimized) {
         onMinimizedChange(false)
@@ -150,7 +146,7 @@ internal fun handleMiniPlayerVerticalDragEnd(
     minimized: Boolean,
     expanded: Boolean,
     fullscreenInteractionActive: Boolean,
-    allowFullscreenFromCollapsed: Boolean,
+    skipExpandedMiniPlayer: Boolean,
     allowFullscreenFromExpanded: Boolean,
     onMinimizedChange: (Boolean) -> Unit,
     onFullscreenChange: (Boolean) -> Unit,
@@ -172,7 +168,7 @@ internal fun handleMiniPlayerVerticalDragEnd(
         state.accumulatedDragY <= -fullscreenSwipeThresholdPx &&
             !expanded &&
             !fullscreenInteractionActive &&
-            allowFullscreenFromCollapsed -> {
+            skipExpandedMiniPlayer -> {
             onMinimizedChange(false)
             onFullscreenChange(true)
             onExpandedChange(true)
@@ -183,7 +179,9 @@ internal fun handleMiniPlayerVerticalDragEnd(
             allowFullscreenFromExpanded -> {
             onFullscreenChange(true)
         }
-        state.accumulatedDragY <= -swipeThresholdPx && !expanded -> {
+        state.accumulatedDragY <= -swipeThresholdPx &&
+            !expanded &&
+            !skipExpandedMiniPlayer -> {
             onExpandedChange(true)
         }
         state.accumulatedDragY >= fullscreenSwipeThresholdPx &&
@@ -338,15 +336,10 @@ internal fun handleMiniPlayerPlaylistClick(
 internal fun handleMiniPlayerCollapseClick(
     fullscreenContentMode: FullscreenContentMode,
     transitions: MiniPlayerTransitions,
-    allowFullscreenFromCollapsed: Boolean,
-    onFullscreenChange: (Boolean) -> Unit,
-    onExpandedChange: (Boolean) -> Unit
+    onFullscreenChange: (Boolean) -> Unit
 ) {
     if (fullscreenContentMode != FullscreenContentMode.Playback) {
         transitions.exitFullscreenContentMode()
-    } else if (allowFullscreenFromCollapsed) {
-        onFullscreenChange(false)
-        onExpandedChange(false)
     } else {
         onFullscreenChange(false)
     }

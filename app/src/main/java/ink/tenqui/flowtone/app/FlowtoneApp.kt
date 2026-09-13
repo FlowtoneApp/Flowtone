@@ -352,10 +352,9 @@ fun FlowtoneApp(
     }
     val exitMiniPlayerFullscreen: () -> Unit = {
         appState.miniPlayerFullscreen = false
-        if (appState.miniPlayerFullscreenEnteredFromCollapsed) {
+        if (appState.skipExpandedMiniPlayer) {
             appState.miniPlayerExpanded = false
             appState.miniPlayerMinimized = false
-            appState.miniPlayerFullscreenEnteredFromCollapsed = false
         }
     }
     fun openArtist(artistName: String) {
@@ -425,19 +424,16 @@ fun FlowtoneApp(
         onClearMiniPlayerState = {
             appState.miniPlayerExpanded = false
             appState.miniPlayerFullscreen = false
-            appState.miniPlayerFullscreenEnteredFromCollapsed = false
             appState.miniPlayerMinimized = false
         },
         onOpenExpandedMiniPlayer = {
-            if (appState.openExpandedMiniPlayerOnMediaClick) {
+            if (!appState.skipExpandedMiniPlayer) {
                 if (!appState.miniPlayerExpanded) {
                     appState.miniPlayerMinimized = false
                     appState.miniPlayerExpanded = true
                 }
                 appState.miniPlayerFullscreen = false
             } else {
-                appState.miniPlayerFullscreenEnteredFromCollapsed =
-                    !appState.miniPlayerExpanded
                 appState.miniPlayerMinimized = false
                 appState.miniPlayerExpanded = true
                 appState.miniPlayerFullscreen = true
