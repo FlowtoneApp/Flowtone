@@ -22,6 +22,7 @@ internal fun ExpandedOnlyContent(
     progressColor: Color,
     fullscreenProgress: Float,
     onSeekTo: (Long) -> Unit,
+    onProgressChanged: () -> Unit,
     onLockPlayPauseVisual: (Boolean) -> Unit,
     onScrubbingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
@@ -45,6 +46,7 @@ internal fun ExpandedOnlyContent(
             trackColor = progressTrackColor,
             progressColor = progressColor,
             onSeekTo = onSeekTo,
+            onProgressChanged = onProgressChanged,
             onLockPlayPauseVisual = onLockPlayPauseVisual,
             onScrubbingChange = onScrubbingChange,
             enterProgress = progressEnterProgress,

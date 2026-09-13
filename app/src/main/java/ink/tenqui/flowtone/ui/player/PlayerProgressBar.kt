@@ -48,6 +48,7 @@ internal fun PlaybackProgressBar(
     trackColor: Color,
     progressColor: Color,
     onSeekTo: (Long) -> Unit,
+    onProgressChanged: () -> Unit,
     onLockPlayPauseVisual: (Boolean) -> Unit,
     onScrubbingChange: (Boolean) -> Unit,
     enterProgress: Float,
@@ -228,6 +229,7 @@ internal fun PlaybackProgressBar(
             x = x,
             width = containerSize.width.toFloat()
         )
+        onProgressChanged()
     }
 
     fun rememberPendingSeek(positionMs: Long) {
@@ -335,6 +337,7 @@ internal fun PlaybackProgressBar(
                     durationMs = durationMs,
                     progress = targetProgress
                 )
+                onProgressChanged()
 
                 tapSeekJob?.cancel()
                 isTapSeeking = true

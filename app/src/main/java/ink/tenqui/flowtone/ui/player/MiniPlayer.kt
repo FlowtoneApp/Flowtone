@@ -192,6 +192,7 @@ fun MiniPlayer(
     var lyricProgressSeekAnimation by remember {
         mutableStateOf<PlaybackProgressSeekAnimation?>(null)
     }
+    var progressTrackingRequestVersion by remember { mutableLongStateOf(0L) }
     val transitions = remember(state) { MiniPlayerTransitions(state) }
     val currentIsPlayingForLyricSeek by rememberUpdatedState(playerUiState.isPlaying)
     val currentSongIdForLyricSeek by rememberUpdatedState(currentSong?.id)
@@ -891,6 +892,7 @@ fun MiniPlayer(
                         isPendingPlayback = isPendingPlayback,
                         strictProgressBar = strictProgressBar,
                         lyricProgressSeekAnimation = lyricProgressSeekAnimation,
+                        progressTrackingRequestVersion = progressTrackingRequestVersion,
                         currentHeight = currentHeight,
                         visualPanelHeight = visualPanelHeight,
                         collapsedHeight = collapsedHeight,
@@ -948,6 +950,9 @@ fun MiniPlayer(
                         callbacks = callbacks,
                         onLyricPress = onLyricPressCallback,
                         onLyricSeek = onLyricSeekCallback,
+                        onPlayerProgressChanged = {
+                            progressTrackingRequestVersion += 1L
+                        },
                         collapseInteractionSource = state.noRippleInteractionSource,
                         onArtistClick = fullscreenInteractionHandlers.onArtistClick,
                         onNewPlaylistCreateAnimationFinished =

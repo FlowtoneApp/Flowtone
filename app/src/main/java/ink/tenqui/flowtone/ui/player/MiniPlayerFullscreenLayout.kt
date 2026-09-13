@@ -48,6 +48,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     isPendingPlayback: Boolean = false,
     strictProgressBar: Boolean,
     lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
+    progressTrackingRequestVersion: Long,
     currentHeight: Dp,
     visualPanelHeight: Dp,
     collapsedHeight: Dp,
@@ -102,6 +103,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     callbacks: MiniPlayerCallbacks,
     onLyricPress: () -> Unit,
     onLyricSeek: (Long) -> Unit,
+    onPlayerProgressChanged: () -> Unit,
     collapseInteractionSource: MutableInteractionSource,
     onArtistClick: (String) -> Unit,
     onNewPlaylistCreateAnimationFinished: (String) -> Unit,
@@ -435,6 +437,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 progressColor = progressColor,
                 fullscreenProgress = fullscreenProgress,
                 onSeekTo = callbacks.onSeekTo,
+                onProgressChanged = onPlayerProgressChanged,
                 onLockPlayPauseVisual = onLockPlayPauseVisual,
                 onScrubbingChange = onScrubbingChange,
                 modifier = Modifier
@@ -500,6 +503,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 visibilityProgress = lyricsVisibilityProgress,
                 onLyricPress = onLyricPress,
                 onSeekTo = onLyricSeek,
+                progressTrackingRequestVersion = progressTrackingRequestVersion,
                 onChooseLyricsDirectory = onChooseLyricsDirectory,
                 modifier = Modifier
                     .align(Alignment.TopCenter)

@@ -111,6 +111,7 @@ internal fun LyricsContent(
     onTrackEnterFinished: () -> Unit = {},
     onLyricPress: () -> Unit,
     onLyricClick: (Long) -> Unit,
+    progressTrackingRequestVersion: Long,
     onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -190,6 +191,7 @@ internal fun LyricsContent(
                                 onTrackEnterFinished = onTrackEnterFinished,
                                 onLyricPress = onLyricPress,
                                 onLyricClick = onLyricClick,
+                                progressTrackingRequestVersion = progressTrackingRequestVersion,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -241,6 +243,7 @@ private fun LyricsList(
     onTrackEnterFinished: () -> Unit,
     onLyricPress: () -> Unit,
     onLyricClick: (Long) -> Unit,
+    progressTrackingRequestVersion: Long,
     modifier: Modifier = Modifier
 ) {
     val gestureCoroutineScope = rememberCoroutineScope()
@@ -537,10 +540,11 @@ private fun LyricsList(
             isFollowingCurrentLine = true
         }
     }
-    LaunchedEffect(lyricSeekVersion) {
-        if (lyricSeekVersion > 0) {
+    LaunchedEffect(lyricSeekVersion, progressTrackingRequestVersion) {
+        if (lyricSeekVersion > 0 || progressTrackingRequestVersion > 0L) {
             // 先让 seek 引发的进度与 BUFFERING 状态更新完成，避免它们和首批滚动帧
             // 同时占用主线程。高亮与点击反馈仍会在点击时立即更新。
+            // 播放器版本号只在用户改变进度条时变化，普通播放推进不会触发这里。
             delay(LyricsSeekTrackingSettleDelayMs)
             isFollowingCurrentLine = true
         }

@@ -59,6 +59,7 @@ internal fun MiniPlayerLyricsHost(
     switchDirection: Int,
     onLyricPress: () -> Unit,
     onSeekTo: (Long) -> Unit,
+    progressTrackingRequestVersion: Long,
     onChooseLyricsDirectory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -207,6 +208,7 @@ internal fun MiniPlayerLyricsHost(
                 },
                 onLyricPress = if (isCurrentPage) onLyricPress else ({ }),
                 onLyricClick = if (isCurrentPage) onSeekTo else ({ _ -> }),
+                progressTrackingRequestVersion = progressTrackingRequestVersion,
                 onChooseLyricsDirectory = if (isCurrentPage) onChooseLyricsDirectory else ({ }),
                 modifier = Modifier.fillMaxSize()
             )
