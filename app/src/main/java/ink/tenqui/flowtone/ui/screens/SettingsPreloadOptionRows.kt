@@ -27,7 +27,7 @@ internal fun PreloadStrengthRow(
     modifier: Modifier = Modifier
 ) = PreloadCountRow(
     title = "预载歌曲元信息强度",
-    description = "提前加载接下来歌曲的封面与元信息，减少切歌时的封面闪烁。强度越高，占用的内存与后台加载越多。",
+    description = "按上一曲方向 20%、下一曲方向 80% 提前准备封面；歌曲文本元信息会随曲库或在线来源解析一并准备。",
     animationLabel = "PreloadStrengthExpandIconRotation",
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,
@@ -41,7 +41,7 @@ internal fun LyricsPreloadStrengthRow(
     modifier: Modifier = Modifier
 ) = PreloadCountRow(
     title = "预载歌词强度",
-    description = "提前读取并解析接下来歌曲的本地歌词，减少切歌后进入歌词页时的等待。强度越高，占用的内存与后台读取越多。",
+    description = "按上一曲方向 20%、下一曲方向 80% 提前读取并解析本地歌词，减少前后切歌后的等待。",
     animationLabel = "LyricsPreloadStrengthExpandIconRotation",
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,

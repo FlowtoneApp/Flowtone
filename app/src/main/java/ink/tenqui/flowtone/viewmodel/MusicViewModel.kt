@@ -77,6 +77,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 data class MusicUiState(
     val hasPermission: Boolean = false,
@@ -1292,10 +1293,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun scheduleNextSongsPreload() {
-        val maximumPreloadCount = maxOf(preloadSongMetadataCount, preloadLyricsCount)
-        val upcomingSongs = upcomingSongsInPlaybackOrder(maximumPreloadCount)
-
-        val metadataSongs = upcomingSongs.take(preloadSongMetadataCount)
+        val metadataSongs = songsInPlaybackPreloadWindow(preloadSongMetadataCount)
         val nextMetadataPreloadUris = metadataSongs.map { it.uri.toString() }
         if (nextMetadataPreloadUris != metadataPreloadUris) {
             metadataPreloadUris = nextMetadataPreloadUris
@@ -1305,7 +1303,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             }
         }
 
-        val songsToPreload = upcomingSongs.take(preloadLyricsCount)
+        val songsToPreload = songsInPlaybackPreloadWindow(preloadLyricsCount)
         lyricsPreloadScheduler.update(
             currentIndex = playbackController.getCurrentMediaItemIndex() ?: currentQueueIndex,
             currentSong = playbackState.value.currentSong
@@ -1398,8 +1396,11 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private fun scheduleOnlineArtworkPreload() {
         onlineArtworkPreloadJob?.cancel()
         val generation = ++onlinePreloadGeneration
-        val entries = (currentQueueIndex + 1).coerceAtLeast(0)
-            .let { start -> playbackTrackQueue.drop(start).take(preloadSongMetadataCount) }
+        val entries = queueItemsInPreloadWindow(
+            items = playbackTrackQueue,
+            currentIndex = currentQueueIndex,
+            totalCount = preloadSongMetadataCount
+        )
             .filter { it.persistentTrack is PersistentTrack.Online || it.runtimeProviderSong != null }
         Log.d(
             "FlowtonePlayback",
@@ -1615,6 +1616,31 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             clearPendingPlayback(requestGeneration)
             scheduleNextSongsPreload()
         }
+    }
+
+    private fun previousSongsInPlaybackOrder(limit: Int): List<Song> {
+        if (limit <= 0 || playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
+            return emptyList()
+        }
+
+        val mediaIds = playbackController.getPreviousMediaIdsInPlaybackOrder(limit)
+        if (mediaIds != null) {
+            return mediaIds.mapNotNull { mediaId ->
+                val songId = mediaId.toLongOrNull()
+                sourceQueue.firstOrNull { it.id == songId }
+                    ?: playbackQueue.firstOrNull { it.id == songId }
+            }
+        }
+
+        return queueItemsBefore(playbackQueue, currentQueueIndex, limit)
+    }
+
+    private fun songsInPlaybackPreloadWindow(totalCount: Int): List<Song> {
+        val counts = preloadWindowCounts(totalCount)
+        return (
+            upcomingSongsInPlaybackOrder(counts.next) +
+                previousSongsInPlaybackOrder(counts.previous)
+            ).distinctBy { it.uri.toString() }
     }
 
     private fun publishTrackPlaybackError(message: String) {
@@ -1878,6 +1904,45 @@ internal fun mediaControllerQueueForSelection(
     listOf(selectedSong)
 } else {
     sourceQueue.ifEmpty { playbackQueue }
+}
+
+internal data class PreloadWindowCounts(
+    val previous: Int,
+    val next: Int
+)
+
+internal fun preloadWindowCounts(totalCount: Int): PreloadWindowCounts {
+    val safeTotalCount = totalCount.coerceAtLeast(0)
+    val previousCount = (safeTotalCount * 0.2f).roundToInt()
+    return PreloadWindowCounts(
+        previous = previousCount,
+        next = safeTotalCount - previousCount
+    )
+}
+
+internal fun <T> queueItemsInPreloadWindow(
+    items: List<T>,
+    currentIndex: Int,
+    totalCount: Int
+): List<T> {
+    val counts = preloadWindowCounts(totalCount)
+    val nextItems = if (currentIndex + 1 in items.indices) {
+        items.drop(currentIndex + 1).take(counts.next)
+    } else {
+        emptyList()
+    }
+    return nextItems + queueItemsBefore(items, currentIndex, counts.previous)
+}
+
+private fun <T> queueItemsBefore(
+    items: List<T>,
+    currentIndex: Int,
+    limit: Int
+): List<T> {
+    if (limit <= 0 || currentIndex <= 0 || currentIndex > items.size) return emptyList()
+    return (currentIndex - 1 downTo 0)
+        .take(limit)
+        .map(items::get)
 }
 
 private fun ProviderSong.toPersistentTrack(): PersistentTrack.Online? {
