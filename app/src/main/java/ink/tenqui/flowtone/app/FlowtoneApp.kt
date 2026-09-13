@@ -528,12 +528,32 @@ fun FlowtoneApp(
             },
             onOpenProviderAlbum = { album ->
                 musicViewModel.loadProviderEntityCollections(album.providerId)
+                if (appState.searchActive) {
+                    appState.searchInputFocused = false
+                    appState.searchFocusRequest = 0
+                    appState.searchKeyboardDismissRequest += 1
+                }
                 appState.secondaryNavigation = appState.secondaryNavigation.push(
                     SecondaryDestination.Album(
                         album,
                         parentArtist = artistPathIdentity(
                             appState.secondaryNavigation.current
                         )
+                    )
+                )
+            },
+            onOpenProviderPlaylist = { playlist ->
+                musicViewModel.loadProviderPlaylist(playlist)
+                if (appState.searchActive) {
+                    appState.searchInputFocused = false
+                    appState.searchFocusRequest = 0
+                    appState.searchKeyboardDismissRequest += 1
+                }
+                appState.secondaryNavigation = appState.secondaryNavigation.push(
+                    SecondaryDestination.Playlist(
+                        playlistId = null,
+                        title = playlist.title,
+                        providerPlaylist = playlist
                     )
                 )
             },

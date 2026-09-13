@@ -5,6 +5,7 @@ import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.displayTitleOrNull
 import ink.tenqui.flowtone.data.online.sanitizedFor
@@ -74,7 +75,8 @@ internal sealed interface SecondaryDestination {
 
     data class Playlist(
         val playlistId: String?,
-        val title: String
+        val title: String,
+        val providerPlaylist: ProviderPlaylistSearchItem? = null
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Playlist
     }

@@ -24,6 +24,7 @@ import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderEntityCapability
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
@@ -90,7 +91,14 @@ data class MusicUiState(
     val pendingPlayback: PendingPlayback? = null,
     val pendingQueueIndex: Int? = null,
     val providerSongs: Map<String, List<ProviderSong>> = emptyMap(),
-    val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap()
+    val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
+    val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap()
+)
+
+data class ProviderPlaylistDetailState(
+    val songs: List<ProviderSong> = emptyList(),
+    val isLoading: Boolean = false,
+    val loadFailed: Boolean = false
 )
 
 data class PendingPlayback(
@@ -764,6 +772,47 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 } finally {
                     providerCollectionLoads.remove("album:$normalizedProviderId")
                 }
+            }
+        }
+    }
+
+    fun loadProviderPlaylist(playlist: ProviderPlaylistSearchItem) {
+        val detailKey = playlist.identity.stableKey
+        if (detailKey in _uiState.value.providerPlaylistDetails) return
+        if (playlist.songs.isNotEmpty()) {
+            _uiState.update { state ->
+                state.copy(
+                    providerPlaylistDetails = state.providerPlaylistDetails +
+                        (detailKey to ProviderPlaylistDetailState(songs = playlist.songs))
+                )
+            }
+            return
+        }
+        val loadKey = "playlist:$detailKey"
+        if (!providerCollectionLoads.add(loadKey)) return
+        _uiState.update { state ->
+            state.copy(
+                providerPlaylistDetails = state.providerPlaylistDetails +
+                    (detailKey to ProviderPlaylistDetailState(isLoading = true))
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val songs = extensionManager.getProviderPlaylistSongs(
+                    playlist.providerId,
+                    playlist.id
+                )
+                _uiState.update { state ->
+                    state.copy(
+                        providerPlaylistDetails = state.providerPlaylistDetails +
+                            (detailKey to ProviderPlaylistDetailState(
+                                songs = songs.orEmpty(),
+                                loadFailed = songs == null
+                            ))
+                    )
+                }
+            } finally {
+                providerCollectionLoads.remove(loadKey)
             }
         }
     }

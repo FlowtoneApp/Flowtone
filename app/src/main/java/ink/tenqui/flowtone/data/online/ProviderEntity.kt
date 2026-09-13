@@ -93,7 +93,9 @@ data class ProviderPlaylistSearchItem(
     override val title: String,
     override val artist: String,
     override val artwork: ExtensionImage? = null,
-    override val metadata: List<ProviderSearchMetadata>? = null
+    override val metadata: List<ProviderSearchMetadata>? = null,
+    /** 搜索结果可直接携带曲目；为空时 Host 会尝试可选的详情读取接口。 */
+    val songs: List<ProviderSong> = emptyList()
 ) : ProviderSearchItem {
     override val searchCategory: ProviderSearchCategory = ProviderSearchCategory.Playlist
 }

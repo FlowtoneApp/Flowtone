@@ -276,6 +276,24 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         }
     }
 
+    internal suspend fun getProviderPlaylistSongs(
+        extensionId: String,
+        playlistId: String
+    ): List<ProviderSong>? {
+        val provider = musicProviders[extensionId] ?: return null
+        return try {
+            provider.getPlaylistSongs(playlistId)?.let(::dedupeProviderSongs)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.w(
+                LogTag,
+                "extension.music.playlist.failed extension=$extensionId type=${error.javaClass.simpleName}"
+            )
+            null
+        }
+    }
+
     @UnstableApi
     fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
         val extensionDataSourceFactory = extensionMediaDataSourceFactory()

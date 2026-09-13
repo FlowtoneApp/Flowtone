@@ -6,6 +6,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
@@ -49,6 +50,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     val onOpenAlbum: (Long) -> Unit,
     val onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    val onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
     val onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
     val onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     val onOpenArtist: (String) -> Unit,
@@ -108,6 +110,7 @@ internal fun flowtoneAppCallbacks(
     onPersistentTrackQueueClick: (List<PersistentTrack>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
     onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
     onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
@@ -265,6 +268,7 @@ internal fun flowtoneAppCallbacks(
         },
         onOpenAlbum = onOpenAlbum,
         onOpenProviderAlbum = onOpenProviderAlbum,
+        onOpenProviderPlaylist = onOpenProviderPlaylist,
         onOpenArtistSongs = onOpenArtistSongs,
         onOpenArtistAlbums = onOpenArtistAlbums,
         onOpenArtist = onOpenArtist,

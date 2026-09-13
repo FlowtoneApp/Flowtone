@@ -11,6 +11,7 @@ import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.ui.components.FullTitleOverlayBackResult
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 import ink.tenqui.flowtone.ui.components.fullTitleOverlayBackResult
@@ -36,6 +37,27 @@ class SecondaryNavigationTest {
 
         assertEquals("provider:provider-a\u00001", first.stableId)
         assertNotEquals(first, second)
+    }
+
+    @Test
+    fun providerPlaylistDestinationRetainsReadOnlyPayload() {
+        val playlist = ProviderPlaylistSearchItem(
+            identity = ProviderEntityIdentity("provider-a", "playlist-1"),
+            title = "Morning",
+            artist = "Creator"
+        )
+        val destination = SecondaryDestination.Playlist(
+            playlistId = null,
+            title = playlist.title,
+            providerPlaylist = playlist
+        )
+
+        assertEquals(playlist, destination.providerPlaylist)
+        assertEquals(SecondaryPage.Playlist, destination.page)
+        assertEquals(
+            listOf("Morning"),
+            secondaryDestinationBreadcrumbs(destination, null, emptyList())
+        )
     }
     @Test
     fun artistPushThenPopReturnsToEmpty() {

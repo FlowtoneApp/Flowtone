@@ -37,4 +37,18 @@ class PlaybackSourceTest {
         assertEquals("Blue (Deluxe)", renamed.displayName)
         assertEquals(PlaybackSource.Unknown, PlaybackSource.album(null, "Blue"))
     }
+
+    @Test
+    fun providerPlaylistKeyUsesProviderAndRemoteIdentity() {
+        val first = PlaybackSource.providerPlaylist("provider-a", "42", "Morning")
+        val renamed = PlaybackSource.providerPlaylist("provider-a", "42", "Morning Mix")
+
+        assertEquals("provider_playlist:provider-a:42", first.key)
+        assertEquals(first.key, renamed.key)
+        assertEquals("Morning Mix", renamed.displayName)
+        assertEquals(
+            PlaybackSource.Unknown,
+            PlaybackSource.providerPlaylist("provider-a", " ", "Morning")
+        )
+    }
 }

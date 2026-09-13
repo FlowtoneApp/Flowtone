@@ -105,6 +105,18 @@ class JavaScriptMusicProvider internal constructor(
         }.distinctBy(ProviderAlbum::identity)
     }
 
+    override suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? {
+        val normalizedId = playlistId.trim().takeIf(String::isNotEmpty) ?: return null
+        val values = JSONArray(
+            runtime.invokeJson("getPlaylistSongs", JSONObject().put("id", normalizedId))
+        )
+        return buildList {
+            repeat(values.length()) { index ->
+                parseSong(values.optJSONObject(index), ProviderSearchCategory.Single)?.let(::add)
+            }
+        }.distinctBy(ProviderSong::identity)
+    }
+
     override suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource? {
         if (song.trackRef.extensionId != runtime.extensionId) return null
         val result = runtime.invokeObject("getPlaybackResource", JSONObject().put("id", song.trackRef.opaqueId))
@@ -218,8 +230,19 @@ class JavaScriptMusicProvider internal constructor(
             title = title,
             artist = item.optString("artist").trim(),
             artwork = parseArtwork(item, "artworkUrl"),
-            metadata = parseMetadata(item)
+            metadata = parseMetadata(item),
+            songs = parsePlaylistSongs(item)
         )
+    }
+
+    private fun parsePlaylistSongs(item: JSONObject): List<ProviderSong> {
+        val values = item.optJSONArray("songs") ?: item.optJSONArray("tracks")
+            ?: return emptyList()
+        return buildList {
+            repeat(values.length()) { index ->
+                parseSong(values.optJSONObject(index), ProviderSearchCategory.Single)?.let(::add)
+            }
+        }.distinctBy(ProviderSong::identity)
     }
 
     private fun parseArtists(item: JSONObject): List<ProviderArtistRef> {

@@ -24,6 +24,9 @@ interface MusicProvider {
     /** 无参数全量专辑 collection；null 表示 capability unavailable。 */
     suspend fun getAlbums(): List<ProviderAlbum>? = null
 
+    /** 可选的只读歌单曲目接口；旧 Provider 未实现时保持 null。 */
+    suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? = null
+
     suspend fun resolvePersistentSong(persistentId: String): ProviderSong?
 
     suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource?

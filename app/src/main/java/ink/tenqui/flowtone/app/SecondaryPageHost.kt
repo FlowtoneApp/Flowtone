@@ -41,6 +41,7 @@ import ink.tenqui.flowtone.ui.library.artistAlbumsFor
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
+import ink.tenqui.flowtone.ui.library.ProviderPlaylistDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
@@ -294,25 +295,31 @@ internal fun SecondaryPageHost(
             )
 
             SecondaryPage.Playlist -> {
-                val destination = playlistDetailDestination ?: return@Box
-                if (destination.playlistId == LikedSongsPlaylistId) {
-                    LikedSongsPlaylistScreen(
-                        metadata = destination.metadata,
-                        allSongs = uiState.songs,
-                        likedTracks = uiState.likedTracks,
+                val navigationDestination =
+                    destination as? SecondaryDestination.Playlist ?: return@Box
+                val providerPlaylist = navigationDestination.providerPlaylist
+                if (providerPlaylist != null) {
+                    val detail = uiState.providerPlaylistDetails[providerPlaylist.identity.stableKey]
+                    ProviderPlaylistDetailScreen(
+                        playlist = providerPlaylist,
+                        songs = detail?.songs.orEmpty(),
+                        isLoading = detail?.isLoading == true,
+                        loadFailed = detail?.loadFailed == true,
+                        presentationSessionKey = navigationEntryKey,
                         currentSong = currentSong,
+                        isPlaying = isPlaying,
                         pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
-                        songSort = playlistSongSort,
-                        onSongClick = { tracks, index ->
-                            onPersistentTrackQueueClick(
-                                tracks,
+                        onSongClick = { queue, index ->
+                            onProviderSongQueueClick(
+                                queue,
                                 index,
-                                PlaybackSource.LikedSongs
+                                PlaybackSource.providerPlaylist(
+                                    providerPlaylist.providerId,
+                                    providerPlaylist.id,
+                                    providerPlaylist.title
+                                )
                             )
                         },
-                        playbackErrorMessage = uiState.trackPlaybackErrorMessage,
-                        playbackErrorEventId = uiState.trackPlaybackErrorEventId,
-                        batchActions = activeBatchActions,
                         pageTransition = pageScope,
                         itemModifier = ::playlistItemModifier,
                         onCollapseProgressStateChange =
@@ -323,37 +330,67 @@ internal fun SecondaryPageHost(
                             .rightSwipeBackGesture(::closeSelectionOrPage)
                     )
                 } else {
-                    PlaylistDetailScreen(
-                        playlistId = destination.playlistId,
-                        metadata = destination.metadata,
-                        allSongs = uiState.songs,
-                        playlistSongEntries = playlistSongEntries,
-                        currentSong = currentSong,
-                        pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
-                        songSort = playlistSongSort,
-                        onSongClick = { tracks, index ->
-                            onPersistentTrackQueueClick(
-                                tracks,
-                                index,
-                                PlaybackSource.userPlaylist(
-                                    playlistId = destination.playlistId.orEmpty(),
-                                    displayName = destination.metadata.title
+                    val detailDestination = playlistDetailDestination ?: return@Box
+                    if (detailDestination.playlistId == LikedSongsPlaylistId) {
+                        LikedSongsPlaylistScreen(
+                            metadata = detailDestination.metadata,
+                            allSongs = uiState.songs,
+                            likedTracks = uiState.likedTracks,
+                            currentSong = currentSong,
+                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                            songSort = playlistSongSort,
+                            onSongClick = { tracks, index ->
+                                onPersistentTrackQueueClick(
+                                    tracks,
+                                    index,
+                                    PlaybackSource.LikedSongs
                                 )
-                            )
-                        },
-                        playbackErrorMessage = uiState.trackPlaybackErrorMessage,
-                        playbackErrorEventId = uiState.trackPlaybackErrorEventId,
-                        batchActions = activeBatchActions,
-                        pageTransition = pageScope,
-                        itemModifier = ::playlistItemModifier,
-                        onCollapseProgressStateChange =
-                            onDetailHeaderCollapseProgressStateChange,
-                        headerModifier = elementModifier(0),
-                        suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .rightSwipeBackGesture(::closeSelectionOrPage)
-                    )
+                            },
+                            playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                            playbackErrorEventId = uiState.trackPlaybackErrorEventId,
+                            batchActions = activeBatchActions,
+                            pageTransition = pageScope,
+                            itemModifier = ::playlistItemModifier,
+                            onCollapseProgressStateChange =
+                                onDetailHeaderCollapseProgressStateChange,
+                            headerModifier = elementModifier(0),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .rightSwipeBackGesture(::closeSelectionOrPage)
+                        )
+                    } else {
+                        PlaylistDetailScreen(
+                            playlistId = detailDestination.playlistId,
+                            metadata = detailDestination.metadata,
+                            allSongs = uiState.songs,
+                            playlistSongEntries = playlistSongEntries,
+                            currentSong = currentSong,
+                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
+                            songSort = playlistSongSort,
+                            onSongClick = { tracks, index ->
+                                onPersistentTrackQueueClick(
+                                    tracks,
+                                    index,
+                                    PlaybackSource.userPlaylist(
+                                        playlistId = detailDestination.playlistId.orEmpty(),
+                                        displayName = detailDestination.metadata.title
+                                    )
+                                )
+                            },
+                            playbackErrorMessage = uiState.trackPlaybackErrorMessage,
+                            playbackErrorEventId = uiState.trackPlaybackErrorEventId,
+                            batchActions = activeBatchActions,
+                            pageTransition = pageScope,
+                            itemModifier = ::playlistItemModifier,
+                            onCollapseProgressStateChange =
+                                onDetailHeaderCollapseProgressStateChange,
+                            headerModifier = elementModifier(0),
+                            suppressEmptyState = secondaryPage != SecondaryPage.Playlist,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .rightSwipeBackGesture(::closeSelectionOrPage)
+                        )
+                    }
                 }
             }
 

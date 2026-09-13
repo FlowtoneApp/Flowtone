@@ -79,6 +79,8 @@ import ink.tenqui.flowtone.data.online.ProviderSearchLandingState
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderArtist
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchMetadataLabels
 import ink.tenqui.flowtone.data.online.formatProviderSearchMetadataLine
@@ -120,6 +122,8 @@ internal fun GlobalSearchContent(
     onArtistClick: (SearchArtist) -> Unit,
     onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
+    onProviderAlbumClick: (ProviderAlbum) -> Unit,
+    onProviderPlaylistClick: (ProviderPlaylistSearchItem) -> Unit,
     onExitSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
     onScopeChange: (SearchScope) -> Unit,
@@ -273,6 +277,8 @@ internal fun GlobalSearchContent(
                         onArtistClick = onArtistClick,
                         onProviderArtistClick = onProviderArtistClick,
                         onAlbumClick = onAlbumClick,
+                        onProviderAlbumClick = onProviderAlbumClick,
+                        onProviderPlaylistClick = onProviderPlaylistClick,
                         category = selectedResultCategory,
                         listState = listState,
                         onLoadMore = onLoadMore,
@@ -495,6 +501,8 @@ private fun SearchResultCategorySelector(
     onArtistClick: (SearchArtist) -> Unit,
     onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
+    onProviderAlbumClick: (ProviderAlbum) -> Unit,
+    onProviderPlaylistClick: (ProviderPlaylistSearchItem) -> Unit,
     category: SearchResultCategory,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onLoadMore: () -> Unit,
@@ -650,6 +658,8 @@ private fun SearchResultCategorySelector(
                     onOnlineSongClick = onOnlineSongClick,
                     onProviderArtistClick = onProviderArtistClick,
                     onAlbumClick = onAlbumClick,
+                    onProviderAlbumClick = onProviderAlbumClick,
+                    onProviderPlaylistClick = onProviderPlaylistClick,
                     elementModifier = { key ->
                         when {
                             outgoing == null -> resultEnterScope.elementModifier(key)
@@ -743,6 +753,8 @@ private fun SearchResultList(
     onArtistClick: (SearchArtist) -> Unit,
     onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
+    onProviderAlbumClick: (ProviderAlbum) -> Unit,
+    onProviderPlaylistClick: (ProviderPlaylistSearchItem) -> Unit,
     elementModifier: (Any) -> Modifier,
     showInitialLoading: Boolean = false,
     showOnlineLoading: Boolean = false,
@@ -838,6 +850,10 @@ private fun SearchResultList(
                     { onOnlineSongClick(song) }
                 } else if (song is ProviderArtist) {
                     { onProviderArtistClick(song) }
+                } else if (song is ProviderAlbum) {
+                    { onProviderAlbumClick(song) }
+                } else if (song is ProviderPlaylistSearchItem) {
+                    { onProviderPlaylistClick(song) }
                 } else {
                     null
                 },

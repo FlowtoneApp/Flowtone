@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,8 +31,10 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.toPresentationSong
+import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
@@ -203,6 +206,8 @@ internal fun ProviderAlbumDetailScreen(
         { _, _, _ -> Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
+    useVinylArtwork: Boolean = true,
+    emptyMessage: String = "未找到该专辑的在线歌曲",
     modifier: Modifier = Modifier
 ) {
     val listState = remember(album.identity) { LazyListState() }
@@ -288,8 +293,10 @@ internal fun ProviderAlbumDetailScreen(
                     title = album.title,
                     artist = album.artist.ifBlank { "未知艺术家" },
                     songCount = presentedSongs.size.takeIf { it > 0 } ?: album.songCount ?: 0,
+                    releaseMetadata = album.releaseMetadata,
                     artworkUri = null,
                     extensionArtwork = album.artwork,
+                    useVinylArtwork = useVinylArtwork,
                     vinylMotionActive = vinylMotionActive,
                     modifier = pageTransition.elementModifier(0)
                 )
@@ -297,7 +304,7 @@ internal fun ProviderAlbumDetailScreen(
             if (presentedSongs.isEmpty()) {
                 item(key = "provider-album-empty") {
                     Text(
-                        text = "未找到该专辑的在线歌曲",
+                        text = emptyMessage,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
@@ -341,27 +348,98 @@ internal fun ProviderAlbumDetailScreen(
     }
 }
 
+@SuppressLint("ModifierParameter")
+@Composable
+internal fun ProviderPlaylistDetailScreen(
+    playlist: ProviderPlaylistSearchItem,
+    songs: List<ProviderSong>,
+    isLoading: Boolean,
+    loadFailed: Boolean,
+    presentationSessionKey: String,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    pendingTrackIdentityKey: String? = null,
+    onSongClick: (List<ProviderSong>, Int) -> Unit,
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
+        { _, _, _ -> Modifier },
+    onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
+    headerModifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
+) {
+    val reportedSongCount = playlist.metadata
+        ?.firstOrNull { metadata -> metadata.type == "track_count" }
+        ?.value
+        ?.takeIf { value -> value in 0..Int.MAX_VALUE.toLong() }
+        ?.toInt()
+    val detailAdapter = remember(playlist, reportedSongCount) {
+        ProviderAlbum(
+            identity = playlist.identity,
+            title = playlist.title,
+            artist = playlist.artist.ifBlank { "在线歌单" },
+            artwork = playlist.artwork,
+            songCount = reportedSongCount,
+            metadata = playlist.metadata
+        )
+    }
+    ProviderAlbumDetailScreen(
+        album = detailAdapter,
+        songs = songs,
+        presentationSessionKey = presentationSessionKey,
+        currentSong = currentSong,
+        isPlaying = isPlaying,
+        pendingTrackIdentityKey = pendingTrackIdentityKey,
+        onSongClick = onSongClick,
+        pageTransition = pageTransition,
+        itemModifier = itemModifier,
+        onCollapseProgressStateChange = onCollapseProgressStateChange,
+        headerModifier = headerModifier,
+        useVinylArtwork = false,
+        emptyMessage = when {
+            isLoading -> "正在加载歌单歌曲"
+            loadFailed -> "当前在线来源无法读取该歌单"
+            else -> "该歌单暂无歌曲"
+        },
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun AlbumMetadataHeader(
     vinylSeed: Long,
     title: String,
     artist: String,
     songCount: Int,
+    releaseMetadata: String? = null,
     artworkUri: android.net.Uri?,
     extensionArtwork: ExtensionImage? = null,
+    useVinylArtwork: Boolean = true,
     vinylMotionActive: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val supportingText = listOfNotNull(
+        artist,
+        releaseMetadata?.trim()?.takeIf(String::isNotEmpty),
+        "$songCount \u9996\u6b4c\u66f2"
+    ).joinToString(" \u00b7 ")
     CollectionMetadataHeader(
         title = title,
-        supportingText = "$artist \u00b7 $songCount \u9996\u6b4c\u66f2",
+        supportingText = supportingText,
         artwork = {
-            AlbumArtwork(
-                artworkUri = artworkUri,
-                extensionArtwork = extensionArtwork,
-                vinylMotionActive = vinylMotionActive,
-                vinylSeed = vinylSeed
-            )
+            if (useVinylArtwork) {
+                AlbumArtwork(
+                    artworkUri = artworkUri,
+                    extensionArtwork = extensionArtwork,
+                    vinylMotionActive = vinylMotionActive,
+                    vinylSeed = vinylSeed
+                )
+            } else {
+                FlowtoneArtwork(
+                    artworkUri = artworkUri,
+                    extensionArtwork = extensionArtwork,
+                    modifier = Modifier.size(128.dp)
+                )
+            }
         },
         modifier = modifier
     )

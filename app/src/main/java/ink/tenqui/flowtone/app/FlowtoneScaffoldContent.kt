@@ -252,7 +252,9 @@ internal fun FlowtoneScaffoldContent(
     } else {
         animatedPaletteCloudPalette
     }
-    val playlistDetailDestination = selectedPlaylistDestination?.let { selectedDestination ->
+    val playlistDetailDestination = selectedPlaylistDestination
+        ?.takeIf { it.providerPlaylist == null }
+        ?.let { selectedDestination ->
         val playlistId = selectedDestination.playlistId
         val metadata = if (playlistId == LikedSongsPlaylistId) {
             PlaylistDetailMetadata(
@@ -726,6 +728,8 @@ private fun FlowtoneMainTabsSearchContent(
         },
         onProviderArtistClick = callbacks.onOpenProviderArtist,
         onAlbumClick = callbacks.onOpenAlbum,
+        onProviderAlbumClick = callbacks.onOpenProviderAlbum,
+        onProviderPlaylistClick = callbacks.onOpenProviderPlaylist,
         onExitSearch = callbacks.onExitSearch,
         onQueryChange = callbacks.onSearchQueryChange,
         onScopeChange = callbacks.onSearchScopeChange,

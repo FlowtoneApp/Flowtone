@@ -116,6 +116,21 @@ data class PlaybackSource(
             )
         }
 
+        fun providerPlaylist(
+            providerId: String,
+            playlistId: String,
+            displayName: String
+        ): PlaybackSource {
+            val safeProviderId = providerId.trim().ifBlank { return Unknown }
+            val safePlaylistId = playlistId.trim().ifBlank { return Unknown }
+            return PlaybackSource(
+                type = PlaybackSourceType.UserPlaylist,
+                key = "provider_playlist:$safeProviderId:$safePlaylistId",
+                sourceId = "$safeProviderId:$safePlaylistId",
+                displayName = displayName.trim().ifBlank { "歌单" }
+            )
+        }
+
         fun other(displayName: String): PlaybackSource {
             val safeName = displayName.trim().ifBlank { "其他来源" }
             val stableId = safeName.lowercase(Locale.ROOT)

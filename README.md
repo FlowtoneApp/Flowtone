@@ -106,6 +106,9 @@ Flowtone 已包含实验性的扩展运行体系。
     * 通过无参数 `getAlbums()` 提供结构化的全量专辑 collection
     * 只声明 Album entity 能力，不代表 Provider 提供专辑详情 endpoint
 
+Provider 搜索歌单可以在结果中直接返回 `songs`（兼容字段 `tracks`），也可以实现可选的
+`getPlaylistSongs({ id })` 只读详情方法；未实现时不影响旧 Provider 的搜索与播放能力。
+
 `song` 与 `album` 是可选能力。未声明这些能力、也未实现对应方法的旧 Provider 仍可继续使用搜索、Artist Profile 与既有播放能力。
 
 音乐 Provider 可以与 Flowtone 的搜索、播放、喜欢和歌单系统连接，而播放器本身不需要直接适配特定音乐平台。
