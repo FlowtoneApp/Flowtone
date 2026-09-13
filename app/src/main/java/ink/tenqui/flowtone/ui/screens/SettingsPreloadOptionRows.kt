@@ -31,6 +31,8 @@ internal fun PreloadStrengthRow(
     animationLabel = "PreloadStrengthExpandIconRotation",
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,
+    options = listOf(1, 3, 5, 7, 10),
+    valueSuffix = "首",
     modifier = modifier
 )
 
@@ -45,6 +47,40 @@ internal fun LyricsPreloadStrengthRow(
     animationLabel = "LyricsPreloadStrengthExpandIconRotation",
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,
+    options = listOf(1, 3, 5, 7, 10),
+    valueSuffix = "首",
+    modifier = modifier
+)
+
+@Composable
+internal fun OnlinePlaybackPreloadCountRow(
+    selectedCount: Int,
+    onSelectedCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) = PreloadCountRow(
+    title = "在线播放预载曲数",
+    description = "提前解析播放队列中后续在线歌曲的播放信息。",
+    animationLabel = "OnlinePlaybackPreloadCountExpandIconRotation",
+    selectedCount = selectedCount,
+    onSelectedCountChange = onSelectedCountChange,
+    options = listOf(1, 2, 3, 5),
+    valueSuffix = "首",
+    modifier = modifier
+)
+
+@Composable
+internal fun OnlinePlaybackPreloadPercentageRow(
+    selectedPercentage: Int,
+    onSelectedPercentageChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) = PreloadCountRow(
+    title = "在线播放内容预载比例",
+    description = "按资源字节比例预载支持分段请求的普通在线音频开头；流媒体与未知长度资源仅预解析。",
+    animationLabel = "OnlinePlaybackPreloadPercentageExpandIconRotation",
+    selectedCount = selectedPercentage,
+    onSelectedCountChange = onSelectedPercentageChange,
+    options = listOf(0, 10, 20, 30, 50),
+    valueSuffix = "%",
     modifier = modifier
 )
 
@@ -55,9 +91,10 @@ private fun PreloadCountRow(
     animationLabel: String,
     selectedCount: Int,
     onSelectedCountChange: (Int) -> Unit,
+    options: List<Int>,
+    valueSuffix: String,
     modifier: Modifier = Modifier
 ) {
-    val options = listOf(1, 3, 5, 7, 10)
     val selectedIndex = options.indexOf(selectedCount).takeIf { it != -1 } ?: 2
     var expanded by rememberSaveable {
         mutableStateOf(false)
@@ -70,7 +107,7 @@ private fun PreloadCountRow(
 
     SettingsExpandableOptionRow(
         title = title,
-        subtitle = "当前：$selectedCount 首",
+        subtitle = "当前：$selectedCount$valueSuffix",
         expanded = expanded,
         expandIconRotation = expandIconRotation,
         onExpandedChange = { nextExpanded ->
@@ -106,7 +143,7 @@ private fun PreloadCountRow(
             ) {
                 options.forEach { count ->
                     Text(
-                        text = count.toString(),
+                        text = "$count$valueSuffix",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (count == selectedCount) {
                             MaterialTheme.colorScheme.primary

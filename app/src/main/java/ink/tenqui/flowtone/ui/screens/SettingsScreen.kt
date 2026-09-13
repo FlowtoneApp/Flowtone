@@ -109,6 +109,10 @@ internal fun SettingsScreen(
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     preloadLyricsCount: Int,
     onPreloadLyricsCountChange: (Int) -> Unit,
+    onlinePlaybackPreloadCount: Int,
+    onOnlinePlaybackPreloadCountChange: (Int) -> Unit,
+    onlinePlaybackPreloadPercentage: Int,
+    onOnlinePlaybackPreloadPercentageChange: (Int) -> Unit,
     songRecordThresholdSeconds: Int,
     onOpenSongRecordThresholdDialog: () -> Unit,
     flowCloudSpeed: Float,
@@ -302,6 +306,11 @@ internal fun SettingsScreen(
                 onPreloadSongMetadataCountChange = onPreloadSongMetadataCountChange,
                 preloadLyricsCount = preloadLyricsCount,
                 onPreloadLyricsCountChange = onPreloadLyricsCountChange,
+                onlinePlaybackPreloadCount = onlinePlaybackPreloadCount,
+                onOnlinePlaybackPreloadCountChange = onOnlinePlaybackPreloadCountChange,
+                onlinePlaybackPreloadPercentage = onlinePlaybackPreloadPercentage,
+                onOnlinePlaybackPreloadPercentageChange =
+                    onOnlinePlaybackPreloadPercentageChange,
                 elementModifier = ::viewElementModifier
             )
 

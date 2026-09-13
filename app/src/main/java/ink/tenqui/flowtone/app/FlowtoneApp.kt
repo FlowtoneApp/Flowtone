@@ -416,6 +416,8 @@ fun FlowtoneApp(
         songs = uiState.songs,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         preloadLyricsCount = appState.preloadLyricsCount,
+        onlinePlaybackPreloadCount = appState.onlinePlaybackPreloadCount,
+        onlinePlaybackPreloadPercentage = appState.onlinePlaybackPreloadPercentage,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         musicViewModel = musicViewModel,
         onContentScrollOffsetChange = { offset ->

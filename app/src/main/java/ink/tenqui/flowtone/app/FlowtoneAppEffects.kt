@@ -17,6 +17,8 @@ internal fun FlowtoneAppEffects(
     songs: List<Song>,
     preloadSongMetadataCount: Int,
     preloadLyricsCount: Int,
+    onlinePlaybackPreloadCount: Int,
+    onlinePlaybackPreloadPercentage: Int,
     songRecordThresholdSeconds: Int,
     musicViewModel: MusicViewModel,
     onContentScrollOffsetChange: (Float) -> Unit,
@@ -59,6 +61,14 @@ internal fun FlowtoneAppEffects(
 
     LaunchedEffect(preloadLyricsCount) {
         musicViewModel.setPreloadLyricsCount(preloadLyricsCount)
+    }
+
+    LaunchedEffect(onlinePlaybackPreloadCount) {
+        musicViewModel.setOnlinePlaybackPreloadCount(onlinePlaybackPreloadCount)
+    }
+
+    LaunchedEffect(onlinePlaybackPreloadPercentage) {
+        musicViewModel.setOnlinePlaybackPreloadPercentage(onlinePlaybackPreloadPercentage)
     }
 
     LaunchedEffect(songRecordThresholdSeconds) {

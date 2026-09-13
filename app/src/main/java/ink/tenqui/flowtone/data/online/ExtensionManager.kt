@@ -35,6 +35,7 @@ import ink.tenqui.flowtone.core.online.ArtistAvatar
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaDataSource
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaSourceFactory
+import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackContentCache
 import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackResourceStore
 import ink.tenqui.flowtone.data.online.playback.ExtensionStreamNetworkHost
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val networkClients = ConcurrentHashMap<String, ExtensionNetworkClient>()
     private val streamClients = ConcurrentHashMap<String, ExtensionStreamClient>()
     private val playbackResources = ExtensionPlaybackResourceStore()
+    @UnstableApi
+    private val playbackContentCacheDelegate = lazy {
+        runCatching {
+            ExtensionPlaybackContentCache(appContext, extensionMediaDataSourceFactory())
+        }.onFailure { error ->
+            Log.w(LogTag, "extension.playback.cache.unavailable", error)
+        }.getOrNull()
+    }
+    private val playbackContentCache by playbackContentCacheDelegate
     private val presentationCache = ConcurrentHashMap<String, ProviderSong>()
     private val searchLandingCache = ConcurrentHashMap<String, ProviderSearchLanding>()
     private val songCollectionCache = ProviderCollectionSessionCache<ProviderSong>()
@@ -244,6 +254,16 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         return createPlaybackMediaItem(song, resource)
     }
 
+    @UnstableApi
+    internal suspend fun preloadPlaybackContent(
+        mediaItem: MediaItem,
+        resource: ExtensionPlaybackResource,
+        percentage: Int
+    ): Long {
+        if (resource.type != ExtensionPlaybackResourceType.Progressive) return 0L
+        return playbackContentCache?.preloadPrefix(mediaItem, percentage) ?: 0L
+    }
+
     /** All 仅合并每个 Provider 的第一页；跨 Provider cursor 留待后续设计。 */
     internal suspend fun searchMusicProviders(request: ProviderSearchRequest): ProviderSearchCallResult =
         runtimeLifecycle.execute {
@@ -383,7 +403,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     @UnstableApi
     fun extensionMediaSourceFactory(context: Context): MediaSource.Factory {
         val extensionDataSourceFactory = extensionMediaDataSourceFactory()
-        val fallbackDataSourceFactory = DefaultDataSource.Factory(context, extensionDataSourceFactory)
+        val fallbackDataSourceFactory = DefaultDataSource.Factory(
+            context,
+            playbackContentCache?.playbackDataSourceFactory ?: extensionDataSourceFactory
+        )
         return ExtensionMediaSourceFactory(
             resources = playbackResources,
             extensionDataSourceFactory = extensionDataSourceFactory,
@@ -633,6 +656,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         disposeRuntime(clearExtensionDataFor = emptySet(), clearPlaybackResources = true)
         privateCache.flushDirty()
         extensionImageLoader.shutdown()
+        if (playbackContentCacheDelegate.isInitialized()) playbackContentCache?.close()
         sandboxHost.close()
     }
 

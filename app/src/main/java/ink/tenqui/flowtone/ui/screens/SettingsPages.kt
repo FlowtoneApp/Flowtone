@@ -200,6 +200,10 @@ internal fun AdvancedSettingsPage(
     onPreloadSongMetadataCountChange: (Int) -> Unit,
     preloadLyricsCount: Int,
     onPreloadLyricsCountChange: (Int) -> Unit,
+    onlinePlaybackPreloadCount: Int,
+    onOnlinePlaybackPreloadCountChange: (Int) -> Unit,
+    onlinePlaybackPreloadPercentage: Int,
+    onOnlinePlaybackPreloadPercentageChange: (Int) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -216,6 +220,16 @@ internal fun AdvancedSettingsPage(
             LyricsPreloadStrengthRow(
                 selectedCount = preloadLyricsCount,
                 onSelectedCountChange = onPreloadLyricsCountChange
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            OnlinePlaybackPreloadCountRow(
+                selectedCount = onlinePlaybackPreloadCount,
+                onSelectedCountChange = onOnlinePlaybackPreloadCountChange
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            OnlinePlaybackPreloadPercentageRow(
+                selectedPercentage = onlinePlaybackPreloadPercentage,
+                onSelectedPercentageChange = onOnlinePlaybackPreloadPercentageChange
             )
         }
     }

@@ -154,6 +154,37 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun getOnlinePlaybackPreloadCount(): Int = nearestOption(
+        prefs.getInt(ONLINE_PLAYBACK_PRELOAD_COUNT_KEY, DEFAULT_ONLINE_PLAYBACK_PRELOAD_COUNT),
+        ONLINE_PLAYBACK_PRELOAD_COUNT_OPTIONS
+    )
+
+    fun setOnlinePlaybackPreloadCount(count: Int) {
+        prefs.edit()
+            .putInt(
+                ONLINE_PLAYBACK_PRELOAD_COUNT_KEY,
+                nearestOption(count, ONLINE_PLAYBACK_PRELOAD_COUNT_OPTIONS)
+            )
+            .apply()
+    }
+
+    fun getOnlinePlaybackPreloadPercentage(): Int = nearestOption(
+        prefs.getInt(
+            ONLINE_PLAYBACK_PRELOAD_PERCENTAGE_KEY,
+            DEFAULT_ONLINE_PLAYBACK_PRELOAD_PERCENTAGE
+        ),
+        ONLINE_PLAYBACK_PRELOAD_PERCENTAGE_OPTIONS
+    )
+
+    fun setOnlinePlaybackPreloadPercentage(percentage: Int) {
+        prefs.edit()
+            .putInt(
+                ONLINE_PLAYBACK_PRELOAD_PERCENTAGE_KEY,
+                nearestOption(percentage, ONLINE_PLAYBACK_PRELOAD_PERCENTAGE_OPTIONS)
+            )
+            .apply()
+    }
+
     fun getSongRecordThresholdSeconds(): Int {
         return prefs.getInt(
             SONG_RECORD_THRESHOLD_SECONDS_KEY,
@@ -241,6 +272,9 @@ class AppPreferences(context: Context) {
         prefs.edit().putString(SEARCH_SCOPE_KEY, value).apply()
     }
 
+    private fun nearestOption(value: Int, options: List<Int>): Int =
+        options.minBy { option -> kotlin.math.abs(option - value) }
+
     private companion object {
         const val DEFAULT_START_PAGE_KEY = "default_start_page"
         const val THEME_MODE_KEY = "theme_mode"
@@ -256,6 +290,8 @@ class AppPreferences(context: Context) {
             "open_expanded_mini_player_on_media_click"
         const val SONG_METADATA_PRELOAD_COUNT_KEY = "song_metadata_preload_count"
         const val LYRICS_PRELOAD_COUNT_KEY = "lyrics_preload_count"
+        const val ONLINE_PLAYBACK_PRELOAD_COUNT_KEY = "online_playback_preload_count"
+        const val ONLINE_PLAYBACK_PRELOAD_PERCENTAGE_KEY = "online_playback_preload_percentage"
         const val SONG_RECORD_THRESHOLD_SECONDS_KEY = "song_record_threshold_seconds"
         const val PLAYBACK_QUEUE_DISPLAY_ORDER_KEY = "playback_queue_display_order"
         const val FLOW_CLOUD_SPEED_KEY = "flow_cloud_speed"
@@ -265,6 +301,8 @@ class AppPreferences(context: Context) {
         const val SEARCH_SCOPE_KEY = "search_scope"
         const val SEARCH_SCOPE_ALL = "all"
         const val DEFAULT_PRELOAD_COUNT = 5
+        const val DEFAULT_ONLINE_PLAYBACK_PRELOAD_COUNT = 1
+        const val DEFAULT_ONLINE_PLAYBACK_PRELOAD_PERCENTAGE = 10
         const val DEFAULT_SONG_RECORD_THRESHOLD_SECONDS = 30
         const val MIN_SONG_RECORD_THRESHOLD_SECONDS = 1
         const val MAX_SONG_RECORD_THRESHOLD_SECONDS = 60
@@ -275,5 +313,7 @@ class AppPreferences(context: Context) {
         const val LIGHT_VALUE = "light"
         const val DARK_VALUE = "dark"
         val PRELOAD_COUNT_OPTIONS = listOf(1, 3, 5, 7, 10)
+        val ONLINE_PLAYBACK_PRELOAD_COUNT_OPTIONS = listOf(1, 2, 3, 5)
+        val ONLINE_PLAYBACK_PRELOAD_PERCENTAGE_OPTIONS = listOf(0, 10, 20, 30, 50)
     }
 }

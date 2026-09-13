@@ -53,6 +53,8 @@ internal class FlowtoneAppState(
     allowScreenOffOnLyricsPageState: MutableState<Boolean>,
     preloadSongMetadataCountState: MutableState<Int>,
     preloadLyricsCountState: MutableState<Int>,
+    onlinePlaybackPreloadCountState: MutableState<Int>,
+    onlinePlaybackPreloadPercentageState: MutableState<Int>,
     songRecordThresholdSecondsState: MutableState<Int>,
     songRecordThresholdDialogStateState: MutableState<SongRecordThresholdDialogState>,
     flowCloudSpeedState: MutableState<Float>,
@@ -92,6 +94,8 @@ internal class FlowtoneAppState(
     var allowScreenOffOnLyricsPage by allowScreenOffOnLyricsPageState
     var preloadSongMetadataCount by preloadSongMetadataCountState
     var preloadLyricsCount by preloadLyricsCountState
+    var onlinePlaybackPreloadCount by onlinePlaybackPreloadCountState
+    var onlinePlaybackPreloadPercentage by onlinePlaybackPreloadPercentageState
     var songRecordThresholdSeconds by songRecordThresholdSecondsState
     var songRecordThresholdDialogState by songRecordThresholdDialogStateState
     var flowCloudSpeed by flowCloudSpeedState
@@ -167,6 +171,12 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     val preloadLyricsCount = rememberSaveable {
         mutableStateOf(appPreferences.getLyricsPreloadCount())
     }
+    val onlinePlaybackPreloadCount = rememberSaveable {
+        mutableStateOf(appPreferences.getOnlinePlaybackPreloadCount())
+    }
+    val onlinePlaybackPreloadPercentage = rememberSaveable {
+        mutableStateOf(appPreferences.getOnlinePlaybackPreloadPercentage())
+    }
     val songRecordThresholdSeconds = rememberSaveable {
         mutableStateOf(appPreferences.getSongRecordThresholdSeconds())
     }
@@ -239,6 +249,8 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         allowScreenOffOnLyricsPageState = allowScreenOffOnLyricsPage,
         preloadSongMetadataCountState = preloadSongMetadataCount,
         preloadLyricsCountState = preloadLyricsCount,
+        onlinePlaybackPreloadCountState = onlinePlaybackPreloadCount,
+        onlinePlaybackPreloadPercentageState = onlinePlaybackPreloadPercentage,
         songRecordThresholdSecondsState = songRecordThresholdSeconds,
         songRecordThresholdDialogStateState = songRecordThresholdDialogState,
         flowCloudSpeedState = flowCloudSpeed,
@@ -284,6 +296,8 @@ internal data class FlowtoneAppScaffoldState(
     val skipExpandedMiniPlayer: Boolean,
     val preloadSongMetadataCount: Int,
     val preloadLyricsCount: Int,
+    val onlinePlaybackPreloadCount: Int,
+    val onlinePlaybackPreloadPercentage: Int,
     val songRecordThresholdSeconds: Int,
     val songRecordThresholdDialogState: SongRecordThresholdDialogState,
     val flowCloudSpeed: Float,
@@ -356,6 +370,8 @@ internal fun flowtoneAppScaffoldState(
         skipExpandedMiniPlayer = appState.skipExpandedMiniPlayer,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         preloadLyricsCount = appState.preloadLyricsCount,
+        onlinePlaybackPreloadCount = appState.onlinePlaybackPreloadCount,
+        onlinePlaybackPreloadPercentage = appState.onlinePlaybackPreloadPercentage,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         songRecordThresholdDialogState = appState.songRecordThresholdDialogState,
         flowCloudSpeed = appState.flowCloudSpeed,

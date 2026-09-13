@@ -29,6 +29,10 @@ class ExtensionMediaDataSource private constructor(
     private var response: ExtensionStreamResponse? = null
     private var bytesRemaining: Long = C.LENGTH_UNSET.toLong()
     private var resolvedUri: Uri? = null
+    internal var responseStatusCode: Int? = null
+        private set
+    internal var responseTotalLength: Long? = null
+        private set
 
     override fun addTransferListener(transferListener: TransferListener) {
         listeners += transferListener
@@ -70,6 +74,8 @@ class ExtensionMediaDataSource private constructor(
                 skipFully(openedResponse, dataSpec.position)
             }
             response = openedResponse
+            responseStatusCode = openedResponse.statusCode
+            responseTotalLength = totalContentLength(openedResponse)
             openedDataSpec = dataSpec
             resolvedUri = Uri.parse(openedResponse.resolvedUrl)
             bytesRemaining = resolvedLength(dataSpec, openedResponse)
@@ -112,6 +118,8 @@ class ExtensionMediaDataSource private constructor(
             openedDataSpec = null
             bytesRemaining = C.LENGTH_UNSET.toLong()
             resolvedUri = null
+            responseStatusCode = null
+            responseTotalLength = null
             if (wasOpened) listeners.forEach { it.onTransferEnd(this, dataSpec!!, true) }
         }
     }
@@ -154,6 +162,19 @@ class ExtensionMediaDataSource private constructor(
         return if (end >= start) start..end else null
     }
 
+    private fun totalContentLength(response: ExtensionStreamResponse): Long? {
+        val value = response.headers.entries
+            .firstOrNull { it.key.equals("Content-Range", ignoreCase = true) }
+            ?.value
+            ?.firstOrNull()
+            ?: return null
+        return ContentRange.matchEntire(value.trim())
+            ?.groupValues
+            ?.getOrNull(3)
+            ?.toLongOrNull()
+            ?.takeIf { it > 0L }
+    }
+
     private fun requestUrlFor(uri: Uri, resource: ExtensionPlaybackResource): String {
         val registeredResource = resources.resolve(uri)
         if (registeredResource != null) {
@@ -186,6 +207,6 @@ class ExtensionMediaDataSource private constructor(
     }
 
     private companion object {
-        val ContentRange = Regex("bytes\\s+(\\d+)-(\\d+)/(?:\\d+|\\*)", RegexOption.IGNORE_CASE)
+        val ContentRange = Regex("bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)", RegexOption.IGNORE_CASE)
     }
 }

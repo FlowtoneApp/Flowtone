@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.viewmodel
 import android.app.Application
 import android.net.Uri
 import android.util.Log
+import androidx.media3.common.MediaItem
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import coil3.request.ImageRequest
@@ -191,13 +192,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
     private var preloadLyricsCount: Int = 5
+    private var onlinePlaybackPreloadCount: Int = 1
+    private var onlinePlaybackPreloadPercentage: Int = 10
     private var preloadJob: Job? = null
     private var onlineArtworkPreloadJob: Job? = null
     private var pendingPlaybackJob: Job? = null
     private var playbackRequestGeneration: Long = 0L
     private var onlinePreloadGeneration: Long = 0L
     private var playbackQueueRevision: Long = 0L
-    private var onlinePlaybackResourcePreload: OnlinePlaybackResourcePreload? = null
+    private val onlinePlaybackResourcePreloads =
+        mutableMapOf<OnlinePlaybackPreloadIdentity, OnlinePlaybackResourcePreload>()
     /** 仅本进程有效；不保存 runtime ref 或播放 URL。 */
     private val onlinePresentationCache = mutableMapOf<String, ProviderSong>()
     private var metadataPreloadUris: List<String> = emptyList()
@@ -232,8 +236,11 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun clearOnlinePlaybackResourcePreload() {
-        onlinePlaybackResourcePreload?.result?.cancel()
-        onlinePlaybackResourcePreload = null
+        onlinePlaybackResourcePreloads.values.forEach { preload ->
+            preload.contentJob.cancel()
+            preload.result.cancel()
+        }
+        onlinePlaybackResourcePreloads.clear()
     }
 
     private fun beginPlaybackRequest(): Long {
@@ -374,6 +381,22 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
         preloadLyricsCount = sanitizedCount
         scheduleNextSongsPreload()
+    }
+
+    fun setOnlinePlaybackPreloadCount(count: Int) {
+        val sanitizedCount = listOf(1, 2, 3, 5).minBy { kotlin.math.abs(it - count) }
+        if (onlinePlaybackPreloadCount == sanitizedCount) return
+        onlinePlaybackPreloadCount = sanitizedCount
+        scheduleOnlinePlaybackResourcePreload()
+    }
+
+    fun setOnlinePlaybackPreloadPercentage(percentage: Int) {
+        val sanitizedPercentage = listOf(0, 10, 20, 30, 50)
+            .minBy { kotlin.math.abs(it - percentage) }
+        if (onlinePlaybackPreloadPercentage == sanitizedPercentage) return
+        onlinePlaybackPreloadPercentage = sanitizedPercentage
+        clearOnlinePlaybackResourcePreload()
+        scheduleOnlinePlaybackResourcePreload()
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -946,7 +969,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             val resolvedSong = preloaded?.providerSong ?: providerSong
             val resource = preloaded?.resource
                 ?: extensionManager.resolvePlaybackResource(resolvedSong)
-            val mediaItem = resource?.let {
+            val mediaItem = preloaded?.mediaItem ?: resource?.let {
                 extensionManager.createPlaybackMediaItem(resolvedSong, it)
             } ?: run {
                 if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
@@ -1315,36 +1338,71 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun scheduleOnlinePlaybackResourcePreload() {
-        val entry = if (playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
-            null
+        val targets = if (playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
+            emptyList()
         } else {
-            playbackTrackQueue.getOrNull(currentQueueIndex + 1)
+            playbackTrackQueue
+                .drop((currentQueueIndex + 1).coerceAtLeast(0))
+                .mapNotNull { entry ->
+                    entry.onlinePlaybackPreloadIdentity(playbackQueueRevision)?.let { it to entry }
+                }
+                .take(onlinePlaybackPreloadCount)
         }
-        val identity = entry?.onlinePlaybackPreloadIdentity(playbackQueueRevision)
-        if (entry == null || identity == null) {
+        val targetIdentities = targets.mapTo(mutableSetOf()) { it.first }
+        val stalePreloads = onlinePlaybackResourcePreloads.keys - targetIdentities
+        stalePreloads.forEach { identity ->
+            onlinePlaybackResourcePreloads.remove(identity)?.let { preload ->
+                preload.contentJob.cancel()
+                preload.result.cancel()
+            }
+        }
+        if (targets.isEmpty()) {
             clearOnlinePlaybackResourcePreload()
             return
         }
-        if (onlinePlaybackResourcePreload?.identity == identity) return
 
-        clearOnlinePlaybackResourcePreload()
-        val result = viewModelScope.async {
-            try {
-                Log.d("FlowtonePlayback", "online.playback.preload.started identityHash=${identity.hashCode()}")
-                resolveOnlinePlaybackForPreload(entry).also { resolved ->
+        targets.forEach { (identity, entry) ->
+            if (onlinePlaybackResourcePreloads.containsKey(identity)) return@forEach
+            val result = viewModelScope.async {
+                try {
+                    Log.d("FlowtonePlayback", "online.playback.preload.started identityHash=${identity.hashCode()}")
+                    resolveOnlinePlaybackForPreload(entry).also { resolved ->
+                        Log.d(
+                            "FlowtonePlayback",
+                            "online.playback.preload.${if (resolved == null) "miss" else "success"} identityHash=${identity.hashCode()}"
+                        )
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    Log.w("FlowtonePlayback", "online.playback.preload.failed identityHash=${identity.hashCode()}", error)
+                    null
+                }
+            }
+            val contentJob = viewModelScope.launch {
+                val resolved = result.await() ?: return@launch
+                try {
+                    val cachedBytes = extensionManager.preloadPlaybackContent(
+                        mediaItem = resolved.mediaItem,
+                        resource = resolved.resource,
+                        percentage = onlinePlaybackPreloadPercentage
+                    )
                     Log.d(
                         "FlowtonePlayback",
-                        "online.playback.preload.${if (resolved == null) "miss" else "success"} identityHash=${identity.hashCode()}"
+                        "online.playback.contentPreload.completed identityHash=${identity.hashCode()} bytes=$cachedBytes"
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    Log.w(
+                        "FlowtonePlayback",
+                        "online.playback.contentPreload.missed identityHash=${identity.hashCode()} type=${error.javaClass.simpleName}"
                     )
                 }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                Log.w("FlowtonePlayback", "online.playback.preload.failed identityHash=${identity.hashCode()}", error)
-                null
             }
+            onlinePlaybackResourcePreloads[identity] =
+                OnlinePlaybackResourcePreload(identity, result, contentJob)
         }
-        onlinePlaybackResourcePreload = OnlinePlaybackResourcePreload(identity, result)
     }
 
     private suspend fun resolveOnlinePlaybackForPreload(
@@ -1356,27 +1414,22 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         currentCoroutineContext().ensureActive()
         val resource = extensionManager.resolvePlaybackResource(providerSong) ?: return null
         currentCoroutineContext().ensureActive()
-        return ResolvedOnlinePlayback(providerSong, resource)
+        val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource) ?: return null
+        return ResolvedOnlinePlayback(providerSong, resource, mediaItem)
     }
 
     private suspend fun awaitOnlinePlaybackPreload(
         entry: QueueTrackEntry
     ): ResolvedOnlinePlayback? {
         val identity = entry.onlinePlaybackPreloadIdentity(playbackQueueRevision) ?: return null
-        val preload = onlinePlaybackResourcePreload ?: return null
-        if (preload.identity != identity) {
-            clearOnlinePlaybackResourcePreload()
-            return null
-        }
+        val preload = onlinePlaybackResourcePreloads.remove(identity) ?: return null
+        preload.contentJob.cancel()
 
         val resolved = try {
             preload.result.await()
         } catch (_: CancellationException) {
             currentCoroutineContext().ensureActive()
             null
-        }
-        if (onlinePlaybackResourcePreload === preload) {
-            onlinePlaybackResourcePreload = null
         }
         if (identity != entry.onlinePlaybackPreloadIdentity(playbackQueueRevision)) return null
         if (resolved == null) return null
@@ -1595,7 +1648,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             setPendingPlayback(track, presentation, index, requestGeneration, PendingPlayback.Phase.Preparing)
             val resource = preloaded?.resource
                 ?: extensionManager.resolvePlaybackResource(providerSong)
-            val mediaItem = resource?.let {
+            val mediaItem = preloaded?.mediaItem ?: resource?.let {
                 extensionManager.createPlaybackMediaItem(providerSong, it)
             }
             if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
@@ -1863,12 +1916,14 @@ internal data class OnlinePlaybackPreloadIdentity(
 
 private data class ResolvedOnlinePlayback(
     val providerSong: ProviderSong,
-    val resource: ExtensionPlaybackResource
+    val resource: ExtensionPlaybackResource,
+    val mediaItem: MediaItem
 )
 
 private data class OnlinePlaybackResourcePreload(
     val identity: OnlinePlaybackPreloadIdentity,
-    val result: Deferred<ResolvedOnlinePlayback?>
+    val result: Deferred<ResolvedOnlinePlayback?>,
+    val contentJob: Job
 )
 
 internal enum class QueueTrackPlaybackKind {

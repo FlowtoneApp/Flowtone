@@ -577,6 +577,12 @@ internal fun FlowtoneScaffoldContent(
                         callbacks.onPreloadSongMetadataCountChange,
                     preloadLyricsCount = state.preloadLyricsCount,
                     onPreloadLyricsCountChange = callbacks.onPreloadLyricsCountChange,
+                    onlinePlaybackPreloadCount = state.onlinePlaybackPreloadCount,
+                    onOnlinePlaybackPreloadCountChange =
+                        callbacks.onOnlinePlaybackPreloadCountChange,
+                    onlinePlaybackPreloadPercentage = state.onlinePlaybackPreloadPercentage,
+                    onOnlinePlaybackPreloadPercentageChange =
+                        callbacks.onOnlinePlaybackPreloadPercentageChange,
                     songRecordThresholdSeconds = state.songRecordThresholdSeconds,
                     onOpenSongRecordThresholdDialog = callbacks.onOpenSongRecordThresholdDialog,
                     flowCloudSpeed = state.flowCloudSpeed,

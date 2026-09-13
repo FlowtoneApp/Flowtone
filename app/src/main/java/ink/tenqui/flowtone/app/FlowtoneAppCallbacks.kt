@@ -26,6 +26,8 @@ internal data class FlowtoneAppCallbacks(
     val onSkipExpandedMiniPlayerChange: (Boolean) -> Unit,
     val onPreloadSongMetadataCountChange: (Int) -> Unit,
     val onPreloadLyricsCountChange: (Int) -> Unit,
+    val onOnlinePlaybackPreloadCountChange: (Int) -> Unit,
+    val onOnlinePlaybackPreloadPercentageChange: (Int) -> Unit,
     val onSongRecordThresholdSecondsChange: (Int) -> Unit,
     val onOpenSongRecordThresholdDialog: () -> Unit,
     val onCloseSongRecordThresholdDialog: () -> Unit,
@@ -171,6 +173,14 @@ internal fun flowtoneAppCallbacks(
         onPreloadLyricsCountChange = { count ->
             appState.preloadLyricsCount = count
             appPreferences.setLyricsPreloadCount(count)
+        },
+        onOnlinePlaybackPreloadCountChange = { count ->
+            appState.onlinePlaybackPreloadCount = count
+            appPreferences.setOnlinePlaybackPreloadCount(count)
+        },
+        onOnlinePlaybackPreloadPercentageChange = { percentage ->
+            appState.onlinePlaybackPreloadPercentage = percentage
+            appPreferences.setOnlinePlaybackPreloadPercentage(percentage)
         },
         onSongRecordThresholdSecondsChange = { seconds ->
             appState.songRecordThresholdSeconds = seconds
