@@ -49,6 +49,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.core.model.toPresentationSong
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
@@ -58,8 +59,12 @@ import ink.tenqui.flowtone.playback.toPlaybackSource
 import ink.tenqui.flowtone.playback.toSongOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -190,6 +195,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var pendingPlaybackJob: Job? = null
     private var playbackRequestGeneration: Long = 0L
     private var onlinePreloadGeneration: Long = 0L
+    private var playbackQueueRevision: Long = 0L
+    private var onlinePlaybackResourcePreload: OnlinePlaybackResourcePreload? = null
     /** 仅本进程有效；不保存 runtime ref 或播放 URL。 */
     private val onlinePresentationCache = mutableMapOf<String, ProviderSong>()
     private var metadataPreloadUris: List<String> = emptyList()
@@ -217,6 +224,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     val confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot> =
         _confirmedPlaybackPosition.asStateFlow()
     val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
+
+    private fun markPlaybackQueueChanged() {
+        playbackQueueRevision += 1L
+        clearOnlinePlaybackResourcePreload()
+    }
+
+    private fun clearOnlinePlaybackResourcePreload() {
+        onlinePlaybackResourcePreload?.result?.cancel()
+        onlinePlaybackResourcePreload = null
+    }
 
     private fun beginPlaybackRequest(): Long {
         pendingPlaybackJob?.cancel()
@@ -296,6 +313,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playbackRequestGeneration += 1L
         onlineArtworkPreloadJob?.cancel()
         onlinePreloadGeneration += 1L
+        clearOnlinePlaybackResourcePreload()
         providerCollectionLoads.clear()
         onlinePresentationCache.clear()
         _uiState.update { state ->
@@ -531,6 +549,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             sourceTrackQueue.firstOrNull { isSameSong(it.presentation, queuedSong) }
         }
         currentQueueIndex = findSongIndex(playbackQueue, currentSong)
+        markPlaybackQueueChanged()
     }
 
     private fun buildPlaybackQueueForMode(
@@ -717,8 +736,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             sourceQueue = emptyList()
             sourceTrackQueue = emptyList()
             playbackQueue = emptyList()
+            playbackTrackQueue = emptyList()
             currentQueueIndex = -1
             currentPlaybackSource = PlaybackSource.Unknown
+            markPlaybackQueueChanged()
             publishPlaybackQueue()
         }
         scanSongs()
@@ -734,6 +755,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             sourceQueue = listOf(song)
             sourceTrackQueue = listOf(QueueTrackEntry(song.toPersistentTrack(), song))
             playbackQueue = listOf(song)
+            playbackTrackQueue = sourceTrackQueue
+            markPlaybackQueueChanged()
             playSongAt(index = 0, source = source)
             return
         }
@@ -915,7 +938,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 publishTrackPlaybackError("在线歌曲引用已失效")
                 return@launch
             }
-            val mediaItem = extensionManager.createPlaybackMediaItem(providerSong) ?: run {
+            val queueEntry = playbackTrackQueue.getOrNull(index)
+                ?: QueueTrackEntry(null, selectedSong, providerSong)
+            val preloaded = awaitOnlinePlaybackPreload(queueEntry)
+            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
+            val resolvedSong = preloaded?.providerSong ?: providerSong
+            val resource = preloaded?.resource
+                ?: extensionManager.resolvePlaybackResource(resolvedSong)
+            val mediaItem = resource?.let {
+                extensionManager.createPlaybackMediaItem(resolvedSong, it)
+            } ?: run {
                 if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
                 clearPendingPlayback(requestGeneration)
                 publishTrackPlaybackError("无法解析在线播放资源")
@@ -931,9 +963,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             playbackController.playResolvedMediaItem(
                 song = selectedSong,
                 mediaItem = mediaItem,
-                extensionArtwork = providerSong.artwork,
-                extensionLargeArtwork = providerSong.largeArtwork,
-                persistentTrack = providerSong.toPersistentTrack()
+                extensionArtwork = resolvedSong.artwork,
+                extensionLargeArtwork = resolvedSong.largeArtwork,
+                persistentTrack = resolvedSong.toPersistentTrack()
             )
             clearPendingPlayback(requestGeneration)
             scheduleNextSongsPreload()
@@ -960,7 +992,12 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playbackQueue = playbackQueue.toMutableList().apply {
             addAll(insertionIndex, songs)
         }
+        playbackTrackQueue = playbackTrackQueue.toMutableList().apply {
+            addAll(insertionIndex, songs.map { QueueTrackEntry(it.toPersistentTrack(), it) })
+        }
         sourceQueue = playbackQueue
+        sourceTrackQueue = playbackTrackQueue
+        markPlaybackQueueChanged()
         publishPlaybackQueue()
         scheduleNextSongsPreload()
         return true
@@ -974,7 +1011,12 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
         if (!playbackController.appendSongsToQueue(songs, currentPlaybackSource)) return false
         playbackQueue = playbackQueue + songs
+        playbackTrackQueue = playbackTrackQueue + songs.map {
+            QueueTrackEntry(it.toPersistentTrack(), it)
+        }
         sourceQueue = playbackQueue
+        sourceTrackQueue = playbackTrackQueue
+        markPlaybackQueueChanged()
         publishPlaybackQueue()
         scheduleNextSongsPreload()
         return true
@@ -1180,6 +1222,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             mode = snapshot.playbackOrderMode,
             currentSong = currentSong
         )
+        markPlaybackQueueChanged()
         currentQueueIndex = findSongIndex(playbackQueue, currentSong)
             .takeIf { it != -1 } ?: 0
 
@@ -1222,6 +1265,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             scannedSongs.firstOrNull { it.id == queuedSong.id || it.uri == queuedSong.uri }
                 ?: queuedSong
         }
+        markPlaybackQueueChanged()
         currentQueueIndex = playbackQueue.indexOfFirst {
             it.id == officialSong.id || it.uri == officialSong.uri
         }
@@ -1269,6 +1313,82 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             songsInPlaybackOrder = songsToPreload
         )
         scheduleOnlineArtworkPreload()
+        scheduleOnlinePlaybackResourcePreload()
+    }
+
+    private fun scheduleOnlinePlaybackResourcePreload() {
+        val entry = if (playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
+            null
+        } else {
+            playbackTrackQueue.getOrNull(currentQueueIndex + 1)
+        }
+        val identity = entry?.onlinePlaybackPreloadIdentity(playbackQueueRevision)
+        if (entry == null || identity == null) {
+            clearOnlinePlaybackResourcePreload()
+            return
+        }
+        if (onlinePlaybackResourcePreload?.identity == identity) return
+
+        clearOnlinePlaybackResourcePreload()
+        val result = viewModelScope.async {
+            try {
+                Log.d("FlowtonePlayback", "online.playback.preload.started identityHash=${identity.hashCode()}")
+                resolveOnlinePlaybackForPreload(entry).also { resolved ->
+                    Log.d(
+                        "FlowtonePlayback",
+                        "online.playback.preload.${if (resolved == null) "miss" else "success"} identityHash=${identity.hashCode()}"
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w("FlowtonePlayback", "online.playback.preload.failed identityHash=${identity.hashCode()}", error)
+                null
+            }
+        }
+        onlinePlaybackResourcePreload = OnlinePlaybackResourcePreload(identity, result)
+    }
+
+    private suspend fun resolveOnlinePlaybackForPreload(
+        entry: QueueTrackEntry
+    ): ResolvedOnlinePlayback? {
+        val providerSong = entry.runtimeProviderSong ?: hydrateOnlinePresentation(
+            entry.persistentTrack as? PersistentTrack.Online
+        ) ?: return null
+        currentCoroutineContext().ensureActive()
+        val resource = extensionManager.resolvePlaybackResource(providerSong) ?: return null
+        currentCoroutineContext().ensureActive()
+        return ResolvedOnlinePlayback(providerSong, resource)
+    }
+
+    private suspend fun awaitOnlinePlaybackPreload(
+        entry: QueueTrackEntry
+    ): ResolvedOnlinePlayback? {
+        val identity = entry.onlinePlaybackPreloadIdentity(playbackQueueRevision) ?: return null
+        val preload = onlinePlaybackResourcePreload ?: return null
+        if (preload.identity != identity) {
+            clearOnlinePlaybackResourcePreload()
+            return null
+        }
+
+        val resolved = try {
+            preload.result.await()
+        } catch (_: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            null
+        }
+        if (onlinePlaybackResourcePreload === preload) {
+            onlinePlaybackResourcePreload = null
+        }
+        if (identity != entry.onlinePlaybackPreloadIdentity(playbackQueueRevision)) return null
+        if (resolved == null) return null
+        if (!extensionManager.isMusicProviderRuntimeAvailable(resolved.providerSong.trackRef.extensionId)) {
+            return null
+        }
+        if (resolved.resource.extensionId != resolved.providerSong.trackRef.extensionId) return null
+
+        Log.d("FlowtonePlayback", "online.playback.preload.consumed identityHash=${identity.hashCode()}")
+        return resolved
     }
 
     /**
@@ -1444,40 +1564,56 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         val requestGeneration = beginPlaybackRequest()
         setPendingPlayback(track, presentation, index, requestGeneration, PendingPlayback.Phase.Resolving)
         pendingPlaybackJob = viewModelScope.launch {
-            val cachedSong = onlinePresentationCache[track.identityKey]
-                ?.takeIf { extensionManager.isMusicProviderRuntimeAvailable(it.trackRef.extensionId) }
+            val queueEntry = playbackTrackQueue.getOrNull(index)
+                ?: QueueTrackEntry(track, presentation)
+            val preloaded = awaitOnlinePlaybackPreload(queueEntry)
             if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-            when (val result = cachedSong?.let {
-                ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved(it)
-            } ?: extensionManager.resolvePersistentPlaylistSong(track)) {
-                is ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved -> {
-                    if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-                    onlinePresentationCache[track.identityKey] = result.song
-                    setPendingPlayback(track, presentation, index, requestGeneration, PendingPlayback.Phase.Preparing)
-                    val mediaItem = extensionManager.createPlaybackMediaItem(result.song)
-                    if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-                    if (mediaItem == null) {
-                        publishTrackPlaybackError("无法解析在线播放资源")
+            val providerSong = preloaded?.providerSong ?: run {
+                val cachedSong = onlinePresentationCache[track.identityKey]
+                    ?.takeIf { extensionManager.isMusicProviderRuntimeAvailable(it.trackRef.extensionId) }
+                when (val result = cachedSong?.let {
+                    ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved(it)
+                } ?: extensionManager.resolvePersistentPlaylistSong(track)) {
+                    is ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved -> result.song
+                    is ink.tenqui.flowtone.data.online.PersistentSongResolution.ProviderMissing -> {
+                        if (isCurrentPlaybackRequest(requestGeneration)) {
+                            publishTrackPlaybackError("当前没有可处理 ${track.sourceHost} 的扩展")
+                        }
                         return@launch
                     }
-                    currentQueueIndex = index
-                    currentPlaybackSource = source
-                    publishPlaybackQueue()
-                    playbackController.playResolvedMediaItem(
-                        song = presentation,
-                        mediaItem = mediaItem,
-                        extensionArtwork = result.song.artwork,
-                        extensionLargeArtwork = result.song.largeArtwork,
-                        persistentTrack = track
-                    )
-                    clearPendingPlayback(requestGeneration)
-                    scheduleNextSongsPreload()
+                    is ink.tenqui.flowtone.data.online.PersistentSongResolution.Unresolved -> {
+                        if (isCurrentPlaybackRequest(requestGeneration)) {
+                            publishTrackPlaybackError("该在线歌曲暂时无法恢复")
+                        }
+                        return@launch
+                    }
                 }
-                is ink.tenqui.flowtone.data.online.PersistentSongResolution.ProviderMissing -> if (isCurrentPlaybackRequest(requestGeneration))
-                    publishTrackPlaybackError("当前没有可处理 ${track.sourceHost} 的扩展")
-                is ink.tenqui.flowtone.data.online.PersistentSongResolution.Unresolved -> if (isCurrentPlaybackRequest(requestGeneration))
-                    publishTrackPlaybackError("该在线歌曲暂时无法恢复")
             }
+            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
+            onlinePresentationCache[track.identityKey] = providerSong
+            setPendingPlayback(track, presentation, index, requestGeneration, PendingPlayback.Phase.Preparing)
+            val resource = preloaded?.resource
+                ?: extensionManager.resolvePlaybackResource(providerSong)
+            val mediaItem = resource?.let {
+                extensionManager.createPlaybackMediaItem(providerSong, it)
+            }
+            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
+            if (mediaItem == null) {
+                publishTrackPlaybackError("无法解析在线播放资源")
+                return@launch
+            }
+            currentQueueIndex = index
+            currentPlaybackSource = source
+            publishPlaybackQueue()
+            playbackController.playResolvedMediaItem(
+                song = presentation,
+                mediaItem = mediaItem,
+                extensionArtwork = providerSong.artwork,
+                extensionLargeArtwork = providerSong.largeArtwork,
+                persistentTrack = track
+            )
+            clearPendingPlayback(requestGeneration)
+            scheduleNextSongsPreload()
         }
     }
 
@@ -1536,7 +1672,11 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
 
         playbackQueue = nextPlaybackQueue
+        playbackTrackQueue = playbackQueue.mapNotNull { queuedSong ->
+            sourceTrackQueue.firstOrNull { isSameSong(it.presentation, queuedSong) }
+        }
         currentQueueIndex = findSongIndex(playbackQueue, currentSong)
+        markPlaybackQueueChanged()
 
         playbackController.updatePlaybackOrderMode(mode)
         playbackController.setPlaybackOrderMode(
@@ -1676,6 +1816,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         searchJob?.cancel()
         providerSearchJob?.cancel()
         playbackOrderModeJob?.cancel()
+        clearOnlinePlaybackResourcePreload()
         lyricsPreloadScheduler.clear()
         localLyricsRepository.close()
         playbackController.release()
@@ -1687,6 +1828,21 @@ internal data class QueueTrackEntry(
     val persistentTrack: PersistentTrack?,
     val presentation: Song,
     val runtimeProviderSong: ProviderSong? = null
+)
+
+internal data class OnlinePlaybackPreloadIdentity(
+    val queueRevision: Long,
+    val trackIdentity: String
+)
+
+private data class ResolvedOnlinePlayback(
+    val providerSong: ProviderSong,
+    val resource: ExtensionPlaybackResource
+)
+
+private data class OnlinePlaybackResourcePreload(
+    val identity: OnlinePlaybackPreloadIdentity,
+    val result: Deferred<ResolvedOnlinePlayback?>
 )
 
 internal enum class QueueTrackPlaybackKind {
@@ -1701,6 +1857,17 @@ internal val QueueTrackEntry.playbackKind: QueueTrackPlaybackKind
         persistentTrack is PersistentTrack.Online -> QueueTrackPlaybackKind.PersistentOnline
         else -> QueueTrackPlaybackKind.Local
     }
+
+internal fun QueueTrackEntry.onlinePlaybackPreloadIdentity(
+    queueRevision: Long
+): OnlinePlaybackPreloadIdentity? {
+    val trackIdentity = runtimeProviderSong?.trackRef?.let { trackRef ->
+        "runtime:${trackRef.extensionId}\u0000${trackRef.opaqueId}"
+    } ?: (persistentTrack as? PersistentTrack.Online)?.let { track ->
+        "persistent:${track.identityKey}"
+    } ?: return null
+    return OnlinePlaybackPreloadIdentity(queueRevision, trackIdentity)
+}
 
 internal fun mediaControllerQueueForSelection(
     containsOnlineTrack: Boolean,

@@ -7,6 +7,8 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.ProviderSong
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class QueueTrackEntryTest {
@@ -52,6 +54,55 @@ class QueueTrackEntryTest {
         assertEquals(
             queue,
             mediaControllerQueueForSelection(false, queue[2], queue, queue)
+        )
+    }
+
+    @Test
+    fun `local entry is excluded from online playback preload`() {
+        val entry = QueueTrackEntry(
+            persistentTrack = PersistentTrack.Local("1"),
+            presentation = song(1, SourceType.Local)
+        )
+
+        assertNull(entry.onlinePlaybackPreloadIdentity(queueRevision = 1L))
+    }
+
+    @Test
+    fun `runtime preload identity changes with provider song`() {
+        val presentation = song(2, SourceType.Online)
+        val first = QueueTrackEntry(
+            persistentTrack = null,
+            presentation = presentation,
+            runtimeProviderSong = ProviderSong(
+                ExtensionTrackRef("provider.a", "song-a"),
+                "A",
+                "Artist"
+            )
+        )
+        val second = first.copy(
+            runtimeProviderSong = ProviderSong(
+                ExtensionTrackRef("provider.a", "song-b"),
+                "B",
+                "Artist"
+            )
+        )
+
+        assertNotEquals(
+            first.onlinePlaybackPreloadIdentity(queueRevision = 1L),
+            second.onlinePlaybackPreloadIdentity(queueRevision = 1L)
+        )
+    }
+
+    @Test
+    fun `queue replacement invalidates otherwise matching preload identity`() {
+        val entry = QueueTrackEntry(
+            persistentTrack = PersistentTrack.Online("soundcloud.com", "stable", "B", "Artist"),
+            presentation = song(2, SourceType.Online)
+        )
+
+        assertNotEquals(
+            entry.onlinePlaybackPreloadIdentity(queueRevision = 1L),
+            entry.onlinePlaybackPreloadIdentity(queueRevision = 2L)
         )
     }
 

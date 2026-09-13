@@ -203,15 +203,25 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         )
     }
 
-    /** 在线曲目只保存 Host 绑定的 track ref；每次播放重新向所属 runtime 解析短期播放资源。 */
-    internal suspend fun createPlaybackMediaItem(song: ProviderSong): MediaItem? =
+    /** 在线曲目只保存 Host 绑定的 track ref；播放资源由所属 runtime 按需解析。 */
+    internal suspend fun resolvePlaybackResource(
+        song: ProviderSong
+    ): ExtensionPlaybackResource? =
         runtimeLifecycle.execute {
             val provider = musicProviders[song.trackRef.extensionId] ?: return@execute null
-            val resource = providerCall { provider.getPlaybackResource(song) }
+            providerCall { provider.getPlaybackResource(song) }
                 .onFailure { error ->
                     Log.w(LogTag, "extension.playback.resolve.failed extension=${song.trackRef.extensionId} type=${error.javaClass.simpleName}")
                 }
                 .getOrNull() ?: return@execute null
+        }
+
+    internal fun createPlaybackMediaItem(
+        song: ProviderSong,
+        resource: ExtensionPlaybackResource
+    ): MediaItem? {
+        if (resource.extensionId != song.trackRef.extensionId) return null
+        return runCatching {
             createPlaybackMediaItem(
                 extensionId = song.trackRef.extensionId,
                 url = resource.url,
@@ -220,7 +230,19 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 type = resource.type,
                 mediaId = song.trackRef.opaqueId
             )
-        }
+        }.onFailure { error ->
+            Log.w(
+                LogTag,
+                "extension.playback.mediaItem.failed extension=${song.trackRef.extensionId} " +
+                    "type=${error.javaClass.simpleName}"
+            )
+        }.getOrNull()
+    }
+
+    internal suspend fun createPlaybackMediaItem(song: ProviderSong): MediaItem? {
+        val resource = resolvePlaybackResource(song) ?: return null
+        return createPlaybackMediaItem(song, resource)
+    }
 
     /** All 仅合并每个 Provider 的第一页；跨 Provider cursor 留待后续设计。 */
     internal suspend fun searchMusicProviders(request: ProviderSearchRequest): ProviderSearchCallResult =
