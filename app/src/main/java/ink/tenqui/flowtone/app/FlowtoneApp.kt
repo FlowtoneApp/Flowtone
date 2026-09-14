@@ -83,15 +83,7 @@ fun FlowtoneApp(
     val songLyricsState by musicViewModel.songLyricsState.collectAsState()
     val searchUiState by musicViewModel.searchUiState.collectAsState()
     val likedTracks by musicViewModel.likedTracks.collectAsState()
-    val pendingPlayback = uiState.pendingPlayback
-    val playerUiState = PlayerUiState.from(
-        playbackState = playbackState,
-        pendingSong = pendingPlayback?.presentation,
-        pendingTrack = pendingPlayback?.track,
-        pendingExtensionArtwork = pendingPlayback?.extensionArtwork,
-        pendingExtensionLargeArtwork = pendingPlayback?.extensionLargeArtwork,
-        pendingPlayWhenReady = pendingPlayback?.playWhenReady ?: true
-    )
+    val playerUiState = PlayerUiState.from(playbackState)
     val appPreferences = remember(context) {
         AppPreferences(context.applicationContext)
     }
@@ -424,8 +416,6 @@ fun FlowtoneApp(
         songs = uiState.songs,
         preloadSongMetadataCount = appState.preloadSongMetadataCount,
         preloadLyricsCount = appState.preloadLyricsCount,
-        onlinePlaybackPreloadCount = appState.onlinePlaybackPreloadCount,
-        onlinePlaybackPreloadPercentage = appState.onlinePlaybackPreloadPercentage,
         songRecordThresholdSeconds = appState.songRecordThresholdSeconds,
         musicViewModel = musicViewModel,
         onContentScrollOffsetChange = { offset ->

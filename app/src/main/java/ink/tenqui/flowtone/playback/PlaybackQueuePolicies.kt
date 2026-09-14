@@ -42,3 +42,31 @@ internal fun systemQueueMetadata(item: PlaybackQueueItem): SystemQueueMetadata =
 
 internal fun likeCommandTarget(item: PlaybackQueueItem?): PersistentTrack? =
     item?.persistentTrack
+
+internal enum class PlaybackOrderConnectionAction {
+    ApplyPendingRequest,
+    ApplyInitialPreference,
+    RestoreFromSession
+}
+
+internal fun playbackOrderConnectionAction(
+    sessionQueueSize: Int,
+    hasPendingRequest: Boolean
+): PlaybackOrderConnectionAction = when {
+    hasPendingRequest -> PlaybackOrderConnectionAction.ApplyPendingRequest
+    sessionQueueSize > 0 -> PlaybackOrderConnectionAction.RestoreFromSession
+    else -> PlaybackOrderConnectionAction.ApplyInitialPreference
+}
+
+internal fun shouldActivateForPrepare(
+    currentQueueId: String?,
+    resolvingQueueId: String?,
+    resolvedQueueId: String?
+): Boolean = currentQueueId != null &&
+    currentQueueId != resolvingQueueId &&
+    currentQueueId != resolvedQueueId
+
+internal fun canApplyLogicalSnapshot(
+    expectedQueueId: String?,
+    snapshotQueueId: String?
+): Boolean = expectedQueueId == null || expectedQueueId == snapshotQueueId

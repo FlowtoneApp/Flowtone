@@ -21,6 +21,8 @@ data class PlaybackState(
     val sourceQueue: List<PlaybackQueueItem> = emptyList(),
     val playbackQueue: List<PlaybackQueueItem> = emptyList(),
     val currentQueueIndex: Int = -1,
+    /** 当前 logical playback target 的 queue identity，用于将瞬时位置与展示页关联。 */
+    val currentQueueId: String? = null,
     val errorMessage: String? = null
 )
 

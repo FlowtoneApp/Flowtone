@@ -26,11 +26,7 @@ class LikedTracksRepository private constructor(context: Context) {
 
     @Synchronized
     fun setLiked(track: PersistentTrack, liked: Boolean) {
-        val next = if (liked) {
-            (_tracks.value + track).distinctBy(PersistentTrack::identityKey)
-        } else {
-            _tracks.value.filterNot { it.identityKey == track.identityKey }
-        }
+        val next = updatedLikedTracks(_tracks.value, track, liked)
         if (next == _tracks.value) return
         _tracks.value = next
         store.saveLikedTracks(next)
@@ -53,4 +49,14 @@ class LikedTracksRepository private constructor(context: Context) {
             instance ?: LikedTracksRepository(context).also { instance = it }
         }
     }
+}
+
+internal fun updatedLikedTracks(
+    current: List<PersistentTrack>,
+    track: PersistentTrack,
+    liked: Boolean
+): List<PersistentTrack> = if (liked) {
+    (current + track).distinctBy(PersistentTrack::identityKey)
+} else {
+    current.filterNot { it.identityKey == track.identityKey }
 }

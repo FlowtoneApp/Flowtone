@@ -503,6 +503,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         ) {
             MiniPlayerLyricsHost(
                 currentSong = playerUiState.currentSong,
+                currentQueueId = playerUiState.currentQueueId,
                 presentedSongId = songPresentationTransition.current.key,
                 songLyricsState = songLyricsState,
                 switchDirection = collapsedMetadataSwitchDirection,

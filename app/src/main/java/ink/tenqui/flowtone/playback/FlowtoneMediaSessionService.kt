@@ -78,18 +78,6 @@ class FlowtoneMediaSessionService : MediaSessionService() {
     }
 
     private val sessionCallback = object : MediaSession.Callback {
-        @Suppress("DEPRECATION")
-        override fun onPlayerCommandRequest(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            playerCommand: Int
-        ): Int {
-            if (playerCommand.isUserSkipCommand()) {
-                player?.playWhenReady = true
-            }
-            return SessionResult.RESULT_SUCCESS
-        }
-
         @OptIn(UnstableApi::class)
         override fun onConnect(
             session: MediaSession,
@@ -108,6 +96,22 @@ class FlowtoneMediaSessionService : MediaSessionService() {
                 .setAvailablePlayerCommands(connectionResult.availablePlayerCommands)
                 .setMediaButtonPreferences(buildMediaButtonPreferences())
                 .build()
+        }
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<androidx.media3.common.MediaItem>
+        ): ListenableFuture<List<androidx.media3.common.MediaItem>> {
+            if (PlaybackQueueMediaItemCodec.isLogicalQueue(mediaItems)) {
+                Log.d(
+                    MEDIA_SESSION_LOG_TAG,
+                    "onAddMediaItems logicalCount=${mediaItems.size} " +
+                        "target=${mediaItems.firstOrNull()?.mediaId} package=${controller.packageName}"
+                )
+                return Futures.immediateFuture(mediaItems)
+            }
+            return super.onAddMediaItems(mediaSession, controller, mediaItems)
         }
 
         override fun onCustomCommand(
@@ -311,12 +315,6 @@ class FlowtoneMediaSessionService : MediaSessionService() {
 
     private fun successResult(): ListenableFuture<SessionResult> =
         Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
-
-    private fun Int.isUserSkipCommand(): Boolean =
-        this == Player.COMMAND_SEEK_TO_NEXT ||
-            this == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM ||
-            this == Player.COMMAND_SEEK_TO_PREVIOUS ||
-            this == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
 
     private companion object {
         const val MEDIA_SESSION_LOG_TAG = "FlowtoneMediaSession"

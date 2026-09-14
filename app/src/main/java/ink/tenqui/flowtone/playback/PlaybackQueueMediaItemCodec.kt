@@ -129,6 +129,9 @@ object PlaybackQueueMediaItemCodec {
     fun isLogicalQueueItem(mediaItem: MediaItem): Boolean =
         mediaItem.mediaMetadata.extras?.getInt(EXTRA_VERSION, 0) == VERSION
 
+    fun isLogicalQueue(mediaItems: List<MediaItem>): Boolean =
+        mediaItems.isNotEmpty() && mediaItems.all(::isLogicalQueueItem)
+
     private fun Bundle.putPersistentTrack(track: PersistentTrack?) {
         when (track) {
             is PersistentTrack.Local -> {

@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 private data class LyricsPageState(
     val songId: Long,
+    val queueId: String?,
     val state: LyricsState
 )
 
@@ -51,6 +52,7 @@ private enum class LyricsPageContentKind {
 @Composable
 internal fun MiniPlayerLyricsHost(
     currentSong: Song?,
+    currentQueueId: String?,
     presentedSongId: Long?,
     songLyricsState: SongLyricsState,
     confirmedPlaybackPosition: StateFlow<PlaybackPositionSnapshot>,
@@ -81,10 +83,6 @@ internal fun MiniPlayerLyricsHost(
     }
 
     val playbackPosition by confirmedPlaybackPosition.collectAsState()
-    val playbackPositionMs = playbackPositionForSong(
-        songId = currentSong.id,
-        playbackPosition = playbackPosition
-    )
     val resolvedLyricsState = if (songLyricsState.songId == currentSong.id) {
         songLyricsState.state
     } else {
@@ -92,6 +90,7 @@ internal fun MiniPlayerLyricsHost(
     }
     val pageState = LyricsPageState(
         songId = currentSong.id,
+        queueId = currentQueueId,
         state = if (resolvedLyricsState == LyricsState.Idle) LyricsState.Loading else resolvedLyricsState
     )
     var presentedPageState by remember { mutableStateOf(pageState) }
@@ -184,9 +183,10 @@ internal fun MiniPlayerLyricsHost(
             LyricsContent(
                 lyricsSessionKey = displayedPage.songId,
                 state = displayedPage.state,
-                confirmedPlaybackPositionMs = playbackPositionMs.takeIf {
-                    displayedPage.songId == currentSong.id
-                },
+                confirmedPlaybackPositionMs = playbackPositionForTarget(
+                    expectedMediaId = displayedPage.queueId,
+                    playbackPosition = playbackPosition
+                ),
                 activeLineTargetY = activeLineTargetY,
                 visibilityProgress = visibilityProgress,
                 contentVisible = lyricsVisible,
@@ -216,11 +216,11 @@ internal fun MiniPlayerLyricsHost(
     }
 }
 
-internal fun playbackPositionForSong(
-    songId: Long,
+internal fun playbackPositionForTarget(
+    expectedMediaId: String?,
     playbackPosition: PlaybackPositionSnapshot
 ): Long? = playbackPosition.positionMs.takeIf {
-    playbackPosition.mediaId == songId.toString()
+    expectedMediaId != null && playbackPosition.mediaId == expectedMediaId
 }
 
 internal fun lyricsTrackSwitchContentKey(songId: Long, state: LyricsState): Any = when (state.contentKind()) {

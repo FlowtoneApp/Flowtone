@@ -20,6 +20,7 @@ data class PlayerUiState(
     val extensionArtwork: ExtensionImage?,
     val extensionLargeArtwork: ExtensionImage?,
     val playbackOrderMode: PlaybackOrderMode,
+    val currentQueueId: String?,
     val hasCurrentSong: Boolean,
     val canPlay: Boolean
 ) {
@@ -69,6 +70,7 @@ data class PlayerUiState(
                     playbackState.extensionLargeArtwork
                 },
                 playbackOrderMode = playbackState.playbackOrderMode,
+                currentQueueId = playbackState.currentQueueId,
                 hasCurrentSong = currentSong != null,
                 canPlay = currentSong != null
             )

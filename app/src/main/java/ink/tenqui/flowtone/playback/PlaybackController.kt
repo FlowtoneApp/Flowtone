@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.playback
 
 import android.content.Context
 import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -45,9 +47,10 @@ class PlaybackController(
         PlaybackState(playbackOrderMode = initialPlaybackOrderMode)
     )
     private var pendingPlaybackRequest: PendingPlaybackRequest? = null
-    private var pendingPlaybackOrderMode: PlaybackOrderMode? = initialPlaybackOrderMode
-    private var pendingShuffleOrderIndices: IntArray? = null
+    private var pendingPlaybackOrderMode: PlaybackOrderMode? = null
     private var logicalPlaybackOrderMode: PlaybackOrderMode = initialPlaybackOrderMode
+    private var logicalRequestGeneration = 0L
+    private var expectedLogicalTarget: ExpectedLogicalTarget? = null
     private var playbackStateMediaId: String? = null
     private var isReleased = false
     private val setPlaybackOrderCommand = SessionCommand(
@@ -94,6 +97,11 @@ class PlaybackController(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            Log.d(
+                LOG_TAG,
+                "onMediaItemTransition time=${SystemClock.elapsedRealtime()} " +
+                    "mediaId=${mediaItem?.mediaId} reason=$reason"
+            )
             syncLogicalQueueState()
             val mediaId = mediaItem?.mediaId
             if (!mediaId.isNullOrBlank()) {
@@ -111,6 +119,11 @@ class PlaybackController(
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            Log.d(
+                LOG_TAG,
+                "onTimelineChanged time=${SystemClock.elapsedRealtime()} " +
+                    "windows=${timeline.windowCount} reason=$reason"
+            )
             syncLogicalQueueState()
         }
     }
@@ -123,14 +136,18 @@ class PlaybackController(
                 }
 
                 controller.addListener(listener)
-                pendingPlaybackOrderMode?.let { mode ->
-                    val shuffleOrderIndices = pendingShuffleOrderIndices
-                    pendingPlaybackOrderMode = null
-                    pendingShuffleOrderIndices = null
-                    applyPlaybackOrderMode(controller, mode, shuffleOrderIndices)
+                val pendingOrderMode = pendingPlaybackOrderMode
+                when (playbackOrderConnectionAction(controller.mediaItemCount, pendingOrderMode != null)) {
+                    PlaybackOrderConnectionAction.ApplyPendingRequest -> {
+                        pendingPlaybackOrderMode = null
+                        applyPlaybackOrderMode(controller, checkNotNull(pendingOrderMode))
+                    }
+                    PlaybackOrderConnectionAction.ApplyInitialPreference ->
+                        applyPlaybackOrderMode(controller, logicalPlaybackOrderMode)
+                    PlaybackOrderConnectionAction.RestoreFromSession ->
+                        syncPlaybackOrderMode(controller)
                 }
                 playPendingRequest()
-                syncPlaybackOrderMode(controller)
                 syncLogicalQueueState(controller)
             },
             onConnectionFailed = { error ->
@@ -221,6 +238,7 @@ class PlaybackController(
                     sourceQueue = items.sortedBy(PlaybackQueueItem::sourceIndex),
                     playbackQueue = items,
                     currentQueueIndex = startIndex,
+                    currentQueueId = target.queueId,
                     playWhenReady = playWhenReady,
                     isBuffering = target.isOnline
                 )
@@ -229,8 +247,21 @@ class PlaybackController(
         }
         val mediaItems = items.map(PlaybackQueueMediaItemCodec::encode)
         val target = items[startIndex]
+        val request = ExpectedLogicalTarget(++logicalRequestGeneration, target.queueId)
+        expectedLogicalTarget = request
         runCatching {
+            Log.d(
+                LOG_TAG,
+                "submit.before generation=${request.generation} expected=${request.queueId} " +
+                    "current=${controller.currentMediaItem?.mediaId} count=${controller.mediaItemCount}"
+            )
             controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
+            Log.d(
+                LOG_TAG,
+                "submit.afterImmediate generation=${request.generation} expected=${request.queueId} " +
+                    "current=${controller.currentMediaItem?.mediaId} count=${controller.mediaItemCount}"
+            )
+            applyPlaybackOrderMode(controller, logicalPlaybackOrderMode)
             controller.prepare()
             if (playWhenReady) controller.play() else controller.pause()
             updatePlaybackStarted(
@@ -241,61 +272,15 @@ class PlaybackController(
                 mediaId = target.queueId,
                 playWhenReady = playWhenReady
             )
-            syncLogicalQueueState(controller)
-        }.onFailure { updatePlaybackFailed(target.presentation, it) }
+        }.onFailure {
+            if (expectedLogicalTarget == request) expectedLogicalTarget = null
+            updatePlaybackFailed(target.presentation, it)
+        }
     }
 
     /** ViewModel 开始了更新的切歌请求时，丢弃尚未连接 Controller 的旧请求。 */
     fun clearPendingPlaybackRequest() {
         pendingPlaybackRequest = null
-    }
-
-    /** 由 Host 已解析好的受控媒体项仍进入同一 MediaController，不创建第二个播放器。 */
-    fun playResolvedMediaItem(
-        song: Song,
-        mediaItem: MediaItem,
-        extensionArtwork: ExtensionImage? = null,
-        extensionLargeArtwork: ExtensionImage? = null,
-        persistentTrack: PersistentTrack? = null,
-        playWhenReady: Boolean = true
-    ) {
-        val controller = currentControllerOrNull()
-        if (controller == null) {
-            pendingPlaybackRequest = PendingPlaybackRequest.ResolvedMediaItem(
-                song = song,
-                mediaItem = mediaItem,
-                extensionArtwork = extensionArtwork,
-                extensionLargeArtwork = extensionLargeArtwork,
-                persistentTrack = persistentTrack,
-                playWhenReady = playWhenReady
-            )
-            updateCurrentSong(song, extensionArtwork, extensionLargeArtwork, persistentTrack)
-            _playbackState.update {
-                it.copy(
-                    isPlaying = false,
-                    playWhenReady = playWhenReady,
-                    isBuffering = false
-                )
-            }
-            return
-        }
-        runCatching {
-            controller.setMediaItem(mediaItem)
-            controller.prepare()
-            if (playWhenReady) {
-                controller.play()
-            } else {
-                controller.pause()
-            }
-            updatePlaybackStarted(
-                song = song,
-                extensionArtwork = extensionArtwork,
-                extensionLargeArtwork = extensionLargeArtwork,
-                persistentTrack = persistentTrack,
-                mediaId = mediaItem.mediaId,
-                playWhenReady = playWhenReady
-            )
-        }.onFailure { error -> updatePlaybackFailed(song, error) }
     }
 
     fun addSongsNext(
@@ -353,6 +338,7 @@ class PlaybackController(
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                currentQueueId = playbackStateMediaId,
                 currentTrack = persistentTrack
                     ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack(),
                 extensionArtwork = extensionArtwork,
@@ -399,6 +385,7 @@ class PlaybackController(
         _playbackState.update {
             it.copy(
                 currentSong = currentSong,
+                currentQueueId = playbackStateMediaId,
                 isPlaying = isPlaying,
                 playWhenReady = playWhenReady,
                 isBuffering = isBuffering,
@@ -475,6 +462,7 @@ class PlaybackController(
     fun skipToNext(playWhenReady: Boolean = false): Boolean {
         val controller = currentControllerOrNull() ?: return false
         return if (controller.hasNextMediaItem()) {
+            expectLogicalTarget(controller.currentMediaItemIndex + 1, controller)
             controller.seekToNextMediaItem()
             if (playWhenReady) {
                 resume()
@@ -492,6 +480,7 @@ class PlaybackController(
     fun skipToPrevious(playWhenReady: Boolean = false): Boolean {
         val controller = currentControllerOrNull() ?: return false
         return if (controller.hasPreviousMediaItem()) {
+            expectLogicalTarget(controller.currentMediaItemIndex - 1, controller)
             controller.seekToPreviousMediaItem()
             if (playWhenReady) {
                 resume()
@@ -506,10 +495,8 @@ class PlaybackController(
         val controller = currentControllerOrNull()
         pendingPlaybackOrderMode?.let { pendingMode ->
             if (controller != null) {
-                val shuffleOrderIndices = pendingShuffleOrderIndices
                 pendingPlaybackOrderMode = null
-                pendingShuffleOrderIndices = null
-                applyPlaybackOrderMode(controller, pendingMode, shuffleOrderIndices)
+                applyPlaybackOrderMode(controller, pendingMode)
                 return pendingMode
             }
             return pendingMode
@@ -519,22 +506,16 @@ class PlaybackController(
             ?: logicalPlaybackOrderMode
     }
 
-    fun setPlaybackOrderMode(
-        mode: PlaybackOrderMode,
-        shuffleOrderIndices: IntArray? = null
-    ) {
+    fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
         val controller = currentControllerOrNull()
         if (controller == null) {
             pendingPlaybackOrderMode = mode
-            pendingShuffleOrderIndices = shuffleOrderIndices
             updatePlaybackOrderMode(mode)
             return
         }
 
         pendingPlaybackOrderMode = null
-        pendingShuffleOrderIndices = null
-        applyPlaybackOrderMode(controller, mode, shuffleOrderIndices)
-        updatePlaybackOrderMode(mode)
+        applyPlaybackOrderMode(controller, mode)
     }
 
     fun togglePlaybackOrderMode() {
@@ -547,9 +528,7 @@ class PlaybackController(
 
     fun resume() {
         currentControllerOrNull()?.play()
-        pendingPlaybackRequest = (pendingPlaybackRequest as? PendingPlaybackRequest.ResolvedMediaItem)
-            ?.copy(playWhenReady = true)
-            ?: pendingPlaybackRequest
+        pendingPlaybackRequest = pendingPlaybackRequest.withPlayWhenReady(true)
         _playbackState.update {
             it.copy(
                 playWhenReady = true,
@@ -560,9 +539,7 @@ class PlaybackController(
 
     fun pause() {
         currentControllerOrNull()?.pause()
-        pendingPlaybackRequest = (pendingPlaybackRequest as? PendingPlaybackRequest.ResolvedMediaItem)
-            ?.copy(playWhenReady = false)
-            ?: pendingPlaybackRequest
+        pendingPlaybackRequest = pendingPlaybackRequest.withPlayWhenReady(false)
         _playbackState.update {
             it.copy(isPlaying = false, playWhenReady = false)
         }
@@ -625,6 +602,7 @@ class PlaybackController(
     }
 
     fun clearPlayback() {
+        expectedLogicalTarget = null
         currentControllerOrNull()?.apply {
             pause()
             clearMediaItems()
@@ -633,6 +611,7 @@ class PlaybackController(
         _playbackState.update { currentState ->
             currentState.copy(
                 currentSong = null,
+                currentQueueId = null,
                 isPlaying = false,
                 playWhenReady = false,
                 isBuffering = false,
@@ -661,7 +640,6 @@ class PlaybackController(
         isReleased = true
         pendingPlaybackRequest = null
         pendingPlaybackOrderMode = null
-        pendingShuffleOrderIndices = null
         currentControllerOrNull()?.removeListener(listener)
         mediaControllerConnection.release()
     }
@@ -679,6 +657,7 @@ class PlaybackController(
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                currentQueueId = null,
                 isPlaying = false,
                 playWhenReady = true,
                 isBuffering = false,
@@ -700,18 +679,6 @@ class PlaybackController(
             is PendingPlaybackRequest.SingleSong -> {
                 pendingPlaybackRequest = null
                 play(request.song, request.source)
-            }
-
-            is PendingPlaybackRequest.ResolvedMediaItem -> {
-                pendingPlaybackRequest = null
-                playResolvedMediaItem(
-                    song = request.song,
-                    mediaItem = request.mediaItem,
-                    extensionArtwork = request.extensionArtwork,
-                    extensionLargeArtwork = request.extensionLargeArtwork,
-                    persistentTrack = request.persistentTrack,
-                    playWhenReady = request.playWhenReady
-                )
             }
 
             is PendingPlaybackRequest.LogicalQueue -> {
@@ -739,6 +706,7 @@ class PlaybackController(
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                currentQueueId = mediaId,
                 currentTrack = persistentTrack
                     ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack(),
                 extensionArtwork = extensionArtwork,
@@ -759,6 +727,7 @@ class PlaybackController(
         _playbackState.update {
             it.copy(
                 currentSong = song,
+                currentQueueId = null,
                 isPlaying = false,
                 playWhenReady = false,
                 isBuffering = false,
@@ -788,6 +757,7 @@ class PlaybackController(
         val controller = currentControllerOrNull() ?: return false
         if (index !in 0 until controller.mediaItemCount) return false
         return runCatching {
+            expectLogicalTarget(index, controller)
             controller.seekTo(index, C.TIME_UNSET)
             if (playWhenReady) controller.play()
             true
@@ -806,6 +776,17 @@ class PlaybackController(
         if (logicalQueue.isEmpty()) return
         val currentIndex = controller.currentMediaItemIndex
         val current = logicalQueue.getOrNull(currentIndex)
+        val expected = expectedLogicalTarget
+        Log.d(
+            LOG_TAG,
+            "sync attempt current=${current?.queueId} index=$currentIndex size=${logicalQueue.size} " +
+                "expected=${expected?.queueId} generation=${expected?.generation}"
+        )
+        if (!canApplyLogicalSnapshot(expected?.queueId, current?.queueId)) {
+            Log.d(LOG_TAG, "sync ignored stale current=${current?.queueId} expected=${expected?.queueId}")
+            return
+        }
+        if (expected != null) expectedLogicalTarget = null
         playbackStateMediaId = current?.queueId
         _playbackState.update { state ->
             state.copy(
@@ -816,6 +797,7 @@ class PlaybackController(
                 sourceQueue = logicalQueue.sortedBy(PlaybackQueueItem::sourceIndex),
                 playbackQueue = logicalQueue,
                 currentQueueIndex = currentIndex,
+                currentQueueId = current?.queueId,
                 durationMs = controller.duration.safeDurationOr(
                     current?.presentation?.durationMs ?: state.durationMs
                 )
@@ -828,14 +810,10 @@ class PlaybackController(
 
     private fun applyPlaybackOrderMode(
         controller: MediaController,
-        mode: PlaybackOrderMode,
-        shuffleOrderIndices: IntArray? = null
+        mode: PlaybackOrderMode
     ) {
         val args = Bundle().apply {
             putString(EXTRA_PLAYBACK_ORDER_MODE, mode.name)
-            if (shuffleOrderIndices != null) {
-                putIntArray(EXTRA_SHUFFLE_ORDER_INDICES, shuffleOrderIndices)
-            }
         }
 
         val commandResult = runCatching {
@@ -896,19 +874,35 @@ class PlaybackController(
             val source: PlaybackSource
         ) : PendingPlaybackRequest
 
-        data class ResolvedMediaItem(
-            val song: Song,
-            val mediaItem: MediaItem,
-            val extensionArtwork: ExtensionImage?,
-            val extensionLargeArtwork: ExtensionImage?,
-            val persistentTrack: PersistentTrack?,
-            val playWhenReady: Boolean
-        ) : PendingPlaybackRequest
-
         data class LogicalQueue(
             val items: List<PlaybackQueueItem>,
             val startIndex: Int,
             val playWhenReady: Boolean
         ) : PendingPlaybackRequest
+    }
+
+    private fun PendingPlaybackRequest?.withPlayWhenReady(
+        playWhenReady: Boolean
+    ): PendingPlaybackRequest? = when (this) {
+        is PendingPlaybackRequest.LogicalQueue -> copy(playWhenReady = playWhenReady)
+        else -> this
+    }
+
+    private fun expectLogicalTarget(index: Int, controller: MediaController) {
+        val queueId = runCatching { controller.getMediaItemAt(index) }
+            .getOrNull()
+            ?.let(PlaybackQueueMediaItemCodec::decode)
+            ?.queueId
+            ?: return
+        expectedLogicalTarget = ExpectedLogicalTarget(++logicalRequestGeneration, queueId)
+    }
+
+    private data class ExpectedLogicalTarget(
+        val generation: Long,
+        val queueId: String
+    )
+
+    private companion object {
+        const val LOG_TAG = "FlowtoneLogicalQueue"
     }
 }
