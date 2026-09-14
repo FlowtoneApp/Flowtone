@@ -118,7 +118,6 @@ internal fun GlobalSearchContent(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onSongClick: (List<Song>, Int) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
-    pendingTrackIdentityKey: String? = null,
     onArtistClick: (SearchArtist) -> Unit,
     onProviderArtistClick: (ProviderArtist) -> Unit,
     onAlbumClick: (Long) -> Unit,
@@ -135,8 +134,6 @@ internal fun GlobalSearchContent(
     pageTransition: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
-    @Suppress("UNUSED_VARIABLE")
-    val retainedInterfaces = listOf(listState, pendingTrackIdentityKey)
     val transitionElementCount = 6
     var sourceSwitcherState by remember { mutableStateOf<SearchSourceSwitcherState>(SearchSourceSwitcherState.Collapsed) }
     val selectedResultCategory = SearchResultCategory.from(searchUiState.selectedProviderCategory)

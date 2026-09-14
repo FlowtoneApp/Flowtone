@@ -12,6 +12,8 @@ data class PlaybackState(
     val extensionArtwork: ExtensionImage? = null,
     val extensionLargeArtwork: ExtensionImage? = null,
     val isPlaying: Boolean = false,
+    val playWhenReady: Boolean = false,
+    val isBuffering: Boolean = false,
     val positionMs: Long = 0L,
     val bufferedPositionMs: Long = 0L,
     val durationMs: Long = 0L,

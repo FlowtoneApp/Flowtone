@@ -724,7 +724,6 @@ private fun FlowtoneMainTabsSearchContent(
             callbacks.onPlaylistSongClick(songs, index, PlaybackSource.Search)
         },
         onOnlineSongClick = callbacks.onOnlineSongClick,
-        pendingTrackIdentityKey = state.uiState.pendingPlayback?.track?.identityKey,
         onArtistClick = { artist ->
             callbacks.onOpenArtist(artist.name)
         },

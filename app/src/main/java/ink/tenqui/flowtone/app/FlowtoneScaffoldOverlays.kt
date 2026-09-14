@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,7 +73,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     }
     MiniPlayer(
         playerUiState = state.playerUiState,
-        isPendingPlayback = state.uiState.pendingPlayback != null,
         songLyricsState = state.songLyricsState,
         expanded = state.miniPlayerExpanded,
         onExpandedChange = callbacks.onExpandedChange,
@@ -164,16 +162,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             .blur(playlistEditingBlurRadius)
             .zIndex(30f)
     )
-    // confirmed current song 保持不动；这里只给出下一首在线歌正在解析的即时反馈。
-    if (state.uiState.pendingPlayback != null) {
-        CircularProgressIndicator(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 18.dp, bottom = state.miniPlayerBottomProtection + 18.dp)
-                .zIndex(31f),
-            strokeWidth = 2.dp
-        )
-    }
     val editingPlaylist = libraryPlaylistController.editingPlaylistId?.let { editingId ->
         libraryPlaylistController.playlists.firstOrNull { playlist ->
             playlist.id == editingId && !playlist.isSystem

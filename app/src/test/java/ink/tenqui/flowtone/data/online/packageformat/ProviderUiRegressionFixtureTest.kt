@@ -141,6 +141,28 @@ class ProviderUiRegressionFixtureTest {
     }
 
     @Test
+    fun fixtureIncludesDeterministicPlaybackLoadingCase() {
+        val source = fixtureFile("main.js").readText()
+        val searchHandler = source.between(
+            "async searchPage(request)",
+            "async getSongs()"
+        )
+        val playbackHandler = source.between(
+            "async getPlaybackResource(request)",
+            "};"
+        )
+
+        assertTrue(source.contains("const ALWAYS_LOADING_SONG_ID = 'playback-always-loading'"))
+        assertTrue(source.contains("title: 'Always Loading Playback Test (20s)'"))
+        assertTrue(source.contains("category: 'single'"))
+        assertTrue(searchHandler.contains("request.category === 'single'"))
+        assertTrue(searchHandler.contains("song.id === ALWAYS_LOADING_SONG_ID"))
+        assertTrue(searchHandler.contains("songSearchResult(loadingSong)"))
+        assertTrue(playbackHandler.contains("request.id === ALWAYS_LOADING_SONG_ID"))
+        assertTrue(playbackHandler.contains("return new Promise(() => {})"))
+    }
+
+    @Test
     fun everyFixtureArtistPayloadCanCreateANavigableArtistEntry() {
         val cases = listOf(
             "banner-scroll" to "Banner Scroll Test",

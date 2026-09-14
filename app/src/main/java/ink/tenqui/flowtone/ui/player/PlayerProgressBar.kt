@@ -43,6 +43,7 @@ internal fun PlaybackProgressBar(
     durationMs: Long,
     isPlaying: Boolean,
     isPlayingForVisualLock: Boolean,
+    isPlaybackWaitingForData: Boolean,
     strictProgressBar: Boolean,
     lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
     currentSongKey: Long?,
@@ -75,6 +76,7 @@ internal fun PlaybackProgressBar(
         durationMs = durationMs
     )
     val animatedBufferedProgress = remember { Animatable(targetBufferedProgress) }
+    val waitingTrackPulse = remember { Animatable(0f) }
     var lastSongKey by remember { mutableStateOf(currentSongKey) }
     var bufferedProgressSongKey by remember { mutableStateOf(currentSongKey) }
     var lastRenderedProgress by remember { mutableStateOf(0f) }
@@ -251,6 +253,40 @@ internal fun PlaybackProgressBar(
     }
     val activeProgressColor = progressColor
     val bufferedProgressColor = lerp(trackColor, progressColor, 0.20f)
+    LaunchedEffect(isPlaybackWaitingForData) {
+        if (!isPlaybackWaitingForData) {
+            waitingTrackPulse.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = PlaybackWaitingTrackSettleMillis,
+                    easing = TrackSwitchProgressEasing
+                )
+            )
+            return@LaunchedEffect
+        }
+
+        while (isActive) {
+            waitingTrackPulse.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = PlaybackWaitingTrackHalfCycleMillis,
+                    easing = TrackSwitchProgressEasing
+                )
+            )
+            waitingTrackPulse.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = PlaybackWaitingTrackHalfCycleMillis,
+                    easing = TrackSwitchProgressEasing
+                )
+            )
+        }
+    }
+    val animatedTrackColor = lerp(
+        trackColor,
+        bufferedProgressColor,
+        waitingTrackPulse.value * PlaybackWaitingTrackPeakFraction
+    )
 
     fun updateScrubProgress(x: Float) {
         scrubProgress = progressFromX(
@@ -313,7 +349,7 @@ internal fun PlaybackProgressBar(
                 visibleProgress = visibleProgress,
                 bufferedProgress = animatedBufferedProgress.value,
                 trackHeight = animatedTrackHeight,
-                trackColor = trackColor,
+                trackColor = animatedTrackColor,
                 bufferedColor = bufferedProgressColor,
                 progressColor = activeProgressColor,
                 enterProgress = enterProgress,

@@ -1,4 +1,5 @@
 const COLLECTION_DELAY_MS = 3000;
+const ALWAYS_LOADING_SONG_ID = 'playback-always-loading';
 
 const image = (width, height, color, label) =>
   `https://placehold.co/${width}x${height}/${color}/FFFFFF.png?text=${encodeURIComponent(label)}`;
@@ -103,6 +104,14 @@ const albums = [
 ];
 
 const songs = [];
+songs.push({
+  id: ALWAYS_LOADING_SONG_ID,
+  persistentId: ALWAYS_LOADING_SONG_ID,
+  title: 'Always Loading Playback Test (20s)',
+  artist: 'Flowtone UI Test',
+  durationMs: 180000,
+  artworkUrl: image(600, 600, 'B45309', 'Loading+20s')
+});
 addTracks('banner-scroll', 'banner-normal-album', 4, 'Banner Normal Track');
 addTracks(
   'banner-scroll',
@@ -193,12 +202,31 @@ function artistSearchResult(artist) {
   };
 }
 
+function songSearchResult(song) {
+  return {
+    ...song,
+    category: 'single'
+  };
+}
+
 globalThis.flowtoneExtension = {
   async searchPage(request) {
-    if (request.category !== 'user' || request.cursor !== null) {
+    if (request.cursor !== null) {
       return { results: [], nextCursor: null };
     }
     const keyword = String(request.keyword || '').trim().toLowerCase();
+    if (request.category === 'single') {
+      const loadingSong = songs.find((song) => song.id === ALWAYS_LOADING_SONG_ID);
+      const matchesKeyword = loadingSong && [loadingSong.id, loadingSong.title, loadingSong.artist]
+        .some((value) => value.toLowerCase().includes(keyword));
+      return {
+        results: matchesKeyword ? [songSearchResult(loadingSong)].slice(0, request.limit) : [],
+        nextCursor: null
+      };
+    }
+    if (request.category !== 'user') {
+      return { results: [], nextCursor: null };
+    }
     const results = artists
       .filter((artist) => artist.id.includes(keyword) || artist.title.toLowerCase().includes(keyword))
       .slice(0, request.limit)
@@ -232,7 +260,11 @@ globalThis.flowtoneExtension = {
     return songs.find((song) => song.persistentId === request.persistentId) || {};
   },
 
-  async getPlaybackResource() {
+  async getPlaybackResource(request) {
+    if (request.id === ALWAYS_LOADING_SONG_ID) {
+      // The host's existing 20-second JS evaluation timeout ends this deterministic loading case.
+      return new Promise(() => {});
+    }
     // Presentation-only fixture: no remote audio is introduced for UI regression coverage.
     return { type: 'unsupported' };
   }

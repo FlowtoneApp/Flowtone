@@ -20,8 +20,9 @@ import ink.tenqui.flowtone.playback.PlaybackOrderMode
 @Composable
 internal fun SharedPlaybackControls(
     progress: Float,
-    isPlaying: Boolean,
-    isPendingPlayback: Boolean = false,
+    playWhenReady: Boolean,
+    previousEnabled: Boolean,
+    nextEnabled: Boolean,
     iconColor: Color,
     screenWidth: Dp,
     minimizedProgress: Float,
@@ -87,7 +88,9 @@ internal fun SharedPlaybackControls(
     val controlsEnabled = controlsExit <= 0.01f
 
     PlayerMainControls(
-        isPlaying = isPlaying,
+        playWhenReady = playWhenReady,
+        previousEnabled = previousEnabled,
+        nextEnabled = nextEnabled,
         iconColor = iconColor,
         screenWidth = screenWidth,
         previousNextTouchSize = previousNextTouchSize,
@@ -100,7 +103,6 @@ internal fun SharedPlaybackControls(
         currentTop = currentTop,
         fullscreenScale = fullscreenScale,
         controlsEnabled = controlsEnabled,
-        isPendingPlayback = isPendingPlayback,
         onPlayPrevious = onPlayPrevious,
         onTogglePlayPause = onTogglePlayPause,
         onPlayNext = onPlayNext,

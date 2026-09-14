@@ -312,7 +312,6 @@ internal fun SecondaryPageHost(
                         presentationSessionKey = navigationEntryKey,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
-                        pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                         onSongClick = { queue, index ->
                             onProviderSongQueueClick(
                                 queue,
@@ -341,7 +340,6 @@ internal fun SecondaryPageHost(
                             allSongs = uiState.songs,
                             likedTracks = uiState.likedTracks,
                             currentSong = currentSong,
-                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                             songSort = playlistSongSort,
                             onSongClick = { tracks, index ->
                                 onPersistentTrackQueueClick(
@@ -369,7 +367,6 @@ internal fun SecondaryPageHost(
                             allSongs = uiState.songs,
                             playlistSongEntries = playlistSongEntries,
                             currentSong = currentSong,
-                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                             songSort = playlistSongSort,
                             onSongClick = { tracks, index ->
                                 onPersistentTrackQueueClick(
@@ -425,7 +422,6 @@ internal fun SecondaryPageHost(
                             album = detail.album,
                             currentSong = currentSong,
                             isPlaying = isPlaying,
-                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                             songSort = playlistSongSort,
                             onSongClick = { songs, index ->
                                 onPlaylistSongClick(
@@ -461,7 +457,6 @@ internal fun SecondaryPageHost(
                             presentationSessionKey = navigationEntryKey,
                             currentSong = currentSong,
                             isPlaying = isPlaying,
-                            pendingTrackIdentityKey = uiState.pendingPlayback?.track?.identityKey,
                             onSongClick = { queue, index ->
                                 onProviderSongQueueClick(
                                     queue,

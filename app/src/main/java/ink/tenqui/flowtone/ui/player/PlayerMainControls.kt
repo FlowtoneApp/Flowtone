@@ -10,7 +10,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,7 +19,9 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun PlayerMainControls(
-    isPlaying: Boolean,
+    playWhenReady: Boolean,
+    previousEnabled: Boolean,
+    nextEnabled: Boolean,
     iconColor: Color,
     screenWidth: Dp,
     previousNextTouchSize: Dp,
@@ -33,7 +34,6 @@ internal fun PlayerMainControls(
     currentTop: Dp,
     fullscreenScale: Float,
     controlsEnabled: Boolean,
-    isPendingPlayback: Boolean = false,
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
@@ -49,7 +49,7 @@ internal fun PlayerMainControls(
     ) {
         TransparentControlButton(
             onClick = onPlayPrevious,
-            enabled = controlsEnabled,
+            enabled = controlsEnabled && previousEnabled,
             modifier = Modifier
                 .size(previousNextTouchSize)
                 .graphicsLayer {
@@ -77,19 +77,13 @@ internal fun PlayerMainControls(
                     scaleY = fullscreenScale
                 }
         ) {
-            if (isPendingPlayback) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(playPauseIconSize),
-                    color = iconColor,
-                    strokeWidth = 2.dp
-                )
-            } else Icon(
-                imageVector = if (isPlaying) {
+            Icon(
+                imageVector = if (playWhenReady) {
                     Icons.Filled.Pause
                 } else {
                     Icons.Filled.PlayArrow
                 },
-                contentDescription = if (isPlaying) {
+                contentDescription = if (playWhenReady) {
                     "\u6682\u505c"
                 } else {
                     "\u64ad\u653e"
@@ -100,7 +94,7 @@ internal fun PlayerMainControls(
         }
         TransparentControlButton(
             onClick = onPlayNext,
-            enabled = controlsEnabled,
+            enabled = controlsEnabled && nextEnabled,
             modifier = Modifier
                 .size(previousNextTouchSize)
                 .graphicsLayer {

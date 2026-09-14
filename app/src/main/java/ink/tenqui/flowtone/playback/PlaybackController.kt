@@ -24,6 +24,8 @@ data class PlaybackSnapshot(
     val mediaItemCount: Int,
     val queueMediaItems: List<MediaItem>,
     val isPlaying: Boolean,
+    val playWhenReady: Boolean,
+    val isBuffering: Boolean,
     val positionMs: Long,
     val bufferedPositionMs: Long,
     val durationMs: Long,
@@ -61,20 +63,32 @@ class PlaybackController(
             }
         }
 
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            _playbackState.update {
+                it.copy(playWhenReady = playWhenReady)
+            }
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             _playbackState.update {
                 it.copy(
                     isPlaying = false,
+                    playWhenReady = false,
+                    isBuffering = false,
                     errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
                 )
             }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_ENDED) {
-                _playbackState.update {
-                    it.copy(isPlaying = false)
-                }
+            val ended = playbackState == Player.STATE_ENDED
+            _playbackState.update {
+                it.copy(
+                    isPlaying = if (ended) false else it.isPlaying,
+                    isBuffering = playbackState == Player.STATE_BUFFERING
+                )
+            }
+            if (ended) {
                 onPlaybackEnded()
             }
         }
@@ -121,6 +135,8 @@ class PlaybackController(
                     _playbackState.update {
                         it.copy(
                             isPlaying = false,
+                            playWhenReady = false,
+                            isBuffering = false,
                             errorMessage = error.message ?: "\u64ad\u653e\u5668\u8fde\u63a5\u5931\u8d25"
                         )
                     }
@@ -189,7 +205,8 @@ class PlaybackController(
         mediaItem: MediaItem,
         extensionArtwork: ExtensionImage? = null,
         extensionLargeArtwork: ExtensionImage? = null,
-        persistentTrack: PersistentTrack? = null
+        persistentTrack: PersistentTrack? = null,
+        playWhenReady: Boolean = true
     ) {
         val controller = currentControllerOrNull()
         if (controller == null) {
@@ -198,21 +215,34 @@ class PlaybackController(
                 mediaItem = mediaItem,
                 extensionArtwork = extensionArtwork,
                 extensionLargeArtwork = extensionLargeArtwork,
-                persistentTrack = persistentTrack
+                persistentTrack = persistentTrack,
+                playWhenReady = playWhenReady
             )
             updateCurrentSong(song, extensionArtwork, extensionLargeArtwork, persistentTrack)
+            _playbackState.update {
+                it.copy(
+                    isPlaying = false,
+                    playWhenReady = playWhenReady,
+                    isBuffering = false
+                )
+            }
             return
         }
         runCatching {
             controller.setMediaItem(mediaItem)
             controller.prepare()
-            controller.play()
+            if (playWhenReady) {
+                controller.play()
+            } else {
+                controller.pause()
+            }
             updatePlaybackStarted(
                 song = song,
                 extensionArtwork = extensionArtwork,
                 extensionLargeArtwork = extensionLargeArtwork,
                 persistentTrack = persistentTrack,
-                mediaId = mediaItem.mediaId
+                mediaId = mediaItem.mediaId,
+                playWhenReady = playWhenReady
             )
         }.onFailure { error -> updatePlaybackFailed(song, error) }
     }
@@ -291,6 +321,8 @@ class PlaybackController(
     fun updateFromSnapshot(
         currentSong: Song,
         isPlaying: Boolean,
+        playWhenReady: Boolean,
+        isBuffering: Boolean,
         positionMs: Long,
         bufferedPositionMs: Long,
         durationMs: Long,
@@ -301,6 +333,8 @@ class PlaybackController(
             it.copy(
                 currentSong = currentSong,
                 isPlaying = isPlaying,
+                playWhenReady = playWhenReady,
+                isBuffering = isBuffering,
                 positionMs = positionMs.coerceAtLeast(0L),
                 bufferedPositionMs = bufferedPositionMs.coerceAtLeast(0L),
                 durationMs = durationMs.coerceAtLeast(0L),
@@ -355,6 +389,8 @@ class PlaybackController(
             mediaItemCount = mediaItemCount,
             queueMediaItems = queueMediaItems,
             isPlaying = controller.isPlaying,
+            playWhenReady = controller.playWhenReady,
+            isBuffering = controller.playbackState == Player.STATE_BUFFERING,
             positionMs = controller.currentPosition.coerceAtLeast(0L),
             bufferedPositionMs = controller.bufferedPosition.coerceAtLeast(0L),
             durationMs = safeDuration(controller.duration),
@@ -440,21 +476,25 @@ class PlaybackController(
     }
 
     fun resume() {
-        val controller = currentControllerOrNull() ?: return
-        controller.play()
+        currentControllerOrNull()?.play()
+        pendingPlaybackRequest = (pendingPlaybackRequest as? PendingPlaybackRequest.ResolvedMediaItem)
+            ?.copy(playWhenReady = true)
+            ?: pendingPlaybackRequest
         _playbackState.update {
             it.copy(
-                isPlaying = true,
+                playWhenReady = true,
                 errorMessage = null
             )
         }
     }
 
     fun pause() {
-        val controller = currentControllerOrNull() ?: return
-        controller.pause()
+        currentControllerOrNull()?.pause()
+        pendingPlaybackRequest = (pendingPlaybackRequest as? PendingPlaybackRequest.ResolvedMediaItem)
+            ?.copy(playWhenReady = false)
+            ?: pendingPlaybackRequest
         _playbackState.update {
-            it.copy(isPlaying = false)
+            it.copy(isPlaying = false, playWhenReady = false)
         }
     }
 
@@ -524,6 +564,8 @@ class PlaybackController(
             currentState.copy(
                 currentSong = null,
                 isPlaying = false,
+                playWhenReady = false,
+                isBuffering = false,
                 positionMs = 0L,
                 bufferedPositionMs = 0L,
                 durationMs = 0L
@@ -533,8 +575,8 @@ class PlaybackController(
 
     fun togglePlayPause() {
         val controller = currentControllerOrNull()
-        val isPlaying = controller?.isPlaying ?: playbackState.value.isPlaying
-        if (isPlaying) {
+        val playWhenReady = controller?.playWhenReady ?: playbackState.value.playWhenReady
+        if (playWhenReady) {
             pause()
         } else {
             play()
@@ -568,6 +610,8 @@ class PlaybackController(
             it.copy(
                 currentSong = song,
                 isPlaying = false,
+                playWhenReady = true,
+                isBuffering = false,
                 positionMs = 0L,
                 bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
@@ -595,7 +639,8 @@ class PlaybackController(
                     mediaItem = request.mediaItem,
                     extensionArtwork = request.extensionArtwork,
                     extensionLargeArtwork = request.extensionLargeArtwork,
-                    persistentTrack = request.persistentTrack
+                    persistentTrack = request.persistentTrack,
+                    playWhenReady = request.playWhenReady
                 )
             }
 
@@ -608,7 +653,8 @@ class PlaybackController(
         extensionArtwork: ExtensionImage? = null,
         extensionLargeArtwork: ExtensionImage? = null,
         persistentTrack: PersistentTrack? = null,
-        mediaId: String? = currentControllerOrNull()?.currentMediaItem?.mediaId
+        mediaId: String? = currentControllerOrNull()?.currentMediaItem?.mediaId,
+        playWhenReady: Boolean = true
     ) {
         playbackStateMediaId = mediaId
         _playbackState.update {
@@ -618,7 +664,9 @@ class PlaybackController(
                     ?: song.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack(),
                 extensionArtwork = extensionArtwork,
                 extensionLargeArtwork = extensionLargeArtwork,
-                isPlaying = true,
+                isPlaying = currentControllerOrNull()?.isPlaying == true,
+                playWhenReady = playWhenReady,
+                isBuffering = currentControllerOrNull()?.playbackState == Player.STATE_BUFFERING,
                 positionMs = 0L,
                 bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
@@ -633,6 +681,8 @@ class PlaybackController(
             it.copy(
                 currentSong = song,
                 isPlaying = false,
+                playWhenReady = false,
+                isBuffering = false,
                 bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
                 errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
@@ -730,7 +780,8 @@ class PlaybackController(
             val mediaItem: MediaItem,
             val extensionArtwork: ExtensionImage?,
             val extensionLargeArtwork: ExtensionImage?,
-            val persistentTrack: PersistentTrack?
+            val persistentTrack: PersistentTrack?,
+            val playWhenReady: Boolean
         ) : PendingPlaybackRequest
     }
 }

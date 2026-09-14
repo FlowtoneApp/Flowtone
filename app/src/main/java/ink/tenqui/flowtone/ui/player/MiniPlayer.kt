@@ -60,7 +60,6 @@ import ink.tenqui.flowtone.viewmodel.MusicViewModel
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
-    isPendingPlayback: Boolean = false,
     songLyricsState: SongLyricsState = SongLyricsState(),
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -106,6 +105,11 @@ fun MiniPlayer(
 ) {
     val currentSong = playerUiState.currentSong
     val hasCurrentSong = playerUiState.hasCurrentSong
+    val hasQueueTarget = currentQueueIndex in playbackQueue.indices
+    val previousEnabled = hasCurrentSong && hasQueueTarget && currentQueueIndex > 0
+    val nextEnabled = hasCurrentSong &&
+        hasQueueTarget &&
+        currentQueueIndex < playbackQueue.lastIndex
     val miniPlayerVisible = hasCurrentSong && !forceHidden
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
@@ -172,7 +176,7 @@ fun MiniPlayer(
         fullscreen = fullscreen,
         expanded = expanded,
         hasCurrentSong = hasCurrentSong,
-        initialIsPlaying = playerUiState.isPlaying,
+        initialPlayWhenReady = playerUiState.playWhenReady,
         currentSong = currentSong,
         title = title,
         artist = artist,
@@ -193,7 +197,7 @@ fun MiniPlayer(
     }
     var progressTrackingRequestVersion by remember { mutableLongStateOf(0L) }
     val transitions = remember(state) { MiniPlayerTransitions(state) }
-    val currentIsPlayingForLyricSeek by rememberUpdatedState(playerUiState.isPlaying)
+    val currentPlayWhenReadyForLyricSeek by rememberUpdatedState(playerUiState.playWhenReady)
     val currentSongIdForLyricSeek by rememberUpdatedState(currentSong?.id)
     val onLyricPressCallback = remember {
         {
@@ -211,8 +215,8 @@ fun MiniPlayer(
                     targetPositionMs = positionMs
                 )
             }
-            // seek 引发的短暂 BUFFERING 不应启动暂停态的封面、背景和控件动画。
-            transitions.lockPlayPauseVisual(currentIsPlayingForLyricSeek)
+            // seek 引发的短暂 BUFFERING 不应改变由播放意图决定的封面、背景和控件视觉。
+            transitions.lockPlayPauseVisual(currentPlayWhenReadyForLyricSeek)
             callbacks.onSeekTo(positionMs)
         }
     }
@@ -570,7 +574,8 @@ fun MiniPlayer(
     ) {
         state.lockedIsPlayingDuringScrub
     } else {
-        playerUiState.isPlaying
+        // resolve / prepare / BUFFERING 只改变引擎事实；封面的暂停态由用户播放意图决定。
+        playerUiState.playWhenReady
     }
     val artworkPlaybackScale by animateFloatAsState(
         targetValue = if (visualIsPlaying || !hasCurrentSong) {
@@ -885,8 +890,10 @@ fun MiniPlayer(
                         title = title,
                         artist = artist,
                         hasCurrentSong = hasCurrentSong,
+                        previousEnabled = previousEnabled,
+                        nextEnabled = nextEnabled,
                         visualIsPlaying = visualIsPlaying,
-                        isPendingPlayback = isPendingPlayback,
+                        playWhenReady = playerUiState.playWhenReady,
                         strictProgressBar = strictProgressBar,
                         lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                         progressTrackingRequestVersion = progressTrackingRequestVersion,
