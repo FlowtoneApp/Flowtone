@@ -499,7 +499,7 @@ fun MiniPlayer(
     val titleColor = Color.White
     val artistColor = Color.White
     val controlIconColor = Color.White
-    val progressTrackColor = Color(0xFF9E9E9E)
+    val progressTrackColor = Color(0xFF7E7E7E)
     val progressColor = Color.White
     val isCurrentSongLiked = currentSong?.let { song ->
         playerUiState.currentTrack?.identityKey?.let(likedSongKeys::contains)
