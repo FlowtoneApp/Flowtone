@@ -53,6 +53,14 @@ object MediaItemMapper {
     }
 
     fun toSongOrNull(mediaItem: MediaItem, scannedSongs: List<Song>): Song? {
+        PlaybackQueueMediaItemCodec.decode(mediaItem)?.let { logicalItem ->
+            val song = logicalItem.presentation
+            if (song.sourceType == SourceType.Local) {
+                scannedSongs.firstOrNull { it.id == song.id || it.uri == song.uri }
+                    ?.let { return it }
+            }
+            return song
+        }
         val mediaIdAsLong = mediaItem.mediaId.toLongOrNull()
         val extras = mediaItem.mediaMetadata.extras
         val songId = mediaIdAsLong
@@ -91,6 +99,7 @@ object MediaItemMapper {
     }
 
     fun toPlaybackSource(mediaItem: MediaItem?): PlaybackSource {
+        mediaItem?.let(PlaybackQueueMediaItemCodec::decode)?.let { return it.source }
         val extras = mediaItem?.mediaMetadata?.extras ?: return PlaybackSource.Unknown
         val sourceKey = extras.getString(EXTRA_SOURCE_KEY)?.takeIf { it.isNotBlank() }
             ?: return PlaybackSource.Unknown

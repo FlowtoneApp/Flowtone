@@ -18,6 +18,9 @@ data class PlaybackState(
     val bufferedPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val playbackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
+    val sourceQueue: List<PlaybackQueueItem> = emptyList(),
+    val playbackQueue: List<PlaybackQueueItem> = emptyList(),
+    val currentQueueIndex: Int = -1,
     val errorMessage: String? = null
 )
 

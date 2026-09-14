@@ -49,6 +49,7 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.playback.PlaybackSource
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.debug.performanceSample
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
@@ -91,6 +92,8 @@ fun MiniPlayer(
     },
     sourceQueue: List<Song> = emptyList(),
     playbackQueue: List<Song> = emptyList(),
+    sourceQueueItems: List<PlaybackQueueItem> = emptyList(),
+    playbackQueueItems: List<PlaybackQueueItem> = emptyList(),
     allSongs: List<Song> = emptyList(),
     currentQueueIndex: Int = -1,
     queueDisplayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
@@ -1005,8 +1008,8 @@ fun MiniPlayer(
         overlayContent = {
             MiniPlayerQueueSheetHost(
             showQueueSheet = state.showQueueSheet,
-            playbackQueue = playbackQueue,
-            sourceQueue = sourceQueue,
+            playbackQueue = playbackQueueItems,
+            sourceQueue = sourceQueueItems,
             currentQueueIndex = currentQueueIndex,
             currentSong = currentSong,
             playbackOrderMode = playerUiState.playbackOrderMode,

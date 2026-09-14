@@ -39,25 +39,6 @@ class QueueTrackEntryTest {
     }
 
     @Test
-    fun `mixed collection gives media controller only selected item`() {
-        val queue = listOf(
-            song(1, SourceType.Local),
-            song(2, SourceType.Online),
-            song(3, SourceType.Local),
-            song(4, SourceType.Online)
-        )
-
-        assertEquals(
-            listOf(queue[2]),
-            mediaControllerQueueForSelection(true, queue[2], queue, queue)
-        )
-        assertEquals(
-            queue,
-            mediaControllerQueueForSelection(false, queue[2], queue, queue)
-        )
-    }
-
-    @Test
     fun `local entry is excluded from online playback preload`() {
         val entry = QueueTrackEntry(
             persistentTrack = PersistentTrack.Local("1"),

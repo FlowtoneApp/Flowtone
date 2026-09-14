@@ -1,0 +1,478 @@
+package ink.tenqui.flowtone.playback
+
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.ForwardingSimpleBasePlayer
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import ink.tenqui.flowtone.app.AppPreferences
+import ink.tenqui.flowtone.core.model.PersistentTrack
+import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.PersistentSongResolution
+import ink.tenqui.flowtone.data.online.ProviderSong
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+
+/**
+ * MediaSession-facing player. Its timeline is the logical queue while [engine] only contains the
+ * currently resolved resource.
+ */
+@OptIn(UnstableApi::class)
+internal class SessionPlaybackPlayer(
+    private val engine: ExoPlayer,
+    private val scope: CoroutineScope,
+    private val extensionManager: ExtensionManager,
+    private val appPreferences: AppPreferences,
+    private val artworkLoader: SessionArtworkLoader,
+    private val onLogicalTargetChanged: (PlaybackQueueItem?) -> Unit,
+    private val onPlaybackOrderChanged: (PlaybackOrderMode) -> Unit,
+    private val onResolveError: (PlaybackQueueItem, String) -> Unit
+) : ForwardingSimpleBasePlayer(engine) {
+    private val queue = SessionPlaybackQueue()
+    private var desiredPlayWhenReady = false
+    private var resolving = false
+    private var logicalError: PlaybackException? = null
+    private val requestGate = PlaybackRequestGate()
+    private var resolveJob: Job? = null
+    private var artworkJob: Job? = null
+    private var preloadJob: Job? = null
+    private var resolvedQueueId: String? = null
+    private var currentArtworkData: ByteArray? = null
+    private val preloadedMediaItems = mutableMapOf<String, PreloadedOnlineItem>()
+
+    val currentLogicalItem: PlaybackQueueItem?
+        get() = queue.currentItem
+
+    val playbackOrderMode: PlaybackOrderMode
+        get() = queue.orderMode
+
+    val sourceItems: List<PlaybackQueueItem>
+        get() = queue.sourceItems
+
+    private val engineListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState != Player.STATE_ENDED || resolving || !desiredPlayWhenReady) return
+            if (queue.orderMode == PlaybackOrderMode.RepeatOne) {
+                activateCurrentTarget(forceResolve = false)
+                return
+            }
+            val next = queue.nextIndex
+            if (next == null) {
+                desiredPlayWhenReady = false
+                invalidateState()
+            } else {
+                queue.select(next)
+                activateCurrentTarget(forceResolve = true)
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            val item = queue.currentItem ?: return
+            desiredPlayWhenReady = false
+            onResolveError(item, error.message ?: "播放失败")
+            invalidateState()
+        }
+    }
+
+    init {
+        engine.addListener(engineListener)
+    }
+
+    override fun getState(): State {
+        val base = super.getState()
+        val playlist = queue.playbackItems.mapIndexed { index, item ->
+            val metadataItem = PlaybackQueueMediaItemCodec.encode(
+                item = item,
+                artworkData = currentArtworkData.takeIf { index == queue.currentIndex }
+            )
+            SimpleBasePlayer.MediaItemData.Builder(item.queueId)
+                .setMediaItem(metadataItem)
+                .setMediaMetadata(metadataItem.mediaMetadata)
+                .setDurationUs(item.presentation.durationMs.toDurationUs())
+                .setIsSeekable(index == queue.currentIndex && resolvedQueueId == item.queueId)
+                .setIsPlaceholder(resolvedQueueId != item.queueId)
+                .build()
+        }
+        val commands = Player.Commands.Builder()
+            .addAll(base.availableCommands)
+            .add(Player.COMMAND_GET_TIMELINE)
+            .add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
+            .add(Player.COMMAND_GET_METADATA)
+            .add(Player.COMMAND_SET_MEDIA_ITEM)
+            .add(Player.COMMAND_CHANGE_MEDIA_ITEMS)
+            .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
+            .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            .add(Player.COMMAND_SEEK_TO_NEXT)
+            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+            .add(Player.COMMAND_PLAY_PAUSE)
+            .add(Player.COMMAND_PREPARE)
+            .add(Player.COMMAND_STOP)
+            .add(Player.COMMAND_SET_REPEAT_MODE)
+            .add(Player.COMMAND_SET_SHUFFLE_MODE)
+            .build()
+        val builder = base.buildUpon()
+            .setAvailableCommands(commands)
+            .setPlaylist(playlist)
+            .setPlayWhenReady(
+                desiredPlayWhenReady,
+                Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST
+            )
+            .setRepeatMode(
+                if (queue.orderMode == PlaybackOrderMode.RepeatOne) {
+                    Player.REPEAT_MODE_ONE
+                } else {
+                    Player.REPEAT_MODE_OFF
+                }
+            )
+            .setShuffleModeEnabled(queue.orderMode == PlaybackOrderMode.Shuffle)
+            .setPlayerError(logicalError ?: base.playerError)
+        if (queue.currentIndex in playlist.indices) {
+            builder.setCurrentMediaItemIndex(queue.currentIndex)
+        }
+        if (resolving) {
+            builder
+                .setPlaybackState(Player.STATE_BUFFERING)
+                .setIsLoading(true)
+        }
+        return builder.build()
+    }
+
+    override fun handleSetMediaItems(
+        mediaItems: MutableList<MediaItem>,
+        startIndex: Int,
+        startPositionMs: Long
+    ): ListenableFuture<*> {
+        val logicalItems = mediaItems.mapNotNull(PlaybackQueueMediaItemCodec::decode)
+        if (logicalItems.size != mediaItems.size) {
+            return Futures.immediateFailedFuture<Void>(
+                IllegalArgumentException("MediaSession queue contains an unknown item format")
+            )
+        }
+        queue.replace(
+            items = logicalItems,
+            selectedIndex = startIndex.coerceIn(0, logicalItems.lastIndex.coerceAtLeast(0))
+        )
+        desiredPlayWhenReady = false
+        logicalError = null
+        activateCurrentTarget(forceResolve = true)
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handlePrepare(): ListenableFuture<*> {
+        if (resolvedQueueId == queue.currentItem?.queueId) {
+            engine.prepare()
+        } else {
+            activateCurrentTarget(forceResolve = false)
+        }
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleAddMediaItems(
+        index: Int,
+        mediaItems: MutableList<MediaItem>
+    ): ListenableFuture<*> {
+        val logicalItems = mediaItems.mapNotNull(PlaybackQueueMediaItemCodec::decode)
+        if (logicalItems.size != mediaItems.size) {
+            return Futures.immediateFailedFuture<Void>(
+                IllegalArgumentException("MediaSession queue contains an unknown item format")
+            )
+        }
+        if (index == queue.currentIndex + 1) {
+            queue.addNext(logicalItems)
+        } else {
+            queue.append(logicalItems)
+        }
+        invalidateState()
+        schedulePreload()
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleRemoveMediaItems(fromIndex: Int, toIndex: Int): ListenableFuture<*> {
+        val oldTargetId = queue.currentItem?.queueId
+        queue.removePlaybackRange(fromIndex, toIndex)
+        if (queue.currentItem?.queueId != oldTargetId) {
+            activateCurrentTarget(forceResolve = true)
+        } else {
+            invalidateState()
+            schedulePreload()
+        }
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
+        desiredPlayWhenReady = playWhenReady
+        engine.playWhenReady = playWhenReady
+        if (playWhenReady && resolvedQueueId != queue.currentItem?.queueId && !resolving) {
+            activateCurrentTarget(forceResolve = false)
+        }
+        invalidateState()
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSeek(
+        mediaItemIndex: Int,
+        positionMs: Long,
+        seekCommand: Int
+    ): ListenableFuture<*> {
+        if (mediaItemIndex != queue.currentIndex) {
+            if (queue.select(mediaItemIndex) != null) {
+                if (seekCommand.isExplicitSkipCommand()) {
+                    desiredPlayWhenReady = true
+                }
+                activateCurrentTarget(forceResolve = true)
+            }
+        } else if (resolvedQueueId == queue.currentItem?.queueId) {
+            engine.seekTo(positionMs.coerceAtLeast(0L))
+        }
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleStop(): ListenableFuture<*> {
+        desiredPlayWhenReady = false
+        engine.stop()
+        invalidateState()
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
+        val mode = if (repeatMode == Player.REPEAT_MODE_ONE) {
+            PlaybackOrderMode.RepeatOne
+        } else if (queue.orderMode == PlaybackOrderMode.Shuffle) {
+            PlaybackOrderMode.Shuffle
+        } else {
+            PlaybackOrderMode.Sequence
+        }
+        setPlaybackOrderMode(mode)
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetShuffleModeEnabled(shuffleModeEnabled: Boolean): ListenableFuture<*> {
+        setPlaybackOrderMode(
+            if (shuffleModeEnabled) PlaybackOrderMode.Shuffle else PlaybackOrderMode.Sequence
+        )
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleRelease(): ListenableFuture<*> {
+        cancelPendingWork()
+        engine.removeListener(engineListener)
+        engine.release()
+        return Futures.immediateVoidFuture()
+    }
+
+    fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
+        queue.setOrderMode(mode)
+        onPlaybackOrderChanged(mode)
+        invalidateState()
+        schedulePreload()
+    }
+
+    fun clearLogicalQueue() {
+        cancelPendingWork()
+        queue.clear()
+        resolvedQueueId = null
+        currentArtworkData = null
+        desiredPlayWhenReady = false
+        engine.clearMediaItems()
+        onLogicalTargetChanged(null)
+        invalidateState()
+    }
+
+    private fun activateCurrentTarget(forceResolve: Boolean) {
+        val item = queue.currentItem ?: run {
+            clearLogicalQueue()
+            return
+        }
+        val requestToken = requestGate.begin(item.queueId)
+        resolveJob?.cancel()
+        artworkJob?.cancel()
+        resolving = item.isOnline
+        logicalError = null
+        resolvedQueueId = null
+        currentArtworkData = null
+        engine.playWhenReady = false
+        engine.stop()
+        engine.clearMediaItems()
+        onLogicalTargetChanged(item)
+        invalidateState()
+        loadCurrentArtwork(item, requestToken)
+
+        if (!item.isOnline) {
+            val mediaItem = MediaItemMapper.toMediaItem(item.presentation, item.source)
+                .buildUpon()
+                .setMediaId(item.queueId)
+                .setMediaMetadata(PlaybackQueueMediaItemCodec.encode(item).mediaMetadata)
+                .build()
+            commitResolvedItem(item, mediaItem, requestToken)
+            return
+        }
+
+        preloadedMediaItems.remove(item.queueId)?.let { preloaded ->
+            commitResolvedItem(
+                item = item.copy(runtimeProviderSong = preloaded.providerSong),
+                mediaItem = preloaded.mediaItem,
+                requestToken = requestToken
+            )
+            return
+        }
+        resolveJob = scope.launch {
+            try {
+                extensionManager.initialize()
+                val providerSong = resolveProviderSong(item) ?: return@launch resolveFailed(
+                    item,
+                    requestToken,
+                    "该在线歌曲暂时无法恢复"
+                )
+                val resource = extensionManager.resolvePlaybackResource(providerSong)
+                    ?: return@launch resolveFailed(item, requestToken, "无法解析在线播放资源")
+                val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource)
+                    ?: return@launch resolveFailed(item, requestToken, "无法创建在线播放资源")
+                commitResolvedItem(
+                    item = item.copy(runtimeProviderSong = providerSong),
+                    mediaItem = mediaItem,
+                    requestToken = requestToken
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                resolveFailed(item, requestToken, error.message ?: "在线播放失败")
+            }
+        }
+    }
+
+    private suspend fun resolveProviderSong(item: PlaybackQueueItem): ProviderSong? {
+        item.runtimeProviderSong?.let { return it }
+        val persistent = item.persistentTrack as? PersistentTrack.Online ?: return null
+        return when (val result = extensionManager.resolvePersistentPlaylistSong(persistent)) {
+            is PersistentSongResolution.Resolved -> result.song
+            is PersistentSongResolution.ProviderMissing,
+            is PersistentSongResolution.Unresolved -> null
+        }
+    }
+
+    private fun commitResolvedItem(
+        item: PlaybackQueueItem,
+        mediaItem: MediaItem,
+        requestToken: PlaybackRequestToken
+    ) {
+        if (!isCurrent(requestToken)) return
+        queue.updateItem(item)
+        resolving = false
+        resolvedQueueId = item.queueId
+        val logicalMetadata = PlaybackQueueMediaItemCodec.encode(item, currentArtworkData).mediaMetadata
+        if (currentArtworkData == null) {
+            loadCurrentArtwork(item, requestToken)
+        }
+        val resolved = mediaItem.buildUpon()
+            .setMediaId(item.queueId)
+            .setMediaMetadata(logicalMetadata)
+            .build()
+        engine.setMediaItem(resolved)
+        engine.prepare()
+        engine.playWhenReady = desiredPlayWhenReady
+        invalidateState()
+        schedulePreload()
+    }
+
+    private fun resolveFailed(
+        item: PlaybackQueueItem,
+        requestToken: PlaybackRequestToken,
+        message: String
+    ) {
+        if (!isCurrent(requestToken)) return
+        resolving = false
+        desiredPlayWhenReady = false
+        resolvedQueueId = null
+        logicalError = PlaybackException(
+            message,
+            null,
+            PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+        )
+        onResolveError(item, message)
+        invalidateState()
+    }
+
+    private fun loadCurrentArtwork(item: PlaybackQueueItem, requestToken: PlaybackRequestToken) {
+        val image = item.extensionLargeArtwork ?: item.extensionArtwork ?: return
+        artworkJob = scope.launch {
+            val data = runCatching { artworkLoader.load(image) }.getOrNull() ?: return@launch
+            if (!isCurrent(requestToken)) return@launch
+            currentArtworkData = data
+            invalidateState()
+        }
+    }
+
+    private fun schedulePreload() {
+        preloadJob?.cancel()
+        val start = queue.currentIndex + 1
+        val targets = queue.playbackItems
+            .drop(start.coerceAtLeast(0))
+            .filter(PlaybackQueueItem::isOnline)
+            .take(appPreferences.getOnlinePlaybackPreloadCount().coerceAtLeast(0))
+        val validIds = targets.mapTo(mutableSetOf(), PlaybackQueueItem::queueId)
+        preloadedMediaItems.keys.retainAll(validIds)
+        if (targets.isEmpty()) return
+        preloadJob = scope.launch {
+            extensionManager.initialize()
+            for (target in targets) {
+                if (target.queueId in preloadedMediaItems) continue
+                try {
+                    val providerSong = resolveProviderSong(target) ?: continue
+                    val resource = extensionManager.resolvePlaybackResource(providerSong) ?: continue
+                    val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource) ?: continue
+                    preloadedMediaItems[target.queueId] = PreloadedOnlineItem(providerSong, mediaItem)
+                    extensionManager.preloadPlaybackContent(
+                        mediaItem = mediaItem,
+                        resource = resource,
+                        percentage = appPreferences.getOnlinePlaybackPreloadPercentage()
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Throwable) {
+                    // Preload failure must never fail the active target.
+                }
+            }
+        }
+    }
+
+    private fun cancelPendingWork() {
+        requestGate.invalidate()
+        resolveJob?.cancel()
+        artworkJob?.cancel()
+        preloadJob?.cancel()
+        resolveJob = null
+        artworkJob = null
+        preloadJob = null
+        preloadedMediaItems.clear()
+        resolving = false
+    }
+
+    private fun isCurrent(requestToken: PlaybackRequestToken): Boolean =
+        requestGate.isCurrent(requestToken, queue.currentItem?.queueId)
+
+    private fun Int.isExplicitSkipCommand(): Boolean =
+        this == Player.COMMAND_SEEK_TO_NEXT ||
+            this == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM ||
+            this == Player.COMMAND_SEEK_TO_PREVIOUS ||
+            this == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+
+    private fun Long.toDurationUs(): Long = when {
+        this <= 0L -> C.TIME_UNSET
+        this > Long.MAX_VALUE / 1_000L -> C.TIME_UNSET
+        else -> this * 1_000L
+    }
+
+    private data class PreloadedOnlineItem(
+        val providerSong: ProviderSong,
+        val mediaItem: MediaItem
+    )
+}

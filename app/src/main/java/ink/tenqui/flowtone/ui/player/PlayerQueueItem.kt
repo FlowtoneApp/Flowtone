@@ -5,17 +5,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.components.SongListItem
 
 @Composable
 internal fun PlayerQueueItem(
-    song: Song,
+    item: PlaybackQueueItem,
     isCurrentSong: Boolean,
     onClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
     SongListItem(
-        song = song,
+        song = item.presentation,
+        extensionArtwork = item.extensionArtwork,
         isCurrentSong = isCurrentSong,
         onClick = onClick,
         titleColor = Color.White,

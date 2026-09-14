@@ -142,6 +142,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         },
         sourceQueue = state.uiState.sourceQueue,
         playbackQueue = state.uiState.playbackQueue,
+        sourceQueueItems = state.uiState.sourceQueueItems,
+        playbackQueueItems = state.uiState.playbackQueueItems,
         allSongs = state.uiState.songs,
         currentQueueIndex = state.uiState.currentQueueIndex,
         queueDisplayOrder = state.playbackQueueDisplayOrder,
