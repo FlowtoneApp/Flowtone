@@ -11,6 +11,11 @@ internal fun progressFraction(
     }.coerceIn(0f, 1f)
 }
 
+internal fun playbackSongIdentityChanged(
+    previousSongKey: Long?,
+    currentSongKey: Long?
+): Boolean = previousSongKey != currentSongKey
+
 internal fun progressFromX(
     x: Float,
     width: Float

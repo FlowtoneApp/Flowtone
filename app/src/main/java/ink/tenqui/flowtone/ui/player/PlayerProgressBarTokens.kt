@@ -12,5 +12,7 @@ internal val PlaybackProgressShadowBlurRadius = 8.dp
 internal const val PlaybackProgressShadowAlphaMultiplier = 0.14f
 internal const val PlaybackProgressTrackHeightAnimationMillis = 160
 internal const val PlaybackProgressTapSeekAnimationMillis = 260
+internal const val PlaybackBufferedProgressAnimationMillis = 320
+internal const val PlaybackBufferedTrackSwitchResetMillis = 140
 internal const val PlaybackProgressLongPressTimeoutMillis = 260L
 internal const val PlaybackProgressPositionSnapThresholdMs = 800L

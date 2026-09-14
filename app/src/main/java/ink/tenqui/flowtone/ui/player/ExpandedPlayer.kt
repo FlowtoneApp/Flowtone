@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 internal fun ExpandedOnlyContent(
     progress: Float,
     positionMs: Long,
+    bufferedPositionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
     isPlayingForVisualLock: Boolean,
@@ -36,6 +37,7 @@ internal fun ExpandedOnlyContent(
     ) {
         PlaybackProgressBar(
             positionMs = positionMs,
+            bufferedPositionMs = bufferedPositionMs,
             durationMs = durationMs,
             isPlaying = isPlaying,
             isPlayingForVisualLock = isPlayingForVisualLock,

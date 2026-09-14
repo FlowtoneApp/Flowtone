@@ -25,6 +25,7 @@ data class PlaybackSnapshot(
     val queueMediaItems: List<MediaItem>,
     val isPlaying: Boolean,
     val positionMs: Long,
+    val bufferedPositionMs: Long,
     val durationMs: Long,
     val playbackOrderMode: PlaybackOrderMode
 )
@@ -43,6 +44,7 @@ class PlaybackController(
     private var pendingPlaybackOrderMode: PlaybackOrderMode? = initialPlaybackOrderMode
     private var pendingShuffleOrderIndices: IntArray? = null
     private var logicalPlaybackOrderMode: PlaybackOrderMode = initialPlaybackOrderMode
+    private var playbackStateMediaId: String? = null
     private var isReleased = false
     private val setPlaybackOrderCommand = SessionCommand(
         ACTION_SET_PLAYBACK_ORDER,
@@ -142,7 +144,7 @@ class PlaybackController(
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
-            updatePlaybackStarted(song)
+            updatePlaybackStarted(song, mediaId = mediaItem.mediaId)
         }.onFailure { error ->
             updatePlaybackFailed(song, error)
         }
@@ -170,7 +172,7 @@ class PlaybackController(
             controller.setMediaItems(mediaItems, startIndex, C.TIME_UNSET)
             controller.prepare()
             controller.play()
-            updatePlaybackStarted(startSong)
+            updatePlaybackStarted(startSong, mediaId = mediaItems[startIndex].mediaId)
         }.onFailure { error ->
             updatePlaybackFailed(startSong, error)
         }
@@ -205,7 +207,13 @@ class PlaybackController(
             controller.setMediaItem(mediaItem)
             controller.prepare()
             controller.play()
-            updatePlaybackStarted(song, extensionArtwork, extensionLargeArtwork, persistentTrack)
+            updatePlaybackStarted(
+                song = song,
+                extensionArtwork = extensionArtwork,
+                extensionLargeArtwork = extensionLargeArtwork,
+                persistentTrack = persistentTrack,
+                mediaId = mediaItem.mediaId
+            )
         }.onFailure { error -> updatePlaybackFailed(song, error) }
     }
 
@@ -244,6 +252,7 @@ class PlaybackController(
         extensionLargeArtwork: ExtensionImage? = null,
         persistentTrack: PersistentTrack? = null
     ) {
+        playbackStateMediaId = currentControllerOrNull()?.currentMediaItem?.mediaId
         _playbackState.update {
             it.copy(
                 currentSong = song,
@@ -252,15 +261,21 @@ class PlaybackController(
                 extensionArtwork = extensionArtwork,
                 extensionLargeArtwork = extensionLargeArtwork,
                 positionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L)
             )
         }
     }
 
-    fun updateProgress(positionMs: Long, durationMs: Long) {
+    fun updateProgress(
+        positionMs: Long,
+        bufferedPositionMs: Long,
+        durationMs: Long
+    ) {
         _playbackState.update {
             it.copy(
                 positionMs = positionMs.coerceAtLeast(0L),
+                bufferedPositionMs = bufferedPositionMs.coerceAtLeast(0L),
                 durationMs = durationMs.coerceAtLeast(0L)
             )
         }
@@ -277,14 +292,17 @@ class PlaybackController(
         currentSong: Song,
         isPlaying: Boolean,
         positionMs: Long,
+        bufferedPositionMs: Long,
         durationMs: Long,
         playbackOrderMode: PlaybackOrderMode = getPlaybackOrderMode()
     ) {
+        playbackStateMediaId = currentControllerOrNull()?.currentMediaItem?.mediaId
         _playbackState.update {
             it.copy(
                 currentSong = currentSong,
                 isPlaying = isPlaying,
                 positionMs = positionMs.coerceAtLeast(0L),
+                bufferedPositionMs = bufferedPositionMs.coerceAtLeast(0L),
                 durationMs = durationMs.coerceAtLeast(0L),
                 playbackOrderMode = playbackOrderMode,
                 errorMessage = null
@@ -311,6 +329,15 @@ class PlaybackController(
         return safeDuration(duration)
     }
 
+    fun getBufferedPositionMs(): Long {
+        val controller = currentControllerOrNull() ?: return 0L
+        val expectedMediaId = playbackStateMediaId ?: return 0L
+        if (controller.currentMediaItem?.mediaId != expectedMediaId) {
+            return 0L
+        }
+        return controller.bufferedPosition.coerceAtLeast(0L)
+    }
+
     fun seekTo(positionMs: Long) {
         currentControllerOrNull()?.seekTo(positionMs.coerceAtLeast(0L))
     }
@@ -329,6 +356,7 @@ class PlaybackController(
             queueMediaItems = queueMediaItems,
             isPlaying = controller.isPlaying,
             positionMs = controller.currentPosition.coerceAtLeast(0L),
+            bufferedPositionMs = controller.bufferedPosition.coerceAtLeast(0L),
             durationMs = safeDuration(controller.duration),
             playbackOrderMode = playbackOrderModeFromController(controller)
         )
@@ -491,11 +519,13 @@ class PlaybackController(
             pause()
             clearMediaItems()
         }
+        playbackStateMediaId = null
         _playbackState.update { currentState ->
             currentState.copy(
                 currentSong = null,
                 isPlaying = false,
                 positionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = 0L
             )
         }
@@ -533,11 +563,13 @@ class PlaybackController(
         source: PlaybackSource
     ) {
         pendingPlaybackRequest = PendingPlaybackRequest.SingleSong(song, source)
+        playbackStateMediaId = null
         _playbackState.update {
             it.copy(
                 currentSong = song,
                 isPlaying = false,
                 positionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
                 errorMessage = null
             )
@@ -575,8 +607,10 @@ class PlaybackController(
         song: Song,
         extensionArtwork: ExtensionImage? = null,
         extensionLargeArtwork: ExtensionImage? = null,
-        persistentTrack: PersistentTrack? = null
+        persistentTrack: PersistentTrack? = null,
+        mediaId: String? = currentControllerOrNull()?.currentMediaItem?.mediaId
     ) {
+        playbackStateMediaId = mediaId
         _playbackState.update {
             it.copy(
                 currentSong = song,
@@ -586,6 +620,7 @@ class PlaybackController(
                 extensionLargeArtwork = extensionLargeArtwork,
                 isPlaying = true,
                 positionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
                 errorMessage = null
             )
@@ -593,10 +628,12 @@ class PlaybackController(
     }
 
     private fun updatePlaybackFailed(song: Song, error: Throwable) {
+        playbackStateMediaId = null
         _playbackState.update {
             it.copy(
                 currentSong = song,
                 isPlaying = false,
+                bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
                 errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
             )

@@ -13,6 +13,7 @@ data class PlaybackState(
     val extensionLargeArtwork: ExtensionImage? = null,
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val playbackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
     val errorMessage: String? = null

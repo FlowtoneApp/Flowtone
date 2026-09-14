@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
@@ -38,6 +39,7 @@ internal data class PlaybackProgressSeekAnimation(
 @Composable
 internal fun PlaybackProgressBar(
     positionMs: Long,
+    bufferedPositionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
     isPlayingForVisualLock: Boolean,
@@ -68,7 +70,13 @@ internal fun PlaybackProgressBar(
     val tapSeekScope = rememberCoroutineScope()
     var tapSeekJob by remember { mutableStateOf<Job?>(null) }
     val trackSwitchProgress = remember { Animatable(1f) }
+    val targetBufferedProgress = progressFraction(
+        positionMs = bufferedPositionMs,
+        durationMs = durationMs
+    )
+    val animatedBufferedProgress = remember { Animatable(targetBufferedProgress) }
     var lastSongKey by remember { mutableStateOf(currentSongKey) }
+    var bufferedProgressSongKey by remember { mutableStateOf(currentSongKey) }
     var lastRenderedProgress by remember { mutableStateOf(0f) }
     var trackSwitchStartProgress by remember { mutableStateOf(0f) }
     var isTrackSwitchProgressAnimating by remember { mutableStateOf(false) }
@@ -144,6 +152,25 @@ internal fun PlaybackProgressBar(
         scrubProgress = 0f
         isTapSeeking = false
         pendingSeekPositionMs = null
+    }
+    LaunchedEffect(currentSongKey, targetBufferedProgress) {
+        if (playbackSongIdentityChanged(bufferedProgressSongKey, currentSongKey)) {
+            animatedBufferedProgress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = PlaybackBufferedTrackSwitchResetMillis,
+                    easing = TrackSwitchProgressEasing
+                )
+            )
+            bufferedProgressSongKey = currentSongKey
+        }
+        animatedBufferedProgress.animateTo(
+            targetValue = targetBufferedProgress,
+            animationSpec = tween(
+                durationMillis = PlaybackBufferedProgressAnimationMillis,
+                easing = TrackSwitchProgressEasing
+            )
+        )
     }
     LaunchedEffect(strictProgressBar, durationMs, pendingSeekPositionMs, positionMs) {
         val pendingPositionMs = pendingSeekPositionMs
@@ -223,6 +250,7 @@ internal fun PlaybackProgressBar(
         animatedDisplayTimePositionMs
     }
     val activeProgressColor = progressColor
+    val bufferedProgressColor = lerp(trackColor, progressColor, 0.20f)
 
     fun updateScrubProgress(x: Float) {
         scrubProgress = progressFromX(
@@ -283,8 +311,10 @@ internal fun PlaybackProgressBar(
         ) {
             PlayerProgressBarTrack(
                 visibleProgress = visibleProgress,
+                bufferedProgress = animatedBufferedProgress.value,
                 trackHeight = animatedTrackHeight,
                 trackColor = trackColor,
+                bufferedColor = bufferedProgressColor,
                 progressColor = activeProgressColor,
                 enterProgress = enterProgress,
                 modifier = Modifier

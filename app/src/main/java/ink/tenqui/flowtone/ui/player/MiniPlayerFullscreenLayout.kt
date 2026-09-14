@@ -28,6 +28,7 @@ import coil3.request.ImageRequest
 import coil3.ImageLoader
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.lyrics.SongLyricsState
 import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsActiveLineScreenYFraction
@@ -426,6 +427,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             ExpandedOnlyContent(
                 progress = animationProgress,
                 positionMs = playerUiState.positionMs,
+                bufferedPositionMs = playerUiState.bufferedPositionMs.takeIf {
+                    playerUiState.currentSong?.sourceType == SourceType.Online
+                } ?: 0L,
                 durationMs = playerUiState.durationMs,
                 isPlaying = playerUiState.isPlaying,
                 isPlayingForVisualLock = visualIsPlaying,

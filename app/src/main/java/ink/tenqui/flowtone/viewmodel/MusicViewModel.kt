@@ -1265,6 +1265,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             currentSong = currentSong,
             isPlaying = snapshot.isPlaying,
             positionMs = position,
+            bufferedPositionMs = snapshot.bufferedPositionMs.coerceIn(0L, duration),
             durationMs = duration,
             playbackOrderMode = snapshot.playbackOrderMode
         )
@@ -1297,6 +1298,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             currentSong = officialSong,
             isPlaying = playbackState.value.isPlaying,
             positionMs = playbackState.value.positionMs,
+            bufferedPositionMs = playbackState.value.bufferedPositionMs,
             durationMs = playbackState.value.durationMs.takeIf { it > 0L }
                 ?: officialSong.durationMs.coerceAtLeast(0L),
             playbackOrderMode = playbackState.value.playbackOrderMode
@@ -1778,6 +1780,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playbackController.seekTo(clampedPosition)
         playbackController.updateProgress(
             positionMs = clampedPosition,
+            bufferedPositionMs = playbackState.value.bufferedPositionMs,
             durationMs = durationMs
         )
     }
@@ -1862,6 +1865,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         if (currentSong == null) {
             playbackController.updateProgress(
                 positionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = 0L
             )
             return
@@ -1878,9 +1882,15 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         } else {
             0L
         }
+        val bufferedPosition = if (duration > 0L) {
+            playbackController.getBufferedPositionMs().coerceIn(0L, duration)
+        } else {
+            0L
+        }
 
         playbackController.updateProgress(
             positionMs = position,
+            bufferedPositionMs = bufferedPosition,
             durationMs = duration
         )
     }
