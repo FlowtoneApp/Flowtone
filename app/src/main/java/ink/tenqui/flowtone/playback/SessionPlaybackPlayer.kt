@@ -41,6 +41,7 @@ internal class SessionPlaybackPlayer(
     private var desiredPlayWhenReady = false
     private var resolving = false
     private var resolvingQueueId: String? = null
+    private var pendingSeek: PendingLogicalSeek? = null
     private var logicalError: PlaybackException? = null
     private val requestGate = PlaybackRequestGate()
     private var resolveJob: Job? = null
@@ -104,7 +105,7 @@ internal class SessionPlaybackPlayer(
                 .setMediaItem(metadataItem)
                 .setMediaMetadata(metadataItem.mediaMetadata)
                 .setDurationUs(item.presentation.durationMs.toDurationUs())
-                .setIsSeekable(index == queue.currentIndex && resolvedQueueId == item.queueId)
+                .setIsSeekable(index == queue.currentIndex)
                 .setIsPlaceholder(resolvedQueueId != item.queueId)
                 .build()
         }
@@ -150,6 +151,12 @@ internal class SessionPlaybackPlayer(
                 .setPlaybackState(Player.STATE_BUFFERING)
                 .setIsLoading(true)
         }
+        pendingSeekForTarget(pendingSeek, queue.currentItem?.queueId)?.let { positionMs ->
+            val positionSupplier = SimpleBasePlayer.PositionSupplier.getConstant(positionMs)
+            builder
+                .setContentPositionMs(positionSupplier)
+                .setContentBufferedPositionMs(positionSupplier)
+        }
         return builder.build()
     }
 
@@ -166,6 +173,7 @@ internal class SessionPlaybackPlayer(
             items = logicalItems,
             selectedIndex = startIndex.coerceIn(0, logicalItems.lastIndex.coerceAtLeast(0))
         )
+        pendingSeek = null
         desiredPlayWhenReady = false
         logicalError = null
         logLogicalState("handleSetMediaItems.afterReplace")
@@ -230,12 +238,29 @@ internal class SessionPlaybackPlayer(
         positionMs: Long,
         seekCommand: Int
     ): ListenableFuture<*> {
-        if (mediaItemIndex != queue.currentIndex) {
-            if (queue.select(mediaItemIndex) != null) {
+        val targetChanged = mediaItemIndex != queue.currentIndex
+        val selectedItem = if (targetChanged) {
+            queue.select(mediaItemIndex)
+        } else {
+            queue.currentItem
+        } ?: return Futures.immediateVoidFuture()
+        val desiredPositionMs = desiredSeekPositionMs(
+            positionMs = positionMs,
+            durationMs = selectedItem.presentation.durationMs
+        )
+        if (resolvedQueueId == selectedItem.queueId) {
+            pendingSeek = null
+            engine.seekTo(desiredPositionMs)
+        } else {
+            pendingSeek = PendingLogicalSeek(selectedItem.queueId, desiredPositionMs)
+            if (targetChanged || !resolving) {
                 activateCurrentTarget("seek")
+            } else {
+                logLogicalState(
+                    "handleSeek.pending queueId=${selectedItem.queueId} desired=$desiredPositionMs"
+                )
+                invalidateState()
             }
-        } else if (resolvedQueueId == queue.currentItem?.queueId) {
-            engine.seekTo(positionMs.coerceAtLeast(0L))
         }
         return Futures.immediateVoidFuture()
     }
@@ -284,6 +309,7 @@ internal class SessionPlaybackPlayer(
         cancelPendingWork()
         queue.clear()
         resolvedQueueId = null
+        pendingSeek = null
         currentArtworkData = null
         desiredPlayWhenReady = false
         engine.clearMediaItems()
@@ -296,6 +322,7 @@ internal class SessionPlaybackPlayer(
             clearLogicalQueue()
             return
         }
+        pendingSeek = pendingSeek?.takeIf { it.queueId == item.queueId }
         val requestToken = requestGate.begin(item.queueId)
         resolveJob?.cancel()
         artworkJob?.cancel()
@@ -313,7 +340,8 @@ internal class SessionPlaybackPlayer(
                 "stable=${item.stableIdentity} index=${queue.currentIndex} size=${queue.playbackItems.size} " +
                 "source=${item.presentation.sourceType} online=${item.isOnline} " +
                 "runtime=${item.runtimeProviderSong != null} persistent=${item.persistentTrack != null} " +
-                "desired=$desiredPlayWhenReady rawCount=${engine.mediaItemCount}"
+                "desiredPlayWhenReady=$desiredPlayWhenReady desiredPositionMs=" +
+                "${pendingSeekForTarget(pendingSeek, item.queueId)} rawCount=${engine.mediaItemCount}"
         )
         onLogicalTargetChanged(item)
         invalidateState()
@@ -380,6 +408,7 @@ internal class SessionPlaybackPlayer(
         requestToken: PlaybackRequestToken
     ) {
         if (!isCurrent(requestToken)) return
+        val initialPositionMs = pendingSeekForTarget(pendingSeek, item.queueId)
         queue.updateItem(item)
         resolving = false
         resolvingQueueId = null
@@ -392,10 +421,14 @@ internal class SessionPlaybackPlayer(
             .setMediaId(item.queueId)
             .setMediaMetadata(logicalMetadata)
             .build()
-        engine.setMediaItem(resolved)
+        engine.setMediaItem(resolved, initialPositionMs ?: C.TIME_UNSET)
+        pendingSeek = null
         engine.prepare()
         engine.playWhenReady = desiredPlayWhenReady
-        logLogicalState("commitResolvedItem generation=${requestToken.generation}")
+        logLogicalState(
+            "commitResolvedItem generation=${requestToken.generation} queueId=${item.queueId} " +
+                "initialPositionMs=$initialPositionMs enginePositionMs=${engine.currentPosition}"
+        )
         invalidateState()
         schedulePreload()
     }
@@ -410,6 +443,7 @@ internal class SessionPlaybackPlayer(
         resolvingQueueId = null
         desiredPlayWhenReady = false
         resolvedQueueId = null
+        pendingSeek = null
         logicalError = PlaybackException(
             message,
             null,
@@ -473,6 +507,7 @@ internal class SessionPlaybackPlayer(
         preloadedMediaItems.clear()
         resolving = false
         resolvingQueueId = null
+        pendingSeek = null
     }
 
     private fun isCurrent(requestToken: PlaybackRequestToken): Boolean =
@@ -506,6 +541,7 @@ internal class SessionPlaybackPlayer(
                 "current=${queue.currentItem?.queueId} playbackState=$playbackState " +
                 "playWhenReady=$desiredPlayWhenReady resolving=$resolving " +
                 "resolvingQueueId=$resolvingQueueId resolvedQueueId=$resolvedQueueId " +
+                "desiredPositionMs=${pendingSeekForTarget(pendingSeek, queue.currentItem?.queueId)} " +
                 "rawCount=${engine.mediaItemCount}"
         )
     }

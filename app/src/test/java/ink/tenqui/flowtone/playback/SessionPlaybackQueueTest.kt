@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.playback
 
 import android.net.testUri
+import androidx.media3.common.C
+import androidx.media3.common.Player
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.online.ExtensionImage
@@ -167,6 +169,66 @@ class SessionPlaybackQueueTest {
         assertFalse(canApplyLogicalSnapshot(expectedQueueId = "B", snapshotQueueId = "A"))
         assertTrue(canApplyLogicalSnapshot(expectedQueueId = "B", snapshotQueueId = "B"))
         assertTrue(canApplyLogicalSnapshot(expectedQueueId = null, snapshotQueueId = "C"))
+    }
+
+    @Test
+    fun `reconnect snapshot restores an already playing session without a playback command`() {
+        val snapshot = controllerPlaybackSnapshot(
+            isPlaying = true,
+            playWhenReady = true,
+            playbackState = Player.STATE_READY,
+            positionMs = 12_000L,
+            bufferedPositionMs = 18_000L,
+            durationMs = 200_000L
+        )
+
+        assertTrue(snapshot.isPlaying)
+        assertTrue(snapshot.playWhenReady)
+        assertFalse(snapshot.isBuffering)
+        assertEquals(12_000L, snapshot.positionMs)
+        assertEquals(18_000L, snapshot.bufferedPositionMs)
+        assertEquals(200_000L, snapshot.durationMs)
+    }
+
+    @Test
+    fun `reconnect snapshot preserves an already paused session`() {
+        val snapshot = controllerPlaybackSnapshot(
+            isPlaying = false,
+            playWhenReady = false,
+            playbackState = Player.STATE_BUFFERING,
+            positionMs = 5_000L,
+            bufferedPositionMs = 6_000L,
+            durationMs = C.TIME_UNSET
+        )
+
+        assertFalse(snapshot.isPlaying)
+        assertFalse(snapshot.playWhenReady)
+        assertTrue(snapshot.isBuffering)
+        assertEquals(0L, snapshot.durationMs)
+    }
+
+    @Test
+    fun `unresolved seek keeps the latest position for its logical target`() {
+        val first = PendingLogicalSeek("B", desiredSeekPositionMs(60_000L, 240_000L))
+        val latest = PendingLogicalSeek("B", desiredSeekPositionMs(180_000L, 240_000L))
+
+        assertEquals(60_000L, pendingSeekForTarget(first, "B"))
+        assertEquals(180_000L, pendingSeekForTarget(latest, "B"))
+    }
+
+    @Test
+    fun `pending seek is isolated from a later logical target`() {
+        val pendingForB = PendingLogicalSeek("B", desiredSeekPositionMs(120_000L, 0L))
+
+        assertEquals(120_000L, pendingSeekForTarget(pendingForB, "B"))
+        assertEquals(null, pendingSeekForTarget(pendingForB, "C"))
+    }
+
+    @Test
+    fun `unresolved seek clamps known duration but retains unknown duration position`() {
+        assertEquals(1_000L, desiredSeekPositionMs(positionMs = 2_000L, durationMs = 1_000L))
+        assertEquals(2_000L, desiredSeekPositionMs(positionMs = 2_000L, durationMs = 0L))
+        assertEquals(0L, desiredSeekPositionMs(positionMs = -1L, durationMs = 0L))
     }
 
     private fun local(title: String, index: Int): PlaybackQueueItem {

@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.playback
 
+import androidx.media3.common.C
+import androidx.media3.common.Player
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.online.ExtensionImage
 
@@ -70,3 +72,44 @@ internal fun canApplyLogicalSnapshot(
     expectedQueueId: String?,
     snapshotQueueId: String?
 ): Boolean = expectedQueueId == null || expectedQueueId == snapshotQueueId
+
+/** The latest unresolved seek is scoped to one logical queue entry. */
+internal data class PendingLogicalSeek(
+    val queueId: String,
+    val positionMs: Long
+)
+
+internal fun desiredSeekPositionMs(positionMs: Long, durationMs: Long): Long = when {
+    durationMs > 0L -> positionMs.coerceIn(0L, durationMs)
+    else -> positionMs.coerceAtLeast(0L)
+}
+
+internal fun pendingSeekForTarget(
+    pendingSeek: PendingLogicalSeek?,
+    queueId: String?
+): Long? = pendingSeek?.takeIf { it.queueId == queueId }?.positionMs
+
+internal data class ControllerPlaybackSnapshot(
+    val isPlaying: Boolean,
+    val playWhenReady: Boolean,
+    val isBuffering: Boolean,
+    val positionMs: Long,
+    val bufferedPositionMs: Long,
+    val durationMs: Long
+)
+
+internal fun controllerPlaybackSnapshot(
+    isPlaying: Boolean,
+    playWhenReady: Boolean,
+    playbackState: Int,
+    positionMs: Long,
+    bufferedPositionMs: Long,
+    durationMs: Long
+): ControllerPlaybackSnapshot = ControllerPlaybackSnapshot(
+    isPlaying = isPlaying,
+    playWhenReady = playWhenReady,
+    isBuffering = playbackState == Player.STATE_BUFFERING,
+    positionMs = positionMs.coerceAtLeast(0L),
+    bufferedPositionMs = bufferedPositionMs.coerceAtLeast(0L),
+    durationMs = durationMs.takeIf { it != C.TIME_UNSET && it >= 0L } ?: 0L
+)

@@ -149,6 +149,7 @@ class PlaybackController(
                 }
                 playPendingRequest()
                 syncLogicalQueueState(controller)
+                syncControllerPlaybackState(controller)
             },
             onConnectionFailed = { error ->
                 if (isReleased) {
@@ -751,6 +752,28 @@ class PlaybackController(
     ) {
         controller ?: return
         updatePlaybackOrderMode(playbackOrderModeFromController(controller))
+    }
+
+    /** A newly attached listener does not receive the Session's existing stable state as callbacks. */
+    private fun syncControllerPlaybackState(controller: MediaController) {
+        val snapshot = controllerPlaybackSnapshot(
+            isPlaying = controller.isPlaying,
+            playWhenReady = controller.playWhenReady,
+            playbackState = controller.playbackState,
+            positionMs = controller.currentPosition,
+            bufferedPositionMs = controller.bufferedPosition,
+            durationMs = controller.duration
+        )
+        _playbackState.update { state ->
+            state.copy(
+                isPlaying = snapshot.isPlaying,
+                playWhenReady = snapshot.playWhenReady,
+                isBuffering = snapshot.isBuffering,
+                positionMs = snapshot.positionMs,
+                bufferedPositionMs = snapshot.bufferedPositionMs,
+                durationMs = snapshot.durationMs.takeIf { it > 0L } ?: state.durationMs
+            )
+        }
     }
 
     fun playAt(index: Int, playWhenReady: Boolean = true): Boolean {
