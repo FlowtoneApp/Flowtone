@@ -439,6 +439,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 strictProgressBar = strictProgressBar,
                 lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                 currentSongKey = playerUiState.currentSong?.id,
+                currentQueueId = playerUiState.currentQueueId,
                 hasCurrentSong = hasCurrentSong,
                 progressTrackColor = progressTrackColor,
                 progressColor = progressColor,

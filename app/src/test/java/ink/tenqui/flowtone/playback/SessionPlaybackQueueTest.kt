@@ -172,6 +172,14 @@ class SessionPlaybackQueueTest {
     }
 
     @Test
+    fun `progress snapshot must belong to current logical queue identity`() {
+        assertFalse(playbackProgressBelongsToCurrentTarget("B", "A"))
+        assertTrue(playbackProgressBelongsToCurrentTarget("B", "B"))
+        assertFalse(playbackProgressBelongsToCurrentTarget(null, "B"))
+        assertFalse(playbackProgressBelongsToCurrentTarget("B", null))
+    }
+
+    @Test
     fun `reconnect snapshot restores an already playing session without a playback command`() {
         val snapshot = controllerPlaybackSnapshot(
             isPlaying = true,
@@ -229,6 +237,23 @@ class SessionPlaybackQueueTest {
         assertEquals(1_000L, desiredSeekPositionMs(positionMs = 2_000L, durationMs = 1_000L))
         assertEquals(2_000L, desiredSeekPositionMs(positionMs = 2_000L, durationMs = 0L))
         assertEquals(0L, desiredSeekPositionMs(positionMs = -1L, durationMs = 0L))
+    }
+
+    @Test
+    fun `handle seek target is retained for unresolved logical item`() {
+        val pendingSeek = PendingLogicalSeek(
+            queueId = "B",
+            positionMs = desiredSeekPositionMs(positionMs = 120_000L, durationMs = 240_000L)
+        )
+
+        assertEquals(120_000L, pendingSeekForTarget(pendingSeek, "B"))
+    }
+
+    @Test
+    fun `resolve commit uses latest pending seek as its initial position`() {
+        val latestPendingSeek = PendingLogicalSeek("B", 120_000L)
+
+        assertEquals(120_000L, pendingSeekForTarget(latestPendingSeek, "B"))
     }
 
     private fun local(title: String, index: Int): PlaybackQueueItem {

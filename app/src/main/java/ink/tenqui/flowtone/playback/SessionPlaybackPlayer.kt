@@ -42,6 +42,7 @@ internal class SessionPlaybackPlayer(
     private var resolving = false
     private var resolvingQueueId: String? = null
     private var pendingSeek: PendingLogicalSeek? = null
+    private var pendingInitialPositionVerification: PendingLogicalSeek? = null
     private var logicalError: PlaybackException? = null
     private val requestGate = PlaybackRequestGate()
     private var resolveJob: Job? = null
@@ -62,6 +63,20 @@ internal class SessionPlaybackPlayer(
 
     private val engineListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
+            pendingInitialPositionVerification?.let { pending ->
+                if (
+                    playbackState != Player.STATE_IDLE &&
+                    engine.currentMediaItem?.mediaId == pending.queueId
+                ) {
+                    Log.d(
+                        LOG_TAG,
+                        "commitResolvedItem.enginePosition queueId=${pending.queueId} " +
+                            "requestedPositionMs=${pending.positionMs} " +
+                            "playbackState=$playbackState enginePositionMs=${engine.currentPosition}"
+                    )
+                    pendingInitialPositionVerification = null
+                }
+            }
             if (playbackState != Player.STATE_ENDED || resolving || !desiredPlayWhenReady) return
             if (queue.orderMode == PlaybackOrderMode.RepeatOne) {
                 engine.seekTo(0L)
@@ -109,24 +124,19 @@ internal class SessionPlaybackPlayer(
                 .setIsPlaceholder(resolvedQueueId != item.queueId)
                 .build()
         }
-        val commands = Player.Commands.Builder()
-            .addAll(base.availableCommands)
-            .add(Player.COMMAND_GET_TIMELINE)
-            .add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
-            .add(Player.COMMAND_GET_METADATA)
-            .add(Player.COMMAND_SET_MEDIA_ITEM)
-            .add(Player.COMMAND_CHANGE_MEDIA_ITEMS)
-            .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
-            .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-            .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-            .add(Player.COMMAND_SEEK_TO_NEXT)
-            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
-            .add(Player.COMMAND_PLAY_PAUSE)
-            .add(Player.COMMAND_PREPARE)
-            .add(Player.COMMAND_STOP)
-            .add(Player.COMMAND_SET_REPEAT_MODE)
-            .add(Player.COMMAND_SET_SHUFFLE_MODE)
-            .build()
+        val logicalCurrentItemIsSeekable = queue.currentItem != null
+        val commands = sessionAvailableCommands(base.availableCommands, logicalCurrentItemIsSeekable)
+        if (resolving) {
+            val seekInCurrentAvailable =
+                commands.contains(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+            Log.d(
+                LOG_TAG,
+                "getState.seekCommand current=${queue.currentItem?.queueId} resolving=$resolving " +
+                    "resolvingQueueId=$resolvingQueueId rawCount=${engine.mediaItemCount} " +
+                    "logicalCurrentItemIsSeekable=$logicalCurrentItemIsSeekable " +
+                    "seekInCurrentAvailable=$seekInCurrentAvailable"
+            )
+        }
         val builder = base.buildUpon()
             .setAvailableCommands(commands)
             .setPlaylist(playlist)
@@ -238,6 +248,12 @@ internal class SessionPlaybackPlayer(
         positionMs: Long,
         seekCommand: Int
     ): ListenableFuture<*> {
+        Log.d(
+            LOG_TAG,
+            "handleSeek.enter mediaItemIndex=$mediaItemIndex positionMs=$positionMs " +
+                "seekCommand=$seekCommand queueId=${queue.currentItem?.queueId} " +
+                "resolvingQueueId=$resolvingQueueId pendingSeekBefore=$pendingSeek"
+        )
         val targetChanged = mediaItemIndex != queue.currentIndex
         val selectedItem = if (targetChanged) {
             queue.select(mediaItemIndex)
@@ -262,6 +278,12 @@ internal class SessionPlaybackPlayer(
                 invalidateState()
             }
         }
+        Log.d(
+            LOG_TAG,
+            "handleSeek.after mediaItemIndex=$mediaItemIndex desired=$desiredPositionMs " +
+                "queueId=${selectedItem.queueId} resolvingQueueId=$resolvingQueueId " +
+                "pendingSeekAfter=$pendingSeek"
+        )
         return Futures.immediateVoidFuture()
     }
 
@@ -422,6 +444,9 @@ internal class SessionPlaybackPlayer(
             .setMediaMetadata(logicalMetadata)
             .build()
         engine.setMediaItem(resolved, initialPositionMs ?: C.TIME_UNSET)
+        pendingInitialPositionVerification = initialPositionMs?.let {
+            PendingLogicalSeek(item.queueId, it)
+        }
         pendingSeek = null
         engine.prepare()
         engine.playWhenReady = desiredPlayWhenReady
@@ -561,3 +586,34 @@ internal class SessionPlaybackPlayer(
         const val LOG_TAG = "FlowtoneLogicalQueue"
     }
 }
+
+/**
+ * The MediaSession timeline remains seekable while an online item is resolving, even though the
+ * raw ExoPlayer timeline is empty. Keep this command decision tied to the logical current item.
+ */
+internal fun sessionAvailableCommands(
+    baseCommands: Player.Commands,
+    logicalCurrentItemIsSeekable: Boolean
+): Player.Commands = Player.Commands.Builder()
+    .addAll(baseCommands)
+    .add(Player.COMMAND_GET_TIMELINE)
+    .add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
+    .add(Player.COMMAND_GET_METADATA)
+    .add(Player.COMMAND_SET_MEDIA_ITEM)
+    .add(Player.COMMAND_CHANGE_MEDIA_ITEMS)
+    .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
+    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+    .add(Player.COMMAND_SEEK_TO_NEXT)
+    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+    .add(Player.COMMAND_PLAY_PAUSE)
+    .add(Player.COMMAND_PREPARE)
+    .add(Player.COMMAND_STOP)
+    .add(Player.COMMAND_SET_REPEAT_MODE)
+    .add(Player.COMMAND_SET_SHUFFLE_MODE)
+    .apply {
+        if (logicalCurrentItemIsSeekable) {
+            add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+        }
+    }
+    .build()

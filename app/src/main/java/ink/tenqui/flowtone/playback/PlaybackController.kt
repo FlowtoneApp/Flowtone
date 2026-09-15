@@ -36,6 +36,14 @@ data class PlaybackSnapshot(
     val sourceQueue: List<PlaybackQueueItem> = emptyList()
 )
 
+internal data class PlaybackProgressSnapshot(
+    val mediaId: String? = null,
+    val positionMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val belongsToCurrentLogicalTarget: Boolean = false
+)
+
 class PlaybackController(
     context: Context,
     initialPlaybackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
@@ -66,11 +74,17 @@ class PlaybackController(
             _playbackState.update {
                 it.copy(isPlaying = isPlaying)
             }
+            if (!isPlaying) {
+                syncCurrentControllerPlaybackState()
+            }
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             _playbackState.update {
                 it.copy(playWhenReady = playWhenReady)
+            }
+            if (!playWhenReady) {
+                syncCurrentControllerPlaybackState()
             }
         }
 
@@ -400,8 +414,24 @@ class PlaybackController(
     }
 
     fun getCurrentPositionMs(): Long {
-        val position = currentControllerOrNull()?.currentPosition ?: 0L
-        return position.coerceAtLeast(0L)
+        val snapshot = getProgressSnapshot()
+        return snapshot.positionMs.takeIf { snapshot.belongsToCurrentLogicalTarget } ?: 0L
+    }
+
+    internal fun getProgressSnapshot(): PlaybackProgressSnapshot {
+        val controller = currentControllerOrNull() ?: return PlaybackProgressSnapshot()
+        val mediaId = controller.currentMediaItem?.mediaId
+        val belongsToCurrentLogicalTarget = playbackProgressBelongsToCurrentTarget(
+            currentQueueId = playbackStateMediaId,
+            snapshotMediaId = mediaId
+        )
+        return PlaybackProgressSnapshot(
+            mediaId = mediaId,
+            positionMs = controller.currentPosition.coerceAtLeast(0L),
+            bufferedPositionMs = controller.bufferedPosition.coerceAtLeast(0L),
+            durationMs = safeDuration(controller.duration),
+            belongsToCurrentLogicalTarget = belongsToCurrentLogicalTarget
+        )
     }
 
     fun getCurrentPositionSnapshot(): PlaybackPositionSnapshot {
@@ -428,7 +458,16 @@ class PlaybackController(
     }
 
     fun seekTo(positionMs: Long) {
-        currentControllerOrNull()?.seekTo(positionMs.coerceAtLeast(0L))
+        val controller = currentControllerOrNull() ?: return
+        val targetPositionMs = positionMs.coerceAtLeast(0L)
+        val seekInCurrentAvailable =
+            controller.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+        Log.d(
+            LOG_TAG,
+            "seekTo.request targetPositionMs=$targetPositionMs current=${controller.currentMediaItem?.mediaId} " +
+                "seekInCurrentAvailable=$seekInCurrentAvailable"
+        )
+        controller.seekTo(targetPositionMs)
     }
 
     fun getPlaybackSnapshot(): PlaybackSnapshot? {
@@ -756,6 +795,10 @@ class PlaybackController(
 
     /** A newly attached listener does not receive the Session's existing stable state as callbacks. */
     private fun syncControllerPlaybackState(controller: MediaController) {
+        val progressBelongsToCurrentTarget = playbackProgressBelongsToCurrentTarget(
+            currentQueueId = playbackStateMediaId,
+            snapshotMediaId = controller.currentMediaItem?.mediaId
+        )
         val snapshot = controllerPlaybackSnapshot(
             isPlaying = controller.isPlaying,
             playWhenReady = controller.playWhenReady,
@@ -769,11 +812,21 @@ class PlaybackController(
                 isPlaying = snapshot.isPlaying,
                 playWhenReady = snapshot.playWhenReady,
                 isBuffering = snapshot.isBuffering,
-                positionMs = snapshot.positionMs,
-                bufferedPositionMs = snapshot.bufferedPositionMs,
-                durationMs = snapshot.durationMs.takeIf { it > 0L } ?: state.durationMs
+                positionMs = snapshot.positionMs
+                    .takeIf { progressBelongsToCurrentTarget }
+                    ?: state.positionMs,
+                bufferedPositionMs = snapshot.bufferedPositionMs
+                    .takeIf { progressBelongsToCurrentTarget }
+                    ?: state.bufferedPositionMs,
+                durationMs = snapshot.durationMs
+                    .takeIf { progressBelongsToCurrentTarget && it > 0L }
+                    ?: state.durationMs
             )
         }
+    }
+
+    private fun syncCurrentControllerPlaybackState() {
+        currentControllerOrNull()?.let(::syncControllerPlaybackState)
     }
 
     fun playAt(index: Int, playWhenReady: Boolean = true): Boolean {
@@ -929,3 +982,8 @@ class PlaybackController(
         const val LOG_TAG = "FlowtoneLogicalQueue"
     }
 }
+
+internal fun playbackProgressBelongsToCurrentTarget(
+    currentQueueId: String?,
+    snapshotMediaId: String?
+): Boolean = currentQueueId != null && currentQueueId == snapshotMediaId

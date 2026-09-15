@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -193,6 +194,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var searchLandingJob: Job? = null
     private var searchLandingGeneration: Long = 0L
     private var playbackOrderModeJob: Job? = null
+    private var lastProgressDiagnosticLogUptimeMs = 0L
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
     private val providerCollectionLoads = mutableSetOf<String>()
     private val requestedProviderCollectionIds = mutableSetOf<String>()
@@ -217,6 +219,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     init {
         observeExtensionRuntime()
         startProgressTicker()
+        startPlaybackOrderTicker()
         startConfirmedPlaybackPositionTicker()
         observeControllerConnection()
         observeListeningStats()
@@ -1537,7 +1540,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         viewModelScope.launch {
             while (isActive) {
                 updateProgressFromController()
-                delay(500)
+                delay(32L)
+            }
+        }
+    }
+
+    private fun startPlaybackOrderTicker() {
+        viewModelScope.launch {
+            while (isActive) {
+                syncPlaybackOrderModeFromController()
+                delay(500L)
             }
         }
     }
@@ -1553,12 +1565,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun updateProgressFromController() {
-        val playbackOrderMode = playbackController.getPlaybackOrderMode()
-        if (playbackState.value.playbackOrderMode != playbackOrderMode) {
-            playbackController.updatePlaybackOrderMode(playbackOrderMode)
-            playbackSettingsStore.setPlaybackOrderMode(playbackOrderMode)
-        }
-
         val currentSong = playbackState.value.currentSong
         if (currentSong == null) {
             playbackController.updateProgress(
@@ -1569,19 +1575,22 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             return
         }
 
-        val controllerDuration = playbackController.getDurationMs()
+        val controllerSnapshot = playbackController.getProgressSnapshot()
+        val controllerDuration = controllerSnapshot.durationMs
+            .takeIf { controllerSnapshot.belongsToCurrentLogicalTarget }
+            ?: 0L
         val duration = when {
             controllerDuration > 0L -> controllerDuration
             currentSong.durationMs > 0L -> currentSong.durationMs
             else -> 0L
         }
-        val position = if (duration > 0L) {
-            playbackController.getCurrentPositionMs().coerceIn(0L, duration)
+        val position = if (duration > 0L && controllerSnapshot.belongsToCurrentLogicalTarget) {
+            controllerSnapshot.positionMs.coerceIn(0L, duration)
         } else {
             0L
         }
-        val bufferedPosition = if (duration > 0L) {
-            playbackController.getBufferedPositionMs().coerceIn(0L, duration)
+        val bufferedPosition = if (duration > 0L && controllerSnapshot.belongsToCurrentLogicalTarget) {
+            controllerSnapshot.bufferedPositionMs.coerceIn(0L, duration)
         } else {
             0L
         }
@@ -1591,6 +1600,33 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             bufferedPositionMs = bufferedPosition,
             durationMs = duration
         )
+        val now = SystemClock.elapsedRealtime()
+        if (
+            lastProgressDiagnosticLogUptimeMs == 0L ||
+            now - lastProgressDiagnosticLogUptimeMs >= ProgressDiagnosticLogIntervalMillis
+        ) {
+            lastProgressDiagnosticLogUptimeMs = now
+            val state = playbackState.value
+            Log.d(
+                ProgressDiagnosticLogTag,
+                "ticker controllerMediaId=${controllerSnapshot.mediaId} " +
+                    "controllerPositionMs=${controllerSnapshot.positionMs} " +
+                    "controllerBufferedPositionMs=${controllerSnapshot.bufferedPositionMs} " +
+                    "controllerDurationMs=${controllerSnapshot.durationMs} " +
+                    "belongsToCurrent=${controllerSnapshot.belongsToCurrentLogicalTarget} " +
+                    "stateQueueId=${state.currentQueueId} statePositionMs=${state.positionMs} " +
+                    "stateBufferedPositionMs=${state.bufferedPositionMs} " +
+                    "stateDurationMs=${state.durationMs}"
+            )
+        }
+    }
+
+    private fun syncPlaybackOrderModeFromController() {
+        val playbackOrderMode = playbackController.getPlaybackOrderMode()
+        if (playbackState.value.playbackOrderMode != playbackOrderMode) {
+            playbackController.updatePlaybackOrderMode(playbackOrderMode)
+            playbackSettingsStore.setPlaybackOrderMode(playbackOrderMode)
+        }
     }
 
     private fun publishListeningStats(snapshot: ListeningStatsSnapshot) {
@@ -1609,6 +1645,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         super.onCleared()
     }
 }
+
+private const val ProgressDiagnosticLogTag = "FlowtoneProgress"
+private const val ProgressDiagnosticLogIntervalMillis = 2_000L
 
 internal data class QueueTrackEntry(
     val persistentTrack: PersistentTrack?,

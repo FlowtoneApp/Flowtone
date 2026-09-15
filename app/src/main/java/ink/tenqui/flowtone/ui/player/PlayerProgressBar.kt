@@ -1,9 +1,10 @@
 package ink.tenqui.flowtone.ui.player
 
+import android.os.SystemClock
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
@@ -19,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -47,6 +47,7 @@ internal fun PlaybackProgressBar(
     strictProgressBar: Boolean,
     lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
     currentSongKey: Long?,
+    currentQueueId: String?,
     enabled: Boolean,
     trackColor: Color,
     progressColor: Color,
@@ -58,30 +59,30 @@ internal fun PlaybackProgressBar(
     fullscreenProgress: Float,
     modifier: Modifier = Modifier
 ) {
-    var isScrubbing by remember { mutableStateOf(false) }
-    var scrubProgress by remember { mutableStateOf(0f) }
+    val currentPlaybackIdentity = currentQueueId ?: currentSongKey?.toString()
+    var isScrubbing by remember(currentPlaybackIdentity) { mutableStateOf(false) }
+    var scrubProgress by remember(currentPlaybackIdentity) { mutableStateOf(0f) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
-    var smoothPositionMs by remember { mutableStateOf(positionMs) }
-    var anchorPositionMs by remember { mutableStateOf(positionMs) }
-    var anchorFrameTimeNanos by remember { mutableStateOf(0L) }
-    var isTapSeeking by remember { mutableStateOf(false) }
+    var isTapSeeking by remember(currentPlaybackIdentity) { mutableStateOf(false) }
     var lastHandledLyricSeekSequence by remember { mutableLongStateOf(Long.MIN_VALUE) }
-    var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
-    val tapSeekProgress = remember { Animatable(0f) }
+    var pendingSeekPositionMs by remember(currentPlaybackIdentity) { mutableStateOf<Long?>(null) }
+    val tapSeekProgress = remember(currentPlaybackIdentity) { Animatable(0f) }
     val tapSeekScope = rememberCoroutineScope()
     var tapSeekJob by remember { mutableStateOf<Job?>(null) }
-    val trackSwitchProgress = remember { Animatable(1f) }
     val targetBufferedProgress = progressFraction(
         positionMs = bufferedPositionMs,
         durationMs = durationMs
     )
     val animatedBufferedProgress = remember { Animatable(targetBufferedProgress) }
     val waitingTrackPulse = remember { Animatable(0f) }
-    var lastSongKey by remember { mutableStateOf(currentSongKey) }
-    var bufferedProgressSongKey by remember { mutableStateOf(currentSongKey) }
+    var lastPlaybackIdentity by remember { mutableStateOf(currentPlaybackIdentity) }
+    var bufferedProgressSongKey by remember { mutableStateOf(currentPlaybackIdentity) }
     var lastRenderedProgress by remember { mutableStateOf(0f) }
-    var trackSwitchStartProgress by remember { mutableStateOf(0f) }
-    var isTrackSwitchProgressAnimating by remember { mutableStateOf(false) }
+    val trackSwitchResetProgress = remember { Animatable(1f) }
+    var trackSwitchResetStartProgress by remember { mutableStateOf(0f) }
+    var isTrackSwitchResetAnimating by remember { mutableStateOf(false) }
+    var trackSwitchResetCancellationSequence by remember { mutableLongStateOf(0L) }
+    var trackSwitchResetSuppressedIdentity by remember { mutableStateOf<String?>(null) }
     val animatedTrackHeight by animateDpAsState(
         targetValue = if (isScrubbing) {
             PlaybackProgressScrubbingTrackHeight
@@ -94,69 +95,47 @@ internal fun PlaybackProgressBar(
         ),
         label = "ProgressTrackHeight"
     )
-    LaunchedEffect(positionMs, durationMs, currentSongKey) {
-        val safeDuration = durationMs.coerceAtLeast(0L)
-        val safePosition = positionMs.coerceIn(0L, safeDuration)
+    val identityChanged = playbackSongIdentityChanged(lastPlaybackIdentity, currentPlaybackIdentity)
+    val trackSwitchResetStartCandidate = lastRenderedProgress.coerceIn(0f, 1f)
+    LaunchedEffect(currentPlaybackIdentity, trackSwitchResetCancellationSequence) {
         if (
-            !isPlaying ||
-            kotlin.math.abs(smoothPositionMs - safePosition) >
-            PlaybackProgressPositionSnapThresholdMs
+            !identityChanged ||
+            trackSwitchResetSuppressedIdentity == currentPlaybackIdentity
         ) {
-            smoothPositionMs = safePosition
+            return@LaunchedEffect
         }
-        anchorPositionMs = smoothPositionMs.coerceIn(0L, safeDuration)
-        anchorFrameTimeNanos = 0L
+
+        trackSwitchResetStartProgress = trackSwitchResetStartCandidate
+        isTrackSwitchResetAnimating = trackSwitchResetStartProgress > 0f
+        if (isTrackSwitchResetAnimating) {
+            trackSwitchResetProgress.snapTo(0f)
+            trackSwitchResetProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = PlaybackProgressTrackSwitchResetAnimationMillis,
+                    easing = TrackSwitchProgressEasing
+                )
+            )
+        }
+        isTrackSwitchResetAnimating = false
+    }
+    LaunchedEffect(positionMs, durationMs, currentPlaybackIdentity) {
+        if (identityChanged) {
+            tapSeekJob?.cancel()
+            isScrubbing = false
+            scrubProgress = 0f
+            isTapSeeking = false
+            lastRenderedProgress = 0f
+            lastPlaybackIdentity = currentPlaybackIdentity
+            return@LaunchedEffect
+        }
         if (durationMs <= 0L) {
             scrubProgress = 0f
             isScrubbing = false
         }
     }
-    LaunchedEffect(isPlaying, durationMs, currentSongKey, positionMs) {
-        if (!isPlaying || durationMs <= 0L) {
-            val safeDuration = durationMs.coerceAtLeast(0L)
-            smoothPositionMs = positionMs.coerceIn(0L, safeDuration)
-            anchorPositionMs = smoothPositionMs
-            anchorFrameTimeNanos = 0L
-            return@LaunchedEffect
-        }
-
-        anchorPositionMs = smoothPositionMs.coerceIn(0L, durationMs)
-        anchorFrameTimeNanos = 0L
-
-        while (isActive && isPlaying && durationMs > 0L) {
-            withFrameNanos { frameTime ->
-                if (anchorFrameTimeNanos == 0L) {
-                    anchorFrameTimeNanos = frameTime
-                }
-
-                val elapsedMs = (frameTime - anchorFrameTimeNanos) / 1_000_000L
-                smoothPositionMs = (anchorPositionMs + elapsedMs).coerceIn(0L, durationMs)
-            }
-        }
-    }
-    LaunchedEffect(currentSongKey) {
-        if (currentSongKey != lastSongKey) {
-            trackSwitchStartProgress = lastRenderedProgress.coerceIn(0f, 1f)
-            isTrackSwitchProgressAnimating = true
-            lastSongKey = currentSongKey
-            trackSwitchProgress.snapTo(0f)
-            trackSwitchProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = 260,
-                    easing = LinearEasing
-                )
-            )
-            isTrackSwitchProgressAnimating = false
-        }
-        tapSeekJob?.cancel()
-        isScrubbing = false
-        scrubProgress = 0f
-        isTapSeeking = false
-        pendingSeekPositionMs = null
-    }
-    LaunchedEffect(currentSongKey, targetBufferedProgress) {
-        if (playbackSongIdentityChanged(bufferedProgressSongKey, currentSongKey)) {
+    LaunchedEffect(currentPlaybackIdentity, targetBufferedProgress) {
+        if (playbackSongIdentityChanged(bufferedProgressSongKey, currentPlaybackIdentity)) {
             animatedBufferedProgress.animateTo(
                 targetValue = 0f,
                 animationSpec = tween(
@@ -164,7 +143,7 @@ internal fun PlaybackProgressBar(
                     easing = TrackSwitchProgressEasing
                 )
             )
-            bufferedProgressSongKey = currentSongKey
+            bufferedProgressSongKey = currentPlaybackIdentity
         }
         animatedBufferedProgress.animateTo(
             targetValue = targetBufferedProgress,
@@ -194,7 +173,7 @@ internal fun PlaybackProgressBar(
             pendingSeekPositionMs = null
         }
     }
-    LaunchedEffect(strictProgressBar, currentSongKey, pendingSeekPositionMs) {
+    LaunchedEffect(strictProgressBar, currentPlaybackIdentity, pendingSeekPositionMs) {
         val pendingPositionMs = pendingSeekPositionMs
         if (!strictProgressBar || pendingPositionMs == null) {
             return@LaunchedEffect
@@ -206,21 +185,57 @@ internal fun PlaybackProgressBar(
         }
     }
 
-    val smoothPlaybackProgress = progressFraction(
-        positionMs = smoothPositionMs,
+    val authoritativePlaybackProgress = progressFraction(
+        positionMs = positionMs,
         durationMs = durationMs
     )
-    val trackSwitchVisualProgress = if (isTrackSwitchProgressAnimating) {
-        val eased = TrackSwitchProgressEasing.transform(trackSwitchProgress.value.coerceIn(0f, 1f))
-        lerpFloat(trackSwitchStartProgress, smoothPlaybackProgress, eased)
-    } else {
-        smoothPlaybackProgress
-    }.coerceIn(0f, 1f)
+    val trackSwitchResetPending =
+        identityChanged &&
+            !isTrackSwitchResetAnimating &&
+            trackSwitchResetSuppressedIdentity != currentPlaybackIdentity
+    val trackSwitchVisualProgress = playedProgressDuringTrackSwitchReset(
+        resetIsAnimating = isTrackSwitchResetAnimating || trackSwitchResetPending,
+        resetStartProgress = if (trackSwitchResetPending) {
+            trackSwitchResetStartCandidate
+        } else {
+            trackSwitchResetStartProgress
+        },
+        resetAnimationProgress = if (trackSwitchResetPending) 0f else trackSwitchResetProgress.value,
+        currentTrackProgress = playedProgressForIdentity(
+            identityChanged = identityChanged,
+            currentTrackProgress = authoritativePlaybackProgress
+        )
+    )
     val visibleProgress = when {
         isScrubbing -> scrubProgress
         isTapSeeking -> tapSeekProgress.value
+        strictProgressBar && pendingSeekPositionMs != null -> progressFraction(
+            positionMs = pendingSeekPositionMs ?: 0L,
+            durationMs = durationMs
+        )
         else -> trackSwitchVisualProgress
     }.coerceIn(0f, 1f)
+    val progressDiagnosticLogUptimeMs = remember { longArrayOf(0L) }
+    SideEffect {
+        val now = SystemClock.elapsedRealtime()
+        if (
+            progressDiagnosticLogUptimeMs[0] == 0L ||
+            now - progressDiagnosticLogUptimeMs[0] >= ProgressDiagnosticLogIntervalMillis
+        ) {
+            progressDiagnosticLogUptimeMs[0] = now
+            Log.d(
+                ProgressDiagnosticLogTag,
+                "progressBar queueId=$currentQueueId identity=$currentPlaybackIdentity " +
+                    "positionMs=$positionMs bufferedPositionMs=$bufferedPositionMs " +
+                    "durationMs=$durationMs authoritativeProgress=$authoritativePlaybackProgress " +
+                    "resetActive=${isTrackSwitchResetAnimating || trackSwitchResetPending} " +
+                    "resetValue=${trackSwitchResetProgress.value} isScrubbing=$isScrubbing " +
+                    "isTapSeeking=$isTapSeeking pendingSeekPositionMs=$pendingSeekPositionMs " +
+                    "identityChanged=$identityChanged awaitingFreshPosition=false " +
+                    "finalVisibleProgress=$visibleProgress"
+            )
+        }
+    }
     val currentVisibleProgress by rememberUpdatedState(visibleProgress)
     val currentIsPlayingForVisualLock by rememberUpdatedState(isPlayingForVisualLock)
     val lyricSeekAnimationPending = lyricProgressSeekAnimation?.let { request ->
@@ -228,28 +243,23 @@ internal fun PlaybackProgressBar(
             request.songId == currentSongKey
     } == true
     SideEffect {
-        if (!isScrubbing && !isTapSeeking && !lyricSeekAnimationPending) {
+        if (
+            !identityChanged &&
+            !isScrubbing &&
+            !isTapSeeking &&
+            !lyricSeekAnimationPending
+        ) {
             lastRenderedProgress = visibleProgress.coerceIn(0f, 1f)
         }
     }
-    val animatedDisplayTimePositionMs = positionFromProgress(
-        durationMs = durationMs,
-        progress = visibleProgress
-    )
-    val displayTimePositionMs = if (strictProgressBar) {
-        when {
-            durationMs <= 0L -> 0L
-            isScrubbing -> positionFromProgress(
-                durationMs = durationMs,
-                progress = scrubProgress
-            )
-            pendingSeekPositionMs != null -> pendingSeekPositionMs
-                ?.coerceIn(0L, durationMs.coerceAtLeast(0L))
-                ?: 0L
-            else -> positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
-        }
-    } else {
-        animatedDisplayTimePositionMs
+    val displayTimePositionMs = when {
+        durationMs <= 0L -> 0L
+        isScrubbing -> positionFromProgress(durationMs = durationMs, progress = scrubProgress)
+        isTapSeeking -> positionFromProgress(durationMs = durationMs, progress = tapSeekProgress.value)
+        strictProgressBar && pendingSeekPositionMs != null -> pendingSeekPositionMs
+            ?.coerceIn(0L, durationMs.coerceAtLeast(0L))
+            ?: 0L
+        else -> positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
     }
     val activeProgressColor = progressColor
     val bufferedProgressColor = lerp(trackColor, progressColor, 0.20f)
@@ -296,6 +306,12 @@ internal fun PlaybackProgressBar(
         onProgressChanged()
     }
 
+    fun cancelTrackSwitchReset() {
+        trackSwitchResetSuppressedIdentity = currentPlaybackIdentity
+        isTrackSwitchResetAnimating = false
+        trackSwitchResetCancellationSequence += 1L
+    }
+
     fun rememberPendingSeek(positionMs: Long) {
         if (strictProgressBar) {
             pendingSeekPositionMs = positionMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
@@ -323,13 +339,11 @@ internal fun PlaybackProgressBar(
             lastRenderedProgress
         }.coerceIn(0f, 1f)
 
+        cancelTrackSwitchReset()
         tapSeekJob?.cancel()
         lastHandledLyricSeekSequence = request.sequence
         isTapSeeking = true
         rememberPendingSeek(targetPositionMs)
-        smoothPositionMs = targetPositionMs
-        anchorPositionMs = targetPositionMs
-        anchorFrameTimeNanos = 0L
         tapSeekProgress.snapTo(startProgress)
         tapSeekProgress.animateTo(
             targetValue = targetProgress,
@@ -370,6 +384,7 @@ internal fun PlaybackProgressBar(
                 containerSize = size
             },
             onEnterScrubbing = { x ->
+                cancelTrackSwitchReset()
                 isTapSeeking = false
                 pendingSeekPositionMs = null
                 isScrubbing = true
@@ -385,9 +400,6 @@ internal fun PlaybackProgressBar(
                     durationMs = durationMs,
                     progress = scrubProgress
                 )
-                smoothPositionMs = targetPositionMs
-                anchorPositionMs = targetPositionMs
-                anchorFrameTimeNanos = 0L
                 rememberPendingSeek(targetPositionMs)
                 onLockPlayPauseVisual(currentIsPlayingForVisualLock)
                 onSeekTo(targetPositionMs)
@@ -405,14 +417,12 @@ internal fun PlaybackProgressBar(
                 )
                 onProgressChanged()
 
+                cancelTrackSwitchReset()
                 tapSeekJob?.cancel()
                 isTapSeeking = true
                 rememberPendingSeek(targetPositionMs)
                 onLockPlayPauseVisual(currentIsPlayingForVisualLock)
                 onSeekTo(targetPositionMs)
-                smoothPositionMs = targetPositionMs
-                anchorPositionMs = targetPositionMs
-                anchorFrameTimeNanos = 0L
                 tapSeekJob = tapSeekScope.launch {
                     tapSeekProgress.snapTo(currentVisibleProgress)
                     tapSeekProgress.animateTo(
@@ -431,3 +441,5 @@ internal fun PlaybackProgressBar(
 
 private const val PlaybackProgressPendingSeekToleranceMs = 500L
 private const val PlaybackProgressPendingSeekTimeoutMillis = 1_500L
+private const val ProgressDiagnosticLogTag = "FlowtoneProgress"
+private const val ProgressDiagnosticLogIntervalMillis = 2_000L

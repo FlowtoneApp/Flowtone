@@ -12,9 +12,26 @@ internal fun progressFraction(
 }
 
 internal fun playbackSongIdentityChanged(
-    previousSongKey: Long?,
-    currentSongKey: Long?
+    previousSongKey: Any?,
+    currentSongKey: Any?
 ): Boolean = previousSongKey != currentSongKey
+
+internal fun playedProgressForIdentity(
+    identityChanged: Boolean,
+    currentTrackProgress: Float
+): Float = if (identityChanged) 0f else currentTrackProgress.coerceIn(0f, 1f)
+
+internal fun playedProgressDuringTrackSwitchReset(
+    resetIsAnimating: Boolean,
+    resetStartProgress: Float,
+    resetAnimationProgress: Float,
+    currentTrackProgress: Float
+): Float = if (resetIsAnimating) {
+    resetStartProgress.coerceIn(0f, 1f) *
+        (1f - resetAnimationProgress.coerceIn(0f, 1f))
+} else {
+    currentTrackProgress.coerceIn(0f, 1f)
+}
 
 internal fun progressFromX(
     x: Float,
