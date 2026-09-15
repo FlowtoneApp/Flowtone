@@ -447,7 +447,8 @@ fun MiniPlayer(
     val fullscreenCoverCenterY = fullscreenTargetHeight * 0.4f
     val fullscreenStationaryControlsOffsetY =
         (fullscreenTargetHeight - currentHeight) * fullscreenProgress
-    val fullscreenControlsLiftY = 50.dp * fullscreenProgress
+    val fullscreenControlsLiftY =
+        PlayerControlsFullscreenTransitionDistance * fullscreenProgress
     val visibleProgress by animateFloatAsState(
         targetValue = if (miniPlayerVisible) 1f else 0f,
         animationSpec = tween(
@@ -730,6 +731,7 @@ fun MiniPlayer(
         showQueueSheet = state.showQueueSheet
     )
     MiniPlayerVisualSurface(
+        stableRootHeight = fullscreenTargetHeight,
         hostHeight = hostHeight,
         miniPlayerSlideOffsetY = miniPlayerSlideOffsetY,
         visibleProgress = visibleProgress,
@@ -944,7 +946,6 @@ fun MiniPlayer(
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,
                         addToPlaylistListState = state.addToPlaylistListState,
                         isCurrentSongLiked = isCurrentSongLiked,
-                        expandedMoreMenu = state.expandedMoreMenu,
                         fullscreen = fullscreen,
                         expanded = expanded,
                         artistPlaceholderArtists = state.artistPlaceholderArtists,
@@ -974,11 +975,7 @@ fun MiniPlayer(
                         onPlayPrevious = fullscreenInteractionHandlers.onPlayPrevious,
                         onTogglePlayPause = fullscreenInteractionHandlers.onTogglePlayPause,
                         onPlayNext = fullscreenInteractionHandlers.onPlayNext,
-                        onMoreMenuExpandedChange =
-                            fullscreenInteractionHandlers.onMoreMenuExpandedChange,
                         onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
-                        onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
-                        onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo,
                         onOpenQueue = fullscreenInteractionHandlers.onOpenQueue,
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
@@ -1006,6 +1003,36 @@ fun MiniPlayer(
             }
         },
         overlayContent = {
+            BoxWithConstraints(modifier = Modifier.matchParentSize()) {
+                val stablePlayerWidth = maxWidth
+                val stableFullscreenLayoutScale =
+                    fullscreenPlayerLayoutScale(stablePlayerWidth)
+                // 这是 fullscreen=1 时旧布局的最终屏幕 Y：固定在稳定根坐标系中，
+                // 不再继承 playback-content Box 的逐帧 translationY。
+                val stableFullscreenActionsBaseY =
+                    fullscreenTargetHeight - expandedHeight + expandedArtworkSize +
+                        (expandedArtworkTop - 16.dp) * stableFullscreenLayoutScale
+                FullscreenSideActionsOverlay(
+                    playerWidth = stablePlayerWidth,
+                    baseY = stableFullscreenActionsBaseY,
+                    fullscreenLayoutScale = stableFullscreenLayoutScale,
+                    fullscreenProgress = fullscreenProgress,
+                    fullscreen = fullscreen,
+                    liked = isCurrentSongLiked,
+                    hasCurrentSong = hasCurrentSong,
+                    iconColor = controlIconColor,
+                    controlsEnabled = maxOf(
+                        fullscreenContentExitProgress,
+                        artistPlaceholderProgress
+                    ) <= 0.01f,
+                    moreMenuExpanded = state.expandedMoreMenu,
+                    onMoreMenuExpandedChange =
+                        fullscreenInteractionHandlers.onMoreMenuExpandedChange,
+                    onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
+                    onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
+                    onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo
+                )
+            }
             MiniPlayerQueueSheetHost(
             showQueueSheet = state.showQueueSheet,
             playbackQueue = playbackQueueItems,

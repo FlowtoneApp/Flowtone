@@ -94,7 +94,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     newlyCreatedPlaylistId: String?,
     addToPlaylistListState: LazyListState,
     isCurrentSongLiked: Boolean,
-    expandedMoreMenu: Boolean,
     fullscreen: Boolean,
     expanded: Boolean,
     artistPlaceholderArtists: List<String>,
@@ -118,10 +117,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onPlayPrevious: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
-    onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
-    onAddToPlaylist: () -> Unit,
-    onOpenSongInfo: () -> Unit,
     onOpenQueue: () -> Unit,
     onArtistHostBack: () -> Unit,
     onArtistHostArtistClick: (String) -> Unit,
@@ -416,7 +412,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .zIndex(if (expandedMoreMenu) 6f else 0f)
                 .graphicsLayer {
                     alpha = metrics.playbackContentAlpha
                     translationY =
@@ -475,7 +470,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 playerWidth = designPlayerWidth,
                 currentHeight = designCurrentHeight,
                 expandedHeight = designExpandedHeight,
-                expandedProgressTop = designExpandedProgressTop,
                 expandedControlsTop = designExpandedControlsTop,
                 hasCurrentSong = hasCurrentSong,
                 isCurrentSongLiked = isCurrentSongLiked,
@@ -483,11 +477,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 iconColor = controlIconColor,
                 fullscreenProgress = fullscreenProgress,
                 controlsExitProgress = metrics.fullscreenContentExitSharedProgress,
-                moreMenuExpanded = expandedMoreMenu,
-                onMoreMenuExpandedChange = onMoreMenuExpandedChange,
                 onToggleLiked = onToggleLiked,
-                onAddToPlaylist = onAddToPlaylist,
-                onOpenSongInfo = onOpenSongInfo,
                 onOpenQueue = onOpenQueue,
                 modifier = Modifier
                     .align(Alignment.TopStart)
