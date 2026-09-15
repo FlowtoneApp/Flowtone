@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -242,7 +243,13 @@ internal fun FlowtoneTopBar(
                 ) {
                     IconButton(
                         onClick = displayedSelectionState.onAddNext,
-                        enabled = !displayedSelectionState.busy
+                        enabled = !displayedSelectionState.busy,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = 0.38f
+                            )
+                        )
                     ) {
                         Box(modifier = Modifier.size(26.dp)) {
                             Icon(
@@ -263,7 +270,13 @@ internal fun FlowtoneTopBar(
                     }
                     IconButton(
                         onClick = displayedSelectionState.onAddToPlaylist,
-                        enabled = !displayedSelectionState.busy
+                        enabled = !displayedSelectionState.busy,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = 0.38f
+                            )
+                        )
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
