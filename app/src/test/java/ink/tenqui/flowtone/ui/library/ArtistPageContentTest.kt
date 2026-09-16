@@ -189,6 +189,24 @@ class ArtistPageContentTest {
     }
 
     @Test
+    fun providerArtistMetadataNeverUsesNameOnlyResolver() {
+        assertFalse(
+            artistMetadataNeedsResolver(
+                artistName = "Same Name",
+                destinationMetadata = ArtistMetadata(biography = "Provider biography"),
+                allowNameResolver = false
+            )
+        )
+        assertFalse(
+            artistMetadataNeedsResolver(
+                artistName = "Same Name",
+                destinationMetadata = null,
+                allowNameResolver = false
+            )
+        )
+    }
+
+    @Test
     fun resolverCompletesMissingMetadataWithoutReplacingDestinationValues() {
         val merged = mergeArtistMetadata(
             artistName = "Artist",

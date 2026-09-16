@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.data.online
 
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.core.online.ArtistMetadata
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -62,6 +64,163 @@ class ProviderEntityTest {
     @Test
     fun sameRemoteAlbumIdAcrossProvidersIsDistinct() {
         assertNotEquals(album("a", "1").identity, album("b", "1").identity)
+    }
+
+    @Test
+    fun providerArtistProfilePrefersLargeArtworkAndFallsBackToArtwork() {
+        val artwork = ExtensionImage("a", "https://example.test/avatar-small.jpg")
+        val largeArtwork = ExtensionImage("a", "https://example.test/avatar-large.jpg")
+
+        assertEquals(
+            largeArtwork,
+            ProviderArtist(
+                identity = ProviderEntityIdentity("a", "42"),
+                title = "Artist",
+                artwork = artwork,
+                largeArtwork = largeArtwork
+            ).preferredProfileArtwork()
+        )
+        assertEquals(
+            artwork,
+            ProviderArtist(
+                identity = ProviderEntityIdentity("a", "42"),
+                title = "Artist",
+                artwork = artwork
+            ).preferredProfileArtwork()
+        )
+    }
+
+    @Test
+    fun formalProviderArtistMetadataWinsAndLegacyOnlyFillsMissingFields() {
+        val formalBanner = ExtensionImage("a", "https://example.test/formal-banner.jpg")
+        val legacyBanner = ExtensionImage("a", "https://example.test/legacy-banner.jpg")
+        val legacy = song(
+            provider = "a",
+            id = "42",
+            artists = listOf(ProviderArtistRef("42", "Artist")),
+            searchCategory = ProviderSearchCategory.User,
+            artistMetadata = ArtistMetadata(
+                aliases = listOf("Legacy alias"),
+                biography = "Legacy biography",
+                songCount = 99,
+                albumCount = 7,
+                banner = legacyBanner
+            )
+        )
+
+        val resolved = resolveProviderArtistProfileMetadata(
+            providerId = "a",
+            artistId = "42",
+            artistName = "Artist",
+            destinationMetadata = ArtistMetadata(
+                aliases = listOf("Formal alias"),
+                biography = "Formal biography",
+                songCount = 12,
+                banner = formalBanner
+            ),
+            songs = listOf(legacy)
+        )
+
+        assertEquals(listOf("Formal alias", "Legacy alias"), resolved?.aliases)
+        assertEquals("Formal biography", resolved?.biography)
+        assertEquals(12, resolved?.songCount)
+        assertEquals(7, resolved?.albumCount)
+        assertEquals(formalBanner, resolved?.banner)
+    }
+
+    @Test
+    fun legacyProviderArtistMetadataRequiresProviderAndArtistIdMatch() {
+        val sameNameWrongArtist = song(
+            provider = "a",
+            id = "99",
+            artists = listOf(ProviderArtistRef("99", "Artist")),
+            searchCategory = ProviderSearchCategory.User,
+            artistMetadata = ArtistMetadata(biography = "Wrong artist")
+        )
+        val sameArtistWrongProvider = song(
+            provider = "b",
+            id = "42",
+            artists = listOf(ProviderArtistRef("42", "Artist")),
+            searchCategory = ProviderSearchCategory.User,
+            artistMetadata = ArtistMetadata(biography = "Wrong provider")
+        )
+        val nameOnly = song(
+            provider = "a",
+            id = "42",
+            artists = listOf(ProviderArtistRef(name = "Artist")),
+            searchCategory = ProviderSearchCategory.User,
+            artistMetadata = ArtistMetadata(biography = "Name-only match")
+        )
+
+        assertNull(
+            resolveProviderArtistProfileMetadata(
+                providerId = "a",
+                artistId = "42",
+                artistName = "Artist",
+                destinationMetadata = null,
+                songs = listOf(sameNameWrongArtist, sameArtistWrongProvider, nameOnly)
+            )
+        )
+    }
+
+    @Test
+    fun multiArtistLegacyMetadataIsNotAttributedToEitherArtist() {
+        val ambiguous = song(
+            provider = "a",
+            id = "a",
+            artists = listOf(
+                ProviderArtistRef("a", "Artist A"),
+                ProviderArtistRef("b", "Artist B")
+            ),
+            searchCategory = ProviderSearchCategory.User,
+            artistMetadata = ArtistMetadata(biography = "Ambiguous biography")
+        )
+
+        assertNull(
+            resolveProviderArtistProfileMetadata(
+                providerId = "a",
+                artistId = "a",
+                artistName = "Artist A",
+                destinationMetadata = null,
+                songs = listOf(ambiguous)
+            )
+        )
+        assertNull(
+            resolveProviderArtistProfileMetadata(
+                providerId = "a",
+                artistId = "b",
+                artistName = "Artist B",
+                destinationMetadata = null,
+                songs = listOf(ambiguous)
+            )
+        )
+    }
+
+    @Test
+    fun legacyMetadataRequiresSingleArtistUserPayloadIdentity() {
+        val normalSong = song(
+            provider = "a",
+            id = "42",
+            artists = listOf(ProviderArtistRef("42", "Artist")),
+            artistMetadata = ArtistMetadata(biography = "Normal song metadata")
+        )
+        val mismatchedUserIdentity = song(
+            provider = "a",
+            id = "different",
+            artists = listOf(ProviderArtistRef("42", "Artist")),
+            searchCategory = ProviderSearchCategory.User,
+            artistMetadata = ArtistMetadata(biography = "Mismatched User payload")
+        )
+
+        assertNull(
+            resolveProviderArtistProfileMetadata(
+                providerId = "a",
+                artistId = "42",
+                artistName = "Artist",
+                destinationMetadata = null,
+                songs = listOf(normalSong, mismatchedUserIdentity)
+            )
+        )
     }
 
     @Test
@@ -158,11 +317,15 @@ class ProviderEntityTest {
         id: String,
         artist: String = "Artist",
         artists: List<ProviderArtistRef> = emptyList(),
-        album: ProviderAlbumRef? = null
+        album: ProviderAlbumRef? = null,
+        searchCategory: ProviderSearchCategory = ProviderSearchCategory.Single,
+        artistMetadata: ArtistMetadata? = null
     ) = ProviderSong(
         trackRef = ExtensionTrackRef(provider, id),
         title = "Song $id",
         artist = artist,
+        searchCategory = searchCategory,
+        artistMetadata = artistMetadata,
         artists = artists,
         album = album
     )

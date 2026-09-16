@@ -103,7 +103,8 @@ internal fun rememberExperimentalArtistAvatarImage(
 @Composable
 internal fun rememberArtistMetadata(
     artistName: String,
-    providedMetadata: ArtistMetadata? = null
+    providedMetadata: ArtistMetadata? = null,
+    allowNameResolver: Boolean = true
 ): ArtistMetadata? {
     val context = LocalContext.current
     val extensionManager = remember(context) { ExtensionManager.get(context) }
@@ -111,8 +112,12 @@ internal fun rememberArtistMetadata(
     val normalizedProvidedMetadata = remember(artistName, providedMetadata) {
         providedMetadata?.sanitizedFor(artistName)
     }
-    val needsResolver = remember(artistName, normalizedProvidedMetadata) {
-        artistMetadataNeedsResolver(artistName, normalizedProvidedMetadata)
+    val needsResolver = remember(artistName, normalizedProvidedMetadata, allowNameResolver) {
+        artistMetadataNeedsResolver(
+            artistName = artistName,
+            destinationMetadata = normalizedProvidedMetadata,
+            allowNameResolver = allowNameResolver
+        )
     }
     var resolvedMetadata by remember(artistName, needsResolver, runtimeState.generation) {
         mutableStateOf<ArtistMetadata?>(null)
@@ -137,8 +142,10 @@ internal fun rememberArtistMetadata(
 /** Destination 字段完整时不触发额外 Provider 查询；否则允许 resolver 补齐未知字段。 */
 internal fun artistMetadataNeedsResolver(
     artistName: String,
-    destinationMetadata: ArtistMetadata?
+    destinationMetadata: ArtistMetadata?,
+    allowNameResolver: Boolean = true
 ): Boolean {
+    if (!allowNameResolver) return false
     val metadata = destinationMetadata?.sanitizedFor(artistName)
     return metadata == null ||
         metadata.aliases.isEmpty() ||

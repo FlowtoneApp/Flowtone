@@ -1,6 +1,10 @@
 package ink.tenqui.flowtone.ui.player
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -8,16 +12,23 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
+
+private const val FULLSCREEN_MORE_GESTURE_TAG = "MoreGesture"
 
 @Composable
 internal fun SharedPlaybackControls(
@@ -125,6 +136,8 @@ internal fun SideButtonsOverlay(
     iconColor: Color,
     fullscreenProgress: Float,
     controlsExitProgress: Float = 0f,
+    moreMenuExpanded: Boolean,
+    onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
     onOpenQueue: () -> Unit,
@@ -146,6 +159,11 @@ internal fun SideButtonsOverlay(
     val queueEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
     val controlsExit = controlsExitProgress.coerceIn(0f, 1f)
     val controlsEnabled = controlsExit <= 0.01f
+    fun collapseMoreMenu() {
+        if (moreMenuExpanded) {
+            onMoreMenuExpandedChange(false)
+        }
+    }
 
     Box(modifier = modifier) {
         val favoriteEndX = progressLeft
@@ -162,7 +180,10 @@ internal fun SideButtonsOverlay(
             FavoriteButton(
                 liked = isCurrentSongLiked,
                 enabled = hasCurrentSong && controlsEnabled,
-                onClick = onToggleLiked,
+                onClick = {
+                    collapseMoreMenu()
+                    onToggleLiked()
+                },
                 modifier = Modifier
                     .zIndex(4f)
                     .offset(x = favoriteX, y = buttonY + bottomFavoriteOffsetY)
@@ -183,7 +204,10 @@ internal fun SideButtonsOverlay(
             mode = playbackOrderMode,
             iconColor = iconColor,
             enabled = sideButtonsVisualEnabled && controlsEnabled,
-            onClick = onTogglePlaybackOrderMode,
+            onClick = {
+                collapseMoreMenu()
+                onTogglePlaybackOrderMode()
+            },
             modifier = Modifier
                 .offset(x = orderX, y = buttonY)
                 .size(buttonSize)
@@ -201,7 +225,10 @@ internal fun SideButtonsOverlay(
             QueueButton(
                 iconColor = iconColor,
                 enabled = queueButtonEnabled,
-                onClick = onOpenQueue,
+                onClick = {
+                    collapseMoreMenu()
+                    onOpenQueue()
+                },
                 modifier = Modifier
                     .offset(x = favoriteEndX, y = buttonY)
                     .size(buttonSize)
@@ -219,111 +246,301 @@ internal fun SideButtonsOverlay(
 @Composable
 internal fun FullscreenSideActionsOverlay(
     playerWidth: Dp,
+    stableRootHeight: Dp,
     baseY: Dp,
     fullscreenLayoutScale: Float,
     fullscreenProgress: Float,
-    fullscreen: Boolean,
+    lyricsControlsOffsetY: Dp,
+    layoutMetrics: MiniPlayerFullscreenLayoutMetrics,
+    fullscreenContentMode: FullscreenContentMode,
     liked: Boolean,
     hasCurrentSong: Boolean,
     iconColor: Color,
-    controlsEnabled: Boolean,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
     onAddToPlaylist: () -> Unit,
-    onOpenSongInfo: () -> Unit
+    onOpenSongInfo: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val visualProgress = fullscreenProgress.coerceIn(0f, 1f)
-    val buttonSize = PlayerSideButtonSize
-    val fullscreenMenuSpacing = FullscreenSideActionsSpacing
-    val progressWidth = playerWidth * 0.76f
-    val progressLeft = (playerWidth - progressWidth) / 2f
-    val groupWidth = buttonSize * 2f + fullscreenMenuSpacing
-    val groupX = progressLeft + progressWidth - groupWidth * fullscreenLayoutScale
-    val translationYPx = with(LocalDensity.current) {
+    val actualDensity = LocalDensity.current
+    val fixedFullscreenDensity = Density(
+        density = actualDensity.density * fullscreenLayoutScale,
+        fontScale = actualDensity.fontScale
+    )
+    val designPlayerWidth = playerWidth / fullscreenLayoutScale
+    val designRootHeight = stableRootHeight / fullscreenLayoutScale
+    val designBaseY = baseY / fullscreenLayoutScale
+    val designLyricsControlsOffsetY = lyricsControlsOffsetY / fullscreenLayoutScale
+    val fullscreenTransitionYPx = with(actualDensity) {
         PlayerControlsFullscreenTransitionDistance.toPx()
     } * (1f - visualProgress)
-    val fullscreenActionsEnabled =
-        fullscreen && hasCurrentSong && visualProgress > 0.72f && controlsEnabled
-    val moreMenuVisible = hasCurrentSong
-    val expandedMoreMenuVisible = moreMenuExpanded && moreMenuVisible && fullscreen
-
-    LaunchedEffect(fullscreen, hasCurrentSong) {
-        if (!fullscreen || !hasCurrentSong) {
-            onMoreMenuExpandedChange(false)
-        }
-    }
-    if (visualProgress <= FullscreenSideActionsVisibilityThreshold && !expandedMoreMenuVisible) {
-        return
-    }
 
     Box(
-        modifier = Modifier
-            .offset(x = groupX, y = baseY)
-            .size(
-                height = buttonSize * fullscreenLayoutScale,
-                width = groupWidth * fullscreenLayoutScale
-            )
+        modifier = modifier
             .graphicsLayer {
-                translationY = translationYPx
-                alpha = visualProgress
+                translationY = fullscreenTransitionYPx
             }
     ) {
-        Box(
-            modifier = Modifier
-                .size(height = buttonSize, width = groupWidth)
-                .graphicsLayer {
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    scaleX = fullscreenLayoutScale
-                    scaleY = fullscreenLayoutScale
-                }
-        ) {
-            Row(
+        CompositionLocalProvider(LocalDensity provides fixedFullscreenDensity) {
+            Box(
                 modifier = Modifier
-                    .size(height = buttonSize, width = groupWidth),
-                horizontalArrangement = Arrangement.spacedBy(fullscreenMenuSpacing)
+                    .size(width = designPlayerWidth, height = designRootHeight)
+                    .zIndex(if (moreMenuExpanded) 6f else 0f)
+                    .pointerInput("MoreGestureTrace", moreMenuExpanded, fullscreenContentMode) {
+                        if (
+                            !moreMenuExpanded ||
+                            fullscreenContentMode != FullscreenContentMode.Playback
+                        ) {
+                            return@pointerInput
+                        }
+
+                        try {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Initial
+                                )
+                                Log.d(
+                                    FULLSCREEN_MORE_GESTURE_TAG,
+                                    "trace DOWN consumed=${down.isConsumed} " +
+                                        "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
+                                )
+                                var moveLogged = false
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull() ?: break
+                                    if (!change.pressed) {
+                                        Log.d(
+                                            FULLSCREEN_MORE_GESTURE_TAG,
+                                            "trace UP consumed=${change.isConsumed} " +
+                                                "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
+                                        )
+                                        break
+                                    }
+                                    val dy = change.position.y - change.previousPosition.y
+                                    if (!moveLogged && abs(dy) >= 8f) {
+                                        moveLogged = true
+                                        Log.d(
+                                            FULLSCREEN_MORE_GESTURE_TAG,
+                                            "trace MOVE dy=$dy consumed=${change.isConsumed} " +
+                                                "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
+                                        )
+                                    }
+                                }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            Log.d(
+                                FULLSCREEN_MORE_GESTURE_TAG,
+                                "trace CANCEL expanded=$moreMenuExpanded " +
+                                    "contentMode=$fullscreenContentMode"
+                            )
+                            throw cancelled
+                        }
+                    }
+                    .pointerInput(moreMenuExpanded, fullscreenContentMode) {
+                        if (
+                            !moreMenuExpanded ||
+                            fullscreenContentMode != FullscreenContentMode.Playback
+                        ) {
+                            return@pointerInput
+                        }
+
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            Log.d(
+                                FULLSCREEN_MORE_GESTURE_TAG,
+                                "ancestor DOWN consumed=${down.isConsumed} " +
+                                    "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
+                            )
+                            val up = waitForUpOrCancellation()
+                            Log.d(
+                                FULLSCREEN_MORE_GESTURE_TAG,
+                                    "ancestor ${if (up == null) "CANCEL" else "UP"} " +
+                                    "consumed=${up?.isConsumed} expanded=$moreMenuExpanded " +
+                                    "contentMode=$fullscreenContentMode"
+                            )
+                            handleExpandedMoreMenuPointerUp(
+                                up = up,
+                                onCollapse = {
+                                    onMoreMenuExpandedChange(false)
+                                }
+                            )
+                        }
+                    }
+                    .graphicsLayer {
+                        alpha = layoutMetrics.playbackContentAlpha
+                        translationY = (
+                            designLyricsControlsOffsetY + layoutMetrics.playbackContentOffsetY
+                            ).toPx()
+                    }
             ) {
-                FavoriteButton(
+                FullscreenSideActionsContent(
+                    playerWidth = designPlayerWidth,
+                    fullscreenFavoriteY = designBaseY,
+                    fullscreenProgress = visualProgress,
+                    controlsExitProgress = layoutMetrics.fullscreenContentExitSharedProgress,
                     liked = liked,
-                    enabled = fullscreenActionsEnabled,
-                    onClick = onToggleLiked,
-                    modifier = Modifier
-                        .zIndex(4f)
-                        .size(buttonSize),
-                    visualEnabled = hasCurrentSong
+                    hasCurrentSong = hasCurrentSong,
+                    iconColor = iconColor,
+                    moreMenuExpanded = moreMenuExpanded,
+                    onMoreMenuExpandedChange = onMoreMenuExpandedChange,
+                    fullscreenContentMode = fullscreenContentMode,
+                    onToggleLiked = onToggleLiked,
+                    onAddToPlaylist = onAddToPlaylist,
+                    onOpenSongInfo = onOpenSongInfo
                 )
-                AnimatedVisibility(
-                    visible = moreMenuVisible && !expandedMoreMenuVisible,
-                    enter = fullscreenMoreButtonEnterTransition(),
-                    exit = fullscreenMoreButtonExitTransition(),
-                    modifier = Modifier.size(buttonSize)
-                ) {
-                    MoreMenuButton(
-                        iconColor = iconColor,
-                        enabled = fullscreenActionsEnabled,
-                        onClick = { onMoreMenuExpandedChange(true) },
-                        modifier = Modifier.size(buttonSize),
-                        visualEnabled = hasCurrentSong
-                    )
-                }
             }
-            FullscreenMoreMenu(
-                visible = expandedMoreMenuVisible,
-                iconColor = iconColor,
-                alpha = 1f,
-                enabled = fullscreenActionsEnabled,
-                onCollapse = { onMoreMenuExpandedChange(false) },
-                onAddToPlaylist = onAddToPlaylist,
-                onOpenSongInfo = onOpenSongInfo,
-                modifier = Modifier.offset(
-                    x = buttonSize + fullscreenMenuSpacing,
-                    y = -buttonSize * 2f
-                )
-            )
         }
     }
 }
 
-private const val FullscreenSideActionsVisibilityThreshold = 0.01f
-private val FullscreenSideActionsSpacing = 4.dp
+@Composable
+private fun FullscreenSideActionsContent(
+    playerWidth: Dp,
+    fullscreenFavoriteY: Dp,
+    fullscreenProgress: Float,
+    controlsExitProgress: Float,
+    liked: Boolean,
+    hasCurrentSong: Boolean,
+    iconColor: Color,
+    moreMenuExpanded: Boolean,
+    onMoreMenuExpandedChange: (Boolean) -> Unit,
+    fullscreenContentMode: FullscreenContentMode,
+    onToggleLiked: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onOpenSongInfo: () -> Unit
+) {
+    val buttonSize = PlayerSideButtonSize
+    val fullscreenMenuSpacing = 4.dp
+    val progressWidth = playerWidth * 0.76f
+    val progressLeft = (playerWidth - progressWidth) / 2f
+    val fullscreenMenuX = progressLeft + progressWidth - buttonSize
+    val fullscreenFavoriteX = fullscreenMenuX - buttonSize - fullscreenMenuSpacing
+    val favoriteEnterProgress = fullscreenProgress.coerceIn(0f, 1f)
+    val controlsExit = controlsExitProgress.coerceIn(0f, 1f)
+    val controlsEnabled = controlsExit <= 0.01f
+    val fullscreenActionsEnabled = hasCurrentSong && fullscreenProgress > 0.72f
+    val fullscreenFavoriteVisible = favoriteEnterProgress > 0.01f
+    val visibility = fullscreenSideActionsVisibility(
+        hasCurrentSong = hasCurrentSong,
+        moreMenuExpanded = moreMenuExpanded
+    )
+
+    LaunchedEffect(hasCurrentSong, fullscreenProgress) {
+        if (!hasCurrentSong || fullscreenProgress <= 0.01f) {
+            onMoreMenuExpandedChange(false)
+        }
+    }
+    fun collapseMoreMenu() {
+        if (moreMenuExpanded) {
+            onMoreMenuExpandedChange(false)
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .offset(x = fullscreenFavoriteX, y = fullscreenFavoriteY)
+            .size(height = buttonSize, width = buttonSize * 2f + fullscreenMenuSpacing),
+        horizontalArrangement = Arrangement.spacedBy(fullscreenMenuSpacing)
+    ) {
+        FavoriteButton(
+            liked = liked,
+            enabled = hasCurrentSong && fullscreenFavoriteVisible && controlsEnabled,
+            onClick = {
+                collapseMoreMenu()
+                onToggleLiked()
+            },
+            modifier = Modifier
+                .zIndex(4f)
+                .size(buttonSize)
+                .graphicsLayer {
+                    alpha = favoriteEnterProgress
+                },
+            visualEnabled = hasCurrentSong
+        )
+        AnimatedVisibility(
+            visible = visibility.moreButtonVisible,
+            enter = fullscreenMoreButtonEnterTransition(),
+            exit = fullscreenMoreButtonExitTransition(),
+            modifier = Modifier
+                .size(buttonSize)
+                .graphicsLayer {
+                    alpha = favoriteEnterProgress
+                }
+        ) {
+            MoreMenuButton(
+                iconColor = iconColor,
+                enabled = fullscreenActionsEnabled && controlsEnabled,
+                onClick = {
+                    onMoreMenuExpandedChange(true)
+                },
+                modifier = Modifier.size(buttonSize),
+                visualEnabled = hasCurrentSong
+            )
+        }
+    }
+    FullscreenMoreMenu(
+        visible = visibility.moreMenuVisible,
+        iconColor = iconColor,
+        alpha = favoriteEnterProgress,
+        enabled = controlsEnabled,
+        onCollapse = {
+            onMoreMenuExpandedChange(false)
+        },
+        onAddToPlaylist = {
+            onAddToPlaylist()
+        },
+        onOpenSongInfo = {
+            onOpenSongInfo()
+        },
+        modifier = Modifier
+            .offset(
+                x = fullscreenMenuX,
+                y = fullscreenFavoriteY - buttonSize * 2f
+            )
+            .pointerInput(visibility.moreMenuVisible, fullscreenContentMode) {
+                if (
+                    !visibility.moreMenuVisible ||
+                    fullscreenContentMode != FullscreenContentMode.Playback
+                ) {
+                    return@pointerInput
+                }
+
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    Log.d(
+                        FULLSCREEN_MORE_GESTURE_TAG,
+                        "menu DOWN consumed=${down.isConsumed} expanded=$moreMenuExpanded " +
+                            "contentMode=$fullscreenContentMode"
+                    )
+                    val up = waitForUpOrCancellation()
+                    Log.d(
+                        FULLSCREEN_MORE_GESTURE_TAG,
+                        "menu ${if (up == null) "CANCEL" else "UP"} " +
+                            "consumed=${up?.isConsumed} expanded=$moreMenuExpanded " +
+                            "contentMode=$fullscreenContentMode"
+                    )
+                    handleExpandedMoreMenuPointerUp(
+                        up = up,
+                        onCollapse = ::collapseMoreMenu
+                    )
+                }
+            }
+    )
+}
+
+internal data class FullscreenSideActionsVisibility(
+    val moreButtonVisible: Boolean,
+    val moreMenuVisible: Boolean
+)
+
+internal fun fullscreenSideActionsVisibility(
+    hasCurrentSong: Boolean,
+    moreMenuExpanded: Boolean
+): FullscreenSideActionsVisibility = FullscreenSideActionsVisibility(
+    moreButtonVisible = hasCurrentSong && !moreMenuExpanded,
+    moreMenuVisible = hasCurrentSong && moreMenuExpanded
+)
 

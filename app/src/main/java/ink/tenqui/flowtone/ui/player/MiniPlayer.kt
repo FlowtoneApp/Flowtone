@@ -781,7 +781,7 @@ fun MiniPlayer(
                             val up = waitForUpOrCancellation()
                             handleExpandedMoreMenuPointerUp(
                                 up = up,
-                                transitions = transitions
+                                onCollapse = transitions::closeExpandedMoreMenu
                             )
                         }
                     }
@@ -946,6 +946,7 @@ fun MiniPlayer(
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,
                         addToPlaylistListState = state.addToPlaylistListState,
                         isCurrentSongLiked = isCurrentSongLiked,
+                        expandedMoreMenu = state.expandedMoreMenu,
                         fullscreen = fullscreen,
                         expanded = expanded,
                         artistPlaceholderArtists = state.artistPlaceholderArtists,
@@ -975,6 +976,8 @@ fun MiniPlayer(
                         onPlayPrevious = fullscreenInteractionHandlers.onPlayPrevious,
                         onTogglePlayPause = fullscreenInteractionHandlers.onTogglePlayPause,
                         onPlayNext = fullscreenInteractionHandlers.onPlayNext,
+                        onMoreMenuExpandedChange =
+                            fullscreenInteractionHandlers.onMoreMenuExpandedChange,
                         onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
                         onOpenQueue = fullscreenInteractionHandlers.onOpenQueue,
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
@@ -1007,6 +1010,18 @@ fun MiniPlayer(
                 val stablePlayerWidth = maxWidth
                 val stableFullscreenLayoutScale =
                     fullscreenPlayerLayoutScale(stablePlayerWidth)
+                val stableAddToPlaylistStatusBarsTop = with(LocalDensity.current) {
+                    WindowInsets.statusBars.getTop(this).toDp()
+                }
+                val stableFullscreenLayoutMetrics = miniPlayerFullscreenLayoutMetrics(
+                    playerWidth = stablePlayerWidth,
+                    visualPanelHeight = visualPanelHeight,
+                    fullscreenCoverCenterY = fullscreenCoverCenterY,
+                    addToPlaylistStatusBarsTop = stableAddToPlaylistStatusBarsTop,
+                    fullscreenContentExitProgress = fullscreenContentExitProgress,
+                    artistPlaceholderProgress = artistPlaceholderProgress,
+                    addToPlaylistProgress = addToPlaylistProgress
+                )
                 // 这是 fullscreen=1 时旧布局的最终屏幕 Y：固定在稳定根坐标系中，
                 // 不再继承 playback-content Box 的逐帧 translationY。
                 val stableFullscreenActionsBaseY =
@@ -1014,23 +1029,23 @@ fun MiniPlayer(
                         (expandedArtworkTop - 16.dp) * stableFullscreenLayoutScale
                 FullscreenSideActionsOverlay(
                     playerWidth = stablePlayerWidth,
+                    stableRootHeight = fullscreenTargetHeight,
                     baseY = stableFullscreenActionsBaseY,
                     fullscreenLayoutScale = stableFullscreenLayoutScale,
                     fullscreenProgress = fullscreenProgress,
-                    fullscreen = fullscreen,
+                    lyricsControlsOffsetY = lyricsControlsOffsetY,
+                    layoutMetrics = stableFullscreenLayoutMetrics,
+                    fullscreenContentMode = state.fullscreenContentMode,
                     liked = isCurrentSongLiked,
                     hasCurrentSong = hasCurrentSong,
                     iconColor = controlIconColor,
-                    controlsEnabled = maxOf(
-                        fullscreenContentExitProgress,
-                        artistPlaceholderProgress
-                    ) <= 0.01f,
                     moreMenuExpanded = state.expandedMoreMenu,
                     onMoreMenuExpandedChange =
                         fullscreenInteractionHandlers.onMoreMenuExpandedChange,
                     onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
                     onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
-                    onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo
+                    onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo,
+                    modifier = Modifier.matchParentSize()
                 )
             }
             MiniPlayerQueueSheetHost(

@@ -160,6 +160,16 @@ class SecondaryNavigationTest {
     }
 
     @Test
+    fun localAndProviderArtistWithSameNameHaveDifferentIdentity() {
+        val local = SecondaryDestination.Artist("Kou!")
+        val provider = SecondaryDestination.Artist(
+            ArtistDestinationIdentity.Provider("provider-a", "42", "Kou!", null)
+        )
+
+        assertNotEquals(local, provider)
+    }
+
+    @Test
     fun providerArtistDestinationRetainsAvatarReference() {
         val avatar = ExtensionImage("provider-a", "https://example.test/kou.jpg")
         val destination = SecondaryDestination.Artist(

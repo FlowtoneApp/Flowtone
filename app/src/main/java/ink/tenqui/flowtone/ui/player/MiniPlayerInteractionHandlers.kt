@@ -204,10 +204,10 @@ internal fun handleMiniPlayerVerticalDragEnd(
 
 internal fun handleExpandedMoreMenuPointerUp(
     up: PointerInputChange?,
-    transitions: MiniPlayerTransitions
+    onCollapse: () -> Unit
 ) {
     if (up != null) {
-        transitions.closeExpandedMoreMenu()
+        onCollapse()
     }
 }
 
