@@ -153,11 +153,11 @@ internal fun SideButtonsOverlay(
         val favoriteX = lerpDp(favoriteStartX, favoriteEndX, enterProgress)
         val bottomFavoriteAlpha = buttonAlpha * (1f - favoriteExitProgress)
         val bottomFavoriteVisible = bottomFavoriteAlpha > 0.01f
-    val bottomFavoriteOffsetY = lerpDp(
-        0.dp,
-        -PlayerControlsFullscreenTransitionDistance,
-        favoriteExitProgress
-    )
+        val bottomFavoriteOffsetY = lerpDp(
+            0.dp,
+            -PlayerSideControlsReplacementDistance,
+            favoriteExitProgress
+        )
         if (bottomFavoriteVisible) {
             FavoriteButton(
                 liked = isCurrentSongLiked,

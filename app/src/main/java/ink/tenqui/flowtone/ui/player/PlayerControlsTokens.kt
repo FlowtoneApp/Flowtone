@@ -6,6 +6,7 @@ internal val PlayerControlDefaultTouchSize = 52.dp
 internal val PlayerSideButtonSize = 48.dp
 internal val PlayerSideButtonIconSize = 30.dp
 internal val PlayerControlsFullscreenTransitionDistance = 50.dp
+internal val PlayerSideControlsReplacementDistance = 24.dp
 internal val FullscreenMoreMenuCapsuleHeight = 96.dp
 internal val FullscreenMoreMenuHeight = 144.dp
 internal val FullscreenMoreMenuCornerRadius = 24.dp
