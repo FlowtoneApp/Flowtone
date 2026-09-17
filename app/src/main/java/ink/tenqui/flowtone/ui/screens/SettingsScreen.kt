@@ -254,7 +254,7 @@ internal fun SettingsScreen(
             state.section == SettingsSection.General && state.managingLyricsFolders -> 1
             state.section == SettingsSection.General && state.showingLyricsSettings -> 1
             state.section == SettingsSection.General && state.showingOnlineSettings ->
-                (installedExtensions.size + 1).coerceAtLeast(1)
+                installedExtensions.size + 2
             state.section == SettingsSection.General -> 3
             else -> 1
         }
