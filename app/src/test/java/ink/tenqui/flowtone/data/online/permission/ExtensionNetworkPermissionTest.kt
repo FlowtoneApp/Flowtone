@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.data.online.permission
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,23 +53,46 @@ class ExtensionNetworkPermissionTest {
     }
 
     @Test
-    fun legacyWildcardKeepsSubdomainsOnlyScopeAndCurrentHttpsRuntimeMeaning() {
-        val permission = LegacyNetworkPermissionCanonicalizer
-            .canonicalize(listOf("*.Example.COM"))
-            .single()
+    fun v2OriginParserSupportsCustomPortAndWildcardWithoutGrantingRootHost() {
+        val permission = NetworkOriginPermissionParser.parse("HTTPS://*.Example.COM:8443")
 
-        assertEquals(NetworkScheme.Https, permission.origin.scheme)
-        assertEquals("example.com", permission.origin.host)
+        assertEquals("https://*.example.com:8443", permission.toString())
         assertEquals(NetworkHostScope.SubdomainsOnly, permission.hostScope)
-        assertEquals("https://*.example.com", permission.toString())
+        assertEquals(8443, permission.origin.effectivePort)
     }
 
     @Test
-    fun duplicateCanonicalLegacyHostsCollapseToOnePermission() {
-        val permissions = LegacyNetworkPermissionCanonicalizer.canonicalize(
-            listOf("example.com", "EXAMPLE.COM.")
+    fun v2OriginParserNormalizesDefaultPorts() {
+        assertEquals(
+            NetworkOriginPermissionParser.parse("https://example.com"),
+            NetworkOriginPermissionParser.parse("https://example.com:443")
         )
+        assertEquals(
+            NetworkOriginPermissionParser.parse("http://example.com"),
+            NetworkOriginPermissionParser.parse("http://example.com:80")
+        )
+    }
 
-        assertTrue(permissions.size == 1)
+    @Test
+    fun originPermissionRejectsUnsupportedSchemeAndUserInfo() {
+        assertThrows(IllegalArgumentException::class.java) {
+            NetworkOriginPermissionParser.parse("ftp://example.com")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            NetworkOriginPermissionParser.parse("https://user:pass@example.com")
+        }
+    }
+
+    @Test
+    fun originPermissionRejectsPathQueryAndFragment() {
+        listOf(
+            "https://example.com/path",
+            "https://example.com?a=b",
+            "https://example.com/#x"
+        ).forEach { declaration ->
+            assertThrows(IllegalArgumentException::class.java) {
+                NetworkOriginPermissionParser.parse(declaration)
+            }
+        }
     }
 }

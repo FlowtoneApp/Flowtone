@@ -1,7 +1,5 @@
 package ink.tenqui.flowtone.data.online.capability
 
-import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifest
-
 enum class AtomicCapabilityId(val value: String) {
     SearchSongPage("search.song.page"),
     SearchAlbumPage("search.album.page"),
@@ -128,33 +126,6 @@ data class CanonicalAtomicCapabilitySet(
 
         fun of(vararg values: AtomicCapabilityId): CanonicalAtomicCapabilitySet =
             CanonicalAtomicCapabilitySet(values.toSet())
-    }
-}
-
-object LegacyCapabilityCanonicalizer {
-    fun canonicalize(manifest: ExtensionManifest): CanonicalAtomicCapabilitySet = canonicalize(
-        legacyCapabilities = manifest.capabilities,
-        musicSources = manifest.musicSources
-    )
-
-    fun canonicalize(
-        legacyCapabilities: Collection<String>,
-        musicSources: Collection<String> = emptyList()
-    ): CanonicalAtomicCapabilitySet {
-        val legacy = legacyCapabilities.toSet()
-        val canonical = linkedSetOf<AtomicCapabilityId>()
-
-        if ("artist_avatar" in legacy) canonical += AtomicCapabilityId.ArtistAvatarLookup
-        if ("artist_metadata" in legacy) canonical += AtomicCapabilityId.ArtistMetadataLookup
-        if ("music_provider" in legacy) {
-            canonical += AtomicCapabilityId.SearchSongPage
-            canonical += AtomicCapabilityId.PlaybackResourceResolve
-            if (musicSources.isNotEmpty()) canonical += AtomicCapabilityId.SongPersistentResolve
-            if ("song" in legacy) canonical += AtomicCapabilityId.CatalogSongsList
-            if ("album" in legacy) canonical += AtomicCapabilityId.CatalogAlbumsList
-        }
-
-        return CanonicalAtomicCapabilitySet(canonical)
     }
 }
 

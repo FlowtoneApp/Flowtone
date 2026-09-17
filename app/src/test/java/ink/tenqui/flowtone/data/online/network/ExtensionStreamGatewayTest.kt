@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.network
 
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import java.io.ByteArrayInputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -27,7 +28,11 @@ class ExtensionStreamGatewayTest {
             limiter = limiter
         )
 
-        val response = gateway.createStreamClientFor("bound.extension", "media_stream", listOf("media.example.com"))
+        val response = gateway.createStreamClientFor(
+            "bound.extension",
+            "media_stream",
+            permissions("https://media.example.com")
+        )
             .open(
                 ExtensionStreamRequest(
                     url = "https://media.example.com/audio?token=SECRET",
@@ -86,12 +91,15 @@ class ExtensionStreamGatewayTest {
             gateway.createStreamClientFor(
                 "bound.extension",
                 "media_stream",
-                listOf("media.example.com")
+                permissions("https://media.example.com")
             ).open(ExtensionStreamRequest("https://media.example.com/audio"))
         }.exceptionOrNull()
 
         assertTrue(failure is SecurityException)
         assertTrue(logs.any { it.startsWith("extension.http.failed extension=bound.extension") })
     }
+
+    private fun permissions(vararg origins: String) =
+        origins.mapTo(linkedSetOf(), NetworkOriginPermissionParser::parse)
 }
 

@@ -8,7 +8,7 @@ import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import org.json.JSONObject
 
-/** artist_avatar capability 的轻量 JS 代理；通用 Host API 由 JavaScriptExtensionRuntime 管理。 */
+/** artist.avatar.lookup capability 的轻量 JS 代理；通用 Host API 由 JavaScriptExtensionRuntime 管理。 */
 class JavaScriptArtistAvatarExtension private constructor(
     private val runtime: JavaScriptExtensionRuntime,
     private val ownsRuntime: Boolean

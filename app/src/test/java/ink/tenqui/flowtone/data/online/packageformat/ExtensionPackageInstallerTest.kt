@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -12,151 +13,158 @@ import org.junit.Test
 
 class ExtensionPackageInstallerTest {
     @Test
-    fun providerEntityCapabilitiesAreOptionalAndExplicit() {
-        val oldProvider = ExtensionManifestParser.parse(manifest(capabilities = "\"music_provider\""))
-        val songsOnly = ExtensionManifestParser.parse(
-            manifest(capabilities = "\"music_provider\",\"song\"")
-        )
-        val albumsOnly = ExtensionManifestParser.parse(
-            manifest(capabilities = "\"music_provider\",\"album\"")
-        )
-        val both = ExtensionManifestParser.parse(
-            manifest(capabilities = "\"music_provider\",\"song\",\"album\"")
-        )
-
-        assertEquals(emptySet<ink.tenqui.flowtone.data.online.ProviderEntityCapability>(), oldProvider.providerEntityCapabilities)
-        assertEquals(setOf(ink.tenqui.flowtone.data.online.ProviderEntityCapability.Song), songsOnly.providerEntityCapabilities)
-        assertEquals(setOf(ink.tenqui.flowtone.data.online.ProviderEntityCapability.Album), albumsOnly.providerEntityCapabilities)
-        assertEquals(ink.tenqui.flowtone.data.online.ProviderEntityCapability.entries.toSet(), both.providerEntityCapabilities)
-    }
-    @Test fun `music provider capability can stand alone or coexist with artist avatar`() {
-        val avatarOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"artist_avatar\""))
-        val musicOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"music_provider\""))
-        val combined = ExtensionManifestParser.parse(
-            manifest(capabilities = "\"artist_avatar\",\"music_provider\"")
-        )
-
-        assertTrue(!avatarOnly.supportsMusicProvider)
-        assertTrue(avatarOnly.supportsArtistAvatar)
-        assertTrue(musicOnly.supportsMusicProvider)
-        assertTrue(!musicOnly.supportsArtistAvatar)
-        assertTrue(combined.supportsMusicProvider)
-        assertTrue(combined.supportsArtistAvatar)
-    }
-
-    @Test fun artistMetadataCapabilityCanStandAloneOrCoexistWithArtistAvatar() {
-        val metadataOnly = ExtensionManifestParser.parse(manifest(capabilities = "\"artist_metadata\""))
-        val combined = ExtensionManifestParser.parse(
-            manifest(capabilities = "\"artist_avatar\",\"artist_metadata\"")
-        )
-
-        assertTrue(metadataOnly.supportsArtistMetadata)
-        assertTrue(!metadataOnly.supportsArtistAvatar)
-        assertTrue(combined.supportsArtistMetadata)
-        assertTrue(combined.supportsArtistAvatar)
-    }
-
-    @Test fun `musicSources 是独立的服务声明 而非网络权限`() {
-        val parsed = ExtensionManifestParser.parse(
+    fun manifestV2ParsesCanonicalDeclarations() {
+        val descriptor = ExtensionManifestParser.parseNormalized(
             manifest(
-                capabilities = "\"music_provider\"",
-                musicSources = "\"service.example\""
+                capabilities = "\"search.song.page\",\"catalog.songs.list\"",
+                musicSources = "\"service.example\"",
+                color = "#1A73E8"
             )
         )
 
-        assertEquals(listOf("service.example"), parsed.musicSources)
-        assertEquals(listOf("example.com"), parsed.networkHosts)
+        assertEquals(2, descriptor.manifest.formatVersion)
+        assertEquals(listOf("service.example"), descriptor.manifest.musicSources)
+        assertEquals("#1A73E8", descriptor.manifest.color)
+        assertEquals(
+            setOf(AtomicCapabilityId.SearchSongPage, AtomicCapabilityId.CatalogSongsList),
+            descriptor.canonicalCapabilities.values
+        )
+        assertEquals("https://example.com", descriptor.networkPermissions.single().toString())
     }
 
-    @Test fun `manifest supports an optional provider selector color`() {
-        val parsed = ExtensionManifestParser.parse(manifest(color = "#1A73E8"))
+    @Test
+    fun formatVersionOneIsRejectedWithDeprecatedFormatMessage() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            ExtensionManifestParser.parseNormalized(manifest(formatVersion = 1))
+        }
 
-        assertEquals("#1A73E8", parsed.color)
+        assertTrue(error.message.orEmpty().contains("已经废弃"))
     }
 
-    @Test fun `manifest rejects ambiguous provider selector colors`() {
+    @Test
+    fun unknownFormatVersionIsRejectedSeparately() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            ExtensionManifestParser.parseNormalized(manifest(formatVersion = 3))
+        }
+
+        assertTrue(error.message.orEmpty().contains("不支持的扩展包版本"))
+    }
+
+    @Test
+    fun manifestRejectsAmbiguousProviderSelectorColors() {
         assertThrows(IllegalArgumentException::class.java) {
             ExtensionManifestParser.parse(manifest(color = "rgba(1,2,3,0.5)"))
         }
     }
 
-    @Test fun `合法 flowtone 和 zip 可以安装`() {
+    @Test
+    fun validFlowtoneAndZipCanInstall() {
         listOf("test.flowtone", "test.zip").forEach { fileName ->
             val root = Files.createTempDirectory("flowtone-test").toFile()
-            val installed = ExtensionPackageInstaller(root).install(fileName, zip(validEntries()))
-            assertEquals("example.avatar", installed.manifest.id)
-            assertTrue(installed.directory.resolve("main.js").isFile)
+            try {
+                val installed = ExtensionPackageInstaller(root).install(fileName, zip(validEntries()))
+                assertEquals("example.provider", installed.manifest.id)
+                assertEquals(2, installed.descriptor.manifest.formatVersion)
+                assertTrue(installed.directory.resolve("main.js").isFile)
+            } finally {
+                root.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun replacementScanAndUninstallReflectCurrentDiskState() {
+        val root = Files.createTempDirectory("flowtone-reload-test").toFile()
+        try {
+            val installer = ExtensionPackageInstaller(root)
+            installer.install("test.flowtone", zip(validEntries(main = "globalThis.version='old';")))
+            installer.install("test.flowtone", zip(validEntries(main = "globalThis.version='new';")))
+
+            val afterUpdate = installer.scan()
+            assertEquals(1, afterUpdate.size)
+            assertEquals(
+                "globalThis.version='new';",
+                afterUpdate.single().directory.resolve("main.js").readText()
+            )
+            assertTrue(installer.uninstall("example.provider"))
+            assertTrue(installer.scan().isEmpty())
+        } finally {
             root.deleteRecursively()
         }
     }
 
-    @Test fun `覆盖安装和删除后的扫描只反映当前磁盘状态`() {
-        val root = Files.createTempDirectory("flowtone-reload-test").toFile()
-        val installer = ExtensionPackageInstaller(root)
-
-        installer.install("test.flowtone", zip(validEntries(main = "globalThis.version='old';")))
-        installer.install("test.flowtone", zip(validEntries(main = "globalThis.version='new';")))
-
-        val afterUpdate = installer.scan()
-        assertEquals(1, afterUpdate.size)
-        assertEquals("globalThis.version='new';", afterUpdate.single().directory.resolve("main.js").readText())
-        assertTrue(installer.uninstall("example.avatar"))
-        assertTrue(installer.scan().isEmpty())
-        root.deleteRecursively()
-    }
-
-    @Test fun `缺文件 不支持版本 非法 id 和损坏 zip 被拒绝`() {
+    @Test
+    fun missingFilesDeprecatedFormatInvalidIdAndBrokenZipAreRejected() {
         val cases = listOf(
             zip(mapOf("main.js" to "x")),
             zip(mapOf("manifest.json" to manifest())),
-            zip(validEntries(manifest = manifest(formatVersion = 2))),
+            zip(validEntries(manifest = manifest(formatVersion = 1))),
             zip(validEntries(manifest = manifest(id = "../bad"))),
             ByteArrayInputStream("not zip".encodeToByteArray())
         )
         cases.forEach { input ->
             val root = Files.createTempDirectory("flowtone-test").toFile()
-            assertThrows(Exception::class.java) { ExtensionPackageInstaller(root).install("test.flowtone", input) }
+            try {
+                assertThrows(Exception::class.java) {
+                    ExtensionPackageInstaller(root).install("test.flowtone", input)
+                }
+            } finally {
+                root.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun zipSlipAndOversizedExtractionAreRejected() {
+        val root = Files.createTempDirectory("flowtone-test").toFile()
+        try {
+            assertThrows(Exception::class.java) {
+                ExtensionPackageInstaller(root).install(
+                    "test.flowtone",
+                    zip(validEntries() + ("../escape" to "bad"))
+                )
+            }
+            val huge = "x".repeat((ExtensionPackageInstaller.Limits.MaxMainBytes + 1).toInt())
+            assertThrows(Exception::class.java) {
+                ExtensionPackageInstaller(root).install(
+                    "test.flowtone",
+                    zip(validEntries(main = huge))
+                )
+            }
+            val expanded = validEntries().toMutableMap().apply {
+                repeat(6) { index -> put("assets/$index.txt", "x".repeat(2 * 1024 * 1024)) }
+            }
+            assertThrows(Exception::class.java) {
+                ExtensionPackageInstaller(root).install("test.flowtone", zip(expanded))
+            }
+        } finally {
             root.deleteRecursively()
         }
     }
 
-    @Test fun `zip slip 和超大解压被拒绝`() {
-        val root = Files.createTempDirectory("flowtone-test").toFile()
-        assertThrows(Exception::class.java) {
-            ExtensionPackageInstaller(root).install("test.flowtone", zip(validEntries() + ("../escape" to "bad")))
-        }
-        val huge = "x".repeat((ExtensionPackageInstaller.Limits.MaxMainBytes + 1).toInt())
-        assertThrows(Exception::class.java) {
-            ExtensionPackageInstaller(root).install("test.flowtone", zip(validEntries(main = huge)))
-        }
-        val expanded = validEntries().toMutableMap().apply {
-            repeat(6) { index -> put("assets/$index.txt", "x".repeat(2 * 1024 * 1024)) }
-        }
-        assertThrows(Exception::class.java) {
-            ExtensionPackageInstaller(root).install("test.flowtone", zip(expanded))
-        }
-        root.deleteRecursively()
-    }
-
-    private fun validEntries(manifest: String = manifest(), main: String = "globalThis.flowtoneExtension={};") =
-        mapOf("manifest.json" to manifest, "main.js" to main)
+    private fun validEntries(
+        manifest: String = manifest(),
+        main: String = "globalThis.flowtoneExtension={};"
+    ) = mapOf("manifest.json" to manifest, "main.js" to main)
 
     private fun manifest(
-        formatVersion: Int = 1,
-        id: String = "example.avatar",
-        capabilities: String = "\"artist_avatar\"",
+        formatVersion: Int = 2,
+        id: String = "example.provider",
+        capabilities: String = "\"artist.avatar.lookup\"",
         musicSources: String? = null,
         color: String? = null
     ) = """
         {"formatVersion":$formatVersion,"id":"$id","name":"Example","version":"1","author":"Test",
-        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()}${color?.let { ",\"color\":\"$it\"" }.orEmpty()},"permissions":{"network":{"hosts":["example.com"]}}}
+        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()}${color?.let { ",\"color\":\"$it\"" }.orEmpty()},"permissions":{"network":{"origins":["https://example.com"]}}}
     """.trimIndent()
 
     private fun zip(entries: Map<String, String>): ByteArrayInputStream {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
             entries.forEach { (name, value) ->
-                zip.putNextEntry(ZipEntry(name)); zip.write(value.encodeToByteArray()); zip.closeEntry()
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(value.encodeToByteArray())
+                zip.closeEntry()
             }
         }
         return ByteArrayInputStream(output.toByteArray())

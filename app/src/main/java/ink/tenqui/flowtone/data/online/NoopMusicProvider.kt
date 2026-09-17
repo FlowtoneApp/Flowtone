@@ -1,9 +1,11 @@
 package ink.tenqui.flowtone.data.online
 
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 
 class NoopMusicProvider : MusicProvider {
     override val musicSources: Set<String> = emptySet()
+    override val capabilities: CanonicalAtomicCapabilitySet = CanonicalAtomicCapabilitySet.Empty
 
     override suspend fun searchPage(request: ProviderSearchRequest) = ProviderSearchPage(emptyList())
 

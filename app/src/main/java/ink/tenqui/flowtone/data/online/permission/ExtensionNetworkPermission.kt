@@ -58,6 +58,10 @@ class NetworkOrigin private constructor(
                 "Origin host 必须是具体 host，不能包含 wildcard、路径或端口"
             }
             require(normalizedHost.none(Char::isWhitespace)) { "Origin host 不能包含空白字符" }
+            require(normalizedHost.split('.').all { label ->
+                label.isNotEmpty() && !label.startsWith('-') && !label.endsWith('-') &&
+                    label.all { it.isLetterOrDigit() || it == '-' }
+            }) { "Origin host 非法" }
             if (port != null) require(port in 1..65535) { "Origin port 超出有效范围" }
             val canonicalPort = port?.takeUnless { it == scheme.defaultPort }
             return NetworkOrigin(scheme, normalizedHost, canonicalPort)
@@ -88,42 +92,25 @@ data class NetworkOriginPermission(
     }
 }
 
-class LegacyNetworkHostRule private constructor(
-    val value: String,
-    val host: String,
-    val hostScope: NetworkHostScope
-) {
-    companion object {
-        fun parse(value: String): LegacyNetworkHostRule {
-            val normalized = value.trim().trimEnd('.').lowercase(Locale.ROOT)
-            val wildcard = normalized.startsWith("*.")
-            val host = normalized.removePrefix("*.")
-            require(host.isNotEmpty() && '*' !in host && '/' !in host && ':' !in host) {
-                "Legacy network host 规则非法"
-            }
-            require(host.none(Char::isWhitespace)) { "Legacy network host 规则包含空白字符" }
-            return LegacyNetworkHostRule(
-                value = if (wildcard) "*.$host" else host,
-                host = host,
-                hostScope = if (wildcard) NetworkHostScope.SubdomainsOnly else NetworkHostScope.Exact
-            )
-        }
-    }
-}
+object NetworkOriginPermissionParser {
+    private val OriginPattern = Regex(
+        pattern = "^(https?)://(\\*\\.)?([a-zA-Z0-9.-]+)(?::([0-9]{1,5}))?$",
+        option = RegexOption.IGNORE_CASE
+    )
 
-object LegacyNetworkPermissionCanonicalizer {
-    /**
-     * v1 manifest 的 host 规则本身没有 scheme。这里映射为 HTTPS，是因为当前
-     * ExtensionHostPolicy 的实际放行行为只允许 HTTPS，而不是把旧声明解释成通用 HTTPS 授权。
-     */
-    fun canonicalize(hostRules: Collection<String>): Set<NetworkOriginPermission> = hostRules
-        .map(LegacyNetworkHostRule::parse)
-        .mapTo(linkedSetOf()) { rule ->
-            NetworkOriginPermission(
-                origin = NetworkOrigin.of(NetworkScheme.Https, rule.host),
-                hostScope = rule.hostScope
-            )
+    fun parse(value: String): NetworkOriginPermission {
+        val match = requireNotNull(OriginPattern.matchEntire(value.trim())) {
+            "网络权限必须是纯 http/https Origin，不能包含 userinfo、路径、查询或 fragment"
         }
+        val scheme = requireNotNull(NetworkScheme.fromValue(match.groupValues[1]))
+        val wildcard = match.groupValues[2].isNotEmpty()
+        val host = match.groupValues[3]
+        val port = match.groupValues[4].takeIf(String::isNotEmpty)?.toInt()
+        return NetworkOriginPermission(
+            origin = NetworkOrigin.of(scheme, host, port),
+            hostScope = if (wildcard) NetworkHostScope.SubdomainsOnly else NetworkHostScope.Exact
+        )
+    }
 }
 
 data class NetworkSecurityDowngrade(

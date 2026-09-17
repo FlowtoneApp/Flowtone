@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.network
 
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,7 +16,7 @@ class ExtensionNetworkGatewayTest {
             logger = ExtensionCoreLogger { event, details -> logs += "$event $details" }
         )
 
-        gateway.createClientFor("flowtone-bound-id", "artist_avatar", listOf("example.com")).execute(
+        gateway.createClientFor("flowtone-bound-id", "host_api", permissions("https://example.com")).execute(
             ExtensionHttpRequest(ExtensionHttpMethod.Get, "https://example.com/avatar?artist=Aimer")
         )
 
@@ -33,7 +34,7 @@ class ExtensionNetworkGatewayTest {
         )
 
         runCatching {
-            gateway.createClientFor("test-extension", "artist_avatar", listOf("example.com")).execute(
+            gateway.createClientFor("test-extension", "host_api", permissions("https://example.com")).execute(
                 ExtensionHttpRequest(ExtensionHttpMethod.Get, "https://example.com")
             )
         }
@@ -55,4 +56,53 @@ class ExtensionNetworkGatewayTest {
         assertFalse(details.contains("SECRET"))
         assertFalse(details.contains("TOKEN"))
     }
+
+    @Test
+    fun redirectToUnapprovedPortIsRejected() = kotlinx.coroutines.runBlocking {
+        val gateway = ExtensionNetworkGateway(
+            transport = ExtensionHttpTransport { _, authorize ->
+                authorize("https://example.com:8443/redirected")
+                error("unreachable")
+            },
+            logger = ExtensionCoreLogger { _, _ -> }
+        )
+        val client = gateway.createClientFor(
+            "test-extension",
+            "host_api",
+            permissions("https://example.com")
+        )
+
+        val error = runCatching {
+            client.execute(ExtensionHttpRequest(ExtensionHttpMethod.Get, "https://example.com/start"))
+        }.exceptionOrNull()
+
+        assertTrue(error.toString(), error is SecurityException)
+    }
+
+    @Test
+    fun httpsRedirectToDeclaredHttpOriginIsRejectedAsUnsupportedCleartext() =
+        kotlinx.coroutines.runBlocking {
+            val gateway = ExtensionNetworkGateway(
+                transport = ExtensionHttpTransport { _, authorize ->
+                    authorize("http://example.com/redirected")
+                    error("unreachable")
+                },
+                logger = ExtensionCoreLogger { _, _ -> }
+            )
+            val client = gateway.createClientFor(
+                "test-extension",
+                "host_api",
+                permissions("https://example.com", "http://example.com")
+            )
+
+            val error = runCatching {
+                client.execute(ExtensionHttpRequest(ExtensionHttpMethod.Get, "https://example.com/start"))
+            }.exceptionOrNull()
+
+            assertTrue(error.toString(), error is SecurityException)
+            assertTrue(error?.message.orEmpty().contains("cleartext"))
+        }
+
+    private fun permissions(vararg origins: String) =
+        origins.mapTo(linkedSetOf(), NetworkOriginPermissionParser::parse)
 }

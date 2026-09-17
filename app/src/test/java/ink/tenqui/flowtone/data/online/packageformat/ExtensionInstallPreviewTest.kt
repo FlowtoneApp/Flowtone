@@ -19,11 +19,7 @@ import org.junit.Test
 
 class ExtensionInstallPreviewTest {
     @Test
-    fun previewCanonicalizesLegacyManifestWithoutRuntimeWork() {
-        val manifest = manifest(
-            capabilities = listOf("music_provider", "song"),
-            networkHosts = listOf("Example.COM")
-        )
+    fun previewUsesCanonicalDescriptorWithoutRuntimeWork() {
         val config = ConfigurationSchema(
             fields = listOf(
                 ConfigurationFieldDefinition(
@@ -35,7 +31,17 @@ class ExtensionInstallPreviewTest {
             )
         )
 
-        val preview = ExtensionInstallPreviewBuilder.fromLegacyManifest(manifest, config)
+        val preview = ExtensionInstallPreviewBuilder.fromDescriptor(
+            snapshot(
+                capabilities = CanonicalAtomicCapabilitySet.of(
+                    AtomicCapabilityId.SearchSongPage,
+                    AtomicCapabilityId.PlaybackResourceResolve,
+                    AtomicCapabilityId.CatalogSongsList
+                ),
+                configurationSchema = config,
+                networkPermissions = setOf(permission("https", "example.com"))
+            )
+        )
 
         assertTrue(AtomicCapabilityId.SearchSongPage in preview.canonicalCapabilities)
         assertTrue(AtomicCapabilityId.PlaybackResourceResolve in preview.canonicalCapabilities)
@@ -204,9 +210,19 @@ class ExtensionInstallPreviewTest {
         configurationSchema: ConfigurationSchema = ConfigurationSchema(),
         networkPermissions: Set<NetworkOriginPermission> = emptySet(),
         credentialRequests: List<CredentialRequestDefinition> = emptyList()
-    ) = ExtensionModelSnapshot(
-        identity = ExtensionIdentity("example", "Example", "1", "Test"),
+    ) = NormalizedExtensionDescriptor(
+        manifest = ExtensionManifest(
+            formatVersion = 2,
+            id = "example",
+            name = "Example",
+            version = "1",
+            author = "Test",
+            description = "",
+            entry = "main.js",
+            capabilities = listOf("test.capability"),
+        ),
         canonicalCapabilities = capabilities,
+        unknownAtomicCapabilityIds = emptyList(),
         configurationSchema = configurationSchema,
         networkPermissions = networkPermissions,
         credentialRequests = credentialRequests
@@ -228,18 +244,4 @@ class ExtensionInstallPreviewTest {
         required = required
     )
 
-    private fun manifest(
-        capabilities: List<String>,
-        networkHosts: List<String>
-    ) = ExtensionManifest(
-        formatVersion = 1,
-        id = "example.extension",
-        name = "Example",
-        version = "1.0.0",
-        author = "Test",
-        description = "",
-        entry = "main.js",
-        capabilities = capabilities,
-        networkHosts = networkHosts
-    )
 }

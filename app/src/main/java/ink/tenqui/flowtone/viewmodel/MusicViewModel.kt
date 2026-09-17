@@ -26,7 +26,7 @@ import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
-import ink.tenqui.flowtone.data.online.ProviderEntityCapability
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
@@ -766,11 +766,11 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         val normalizedProviderId = providerId.trim()
         if (normalizedProviderId.isEmpty()) return
         requestedProviderCollectionIds += normalizedProviderId
-        val capabilities = extensionManager.providerEntityCapabilities(normalizedProviderId)
+        val capabilities = extensionManager.providerCapabilities(normalizedProviderId)
         val runtimeGeneration = extensionManager.runtimeState.value.generation
         val songLoadKey = "$runtimeGeneration:song:$normalizedProviderId"
         if (
-            ProviderEntityCapability.Song in capabilities &&
+            AtomicCapabilityId.CatalogSongsList in capabilities &&
             normalizedProviderId !in _uiState.value.providerSongs &&
             providerCollectionLoads.add(songLoadKey)
         ) {
@@ -788,7 +788,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
         val albumLoadKey = "$runtimeGeneration:album:$normalizedProviderId"
         if (
-            ProviderEntityCapability.Album in capabilities &&
+            AtomicCapabilityId.CatalogAlbumsList in capabilities &&
             normalizedProviderId !in _uiState.value.providerAlbums &&
             providerCollectionLoads.add(albumLoadKey)
         ) {

@@ -1,65 +1,47 @@
 package ink.tenqui.flowtone.data.online.capability
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExtensionCapabilitiesTest {
     @Test
-    fun legacyArtistAvatarMapsToCanonicalLookup() {
-        val result = LegacyCapabilityCanonicalizer.canonicalize(listOf("artist_avatar"))
+    fun onlyArtistCapabilitiesDoNotRequireMusicProviderRuntime() {
+        val avatar = ExtensionRuntimeCapabilityPolicy.registrationRequirements(
+            CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.ArtistAvatarLookup)
+        )
+        val metadata = ExtensionRuntimeCapabilityPolicy.registrationRequirements(
+            CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.ArtistMetadataLookup)
+        )
 
-        assertEquals(setOf(AtomicCapabilityId.ArtistAvatarLookup), result.values)
+        assertEquals(ExtensionRuntimeRequirements(true, false, false), avatar)
+        assertEquals(ExtensionRuntimeRequirements(false, true, false), metadata)
     }
 
     @Test
-    fun legacyMusicProviderMapsOnlyConservativeCoreCapabilities() {
-        val result = LegacyCapabilityCanonicalizer.canonicalize(listOf("music_provider"))
+    fun everyMusicProviderCapabilityRequiresMusicProviderRuntime() {
+        ExtensionRuntimeCapabilityPolicy.musicProviderCapabilities.forEach { capability ->
+            assertTrue(
+                ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(
+                    CanonicalAtomicCapabilitySet.of(capability)
+                )
+            )
+        }
+    }
 
+    @Test
+    fun searchCategoriesMapToExactAtomicCapabilities() {
         assertEquals(
-            setOf(
+            listOf(
                 AtomicCapabilityId.SearchSongPage,
-                AtomicCapabilityId.PlaybackResourceResolve
+                AtomicCapabilityId.SearchPlaylistPage,
+                AtomicCapabilityId.SearchAlbumPage,
+                AtomicCapabilityId.SearchArtistPage
             ),
-            result.values
+            ink.tenqui.flowtone.data.online.ProviderSearchCategory.entries.map(
+                ExtensionRuntimeCapabilityPolicy::searchCapability
+            )
         )
-    }
-
-    @Test
-    fun legacyMusicProviderAndSongMapsCatalogSongs() {
-        val result = LegacyCapabilityCanonicalizer.canonicalize(listOf("music_provider", "song"))
-
-        assertTrue(AtomicCapabilityId.CatalogSongsList in result)
-    }
-
-    @Test
-    fun legacyMusicProviderAndAlbumMapsCatalogAlbums() {
-        val result = LegacyCapabilityCanonicalizer.canonicalize(listOf("music_provider", "album"))
-
-        assertTrue(AtomicCapabilityId.CatalogAlbumsList in result)
-    }
-
-    @Test
-    fun musicSourcesEnablePersistentSongResolutionOnlyForMusicProvider() {
-        val provider = LegacyCapabilityCanonicalizer.canonicalize(
-            legacyCapabilities = listOf("music_provider"),
-            musicSources = listOf("music.example")
-        )
-        val unrelated = LegacyCapabilityCanonicalizer.canonicalize(
-            legacyCapabilities = listOf("artist_avatar"),
-            musicSources = listOf("music.example")
-        )
-
-        assertTrue(AtomicCapabilityId.SongPersistentResolve in provider)
-        assertFalse(AtomicCapabilityId.SongPersistentResolve in unrelated)
-    }
-
-    @Test
-    fun unknownLegacyCapabilityDoesNotGrantCanonicalCapabilities() {
-        val result = LegacyCapabilityCanonicalizer.canonicalize(listOf("future_unknown"))
-
-        assertTrue(result.values.isEmpty())
     }
 
     @Test

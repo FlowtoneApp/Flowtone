@@ -1,8 +1,6 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
-import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
-import ink.tenqui.flowtone.data.online.capability.LegacyCapabilityCanonicalizer
 import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
@@ -12,30 +10,14 @@ import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestIdentity
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestValidator
 import ink.tenqui.flowtone.data.online.credential.identity
-import ink.tenqui.flowtone.data.online.permission.LegacyNetworkPermissionCanonicalizer
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurityDowngrade
 import ink.tenqui.flowtone.data.online.permission.hasSameAuthoritySemanticsAs
 
-data class ExtensionIdentity(
-    val id: String,
-    val name: String,
-    val version: String,
-    val author: String
-) {
-    companion object {
-        fun from(manifest: ExtensionManifest): ExtensionIdentity = ExtensionIdentity(
-            id = manifest.id,
-            name = manifest.name,
-            version = manifest.version,
-            author = manifest.author
-        )
-    }
-}
-
 data class ConfigurationRequirementSummary(
-    val requiredFields: List<ConfigurationFieldSummary>
+    val requiredFields: List<ConfigurationFieldSummary>,
+    val omittedFieldCount: Int
 )
 
 data class ConfigurationFieldSummary(
@@ -43,27 +25,22 @@ data class ConfigurationFieldSummary(
     val label: String
 )
 
-data class ExtensionModelSnapshot(
-    val identity: ExtensionIdentity,
-    val canonicalCapabilities: CanonicalAtomicCapabilitySet,
-    val configurationSchema: ConfigurationSchema,
-    val networkPermissions: Set<NetworkOriginPermission>,
-    val credentialRequests: List<CredentialRequestDefinition>
-)
-
 data class ExtensionInstallPreview(
-    val incomingManifest: ExtensionManifest,
-    val canonicalCapabilities: CanonicalAtomicCapabilitySet,
+    val incoming: NormalizedExtensionDescriptor,
     val summaryCapabilities: List<SummaryCapability>,
-    val configurationSchema: ConfigurationSchema,
-    val requiresConfiguration: Boolean,
     val configurationSummary: ConfigurationRequirementSummary,
-    val networkPermissions: Set<NetworkOriginPermission>,
-    val credentialRequests: List<CredentialRequestDefinition>,
-    val existingInstallation: ExtensionModelSnapshot?,
-    val updateDiff: ExtensionUpdateDiff?
+    val existingInstallation: NormalizedExtensionDescriptor?,
+    val updateDiff: ExtensionUpdateDiff?,
+    val snapshotHandle: ExtensionPackageSnapshotHandle? = null
 ) {
-    val identity: ExtensionIdentity get() = ExtensionIdentity.from(incomingManifest)
+    val incomingManifest: ExtensionManifest get() = incoming.manifest
+    val identity: ExtensionIdentity get() = incoming.identity
+    val canonicalCapabilities get() = incoming.canonicalCapabilities
+    val configurationSchema get() = incoming.configurationSchema
+    val requiresConfiguration: Boolean get() = configurationSchema.requiresConfiguration
+    val networkPermissions get() = incoming.networkPermissions
+    val credentialRequests get() = incoming.credentialRequests
+    val isUpdate: Boolean get() = existingInstallation != null
 }
 
 data class ExtensionUpdateDiff(
@@ -85,8 +62,8 @@ data class ExtensionUpdateDiff(
 
     companion object {
         fun between(
-            previous: ExtensionModelSnapshot,
-            incoming: ExtensionModelSnapshot
+            previous: NormalizedExtensionDescriptor,
+            incoming: NormalizedExtensionDescriptor
         ): ExtensionUpdateDiff {
             val addedNetworkPermissions = incoming.networkPermissions - previous.networkPermissions
             val removedNetworkPermissions = previous.networkPermissions - incoming.networkPermissions
@@ -98,9 +75,7 @@ data class ExtensionUpdateDiff(
                             newPermission.security == NetworkSecurity.Insecure &&
                                 oldPermission.hasSameAuthoritySemanticsAs(newPermission)
                         }
-                        .map { newPermission ->
-                            NetworkSecurityDowngrade(oldPermission, newPermission)
-                        }
+                        .map { newPermission -> NetworkSecurityDowngrade(oldPermission, newPermission) }
                 }
 
             val previousCredentials = previous.credentialRequests.associateBy { it.identity }
@@ -137,53 +112,35 @@ data class ExtensionUpdateDiff(
 }
 
 object ExtensionInstallPreviewBuilder {
-    fun snapshotFromLegacyManifest(
-        manifest: ExtensionManifest,
-        configurationSchema: ConfigurationSchema = ConfigurationSchema(),
-        credentialRequests: List<CredentialRequestDefinition> = emptyList()
-    ): ExtensionModelSnapshot {
-        ConfigurationSchemaValidator.requireValid(configurationSchema)
-        CredentialRequestValidator.requireValid(credentialRequests)
-        return ExtensionModelSnapshot(
-            identity = ExtensionIdentity.from(manifest),
-            canonicalCapabilities = LegacyCapabilityCanonicalizer.canonicalize(manifest),
-            configurationSchema = configurationSchema,
-            networkPermissions = LegacyNetworkPermissionCanonicalizer.canonicalize(manifest.networkHosts),
-            credentialRequests = credentialRequests
+    const val MaxConfigurationSummaryFields = 3
+
+    fun fromDescriptor(
+        incoming: NormalizedExtensionDescriptor,
+        existingInstallation: NormalizedExtensionDescriptor? = null,
+        snapshotHandle: ExtensionPackageSnapshotHandle? = null
+    ): ExtensionInstallPreview {
+        require(existingInstallation == null || existingInstallation.identity.id == incoming.identity.id) {
+            "更新预览只能比较相同 extension ID"
+        }
+        ConfigurationSchemaValidator.requireValid(incoming.configurationSchema)
+        CredentialRequestValidator.requireValid(incoming.credentialRequests)
+        val requiredFields = incoming.configurationSchema.fields
+            .filter(ConfigurationFieldDefinition::required)
+        return ExtensionInstallPreview(
+            incoming = incoming,
+            summaryCapabilities = SummaryCapabilityAggregator.aggregate(incoming.canonicalCapabilities),
+            configurationSummary = ConfigurationRequirementSummary(
+                requiredFields = requiredFields
+                    .take(MaxConfigurationSummaryFields)
+                    .map { ConfigurationFieldSummary(it.id, it.label) },
+                omittedFieldCount = (requiredFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0)
+            ),
+            existingInstallation = existingInstallation,
+            updateDiff = existingInstallation?.let { ExtensionUpdateDiff.between(it, incoming) },
+            snapshotHandle = snapshotHandle
         )
     }
 
-    fun fromLegacyManifest(
-        incomingManifest: ExtensionManifest,
-        configurationSchema: ConfigurationSchema = ConfigurationSchema(),
-        credentialRequests: List<CredentialRequestDefinition> = emptyList(),
-        existingInstallation: ExtensionModelSnapshot? = null
-    ): ExtensionInstallPreview {
-        require(existingInstallation == null || existingInstallation.identity.id == incomingManifest.id) {
-            "更新预览只能比较相同 extension ID"
-        }
-        val incoming = snapshotFromLegacyManifest(
-            manifest = incomingManifest,
-            configurationSchema = configurationSchema,
-            credentialRequests = credentialRequests
-        )
-        return ExtensionInstallPreview(
-            incomingManifest = incomingManifest,
-            canonicalCapabilities = incoming.canonicalCapabilities,
-            summaryCapabilities = SummaryCapabilityAggregator.aggregate(incoming.canonicalCapabilities),
-            configurationSchema = configurationSchema,
-            requiresConfiguration = configurationSchema.requiresConfiguration,
-            configurationSummary = ConfigurationRequirementSummary(
-                requiredFields = configurationSchema.fields
-                    .filter(ConfigurationFieldDefinition::required)
-                    .map { ConfigurationFieldSummary(it.id, it.label) }
-            ),
-            networkPermissions = incoming.networkPermissions,
-            credentialRequests = credentialRequests,
-            existingInstallation = existingInstallation,
-            updateDiff = existingInstallation?.let { ExtensionUpdateDiff.between(it, incoming) }
-        )
-    }
 }
 
 object ExtensionAuthorizationPolicy {

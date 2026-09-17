@@ -3,6 +3,8 @@ package ink.tenqui.flowtone.data.online
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
+import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -76,6 +78,19 @@ class PersistentSongResolverTest {
         assertEquals(listOf("stable-id"), newProvider.resolvedIds)
     }
 
+    @Test
+    fun `music source without persistent capability is not invoked`() = runBlocking {
+        val provider = FakeProvider(
+            musicSources = setOf("soundcloud.com"),
+            capabilities = CanonicalAtomicCapabilitySet.Empty
+        )
+
+        val result = resolvePersistentSongWithProviders(mapOf("provider" to provider), onlineTrack())
+
+        assertTrue(result is PersistentSongResolution.ProviderMissing)
+        assertTrue(provider.resolvedIds.isEmpty())
+    }
+
     private fun onlineTrack() = PersistentTrack.Online(
         "soundcloud.com",
         "stable-id",
@@ -85,7 +100,10 @@ class PersistentSongResolverTest {
 
     private class FakeProvider(
         override val musicSources: Set<String>,
-        private val resolvedSong: ProviderSong? = null
+        private val resolvedSong: ProviderSong? = null,
+        override val capabilities: CanonicalAtomicCapabilitySet = CanonicalAtomicCapabilitySet.of(
+            AtomicCapabilityId.SongPersistentResolve
+        )
     ) : MusicProvider {
         val resolvedIds = mutableListOf<String>()
         var playbackRequests = 0

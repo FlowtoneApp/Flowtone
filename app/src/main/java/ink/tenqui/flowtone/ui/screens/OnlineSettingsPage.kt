@@ -25,7 +25,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.R
-import ink.tenqui.flowtone.data.online.ProviderEntityCapability
+import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
+import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.OptionGroup
 
@@ -105,13 +106,11 @@ private fun InstalledExtensionCard(
     modifier: Modifier = Modifier
 ) {
     val manifest = installed.manifest
-    val capabilities = listOfNotNull(
-        "歌手头像".takeIf { manifest.supportsArtistAvatar },
-        "歌手信息".takeIf { manifest.supportsArtistMetadata },
-        "音乐服务".takeIf { manifest.supportsMusicProvider },
-        "歌曲实体".takeIf { ProviderEntityCapability.Song in manifest.providerEntityCapabilities },
-        "专辑实体".takeIf { ProviderEntityCapability.Album in manifest.providerEntityCapabilities }
-    ).joinToString(" · ").ifBlank { "当前版本不支持" }
+    val capabilities = SummaryCapabilityAggregator
+        .aggregate(installed.descriptor.canonicalCapabilities)
+        .filter { it.status != SummaryCapabilityStatus.Unsupported }
+        .joinToString(" · ") { it.label }
+        .ifBlank { "当前版本不支持" }
     val statusColor = if (installed.runtimeAvailable) {
         MaterialTheme.colorScheme.onSurfaceVariant
     } else {

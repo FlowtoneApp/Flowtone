@@ -4,7 +4,8 @@ import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
-import ink.tenqui.flowtone.data.online.packageformat.ExtensionHostPolicy
+import ink.tenqui.flowtone.data.online.permission.ExtensionNetworkAccessPolicy
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -24,12 +25,12 @@ class ExtensionNetworkGateway(
     fun createClientFor(
         extensionId: String,
         capability: String,
-        allowedHosts: List<String>
+        allowedPermissions: Set<NetworkOriginPermission>
     ): ExtensionNetworkClient {
         return BoundExtensionNetworkClient(
             extensionId,
             capability,
-            ExtensionHostPolicy(allowedHosts),
+            ExtensionNetworkAccessPolicy(allowedPermissions),
             transport,
             logger,
             limiter
@@ -39,12 +40,12 @@ class ExtensionNetworkGateway(
     fun createStreamClientFor(
         extensionId: String,
         capability: String,
-        allowedHosts: List<String>
+        allowedPermissions: Set<NetworkOriginPermission>
     ): ExtensionStreamClient {
         return BoundExtensionStreamClient(
             extensionId = extensionId,
             capability = capability,
-            hostPolicy = ExtensionHostPolicy(allowedHosts),
+            accessPolicy = ExtensionNetworkAccessPolicy(allowedPermissions),
             transport = streamTransport,
             logger = logger,
             limiter = limiter
@@ -79,7 +80,7 @@ private object AndroidExtensionCoreLogger : ExtensionCoreLogger {
 private class BoundExtensionNetworkClient(
     private val extensionId: String,
     private val capability: String,
-    private val hostPolicy: ExtensionHostPolicy,
+    private val accessPolicy: ExtensionNetworkAccessPolicy,
     private val transport: ExtensionHttpTransport,
     private val logger: ExtensionCoreLogger,
     private val limiter: GlobalExtensionNetworkLimiter
@@ -108,12 +109,12 @@ private class BoundExtensionNetworkClient(
         val requestDetails = requestLogDetails(request)
         val startedAt = System.nanoTime()
         return try {
-            hostPolicy.requireAllowed(request.url)
+            accessPolicy.requireAllowed(request.url)
             logger.log("extension.http.prepared", identityDetails() + " $requestDetails")
             val queued = admission.acquireActive()
             if (queued) logQueued()
             logger.log("extension.http.started", identityDetails() + " $requestDetails")
-            val response = transport.execute(request, hostPolicy::requireAllowed)
+            val response = transport.execute(request, accessPolicy::requireAllowed)
             val durationMs = elapsedMillis(startedAt)
             logger.log(
                 "extension.http.response",
@@ -147,7 +148,7 @@ private class BoundExtensionNetworkClient(
 private class BoundExtensionStreamClient(
     private val extensionId: String,
     private val capability: String,
-    private val hostPolicy: ExtensionHostPolicy,
+    private val accessPolicy: ExtensionNetworkAccessPolicy,
     private val transport: ExtensionStreamTransport,
     private val logger: ExtensionCoreLogger,
     private val limiter: GlobalExtensionNetworkLimiter
@@ -175,7 +176,7 @@ private class BoundExtensionStreamClient(
                 "requestedLength=${request.length}"
         )
         return try {
-            hostPolicy.requireAllowed(request.url)
+            accessPolicy.requireAllowed(request.url)
             val managedRequest = request.copy(headers = managedStreamHeaders(request))
             val details = streamRequestLogDetails(managedRequest)
             logger.log("extension.http.prepared", "$identity $details")
@@ -189,7 +190,7 @@ private class BoundExtensionStreamClient(
                 )
             }
             logger.log("extension.http.started", "$identity $details")
-            val response = transport.open(managedRequest, hostPolicy::requireAllowed)
+            val response = transport.open(managedRequest, accessPolicy::requireAllowed)
             val durationToHeadersMs = elapsedMillis(startedAt)
             val contentLength = response.headerValue("Content-Length") ?: "<unknown>"
             logger.log(
