@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -354,9 +355,16 @@ private fun GlobalSearchTopBarControl(
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
+    val searchFieldDebugId = remember { System.identityHashCode(Any()).toString(16) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val noRippleInteractionSource = remember { MutableInteractionSource() }
+    DisposableEffect(searchFieldDebugId) {
+        Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "TOPBAR_FIELD_COMPOSED id=$searchFieldDebugId active=$active")
+        onDispose {
+            Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "TOPBAR_FIELD_DISPOSED id=$searchFieldDebugId active=$active")
+        }
+    }
     val backAlpha = ((progress - 0.18f) / 0.82f).coerceIn(0f, 1f)
     val contentAlpha = ((progress - 0.28f) / 0.72f).coerceIn(0f, 1f)
     val searchContainerColor = if (active) {
@@ -373,6 +381,11 @@ private fun GlobalSearchTopBarControl(
     LaunchedEffect(focusRequest) {
         if (active && focusRequest > 0) {
             delay(240)
+            Log.d(
+                MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+                "REQUEST_FOCUS source=search_focus_request field=$searchFieldDebugId " +
+                    "active=$active request=$focusRequest"
+            )
             focusRequester.requestFocus()
             keyboardController?.show()
             onFocusRequestConsumed()
@@ -381,8 +394,14 @@ private fun GlobalSearchTopBarControl(
 
     LaunchedEffect(keyboardDismissRequest) {
         if (active && keyboardDismissRequest > 0) {
+            Log.d(
+                MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+                "CLEAR_FOCUS source=keyboard_dismiss_effect field=$searchFieldDebugId " +
+                    "active=$active dismiss=$keyboardDismissRequest"
+            )
             keyboardController?.hide()
             focusManager.clearFocus(force = true)
+            Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS_DONE source=keyboard_dismiss_effect field=$searchFieldDebugId")
             onKeyboardDismissRequestConsumed()
         }
     }
@@ -397,8 +416,10 @@ private fun GlobalSearchTopBarControl(
 
         IconButton(
             onClick = {
+                Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS source=search_back field=$searchFieldDebugId")
                 keyboardController?.hide()
                 focusManager.clearFocus(force = true)
+                Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS_DONE source=search_back field=$searchFieldDebugId")
                 onExitSearch()
             },
             enabled = active,
@@ -478,10 +499,12 @@ private fun GlobalSearchTopBarControl(
                     ),
                     cursorBrush = SolidColor(colors.accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = {
-                            keyboardController?.hide()
-                            focusManager.clearFocus(force = true)
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS source=ime_action field=$searchFieldDebugId")
+                        keyboardController?.hide()
+                        focusManager.clearFocus(force = true)
+                        Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS_DONE source=ime_action field=$searchFieldDebugId")
                             onImeAction()
                         }
                     ),
@@ -489,6 +512,12 @@ private fun GlobalSearchTopBarControl(
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
                         .onFocusChanged { state ->
+                            Log.d(
+                                MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+                                "TOPBAR_FIELD_FOCUS id=$searchFieldDebugId focused=${state.isFocused} " +
+                                    "hasFocus=${state.hasFocus} active=$active request=$focusRequest " +
+                                    "dismiss=$keyboardDismissRequest"
+                            )
                             onInputFocusChange(state.isFocused)
                         }
                 )
@@ -497,6 +526,7 @@ private fun GlobalSearchTopBarControl(
                 IconButton(
                     onClick = {
                         onClearSearch()
+                        Log.d(MainActivity.SEARCH_FOCUS_DEBUG_TAG, "REQUEST_FOCUS source=clear_search field=$searchFieldDebugId active=$active")
                         focusRequester.requestFocus()
                         keyboardController?.show()
                     },

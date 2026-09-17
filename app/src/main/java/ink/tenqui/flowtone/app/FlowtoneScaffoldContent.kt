@@ -736,6 +736,11 @@ private fun FlowtoneMainTabsSearchContent(
         onScopeChange = callbacks.onSearchScopeChange,
         onCategoryChange = callbacks.onSearchCategoryChange,
         onLoadMore = callbacks.onLoadMoreSearchResults,
+        searchInputFocused = state.searchInputFocused,
+        searchFocusRequest = state.searchFocusRequest,
+        searchKeyboardDismissRequest = state.searchKeyboardDismissRequest,
+        onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
+        onSearchKeyboardDismissRequestConsumed = callbacks.onSearchKeyboardDismissRequestConsumed,
         bottomContentPadding =
             state.miniPlayerContentBottomPadding * miniPlayerSpaceProgress,
         interactionsEnabled = true,

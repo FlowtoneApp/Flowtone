@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.ui.search
 
 import android.os.Build
+import android.util.Log
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -51,6 +53,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,9 +66,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -110,6 +118,10 @@ import ink.tenqui.flowtone.ui.library.rememberExperimentalArtistAvatarImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import ink.tenqui.flowtone.R
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+
+private const val SEARCH_FOCUS_DEBUG_TAG = "SearchFocusDebug"
 
 @Composable
 internal fun GlobalSearchContent(
@@ -128,6 +140,11 @@ internal fun GlobalSearchContent(
     onScopeChange: (SearchScope) -> Unit,
     onCategoryChange: (ProviderSearchCategory) -> Unit,
     onLoadMore: () -> Unit,
+    searchInputFocused: Boolean,
+    searchFocusRequest: Int,
+    searchKeyboardDismissRequest: Int,
+    onSearchInputFocusChange: (Boolean) -> Unit,
+    onSearchKeyboardDismissRequestConsumed: () -> Unit,
     bottomContentPadding: Dp = 0.dp,
     interactionsEnabled: Boolean,
     reentryProgress: Float,
@@ -230,6 +247,11 @@ internal fun GlobalSearchContent(
             SearchInput(
                 query = searchUiState.queryText,
                 onQueryChange = onQueryChange,
+                searchInputFocused = searchInputFocused,
+                searchFocusRequest = searchFocusRequest,
+                searchKeyboardDismissRequest = searchKeyboardDismissRequest,
+                onSearchInputFocusChange = onSearchInputFocusChange,
+                onSearchKeyboardDismissRequestConsumed = onSearchKeyboardDismissRequestConsumed,
                 modifier = Modifier
                     .padding(horizontal = 20.dp)
                     .then(pageTransition.elementModifier(1, transitionElementCount))
@@ -419,8 +441,57 @@ private fun SearchResultCategorySelector(
 @Composable private fun SearchInput(
     query: String,
     onQueryChange: (String) -> Unit,
+    searchInputFocused: Boolean,
+    searchFocusRequest: Int,
+    searchKeyboardDismissRequest: Int,
+    onSearchInputFocusChange: (Boolean) -> Unit,
+    onSearchKeyboardDismissRequestConsumed: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val fieldDebugId = remember { System.identityHashCode(Any()).toString(16) }
+    val density = LocalDensity.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val imeVisible = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density) > 0
+    DisposableEffect(fieldDebugId) {
+        Log.d(SEARCH_FOCUS_DEBUG_TAG, "SEARCH_FIELD_COMPOSED id=$fieldDebugId")
+        onDispose {
+            Log.d(SEARCH_FOCUS_DEBUG_TAG, "SEARCH_FIELD_DISPOSED id=$fieldDebugId")
+        }
+    }
+    LaunchedEffect(searchKeyboardDismissRequest) {
+        if (searchKeyboardDismissRequest > 0) {
+            Log.d(
+                SEARCH_FOCUS_DEBUG_TAG,
+                "CLEAR_FOCUS source=search_input_dismiss_effect field=$fieldDebugId " +
+                    "dismiss=$searchKeyboardDismissRequest"
+            )
+            keyboardController?.hide()
+            focusManager.clearFocus(force = true)
+            onSearchInputFocusChange(false)
+            onSearchKeyboardDismissRequestConsumed()
+            Log.d(
+                SEARCH_FOCUS_DEBUG_TAG,
+                "CLEAR_FOCUS_DONE source=search_input_dismiss_effect field=$fieldDebugId"
+            )
+        }
+    }
+    DisposableEffect(lifecycleOwner, focusManager, keyboardController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                Log.d(SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS source=search_input_on_stop field=$fieldDebugId")
+                keyboardController?.hide()
+                focusManager.clearFocus(force = true)
+                onSearchInputFocusChange(false)
+                Log.d(SEARCH_FOCUS_DEBUG_TAG, "CLEAR_FOCUS_DONE source=search_input_on_stop field=$fieldDebugId")
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -439,7 +510,20 @@ private fun SearchResultCategorySelector(
                 if (query.isBlank()) Text("搜索歌曲、艺人或专辑", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.66f))
                 BasicTextField(value = query, onValueChange = onQueryChange, singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onPrimaryContainer),
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { state ->
+                            Log.d(
+                                SEARCH_FOCUS_DEBUG_TAG,
+                                "FIELD_FOCUS id=$fieldDebugId focused=${state.isFocused} " +
+                                    "hasFocus=${state.hasFocus} active=true " +
+                                    "searchInputFocused=$searchInputFocused " +
+                                    "focusRequest=$searchFocusRequest " +
+                                    "dismiss=$searchKeyboardDismissRequest ime=$imeVisible " +
+                                    "lifecycle=${lifecycleOwner.lifecycle.currentState}"
+                            )
+                            onSearchInputFocusChange(state.isFocused)
+                        })
             }
         }
     }

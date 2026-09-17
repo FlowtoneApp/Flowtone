@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.app
 
 import android.app.Activity
+import android.util.Log
 import android.widget.Toast
 import android.os.Build
 import android.provider.MediaStore
@@ -259,10 +260,44 @@ fun FlowtoneApp(
             hasRequestedPermissionBefore = appPreferences.hasRequestedAudioPermission()
         )
     }
+    fun dismissCurrentSearchInputSession(source: String) {
+        Log.d(
+            MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+            "DISMISS_INPUT source=$source before focused=${appState.searchInputFocused} " +
+                "focusRequest=${appState.searchFocusRequest} " +
+                "keyboardDismiss=${appState.searchKeyboardDismissRequest} ime=$imeVisible"
+        )
+        val dismissed = dismissSearchInputSession(
+            SearchInputContext(
+                inputFocused = appState.searchInputFocused,
+                keyboardVisible = appState.searchKeyboardVisible,
+                focusRequest = appState.searchFocusRequest,
+                keyboardDismissRequest = appState.searchKeyboardDismissRequest
+            )
+        )
+        appState.searchInputFocused = dismissed.inputFocused
+        appState.searchFocusRequest = dismissed.focusRequest
+        appState.searchKeyboardDismissRequest = dismissed.keyboardDismissRequest
+        Log.d(
+            MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+            "DISMISS_INPUT_DONE source=$source focused=${appState.searchInputFocused} " +
+                "focusRequest=${appState.searchFocusRequest} " +
+                "keyboardDismiss=${appState.searchKeyboardDismissRequest} ime=$imeVisible"
+        )
+    }
     DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
+            Log.d(
+                MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+                "APP $event active=${appState.searchActive} focused=${appState.searchInputFocused} " +
+                    "focusRequest=${appState.searchFocusRequest} " +
+                    "keyboardDismiss=${appState.searchKeyboardDismissRequest} ime=$imeVisible"
+            )
             if (event == Lifecycle.Event.ON_RESUME) {
                 audioPermissionGranted = hasAudioPermission(context)
+            }
+            if (event == Lifecycle.Event.ON_STOP) {
+                dismissCurrentSearchInputSession("app_on_stop")
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -386,6 +421,12 @@ fun FlowtoneApp(
 
     LaunchedEffect(appState.searchActive, imeVisible) {
         appState.searchKeyboardVisible = appState.searchActive && imeVisible
+        Log.d(
+            MainActivity.SEARCH_FOCUS_DEBUG_TAG,
+            "IME_PROJECTION active=${appState.searchActive} ime=$imeVisible " +
+                "visible=${appState.searchKeyboardVisible} focused=${appState.searchInputFocused} " +
+                "focusRequest=${appState.searchFocusRequest}"
+        )
     }
 
     FlowtoneAppBackHandlers(
@@ -425,6 +466,9 @@ fun FlowtoneApp(
             appState.miniPlayerExpanded = false
             appState.miniPlayerFullscreen = false
             appState.miniPlayerMinimized = false
+        },
+        onDismissSearchInputForSystemPlayerOpen = {
+            dismissCurrentSearchInputSession("system_media_open")
         },
         onOpenExpandedMiniPlayer = {
             if (!appState.skipExpandedMiniPlayer) {
