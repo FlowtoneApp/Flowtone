@@ -2,13 +2,13 @@ package ink.tenqui.flowtone.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
-import androidx.media3.common.MediaItem
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.data.local.AudioScanner
-import ink.tenqui.flowtone.data.local.LikedSongsStore
+import ink.tenqui.flowtone.data.local.LikedTracksRepository
 import ink.tenqui.flowtone.lyrics.LocalLyricsRepository
 import ink.tenqui.flowtone.lyrics.LyricsLoadResult
 import ink.tenqui.flowtone.lyrics.LyricsLoadSource
@@ -50,22 +50,19 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.core.model.toPresentationSong
-import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.playback.PlaybackState
 import ink.tenqui.flowtone.playback.toPlaybackSource
 import ink.tenqui.flowtone.playback.toSongOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -87,6 +84,8 @@ data class MusicUiState(
     val albums: List<LocalAlbum> = emptyList(),
     val sourceQueue: List<Song> = emptyList(),
     val playbackQueue: List<Song> = emptyList(),
+    val sourceQueueItems: List<PlaybackQueueItem> = emptyList(),
+    val playbackQueueItems: List<PlaybackQueueItem> = emptyList(),
     val currentQueueIndex: Int = -1,
     val errorMessage: String? = null,
     val hasScanned: Boolean = false,
@@ -95,8 +94,6 @@ data class MusicUiState(
     val trackPlaybackErrorMessage: String? = null,
     val trackPlaybackErrorEventId: Long = 0L,
     /** 在线请求尚未被播放器确认；绝不能覆盖 confirmed PlaybackState。 */
-    val pendingPlayback: PendingPlayback? = null,
-    val pendingQueueIndex: Int? = null,
     val providerSongs: Map<String, List<ProviderSong>> = emptyMap(),
     val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap()
@@ -107,15 +104,6 @@ data class ProviderPlaylistDetailState(
     val isLoading: Boolean = false,
     val loadFailed: Boolean = false
 )
-
-data class PendingPlayback(
-    val track: PersistentTrack?,
-    val presentation: Song,
-    val requestGeneration: Long,
-    val phase: Phase
-) {
-    enum class Phase { Resolving, Preparing }
-}
 
 private fun searchScopeFromPreference(value: String): SearchScope = when {
     value == "local" -> SearchScope.Local
@@ -151,7 +139,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     private val playbackSettingsStore = PlaybackSettingsStore(application)
-    private val likedSongsStore = LikedSongsStore(application)
+    private val likedTracksRepository = LikedTracksRepository.get(application)
     private val localLyricsRepository = LocalLyricsRepository(application)
     private val listeningStatsRepository = ListeningStatsRepositoryProvider.get(application)
     private val searchRepository = SearchRepository()
@@ -164,7 +152,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         onMediaItemChanged = ::syncCurrentSongFromMediaId
     )
     private val songMetadataPreloader = SongMetadataPreloader(application)
-    private val initialLikedTracks = likedSongsStore.loadLikedTracks(emptyList())
+    private val initialLikedTracks = likedTracksRepository.tracks.value
     private val _uiState = MutableStateFlow(
         MusicUiState(
             listeningStats = listeningStatsRepository.getStats(),
@@ -192,16 +180,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var currentQueueIndex: Int = -1
     private var preloadSongMetadataCount: Int = 5
     private var preloadLyricsCount: Int = 5
-    private var onlinePlaybackPreloadCount: Int = 1
-    private var onlinePlaybackPreloadPercentage: Int = 10
     private var preloadJob: Job? = null
     private var onlineArtworkPreloadJob: Job? = null
-    private var pendingPlaybackJob: Job? = null
-    private var playbackRequestGeneration: Long = 0L
     private var onlinePreloadGeneration: Long = 0L
-    private var playbackQueueRevision: Long = 0L
-    private val onlinePlaybackResourcePreloads =
-        mutableMapOf<OnlinePlaybackPreloadIdentity, OnlinePlaybackResourcePreload>()
     /** 仅本进程有效；不保存 runtime ref 或播放 URL。 */
     private val onlinePresentationCache = mutableMapOf<String, ProviderSong>()
     private var metadataPreloadUris: List<String> = emptyList()
@@ -213,6 +194,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var searchLandingJob: Job? = null
     private var searchLandingGeneration: Long = 0L
     private var playbackOrderModeJob: Job? = null
+    private var lastProgressDiagnosticLogUptimeMs = 0L
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
     private val providerCollectionLoads = mutableSetOf<String>()
     private val requestedProviderCollectionIds = mutableSetOf<String>()
@@ -230,63 +212,19 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         _confirmedPlaybackPosition.asStateFlow()
     val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
 
-    private fun markPlaybackQueueChanged() {
-        playbackQueueRevision += 1L
-        clearOnlinePlaybackResourcePreload()
-    }
-
-    private fun clearOnlinePlaybackResourcePreload() {
-        onlinePlaybackResourcePreloads.values.forEach { preload ->
-            preload.contentJob.cancel()
-            preload.result.cancel()
-        }
-        onlinePlaybackResourcePreloads.clear()
-    }
-
-    private fun beginPlaybackRequest(): Long {
-        pendingPlaybackJob?.cancel()
-        pendingPlaybackJob = null
-        playbackRequestGeneration += 1L
+    private fun beginPlaybackRequest() {
         playbackController.clearPendingPlaybackRequest()
-        // 本地请求不依赖旧在线协程结束：同一帧撤销其视觉 pending。
-        _uiState.update { it.copy(pendingPlayback = null, pendingQueueIndex = null) }
-        return playbackRequestGeneration
-    }
-
-    private fun isCurrentPlaybackRequest(generation: Long) =
-        generation == playbackRequestGeneration
-
-    private fun setPendingPlayback(
-        track: PersistentTrack?,
-        presentation: Song,
-        index: Int,
-        generation: Long,
-        phase: PendingPlayback.Phase
-    ) {
-        if (!isCurrentPlaybackRequest(generation)) return
-        _uiState.update {
-            it.copy(
-                pendingPlayback = PendingPlayback(track, presentation, generation, phase),
-                pendingQueueIndex = index
-            )
-        }
-    }
-
-    private fun clearPendingPlayback(generation: Long) {
-        if (!isCurrentPlaybackRequest(generation)) return
-        _uiState.update { state ->
-            if (state.pendingPlayback?.requestGeneration == generation) {
-                state.copy(pendingPlayback = null, pendingQueueIndex = null)
-            } else state
-        }
     }
 
     init {
         observeExtensionRuntime()
         startProgressTicker()
+        startPlaybackOrderTicker()
         startConfirmedPlaybackPositionTicker()
         observeControllerConnection()
         observeListeningStats()
+        observeLikedTracks()
+        observeLogicalQueue()
         observeLyrics()
         refreshSearchSources()
     }
@@ -317,17 +255,14 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         providerSearchJob?.cancel()
         searchLandingJob?.cancel()
         searchLandingGeneration += 1L
-        pendingPlaybackJob?.cancel()
-        playbackRequestGeneration += 1L
         onlineArtworkPreloadJob?.cancel()
         onlinePreloadGeneration += 1L
-        clearOnlinePlaybackResourcePreload()
         providerCollectionLoads.clear()
         onlinePresentationCache.clear()
+        val confirmedQueueIndex = confirmedPlaybackQueueIndex()
         _uiState.update { state ->
             state.copy(
-                pendingPlayback = null,
-                pendingQueueIndex = null,
+                currentQueueIndex = confirmedQueueIndex,
                 providerSongs = emptyMap(),
                 providerAlbums = emptyMap(),
                 providerPlaylistDetails = emptyMap()
@@ -381,22 +316,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
         preloadLyricsCount = sanitizedCount
         scheduleNextSongsPreload()
-    }
-
-    fun setOnlinePlaybackPreloadCount(count: Int) {
-        val sanitizedCount = listOf(1, 2, 3, 5).minBy { kotlin.math.abs(it - count) }
-        if (onlinePlaybackPreloadCount == sanitizedCount) return
-        onlinePlaybackPreloadCount = sanitizedCount
-        scheduleOnlinePlaybackResourcePreload()
-    }
-
-    fun setOnlinePlaybackPreloadPercentage(percentage: Int) {
-        val sanitizedPercentage = listOf(0, 10, 20, 30, 50)
-            .minBy { kotlin.math.abs(it - percentage) }
-        if (onlinePlaybackPreloadPercentage == sanitizedPercentage) return
-        onlinePlaybackPreloadPercentage = sanitizedPercentage
-        clearOnlinePlaybackResourcePreload()
-        scheduleOnlinePlaybackResourcePreload()
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -573,7 +492,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             sourceTrackQueue.firstOrNull { isSameSong(it.presentation, queuedSong) }
         }
         currentQueueIndex = findSongIndex(playbackQueue, currentSong)
-        markPlaybackQueueChanged()
     }
 
     private fun buildPlaybackQueueForMode(
@@ -672,14 +590,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             _uiState.update { currentState ->
                 result.fold(
                     onSuccess = { (songs, albums) ->
-                        sourceQueue = songs
-                        sourceTrackQueue = songs.map { song ->
-                            QueueTrackEntry(song.toPersistentTrack(), song)
+                        if (playbackState.value.playbackQueue.isEmpty()) {
+                            sourceQueue = songs
+                            sourceTrackQueue = songs.map { song ->
+                                QueueTrackEntry(song.toPersistentTrack(), song)
+                            }
+                            rebuildPlaybackQueueForMode(
+                                mode = playbackState.value.playbackOrderMode,
+                                currentSong = playbackState.value.currentSong
+                            )
                         }
-                        rebuildPlaybackQueueForMode(
-                            mode = playbackState.value.playbackOrderMode,
-                            currentSong = playbackState.value.currentSong
-                        )
                         currentState.copy(
                             isLoading = false,
                             songs = songs,
@@ -702,11 +622,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             }
 
             if (result.isSuccess) {
-                loadedSongs?.let { songs ->
-                    _likedTracks.value = likedSongsStore.loadLikedTracks(songs)
-                    likedSongsStore.saveLikedTracks(_likedTracks.value)
-                    _uiState.update { it.copy(likedTracks = _likedTracks.value) }
-                }
+                loadedSongs?.let(likedTracksRepository::refreshLocalSongs)
                 if (loadedSongs != null) {
                     refreshSearchIndex(
                         songs = loadedSongs,
@@ -763,7 +679,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             playbackTrackQueue = emptyList()
             currentQueueIndex = -1
             currentPlaybackSource = PlaybackSource.Unknown
-            markPlaybackQueueChanged()
             publishPlaybackQueue()
         }
         scanSongs()
@@ -780,7 +695,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             sourceTrackQueue = listOf(QueueTrackEntry(song.toPersistentTrack(), song))
             playbackQueue = listOf(song)
             playbackTrackQueue = sourceTrackQueue
-            markPlaybackQueueChanged()
             playSongAt(index = 0, source = source)
             return
         }
@@ -943,63 +857,12 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
     }
 
-    private fun playOnlineSongAt(
-        selectedSong: Song,
-        index: Int,
-        source: PlaybackSource
-    ) {
-        val requestGeneration = beginPlaybackRequest()
-        setPendingPlayback(
-            track = playbackTrackQueue.getOrNull(index)?.persistentTrack,
-            presentation = selectedSong,
-            index = index,
-            generation = requestGeneration,
-            phase = PendingPlayback.Phase.Preparing
-        )
-        pendingPlaybackJob = viewModelScope.launch {
-            val providerSong = playbackTrackQueue.getOrNull(index)?.runtimeProviderSong
-                ?: onlineQueueSongs[selectedSong.uri.toString()] ?: run {
-                publishTrackPlaybackError("在线歌曲引用已失效")
-                return@launch
-            }
-            val queueEntry = playbackTrackQueue.getOrNull(index)
-                ?: QueueTrackEntry(null, selectedSong, providerSong)
-            val preloaded = awaitOnlinePlaybackPreload(queueEntry)
-            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-            val resolvedSong = preloaded?.providerSong ?: providerSong
-            val resource = preloaded?.resource
-                ?: extensionManager.resolvePlaybackResource(resolvedSong)
-            val mediaItem = preloaded?.mediaItem ?: resource?.let {
-                extensionManager.createPlaybackMediaItem(resolvedSong, it)
-            } ?: run {
-                if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-                clearPendingPlayback(requestGeneration)
-                publishTrackPlaybackError("无法解析在线播放资源")
-                return@launch
-            }
-            if (!isCurrentPlaybackRequest(requestGeneration)) {
-                Log.d("FlowtonePlayback", "playback.request.stale success")
-                return@launch
-            }
-            currentQueueIndex = index
-            currentPlaybackSource = source
-            publishPlaybackQueue()
-            playbackController.playResolvedMediaItem(
-                song = selectedSong,
-                mediaItem = mediaItem,
-                extensionArtwork = resolvedSong.artwork,
-                extensionLargeArtwork = resolvedSong.largeArtwork,
-                persistentTrack = resolvedSong.toPersistentTrack()
-            )
-            clearPendingPlayback(requestGeneration)
-            scheduleNextSongsPreload()
-        }
-    }
-
     fun playQueueSong(song: Song) {
         val playbackIndex = findSongIndex(playbackQueue, song)
         if (playbackIndex != -1) {
-            playSongAt(playbackIndex, source = currentPlaybackSource)
+            if (!playbackController.playAt(playbackIndex, playWhenReady = true)) {
+                playSongAt(playbackIndex, source = currentPlaybackSource)
+            }
         }
     }
 
@@ -1021,7 +884,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
         sourceQueue = playbackQueue
         sourceTrackQueue = playbackTrackQueue
-        markPlaybackQueueChanged()
         publishPlaybackQueue()
         scheduleNextSongsPreload()
         return true
@@ -1040,7 +902,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
         sourceQueue = playbackQueue
         sourceTrackQueue = playbackTrackQueue
-        markPlaybackQueueChanged()
         publishPlaybackQueue()
         scheduleNextSongsPreload()
         return true
@@ -1056,60 +917,18 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             return
         }
 
-        val selectedSong = playbackQueue[index]
-        val queueEntry = playbackTrackQueue.getOrNull(index)
-        when (queueEntry?.playbackKind) {
-            QueueTrackPlaybackKind.RuntimeProvider -> {
-                playOnlineSongAt(selectedSong, index, source)
-                return
-            }
-            QueueTrackPlaybackKind.PersistentOnline -> {
-                playPersistentOnlineTrack(
-                    queueEntry.persistentTrack as PersistentTrack.Online,
-                    selectedSong,
-                    index,
-                    source
-                )
-                return
-            }
-            QueueTrackPlaybackKind.Local, null -> Unit
-        }
-        // 所有 Local 入口（列表、歌单、Likes、next/previous、auto-next）最终都到这里。
+        val selectedEntry = playbackTrackQueue.getOrNull(index) ?: return
         beginPlaybackRequest()
-        val containsOnlineTrack = playbackTrackQueue.any {
-            it.playbackKind != QueueTrackPlaybackKind.Local
-        }
-        val playerQueue = mediaControllerQueueForSelection(
-            containsOnlineTrack = containsOnlineTrack,
-            selectedSong = selectedSong,
-            sourceQueue = sourceQueue,
-            playbackQueue = playbackQueue
-        )
-        val playerStartIndex = findSongIndex(playerQueue, selectedSong)
-        if (playerStartIndex == -1) {
-            return
-        }
-
         currentQueueIndex = index
         currentPlaybackSource = source
-        playbackController.playQueue(playerQueue, playerStartIndex, source)
-        if (!containsOnlineTrack) {
-            playbackController.setPlaybackOrderMode(
-                mode = playbackState.value.playbackOrderMode,
-                shuffleOrderIndices = if (
-                    playbackState.value.playbackOrderMode == PlaybackOrderMode.Shuffle
-                ) {
-                    buildPlaybackOrderIndices(playbackQueue, playerQueue)
-                } else {
-                    null
-                }
-            )
-        } else {
-            playbackController.setPlaybackOrderMode(
-                mode = playbackState.value.playbackOrderMode,
-                shuffleOrderIndices = null
-            )
+        val logicalItems = sourceTrackQueue.mapIndexed { sourceIndex, entry ->
+            entry.toPlaybackQueueItem(source, sourceIndex)
         }
+        val selectedSourceIndex = sourceTrackQueue.indexOfFirst { entry ->
+            entry.stableIdentity == selectedEntry.stableIdentity
+        }
+        if (selectedSourceIndex == -1) return
+        playbackController.playLogicalQueue(logicalItems, selectedSourceIndex, playWhenReady = true)
         publishPlaybackQueue()
         scheduleNextSongsPreload()
     }
@@ -1220,6 +1039,21 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
     private fun restoreFromControllerIfPossible() {
         val snapshot = playbackController.getPlaybackSnapshot() ?: return
+        if (snapshot.logicalQueue.isNotEmpty()) {
+            sourceTrackQueue = snapshot.sourceQueue.map(PlaybackQueueItem::toQueueTrackEntry)
+            playbackTrackQueue = snapshot.logicalQueue.map(PlaybackQueueItem::toQueueTrackEntry)
+            sourceQueue = sourceTrackQueue.map(QueueTrackEntry::presentation)
+            playbackQueue = playbackTrackQueue.map(QueueTrackEntry::presentation)
+            currentQueueIndex = snapshot.currentMediaItemIndex
+                .coerceIn(0, playbackQueue.lastIndex.coerceAtLeast(0))
+            currentPlaybackSource = snapshot.logicalQueue
+                .getOrNull(currentQueueIndex)
+                ?.source
+                ?: PlaybackSource.Unknown
+            publishPlaybackQueue()
+            scheduleNextSongsPreload()
+            return
+        }
         val currentMediaItem = snapshot.currentMediaItem ?: return
         val scannedSongs = _uiState.value.songs
         val currentSong = currentMediaItem.toSongOrNull(scannedSongs) ?: return
@@ -1236,17 +1070,12 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             return
         }
 
-        sourceQueue = if (scannedSongs.isNotEmpty()) {
-            scannedSongs
-        } else {
-            restoredQueue
-        }
+        sourceQueue = restoredQueue
         playbackQueue = buildPlaybackQueueForMode(
             queue = sourceQueue,
             mode = snapshot.playbackOrderMode,
             currentSong = currentSong
         )
-        markPlaybackQueueChanged()
         currentQueueIndex = findSongIndex(playbackQueue, currentSong)
             .takeIf { it != -1 } ?: 0
 
@@ -1264,7 +1093,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playbackController.updateFromSnapshot(
             currentSong = currentSong,
             isPlaying = snapshot.isPlaying,
+            playWhenReady = snapshot.playWhenReady,
+            isBuffering = snapshot.isBuffering,
             positionMs = position,
+            bufferedPositionMs = snapshot.bufferedPositionMs.coerceIn(0L, duration),
             durationMs = duration,
             playbackOrderMode = snapshot.playbackOrderMode
         )
@@ -1289,14 +1121,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             scannedSongs.firstOrNull { it.id == queuedSong.id || it.uri == queuedSong.uri }
                 ?: queuedSong
         }
-        markPlaybackQueueChanged()
         currentQueueIndex = playbackQueue.indexOfFirst {
             it.id == officialSong.id || it.uri == officialSong.uri
         }
         playbackController.updateFromSnapshot(
             currentSong = officialSong,
             isPlaying = playbackState.value.isPlaying,
+            playWhenReady = playbackState.value.playWhenReady,
+            isBuffering = playbackState.value.isBuffering,
             positionMs = playbackState.value.positionMs,
+            bufferedPositionMs = playbackState.value.bufferedPositionMs,
             durationMs = playbackState.value.durationMs.takeIf { it > 0L }
                 ?: officialSong.durationMs.coerceAtLeast(0L),
             playbackOrderMode = playbackState.value.playbackOrderMode
@@ -1306,10 +1140,34 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun publishPlaybackQueue() {
+        val hydratedByIdentity = (sourceTrackQueue + playbackTrackQueue)
+            .mapNotNull { entry -> entry.runtimeProviderSong?.let { entry.stableIdentity to it } }
+            .toMap()
+        val controllerState = playbackState.value
+        val sourceItems = controllerState.sourceQueue.takeIf { it.isNotEmpty() }
+            ?.map { item ->
+                hydratedByIdentity[item.stableIdentity]
+                    ?.let { item.copy(runtimeProviderSong = it) }
+                    ?: item
+            }
+            ?: sourceTrackQueue.mapIndexed { index, entry ->
+                entry.toPlaybackQueueItem(currentPlaybackSource, index)
+            }
+        val playbackItems = controllerState.playbackQueue.takeIf { it.isNotEmpty() }
+            ?.map { item ->
+                hydratedByIdentity[item.stableIdentity]
+                    ?.let { item.copy(runtimeProviderSong = it) }
+                    ?: item
+            }
+            ?: playbackTrackQueue.mapIndexed { index, entry ->
+                entry.toPlaybackQueueItem(currentPlaybackSource, index)
+            }
         _uiState.update {
             it.copy(
                 sourceQueue = sourceQueue,
                 playbackQueue = playbackQueue,
+                sourceQueueItems = sourceItems,
+                playbackQueueItems = playbackItems,
                 currentQueueIndex = currentQueueIndex
             )
         }
@@ -1334,112 +1192,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             songsInPlaybackOrder = songsToPreload
         )
         scheduleOnlineArtworkPreload()
-        scheduleOnlinePlaybackResourcePreload()
-    }
-
-    private fun scheduleOnlinePlaybackResourcePreload() {
-        val targets = if (playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
-            emptyList()
-        } else {
-            playbackTrackQueue
-                .drop((currentQueueIndex + 1).coerceAtLeast(0))
-                .mapNotNull { entry ->
-                    entry.onlinePlaybackPreloadIdentity(playbackQueueRevision)?.let { it to entry }
-                }
-                .take(onlinePlaybackPreloadCount)
-        }
-        val targetIdentities = targets.mapTo(mutableSetOf()) { it.first }
-        val stalePreloads = onlinePlaybackResourcePreloads.keys - targetIdentities
-        stalePreloads.forEach { identity ->
-            onlinePlaybackResourcePreloads.remove(identity)?.let { preload ->
-                preload.contentJob.cancel()
-                preload.result.cancel()
-            }
-        }
-        if (targets.isEmpty()) {
-            clearOnlinePlaybackResourcePreload()
-            return
-        }
-
-        targets.forEach { (identity, entry) ->
-            if (onlinePlaybackResourcePreloads.containsKey(identity)) return@forEach
-            val result = viewModelScope.async {
-                try {
-                    Log.d("FlowtonePlayback", "online.playback.preload.started identityHash=${identity.hashCode()}")
-                    resolveOnlinePlaybackForPreload(entry).also { resolved ->
-                        Log.d(
-                            "FlowtonePlayback",
-                            "online.playback.preload.${if (resolved == null) "miss" else "success"} identityHash=${identity.hashCode()}"
-                        )
-                    }
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Throwable) {
-                    Log.w("FlowtonePlayback", "online.playback.preload.failed identityHash=${identity.hashCode()}", error)
-                    null
-                }
-            }
-            val contentJob = viewModelScope.launch {
-                val resolved = result.await() ?: return@launch
-                try {
-                    val cachedBytes = extensionManager.preloadPlaybackContent(
-                        mediaItem = resolved.mediaItem,
-                        resource = resolved.resource,
-                        percentage = onlinePlaybackPreloadPercentage
-                    )
-                    Log.d(
-                        "FlowtonePlayback",
-                        "online.playback.contentPreload.completed identityHash=${identity.hashCode()} bytes=$cachedBytes"
-                    )
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Throwable) {
-                    Log.w(
-                        "FlowtonePlayback",
-                        "online.playback.contentPreload.missed identityHash=${identity.hashCode()} type=${error.javaClass.simpleName}"
-                    )
-                }
-            }
-            onlinePlaybackResourcePreloads[identity] =
-                OnlinePlaybackResourcePreload(identity, result, contentJob)
-        }
-    }
-
-    private suspend fun resolveOnlinePlaybackForPreload(
-        entry: QueueTrackEntry
-    ): ResolvedOnlinePlayback? {
-        val providerSong = entry.runtimeProviderSong ?: hydrateOnlinePresentation(
-            entry.persistentTrack as? PersistentTrack.Online
-        ) ?: return null
-        currentCoroutineContext().ensureActive()
-        val resource = extensionManager.resolvePlaybackResource(providerSong) ?: return null
-        currentCoroutineContext().ensureActive()
-        val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource) ?: return null
-        return ResolvedOnlinePlayback(providerSong, resource, mediaItem)
-    }
-
-    private suspend fun awaitOnlinePlaybackPreload(
-        entry: QueueTrackEntry
-    ): ResolvedOnlinePlayback? {
-        val identity = entry.onlinePlaybackPreloadIdentity(playbackQueueRevision) ?: return null
-        val preload = onlinePlaybackResourcePreloads.remove(identity) ?: return null
-        preload.contentJob.cancel()
-
-        val resolved = try {
-            preload.result.await()
-        } catch (_: CancellationException) {
-            currentCoroutineContext().ensureActive()
-            null
-        }
-        if (identity != entry.onlinePlaybackPreloadIdentity(playbackQueueRevision)) return null
-        if (resolved == null) return null
-        if (!extensionManager.isMusicProviderRuntimeAvailable(resolved.providerSong.trackRef.extensionId)) {
-            return null
-        }
-        if (resolved.resource.extensionId != resolved.providerSong.trackRef.extensionId) return null
-
-        Log.d("FlowtonePlayback", "online.playback.preload.consumed identityHash=${identity.hashCode()}")
-        return resolved
+        // Service owns online playback-resource/content preload from the logical next item.
     }
 
     /**
@@ -1461,18 +1214,36 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         )
         if (entries.isEmpty()) return
         onlineArtworkPreloadJob = viewModelScope.launch {
-            val songs = entries.mapNotNull { entry ->
+            val hydratedEntries = entries.mapNotNull { entry ->
                 if (generation != onlinePreloadGeneration) {
                     Log.d("FlowtonePlayback", "online.artwork.preload.skip reason=staleGeneration")
                     return@launch
                 }
-                entry.runtimeProviderSong ?: hydrateOnlinePresentation(
+                val song = entry.runtimeProviderSong ?: hydrateOnlinePresentation(
                     entry.persistentTrack as? PersistentTrack.Online
                 ).also { hydrated ->
                     if (hydrated == null) Log.d("FlowtonePlayback", "online.artwork.preload.skip reason=hydrationFailed")
                 }
+                song?.let { entry to it }
             }
             if (generation != onlinePreloadGeneration) return@launch
+            val hydratedByIdentity = hydratedEntries.associate { (entry, song) ->
+                entry.stableIdentity to song
+            }
+            if (hydratedByIdentity.isNotEmpty()) {
+                sourceTrackQueue = sourceTrackQueue.map { entry ->
+                    hydratedByIdentity[entry.stableIdentity]
+                        ?.let { entry.copy(runtimeProviderSong = it) }
+                        ?: entry
+                }
+                playbackTrackQueue = playbackTrackQueue.map { entry ->
+                    hydratedByIdentity[entry.stableIdentity]
+                        ?.let { entry.copy(runtimeProviderSong = it) }
+                        ?: entry
+                }
+                publishPlaybackQueue()
+            }
+            val songs = hydratedEntries.map { it.second }
             songs.forEach { song ->
                 song.artwork?.let { image ->
                     Log.d("FlowtonePlayback", "online.artwork.preload.small identityHash=${song.trackRef.opaqueId.hashCode()}")
@@ -1558,17 +1329,49 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playbackController.togglePlayPause()
     }
 
+    private fun observeLikedTracks() {
+        viewModelScope.launch {
+            likedTracksRepository.tracks.collect { tracks ->
+                _likedTracks.value = tracks
+                _uiState.update { it.copy(likedTracks = tracks) }
+            }
+        }
+    }
+
+    private fun observeLogicalQueue() {
+        viewModelScope.launch {
+            playbackState
+                .map { state ->
+                    LogicalQueueSnapshot(
+                        sourceQueue = state.sourceQueue,
+                        playbackQueue = state.playbackQueue,
+                        currentIndex = state.currentQueueIndex
+                    )
+                }
+                .distinctUntilChanged()
+                .collect { snapshot ->
+                    if (snapshot.playbackQueue.isEmpty()) return@collect
+                    sourceTrackQueue = snapshot.sourceQueue.map(PlaybackQueueItem::toQueueTrackEntry)
+                    playbackTrackQueue = snapshot.playbackQueue.map(PlaybackQueueItem::toQueueTrackEntry)
+                    sourceQueue = sourceTrackQueue.map(QueueTrackEntry::presentation)
+                    playbackQueue = playbackTrackQueue.map(QueueTrackEntry::presentation)
+                    currentQueueIndex = snapshot.currentIndex
+                    onlineQueueSongs = sourceTrackQueue.mapNotNull { entry ->
+                        entry.runtimeProviderSong?.let { entry.presentation.uri.toString() to it }
+                    }.toMap()
+                    publishPlaybackQueue()
+                    scheduleNextSongsPreload()
+                }
+        }
+    }
+
+    private fun confirmedPlaybackQueueIndex(): Int {
+        val confirmedSong = playbackState.value.currentSong ?: return -1
+        return findSongIndex(playbackQueue, confirmedSong)
+    }
+
     fun setTrackLiked(track: PersistentTrack, liked: Boolean) {
-        val next = if (liked) {
-            (_likedTracks.value + track).distinctBy(PersistentTrack::identityKey)
-        } else {
-            _likedTracks.value.filterNot { it.identityKey == track.identityKey }
-        }
-        if (next != _likedTracks.value) {
-            _likedTracks.value = next
-            _uiState.update { it.copy(likedTracks = next) }
-            likedSongsStore.saveLikedTracks(next)
-        }
+        likedTracksRepository.setLiked(track, liked)
     }
 
     fun playPersistentTrackQueue(
@@ -1609,68 +1412,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         )
     }
 
-    private fun playPersistentOnlineTrack(
-        track: PersistentTrack.Online,
-        presentation: Song,
-        index: Int,
-        source: PlaybackSource
-    ) {
-        val requestGeneration = beginPlaybackRequest()
-        setPendingPlayback(track, presentation, index, requestGeneration, PendingPlayback.Phase.Resolving)
-        pendingPlaybackJob = viewModelScope.launch {
-            val queueEntry = playbackTrackQueue.getOrNull(index)
-                ?: QueueTrackEntry(track, presentation)
-            val preloaded = awaitOnlinePlaybackPreload(queueEntry)
-            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-            val providerSong = preloaded?.providerSong ?: run {
-                val cachedSong = onlinePresentationCache[track.identityKey]
-                    ?.takeIf { extensionManager.isMusicProviderRuntimeAvailable(it.trackRef.extensionId) }
-                when (val result = cachedSong?.let {
-                    ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved(it)
-                } ?: extensionManager.resolvePersistentPlaylistSong(track)) {
-                    is ink.tenqui.flowtone.data.online.PersistentSongResolution.Resolved -> result.song
-                    is ink.tenqui.flowtone.data.online.PersistentSongResolution.ProviderMissing -> {
-                        if (isCurrentPlaybackRequest(requestGeneration)) {
-                            publishTrackPlaybackError("当前没有可处理 ${track.sourceHost} 的扩展")
-                        }
-                        return@launch
-                    }
-                    is ink.tenqui.flowtone.data.online.PersistentSongResolution.Unresolved -> {
-                        if (isCurrentPlaybackRequest(requestGeneration)) {
-                            publishTrackPlaybackError("该在线歌曲暂时无法恢复")
-                        }
-                        return@launch
-                    }
-                }
-            }
-            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-            onlinePresentationCache[track.identityKey] = providerSong
-            setPendingPlayback(track, presentation, index, requestGeneration, PendingPlayback.Phase.Preparing)
-            val resource = preloaded?.resource
-                ?: extensionManager.resolvePlaybackResource(providerSong)
-            val mediaItem = preloaded?.mediaItem ?: resource?.let {
-                extensionManager.createPlaybackMediaItem(providerSong, it)
-            }
-            if (!isCurrentPlaybackRequest(requestGeneration)) return@launch
-            if (mediaItem == null) {
-                publishTrackPlaybackError("无法解析在线播放资源")
-                return@launch
-            }
-            currentQueueIndex = index
-            currentPlaybackSource = source
-            publishPlaybackQueue()
-            playbackController.playResolvedMediaItem(
-                song = presentation,
-                mediaItem = mediaItem,
-                extensionArtwork = providerSong.artwork,
-                extensionLargeArtwork = providerSong.largeArtwork,
-                persistentTrack = track
-            )
-            clearPendingPlayback(requestGeneration)
-            scheduleNextSongsPreload()
-        }
-    }
-
     private fun previousSongsInPlaybackOrder(limit: Int): List<Song> {
         if (limit <= 0 || playbackState.value.playbackOrderMode == PlaybackOrderMode.RepeatOne) {
             return emptyList()
@@ -1697,12 +1438,12 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun publishTrackPlaybackError(message: String) {
+        val confirmedQueueIndex = confirmedPlaybackQueueIndex()
         _uiState.update { state ->
             state.copy(
                 trackPlaybackErrorMessage = message,
                 trackPlaybackErrorEventId = state.trackPlaybackErrorEventId + 1L,
-                pendingPlayback = null,
-                pendingQueueIndex = null
+                currentQueueIndex = confirmedQueueIndex
             )
         }
     }
@@ -1731,40 +1472,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         if (mode == playbackState.value.playbackOrderMode) {
             return
         }
-
-        val currentSong = playbackState.value.currentSong
-
-        if (sourceQueue.isEmpty() && playbackQueue.isNotEmpty()) {
-            sourceQueue = playbackQueue
-        }
-
-        val sourceSnapshot = sourceQueue
-        val nextPlaybackQueue = withContext(Dispatchers.Default) {
-            buildPlaybackQueueForMode(sourceSnapshot, mode, currentSong)
-        }
-        val nextShuffleOrderIndices = if (mode == PlaybackOrderMode.Shuffle) {
-            withContext(Dispatchers.Default) {
-                buildPlaybackOrderIndices(nextPlaybackQueue, sourceSnapshot)
-            }
-        } else {
-            null
-        }
-
-        playbackQueue = nextPlaybackQueue
-        playbackTrackQueue = playbackQueue.mapNotNull { queuedSong ->
-            sourceTrackQueue.firstOrNull { isSameSong(it.presentation, queuedSong) }
-        }
-        currentQueueIndex = findSongIndex(playbackQueue, currentSong)
-        markPlaybackQueueChanged()
-
-        playbackController.updatePlaybackOrderMode(mode)
-        playbackController.setPlaybackOrderMode(
-            mode = mode,
-            shuffleOrderIndices = nextShuffleOrderIndices
-        )
+        playbackController.setPlaybackOrderMode(mode)
         playbackSettingsStore.setPlaybackOrderMode(mode)
-        publishPlaybackQueue()
-        scheduleNextSongsPreload()
     }
 
     fun seekTo(positionMs: Long) {
@@ -1778,6 +1487,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playbackController.seekTo(clampedPosition)
         playbackController.updateProgress(
             positionMs = clampedPosition,
+            bufferedPositionMs = playbackState.value.bufferedPositionMs,
             durationMs = durationMs
         )
     }
@@ -1830,7 +1540,16 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         viewModelScope.launch {
             while (isActive) {
                 updateProgressFromController()
-                delay(500)
+                delay(32L)
+            }
+        }
+    }
+
+    private fun startPlaybackOrderTicker() {
+        viewModelScope.launch {
+            while (isActive) {
+                syncPlaybackOrderModeFromController()
+                delay(500L)
             }
         }
     }
@@ -1846,43 +1565,68 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     private fun updateProgressFromController() {
-        val playbackOrderMode = playbackController.getPlaybackOrderMode()
-        if (playbackState.value.playbackOrderMode != playbackOrderMode) {
-            playbackController.updatePlaybackOrderMode(playbackOrderMode)
-            playbackSettingsStore.setPlaybackOrderMode(playbackOrderMode)
-            rebuildPlaybackQueueForMode(
-                mode = playbackOrderMode,
-                currentSong = playbackState.value.currentSong
-            )
-            publishPlaybackQueue()
-            scheduleNextSongsPreload()
-        }
-
         val currentSong = playbackState.value.currentSong
         if (currentSong == null) {
             playbackController.updateProgress(
                 positionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = 0L
             )
             return
         }
 
-        val controllerDuration = playbackController.getDurationMs()
+        val controllerSnapshot = playbackController.getProgressSnapshot()
+        val controllerDuration = controllerSnapshot.durationMs
+            .takeIf { controllerSnapshot.belongsToCurrentLogicalTarget }
+            ?: 0L
         val duration = when {
             controllerDuration > 0L -> controllerDuration
             currentSong.durationMs > 0L -> currentSong.durationMs
             else -> 0L
         }
-        val position = if (duration > 0L) {
-            playbackController.getCurrentPositionMs().coerceIn(0L, duration)
+        val position = if (duration > 0L && controllerSnapshot.belongsToCurrentLogicalTarget) {
+            controllerSnapshot.positionMs.coerceIn(0L, duration)
+        } else {
+            0L
+        }
+        val bufferedPosition = if (duration > 0L && controllerSnapshot.belongsToCurrentLogicalTarget) {
+            controllerSnapshot.bufferedPositionMs.coerceIn(0L, duration)
         } else {
             0L
         }
 
         playbackController.updateProgress(
             positionMs = position,
+            bufferedPositionMs = bufferedPosition,
             durationMs = duration
         )
+        val now = SystemClock.elapsedRealtime()
+        if (
+            lastProgressDiagnosticLogUptimeMs == 0L ||
+            now - lastProgressDiagnosticLogUptimeMs >= ProgressDiagnosticLogIntervalMillis
+        ) {
+            lastProgressDiagnosticLogUptimeMs = now
+            val state = playbackState.value
+            Log.d(
+                ProgressDiagnosticLogTag,
+                "ticker controllerMediaId=${controllerSnapshot.mediaId} " +
+                    "controllerPositionMs=${controllerSnapshot.positionMs} " +
+                    "controllerBufferedPositionMs=${controllerSnapshot.bufferedPositionMs} " +
+                    "controllerDurationMs=${controllerSnapshot.durationMs} " +
+                    "belongsToCurrent=${controllerSnapshot.belongsToCurrentLogicalTarget} " +
+                    "stateQueueId=${state.currentQueueId} statePositionMs=${state.positionMs} " +
+                    "stateBufferedPositionMs=${state.bufferedPositionMs} " +
+                    "stateDurationMs=${state.durationMs}"
+            )
+        }
+    }
+
+    private fun syncPlaybackOrderModeFromController() {
+        val playbackOrderMode = playbackController.getPlaybackOrderMode()
+        if (playbackState.value.playbackOrderMode != playbackOrderMode) {
+            playbackController.updatePlaybackOrderMode(playbackOrderMode)
+            playbackSettingsStore.setPlaybackOrderMode(playbackOrderMode)
+        }
     }
 
     private fun publishListeningStats(snapshot: ListeningStatsSnapshot) {
@@ -1895,7 +1639,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         searchJob?.cancel()
         providerSearchJob?.cancel()
         playbackOrderModeJob?.cancel()
-        clearOnlinePlaybackResourcePreload()
         lyricsPreloadScheduler.clear()
         localLyricsRepository.close()
         playbackController.release()
@@ -1903,63 +1646,50 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 }
 
+private const val ProgressDiagnosticLogTag = "FlowtoneProgress"
+private const val ProgressDiagnosticLogIntervalMillis = 2_000L
+
 internal data class QueueTrackEntry(
     val persistentTrack: PersistentTrack?,
     val presentation: Song,
     val runtimeProviderSong: ProviderSong? = null
 )
 
-internal data class OnlinePlaybackPreloadIdentity(
-    val queueRevision: Long,
-    val trackIdentity: String
+private data class LogicalQueueSnapshot(
+    val sourceQueue: List<PlaybackQueueItem>,
+    val playbackQueue: List<PlaybackQueueItem>,
+    val currentIndex: Int
 )
 
-private data class ResolvedOnlinePlayback(
-    val providerSong: ProviderSong,
-    val resource: ExtensionPlaybackResource,
-    val mediaItem: MediaItem
+private val QueueTrackEntry.stableIdentity: String
+    get() = persistentTrack?.identityKey
+        ?: runtimeProviderSong?.trackRef?.let { "runtime:${it.extensionId}:${it.opaqueId}" }
+        ?: "song:${presentation.sourceType}:${presentation.id}:${presentation.uri}"
+
+private fun QueueTrackEntry.toPlaybackQueueItem(
+    source: PlaybackSource,
+    sourceIndex: Int
+): PlaybackQueueItem = when {
+    runtimeProviderSong != null -> PlaybackQueueItem.provider(
+        song = runtimeProviderSong,
+        presentation = presentation,
+        source = source,
+        sourceIndex = sourceIndex
+    )
+    persistentTrack != null -> PlaybackQueueItem.persistent(
+        track = persistentTrack,
+        presentation = presentation,
+        source = source,
+        sourceIndex = sourceIndex
+    )
+    else -> PlaybackQueueItem.local(presentation, source, sourceIndex)
+}
+
+private fun PlaybackQueueItem.toQueueTrackEntry(): QueueTrackEntry = QueueTrackEntry(
+    persistentTrack = persistentTrack,
+    presentation = presentation,
+    runtimeProviderSong = runtimeProviderSong
 )
-
-private data class OnlinePlaybackResourcePreload(
-    val identity: OnlinePlaybackPreloadIdentity,
-    val result: Deferred<ResolvedOnlinePlayback?>,
-    val contentJob: Job
-)
-
-internal enum class QueueTrackPlaybackKind {
-    Local,
-    RuntimeProvider,
-    PersistentOnline
-}
-
-internal val QueueTrackEntry.playbackKind: QueueTrackPlaybackKind
-    get() = when {
-        runtimeProviderSong != null -> QueueTrackPlaybackKind.RuntimeProvider
-        persistentTrack is PersistentTrack.Online -> QueueTrackPlaybackKind.PersistentOnline
-        else -> QueueTrackPlaybackKind.Local
-    }
-
-internal fun QueueTrackEntry.onlinePlaybackPreloadIdentity(
-    queueRevision: Long
-): OnlinePlaybackPreloadIdentity? {
-    val trackIdentity = runtimeProviderSong?.trackRef?.let { trackRef ->
-        "runtime:${trackRef.extensionId}\u0000${trackRef.opaqueId}"
-    } ?: (persistentTrack as? PersistentTrack.Online)?.let { track ->
-        "persistent:${track.identityKey}"
-    } ?: return null
-    return OnlinePlaybackPreloadIdentity(queueRevision, trackIdentity)
-}
-
-internal fun mediaControllerQueueForSelection(
-    containsOnlineTrack: Boolean,
-    selectedSong: Song,
-    sourceQueue: List<Song>,
-    playbackQueue: List<Song>
-): List<Song> = if (containsOnlineTrack) {
-    listOf(selectedSong)
-} else {
-    sourceQueue.ifEmpty { playbackQueue }
-}
 
 internal data class PreloadWindowCounts(
     val previous: Int,

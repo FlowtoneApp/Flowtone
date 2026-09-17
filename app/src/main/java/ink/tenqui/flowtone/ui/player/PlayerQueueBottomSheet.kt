@@ -39,6 +39,7 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -49,8 +50,8 @@ enum class QueueDisplayOrder(val label: String) {
 
 @Composable
 internal fun PlayerQueueBottomSheet(
-    playbackQueue: List<Song>,
-    sourceQueue: List<Song>,
+    playbackQueue: List<PlaybackQueueItem>,
+    sourceQueue: List<PlaybackQueueItem>,
     currentQueueIndex: Int,
     currentSong: Song?,
     playbackOrderMode: PlaybackOrderMode,
@@ -356,7 +357,7 @@ private fun QueueDisplaySnapshotLayers(
     targetReady: Boolean,
     transitionProgress: Float,
     transitionDistancePx: Float,
-    playbackQueue: List<Song>,
+    playbackQueue: List<PlaybackQueueItem>,
     currentQueueIndex: Int,
     currentSong: Song?,
     dismissStarted: Boolean,
@@ -436,8 +437,8 @@ private fun currentSongTargetScrollOffset(viewportHeightPx: Int): Int {
 }
 
 private fun buildQueueDisplayCache(
-    playbackQueue: List<Song>,
-    sourceQueue: List<Song>
+    playbackQueue: List<PlaybackQueueItem>,
+    sourceQueue: List<PlaybackQueueItem>
 ): QueueDisplayCache {
     val playbackOrderQueue = playbackQueue
     val listOrderQueue = sourceQueue.ifEmpty { playbackQueue }
@@ -449,10 +450,11 @@ private fun buildQueueDisplayCache(
     )
 }
 
-private fun buildQueueIndexLookup(queue: List<Song>): QueueIndexLookup {
+private fun buildQueueIndexLookup(queue: List<PlaybackQueueItem>): QueueIndexLookup {
     val indicesById = mutableMapOf<Long, Int>()
     val indicesByUri = mutableMapOf<String, Int>()
-    queue.forEachIndexed { index, song ->
+    queue.forEachIndexed { index, item ->
+        val song = item.presentation
         indicesById.putIfAbsent(song.id, index)
         indicesByUri.putIfAbsent(song.uri.toString(), index)
     }
@@ -517,7 +519,7 @@ private fun safeInitialItemIndex(index: Int?, queueSize: Int): Int {
 private data class QueueDisplaySnapshot(
     val id: Long,
     val displayOrder: QueueDisplayOrder,
-    val songs: List<Song>,
+    val songs: List<PlaybackQueueItem>,
     val currentSongKey: QueueSongKey?,
     val currentQueueIndex: Int,
     val targetIndex: Int?,
@@ -525,12 +527,12 @@ private data class QueueDisplaySnapshot(
 )
 
 private data class QueueDisplayCache(
-    val playbackOrderQueue: List<Song>,
-    val listOrderQueue: List<Song>,
+    val playbackOrderQueue: List<PlaybackQueueItem>,
+    val listOrderQueue: List<PlaybackQueueItem>,
     val playbackOrderIndexLookup: QueueIndexLookup,
     val listOrderIndexLookup: QueueIndexLookup
 ) {
-    fun queueFor(displayOrder: QueueDisplayOrder): List<Song> {
+    fun queueFor(displayOrder: QueueDisplayOrder): List<PlaybackQueueItem> {
         return when (displayOrder) {
             QueueDisplayOrder.PlaybackOrder -> playbackOrderQueue
             QueueDisplayOrder.ListOrder -> listOrderQueue

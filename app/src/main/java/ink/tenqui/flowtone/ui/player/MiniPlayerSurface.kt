@@ -49,6 +49,7 @@ internal sealed interface PlayerBackdropState {
 
 @Composable
 internal fun MiniPlayerVisualSurface(
+    stableRootHeight: Dp,
     hostHeight: Dp,
     miniPlayerSlideOffsetY: Dp,
     visibleProgress: Float,
@@ -71,59 +72,66 @@ internal fun MiniPlayerVisualSurface(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(hostHeight)
+            .height(stableRootHeight)
             .graphicsLayer {
                 translationY = miniPlayerSlideOffsetY.toPx()
                 alpha = visibleProgress
                 clip = fullscreenProgress > 0.01f
             }
     ) {
-        val playerShape = RoundedCornerShape(
-            topStart = lerpDp(24.dp, 0.dp, fullscreenProgress),
-            topEnd = lerpDp(24.dp, 0.dp, fullscreenProgress),
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp
-        )
-        val playerShadowElevation = lerpDp(0.dp, 18.dp, animationProgress)
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .blur(queueSheetBackgroundBlurRadius)
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(hostHeight)
         ) {
-            PlayerDragHandle(
-                animationProgress = animationProgress,
-                hasCurrentSong = hasCurrentSong,
-                expanded = expanded,
-                interactionSource = interactionSource,
-                onActivate = onActivate,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(dragHotZoneHeight)
-                    .graphicsLayer {
-                        translationY = handleOffsetY.toPx()
-                    }
-                    .align(Alignment.TopCenter)
-                    .then(gestureModifier)
+            val playerShape = RoundedCornerShape(
+                topStart = lerpDp(24.dp, 0.dp, fullscreenProgress),
+                topEnd = lerpDp(24.dp, 0.dp, fullscreenProgress),
+                bottomStart = 0.dp,
+                bottomEnd = 0.dp
             )
+            val playerShadowElevation = lerpDp(0.dp, 18.dp, animationProgress)
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = visualPanelTop)
-                    .fillMaxWidth()
-                    .height(visualPanelHeight)
-                    .shadow(
-                        elevation = playerShadowElevation,
-                        shape = playerShape,
-                        clip = false
-                    )
-                    .clickable(
-                        enabled = hasCurrentSong && !expanded,
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = onActivate
-                    )
+                    .matchParentSize()
+                    .blur(queueSheetBackgroundBlurRadius)
             ) {
-                panelContent(playerShape)
+                PlayerDragHandle(
+                    animationProgress = animationProgress,
+                    hasCurrentSong = hasCurrentSong,
+                    expanded = expanded,
+                    interactionSource = interactionSource,
+                    onActivate = onActivate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(dragHotZoneHeight)
+                        .graphicsLayer {
+                            translationY = handleOffsetY.toPx()
+                        }
+                        .align(Alignment.TopCenter)
+                        .then(gestureModifier)
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = visualPanelTop)
+                        .fillMaxWidth()
+                        .height(visualPanelHeight)
+                        .shadow(
+                            elevation = playerShadowElevation,
+                            shape = playerShape,
+                            clip = false
+                        )
+                        .clickable(
+                            enabled = hasCurrentSong && !expanded,
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = onActivate
+                        )
+                ) {
+                    panelContent(playerShape)
+                }
             }
         }
         overlayContent()

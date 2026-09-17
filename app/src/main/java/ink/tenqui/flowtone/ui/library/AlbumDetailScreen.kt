@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
-import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
@@ -65,7 +64,6 @@ internal fun AlbumDetailScreen(
     album: LocalAlbum?,
     currentSong: Song?,
     isPlaying: Boolean,
-    pendingTrackIdentityKey: String? = null,
     songSort: PlaylistSongSort = PlaylistSongSort(),
     onSongClick: (List<Song>, Int) -> Unit,
     playbackErrorMessage: String? = null,
@@ -150,7 +148,6 @@ internal fun AlbumDetailScreen(
             entries = albumSongs,
             listState = listState,
             currentSong = currentSong,
-            pendingTrackIdentityKey = pendingTrackIdentityKey,
             likedSongKeys = batchActions.likedSongKeys,
             editablePlaylists = batchActions.editablePlaylists,
             clearSelectionRequest = batchActions.clearSelectionRequest,
@@ -199,7 +196,6 @@ internal fun ProviderAlbumDetailScreen(
     presentationSessionKey: String,
     currentSong: Song?,
     isPlaying: Boolean,
-    pendingTrackIdentityKey: String? = null,
     onSongClick: (List<ProviderSong>, Int) -> Unit,
     pageTransition: PageTransitionScope,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
@@ -329,10 +325,6 @@ internal fun ProviderAlbumDetailScreen(
                     SongListItem(
                         song = song,
                         isCurrentSong = currentUri == song.uri,
-                        isPendingPlayback = pendingTrackIdentityKey != null &&
-                            pendingTrackIdentityKey == songs[index].persistentTrackRef?.let {
-                                "online:${normalizeMusicSourceHost(it.sourceHost)}:${it.persistentId}"
-                            },
                         extensionArtwork = songs[index].artwork,
                         onClick = { onSongClick(songs, index) },
                         modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
@@ -358,7 +350,6 @@ internal fun ProviderPlaylistDetailScreen(
     presentationSessionKey: String,
     currentSong: Song?,
     isPlaying: Boolean,
-    pendingTrackIdentityKey: String? = null,
     onSongClick: (List<ProviderSong>, Int) -> Unit,
     pageTransition: PageTransitionScope,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
@@ -388,7 +379,6 @@ internal fun ProviderPlaylistDetailScreen(
         presentationSessionKey = presentationSessionKey,
         currentSong = currentSong,
         isPlaying = isPlaying,
-        pendingTrackIdentityKey = pendingTrackIdentityKey,
         onSongClick = onSongClick,
         pageTransition = pageTransition,
         itemModifier = itemModifier,

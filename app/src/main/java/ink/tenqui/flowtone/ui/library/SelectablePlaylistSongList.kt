@@ -159,7 +159,6 @@ internal fun SelectablePlaylistSongList(
     entries: List<SelectablePlaylistSong>,
     listState: LazyListState,
     currentSong: Song?,
-    pendingTrackIdentityKey: String? = null,
     likedSongKeys: List<String>,
     editablePlaylists: List<LibraryPlaylistCard>,
     clearSelectionRequest: Int,
@@ -800,7 +799,6 @@ internal fun SelectablePlaylistSongList(
                 SongListItem(
                     song = entry.song,
                     isCurrentSong = currentSong?.id == entry.song.id,
-                    isPendingPlayback = entry.track.identityKey == pendingTrackIdentityKey,
                     extensionArtwork = hydratedArtwork,
                     selectionMode = selectionMode,
                     isSelected = selected,

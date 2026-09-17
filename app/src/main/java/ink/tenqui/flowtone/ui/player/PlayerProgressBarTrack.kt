@@ -21,8 +21,10 @@ import androidx.compose.ui.unit.Dp
 @Composable
 internal fun PlayerProgressBarTrack(
     visibleProgress: Float,
+    bufferedProgress: Float,
     trackHeight: Dp,
     trackColor: Color,
+    bufferedColor: Color,
     progressColor: Color,
     enterProgress: Float,
     modifier: Modifier = Modifier
@@ -34,6 +36,7 @@ internal fun PlayerProgressBarTrack(
         val trackLeft = 0f
         val trackWidth = size.width
         val cornerRadius = trackHeightPx / 2f
+        val bufferedWidth = trackWidth * bufferedProgress.coerceIn(0f, 1f)
         val progressWidth = trackWidth * visibleProgress.coerceIn(0f, 1f)
         val shadowOffsetY = PlaybackProgressShadowOffsetY.toPx()
         val shadowBlurRadius = PlaybackProgressShadowBlurRadius.toPx()
@@ -65,7 +68,7 @@ internal fun PlayerProgressBarTrack(
             size = Size(trackWidth, trackHeightPx),
             cornerRadius = CornerRadius(cornerRadius, cornerRadius)
         )
-        if (visibleProgress > 0f) {
+        if (bufferedProgress > 0f || visibleProgress > 0f) {
             val trackPath = Path().apply {
                 addRoundRect(
                     RoundRect(
@@ -78,11 +81,20 @@ internal fun PlayerProgressBarTrack(
                 )
             }
             clipPath(trackPath) {
-                drawRect(
-                    color = progressColor,
-                    topLeft = Offset(trackLeft, trackTop),
-                    size = Size(progressWidth, trackHeightPx)
-                )
+                if (bufferedProgress > 0f) {
+                    drawRect(
+                        color = bufferedColor,
+                        topLeft = Offset(trackLeft, trackTop),
+                        size = Size(bufferedWidth, trackHeightPx)
+                    )
+                }
+                if (visibleProgress > 0f) {
+                    drawRect(
+                        color = progressColor,
+                        topLeft = Offset(trackLeft, trackTop),
+                        size = Size(progressWidth, trackHeightPx)
+                    )
+                }
             }
         }
     }

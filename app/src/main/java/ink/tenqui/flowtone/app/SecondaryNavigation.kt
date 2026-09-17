@@ -8,6 +8,7 @@ import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.displayTitleOrNull
+import ink.tenqui.flowtone.data.online.preferredProfileArtwork
 import ink.tenqui.flowtone.data.online.sanitizedFor
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
@@ -305,7 +306,7 @@ internal fun providerArtistDestination(artist: ProviderArtist): SecondaryDestina
             providerId = providerId,
             artistId = artistId,
             displayName = displayName,
-            avatar = artist.artwork ?: artist.largeArtwork,
+            avatar = artist.preferredProfileArtwork(),
             profileMetadata = artist.profileMetadata?.sanitizedFor(displayName),
             songOrder = artist.songOrder?.displayTitleOrNull()?.let { title ->
                 artist.songOrder.copy(title = title)

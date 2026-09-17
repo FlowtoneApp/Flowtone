@@ -12,9 +12,17 @@ data class PlaybackState(
     val extensionArtwork: ExtensionImage? = null,
     val extensionLargeArtwork: ExtensionImage? = null,
     val isPlaying: Boolean = false,
+    val playWhenReady: Boolean = false,
+    val isBuffering: Boolean = false,
     val positionMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val playbackOrderMode: PlaybackOrderMode = PlaybackOrderMode.Sequence,
+    val sourceQueue: List<PlaybackQueueItem> = emptyList(),
+    val playbackQueue: List<PlaybackQueueItem> = emptyList(),
+    val currentQueueIndex: Int = -1,
+    /** 当前 logical playback target 的 queue identity，用于将瞬时位置与展示页关联。 */
+    val currentQueueId: String? = null,
     val errorMessage: String? = null
 )
 

@@ -28,6 +28,7 @@ import coil3.request.ImageRequest
 import coil3.ImageLoader
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.lyrics.SongLyricsState
 import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsActiveLineScreenYFraction
@@ -44,8 +45,10 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     title: String,
     artist: String,
     hasCurrentSong: Boolean,
+    previousEnabled: Boolean,
+    nextEnabled: Boolean,
     visualIsPlaying: Boolean,
-    isPendingPlayback: Boolean = false,
+    playWhenReady: Boolean,
     strictProgressBar: Boolean,
     lyricProgressSeekAnimation: PlaybackProgressSeekAnimation?,
     progressTrackingRequestVersion: Long,
@@ -117,8 +120,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onPlayNext: () -> Unit,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
-    onAddToPlaylist: () -> Unit,
-    onOpenSongInfo: () -> Unit,
     onOpenQueue: () -> Unit,
     onArtistHostBack: () -> Unit,
     onArtistHostArtistClick: (String) -> Unit,
@@ -413,7 +414,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .zIndex(if (expandedMoreMenu) 6f else 0f)
                 .graphicsLayer {
                     alpha = metrics.playbackContentAlpha
                     translationY =
@@ -426,12 +426,17 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             ExpandedOnlyContent(
                 progress = animationProgress,
                 positionMs = playerUiState.positionMs,
+                bufferedPositionMs = playerUiState.bufferedPositionMs.takeIf {
+                    playerUiState.currentSong?.sourceType == SourceType.Online
+                } ?: 0L,
                 durationMs = playerUiState.durationMs,
                 isPlaying = playerUiState.isPlaying,
                 isPlayingForVisualLock = visualIsPlaying,
+                isPlaybackWaitingForData = playerUiState.isPlaybackWaitingForData,
                 strictProgressBar = strictProgressBar,
                 lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                 currentSongKey = playerUiState.currentSong?.id,
+                currentQueueId = playerUiState.currentQueueId,
                 hasCurrentSong = hasCurrentSong,
                 progressTrackColor = progressTrackColor,
                 progressColor = progressColor,
@@ -446,8 +451,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             )
             SharedPlaybackControls(
                 progress = animationProgress,
-                isPlaying = visualIsPlaying,
-                isPendingPlayback = isPendingPlayback,
+                playWhenReady = playWhenReady,
+                previousEnabled = previousEnabled,
+                nextEnabled = nextEnabled,
                 iconColor = controlIconColor,
                 screenWidth = designPlayerWidth,
                 minimizedProgress = minimizedProgress,
@@ -466,7 +472,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 playerWidth = designPlayerWidth,
                 currentHeight = designCurrentHeight,
                 expandedHeight = designExpandedHeight,
-                expandedProgressTop = designExpandedProgressTop,
                 expandedControlsTop = designExpandedControlsTop,
                 hasCurrentSong = hasCurrentSong,
                 isCurrentSongLiked = isCurrentSongLiked,
@@ -477,8 +482,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 moreMenuExpanded = expandedMoreMenu,
                 onMoreMenuExpandedChange = onMoreMenuExpandedChange,
                 onToggleLiked = onToggleLiked,
-                onAddToPlaylist = onAddToPlaylist,
-                onOpenSongInfo = onOpenSongInfo,
                 onOpenQueue = onOpenQueue,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -495,6 +498,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         ) {
             MiniPlayerLyricsHost(
                 currentSong = playerUiState.currentSong,
+                currentQueueId = playerUiState.currentQueueId,
                 presentedSongId = songPresentationTransition.current.key,
                 songLyricsState = songLyricsState,
                 switchDirection = collapsedMetadataSwitchDirection,

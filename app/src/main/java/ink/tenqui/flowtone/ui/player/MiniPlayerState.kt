@@ -81,7 +81,7 @@ internal fun rememberMiniPlayerState(
     fullscreen: Boolean,
     expanded: Boolean,
     hasCurrentSong: Boolean,
-    initialIsPlaying: Boolean,
+    initialPlayWhenReady: Boolean,
     currentSong: Song?,
     title: String,
     artist: String,
@@ -179,7 +179,7 @@ internal fun rememberMiniPlayerState(
         mutableStateOf(true)
     }
     val isProgressScrubbingState = remember { mutableStateOf(false) }
-    val lockedIsPlayingDuringScrubState = remember { mutableStateOf(initialIsPlaying) }
+    val lockedIsPlayingDuringScrubState = remember { mutableStateOf(initialPlayWhenReady) }
     val keepPlayPauseVisualLockedAfterSeekState = remember { mutableStateOf(false) }
     val playPauseVisualLockTokenState = remember { mutableStateOf(0) }
     val showQueueSheetState = rememberSaveable { mutableStateOf(false) }

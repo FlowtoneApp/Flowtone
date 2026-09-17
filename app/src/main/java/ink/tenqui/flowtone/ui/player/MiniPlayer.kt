@@ -10,12 +10,9 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,6 +46,7 @@ import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.playback.PlaybackSource
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.debug.performanceSample
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
@@ -60,7 +58,6 @@ import ink.tenqui.flowtone.viewmodel.MusicViewModel
 @Composable
 fun MiniPlayer(
     playerUiState: PlayerUiState,
-    isPendingPlayback: Boolean = false,
     songLyricsState: SongLyricsState = SongLyricsState(),
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -92,6 +89,8 @@ fun MiniPlayer(
     },
     sourceQueue: List<Song> = emptyList(),
     playbackQueue: List<Song> = emptyList(),
+    sourceQueueItems: List<PlaybackQueueItem> = emptyList(),
+    playbackQueueItems: List<PlaybackQueueItem> = emptyList(),
     allSongs: List<Song> = emptyList(),
     currentQueueIndex: Int = -1,
     queueDisplayOrder: QueueDisplayOrder = QueueDisplayOrder.PlaybackOrder,
@@ -106,6 +105,11 @@ fun MiniPlayer(
 ) {
     val currentSong = playerUiState.currentSong
     val hasCurrentSong = playerUiState.hasCurrentSong
+    val hasQueueTarget = currentQueueIndex in playbackQueue.indices
+    val previousEnabled = hasCurrentSong && hasQueueTarget && currentQueueIndex > 0
+    val nextEnabled = hasCurrentSong &&
+        hasQueueTarget &&
+        currentQueueIndex < playbackQueue.lastIndex
     val miniPlayerVisible = hasCurrentSong && !forceHidden
     val title = currentSong?.title.orEmpty()
     val artist = currentSong?.artist.orEmpty()
@@ -172,7 +176,7 @@ fun MiniPlayer(
         fullscreen = fullscreen,
         expanded = expanded,
         hasCurrentSong = hasCurrentSong,
-        initialIsPlaying = playerUiState.isPlaying,
+        initialPlayWhenReady = playerUiState.playWhenReady,
         currentSong = currentSong,
         title = title,
         artist = artist,
@@ -193,7 +197,7 @@ fun MiniPlayer(
     }
     var progressTrackingRequestVersion by remember { mutableLongStateOf(0L) }
     val transitions = remember(state) { MiniPlayerTransitions(state) }
-    val currentIsPlayingForLyricSeek by rememberUpdatedState(playerUiState.isPlaying)
+    val currentPlayWhenReadyForLyricSeek by rememberUpdatedState(playerUiState.playWhenReady)
     val currentSongIdForLyricSeek by rememberUpdatedState(currentSong?.id)
     val onLyricPressCallback = remember {
         {
@@ -211,8 +215,8 @@ fun MiniPlayer(
                     targetPositionMs = positionMs
                 )
             }
-            // seek 引发的短暂 BUFFERING 不应启动暂停态的封面、背景和控件动画。
-            transitions.lockPlayPauseVisual(currentIsPlayingForLyricSeek)
+            // seek 引发的短暂 BUFFERING 不应改变由播放意图决定的封面、背景和控件视觉。
+            transitions.lockPlayPauseVisual(currentPlayWhenReadyForLyricSeek)
             callbacks.onSeekTo(positionMs)
         }
     }
@@ -440,7 +444,8 @@ fun MiniPlayer(
     val fullscreenCoverCenterY = fullscreenTargetHeight * 0.4f
     val fullscreenStationaryControlsOffsetY =
         (fullscreenTargetHeight - currentHeight) * fullscreenProgress
-    val fullscreenControlsLiftY = 50.dp * fullscreenProgress
+    val fullscreenControlsLiftY =
+        PlayerControlsFullscreenTransitionDistance * fullscreenProgress
     val visibleProgress by animateFloatAsState(
         targetValue = if (miniPlayerVisible) 1f else 0f,
         animationSpec = tween(
@@ -570,7 +575,8 @@ fun MiniPlayer(
     ) {
         state.lockedIsPlayingDuringScrub
     } else {
-        playerUiState.isPlaying
+        // resolve / prepare / BUFFERING 只改变引擎事实；封面的暂停态由用户播放意图决定。
+        playerUiState.playWhenReady
     }
     val artworkPlaybackScale by animateFloatAsState(
         targetValue = if (visualIsPlaying || !hasCurrentSong) {
@@ -722,6 +728,7 @@ fun MiniPlayer(
         showQueueSheet = state.showQueueSheet
     )
     MiniPlayerVisualSurface(
+        stableRootHeight = fullscreenTargetHeight,
         hostHeight = hostHeight,
         miniPlayerSlideOffsetY = miniPlayerSlideOffsetY,
         visibleProgress = visibleProgress,
@@ -755,26 +762,6 @@ fun MiniPlayer(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(visualPanelHeight)
-                    .pointerInput(
-                        state.expandedMoreMenu,
-                        state.fullscreenContentMode
-                    ) {
-                        if (
-                            !state.expandedMoreMenu ||
-                            state.fullscreenContentMode != FullscreenContentMode.Playback
-                        ) {
-                            return@pointerInput
-                        }
-
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            val up = waitForUpOrCancellation()
-                            handleExpandedMoreMenuPointerUp(
-                                up = up,
-                                transitions = transitions
-                            )
-                        }
-                    }
                     .graphicsLayer {
                         shape = playerShape
                         clip = true
@@ -885,8 +872,10 @@ fun MiniPlayer(
                         title = title,
                         artist = artist,
                         hasCurrentSong = hasCurrentSong,
+                        previousEnabled = previousEnabled,
+                        nextEnabled = nextEnabled,
                         visualIsPlaying = visualIsPlaying,
-                        isPendingPlayback = isPendingPlayback,
+                        playWhenReady = playerUiState.playWhenReady,
                         strictProgressBar = strictProgressBar,
                         lyricProgressSeekAnimation = lyricProgressSeekAnimation,
                         progressTrackingRequestVersion = progressTrackingRequestVersion,
@@ -967,8 +956,6 @@ fun MiniPlayer(
                         onMoreMenuExpandedChange =
                             fullscreenInteractionHandlers.onMoreMenuExpandedChange,
                         onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
-                        onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
-                        onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo,
                         onOpenQueue = fullscreenInteractionHandlers.onOpenQueue,
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
@@ -996,10 +983,51 @@ fun MiniPlayer(
             }
         },
         overlayContent = {
+            BoxWithConstraints(modifier = Modifier.matchParentSize()) {
+                val stablePlayerWidth = maxWidth
+                val stableFullscreenLayoutScale =
+                    fullscreenPlayerLayoutScale(stablePlayerWidth)
+                val stableAddToPlaylistStatusBarsTop = with(LocalDensity.current) {
+                    WindowInsets.statusBars.getTop(this).toDp()
+                }
+                val stableFullscreenLayoutMetrics = miniPlayerFullscreenLayoutMetrics(
+                    playerWidth = stablePlayerWidth,
+                    visualPanelHeight = visualPanelHeight,
+                    fullscreenCoverCenterY = fullscreenCoverCenterY,
+                    addToPlaylistStatusBarsTop = stableAddToPlaylistStatusBarsTop,
+                    fullscreenContentExitProgress = fullscreenContentExitProgress,
+                    artistPlaceholderProgress = artistPlaceholderProgress,
+                    addToPlaylistProgress = addToPlaylistProgress
+                )
+                // 这是 fullscreen=1 时旧布局的最终屏幕 Y：固定在稳定根坐标系中，
+                // 不再继承 playback-content Box 的逐帧 translationY。
+                val stableFullscreenActionsBaseY =
+                    fullscreenTargetHeight - expandedHeight + expandedArtworkSize +
+                        (expandedArtworkTop - 16.dp) * stableFullscreenLayoutScale
+                FullscreenSideActionsOverlay(
+                    playerWidth = stablePlayerWidth,
+                    stableRootHeight = fullscreenTargetHeight,
+                    baseY = stableFullscreenActionsBaseY,
+                    fullscreenLayoutScale = stableFullscreenLayoutScale,
+                    fullscreenProgress = fullscreenProgress,
+                    lyricsControlsOffsetY = lyricsControlsOffsetY,
+                    layoutMetrics = stableFullscreenLayoutMetrics,
+                    liked = isCurrentSongLiked,
+                    hasCurrentSong = hasCurrentSong,
+                    iconColor = controlIconColor,
+                    moreMenuExpanded = state.expandedMoreMenu,
+                    onMoreMenuExpandedChange =
+                        fullscreenInteractionHandlers.onMoreMenuExpandedChange,
+                    onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
+                    onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
+                    onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
             MiniPlayerQueueSheetHost(
             showQueueSheet = state.showQueueSheet,
-            playbackQueue = playbackQueue,
-            sourceQueue = sourceQueue,
+            playbackQueue = playbackQueueItems,
+            sourceQueue = sourceQueueItems,
             currentQueueIndex = currentQueueIndex,
             currentSong = currentSong,
             playbackOrderMode = playerUiState.playbackOrderMode,

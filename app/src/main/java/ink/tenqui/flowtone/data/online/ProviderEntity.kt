@@ -88,6 +88,9 @@ data class ProviderArtist(
     override val searchCategory: ProviderSearchCategory = ProviderSearchCategory.User
 }
 
+/** Artist profile surfaces prefer the Provider's larger explicit image when one is available. */
+fun ProviderArtist.preferredProfileArtwork(): ExtensionImage? = largeArtwork ?: artwork
+
 data class ProviderPlaylistSearchItem(
     override val identity: ProviderEntityIdentity,
     override val title: String,
@@ -136,6 +139,41 @@ fun providerAlbumsForArtist(
         artistId = artistId,
         artistName = artistName
     )
+}
+
+/**
+ * Resolves Provider Artist profile metadata without crossing source or name-only identity bounds.
+ * The navigation snapshot remains authoritative. Legacy metadata only fills missing fields when a
+ * single-artist User payload proves ownership through both its entity identity and artist ref.
+ */
+fun resolveProviderArtistProfileMetadata(
+    providerId: String,
+    artistId: String,
+    artistName: String,
+    destinationMetadata: ArtistMetadata?,
+    songs: List<ProviderSong>
+): ArtistMetadata? {
+    val normalizedProviderId = providerId.trim()
+    val normalizedArtistId = artistId.trim()
+    var resolved = destinationMetadata?.sanitizedFor(artistName)
+    if (normalizedProviderId.isEmpty() || normalizedArtistId.isEmpty()) return resolved
+
+    songs.asSequence()
+        .filter { song ->
+            song.legacyArtistMetadataBelongsTo(
+                providerId = normalizedProviderId,
+                artistId = normalizedArtistId
+            )
+        }
+        .mapNotNull(ProviderSong::artistMetadata)
+        .forEach { legacyMetadata ->
+            resolved = mergeProviderArtistMetadata(
+                artistName = artistName,
+                preferred = resolved,
+                fallback = legacyMetadata
+            )
+    }
+    return resolved
 }
 
 fun providerSongsForAlbum(
@@ -191,6 +229,35 @@ private fun providerArtistsMatch(
     return normalizedName.isNotEmpty() && artists.any { artist ->
         localArtistStableId(artist.name) == normalizedName
     }
+}
+
+private fun ProviderSong.legacyArtistMetadataBelongsTo(
+    providerId: String,
+    artistId: String
+): Boolean {
+    if (this.providerId.trim() != providerId || searchCategory != ProviderSearchCategory.User) {
+        return false
+    }
+    if (id.trim() != artistId) return false
+
+    val sanitizedArtists = artists.mapNotNull(::sanitizeProviderArtistRef)
+    return sanitizedArtists.size == 1 && sanitizedArtists.single().remoteId == artistId
+}
+
+private fun mergeProviderArtistMetadata(
+    artistName: String,
+    preferred: ArtistMetadata?,
+    fallback: ArtistMetadata?
+): ArtistMetadata? {
+    val primary = preferred?.sanitizedFor(artistName)
+    val secondary = fallback?.sanitizedFor(artistName)
+    return ArtistMetadata(
+        aliases = primary?.aliases.orEmpty() + secondary?.aliases.orEmpty(),
+        biography = primary?.biography ?: secondary?.biography,
+        songCount = primary?.songCount ?: secondary?.songCount,
+        albumCount = primary?.albumCount ?: secondary?.albumCount,
+        banner = primary?.banner ?: secondary?.banner
+    ).sanitizedFor(artistName)
 }
 
 private fun sanitizeProviderArtistRef(artist: ProviderArtistRef): ProviderArtistRef? {

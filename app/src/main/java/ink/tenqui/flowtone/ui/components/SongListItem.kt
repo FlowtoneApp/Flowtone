@@ -168,7 +168,6 @@ fun SongListItem(
     isNextSelected: Boolean = false,
     selectionSlotPadding: Dp = 0.dp,
     onLongClick: ((Song) -> Unit)? = null,
-    isPendingPlayback: Boolean = false,
     extensionArtwork: ExtensionImage? = null
 ) {
     val hapticFeedback = LocalHapticFeedback.current
@@ -395,12 +394,7 @@ fun SongListItem(
             Box(
                 modifier = Modifier.width(layoutSpec.trailingWidth)
             ) {
-                if (isPendingPlayback) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else if (isCurrentSong) {
+                if (isCurrentSong) {
                     Text(
                         text = "\u64ad\u653e\u4e2d",
                         style = MaterialTheme.typography.labelMedium,

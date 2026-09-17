@@ -724,7 +724,6 @@ private fun FlowtoneMainTabsSearchContent(
             callbacks.onPlaylistSongClick(songs, index, PlaybackSource.Search)
         },
         onOnlineSongClick = callbacks.onOnlineSongClick,
-        pendingTrackIdentityKey = state.uiState.pendingPlayback?.track?.identityKey,
         onArtistClick = { artist ->
             callbacks.onOpenArtist(artist.name)
         },
@@ -737,6 +736,11 @@ private fun FlowtoneMainTabsSearchContent(
         onScopeChange = callbacks.onSearchScopeChange,
         onCategoryChange = callbacks.onSearchCategoryChange,
         onLoadMore = callbacks.onLoadMoreSearchResults,
+        searchInputFocused = state.searchInputFocused,
+        searchFocusRequest = state.searchFocusRequest,
+        searchKeyboardDismissRequest = state.searchKeyboardDismissRequest,
+        onSearchInputFocusChange = callbacks.onSearchInputFocusChange,
+        onSearchKeyboardDismissRequestConsumed = callbacks.onSearchKeyboardDismissRequestConsumed,
         bottomContentPadding =
             state.miniPlayerContentBottomPadding * miniPlayerSpaceProgress,
         interactionsEnabled = true,

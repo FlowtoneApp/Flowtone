@@ -8,14 +8,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.components.pullToDismissAtTop
 import ink.tenqui.flowtone.ui.debug.performanceSample
 
 @Composable
 internal fun PlayerQueueList(
     displayOrder: QueueDisplayOrder,
-    displayedQueue: List<Song>,
-    playbackQueue: List<Song>,
+    displayedQueue: List<PlaybackQueueItem>,
+    playbackQueue: List<PlaybackQueueItem>,
     currentQueueIndex: Int,
     currentSong: Song?,
     queueListState: LazyListState,
@@ -46,8 +47,9 @@ internal fun PlayerQueueList(
         itemsIndexed(
             items = displayedQueue,
             // 播放队列允许同一首歌曲出现多次，位置参与 key 可避免 Compose 重复键崩溃。
-            key = { index, song -> song.queueItemKey(index) }
-        ) { index, song ->
+            key = { index, item -> "${item.queueId}:$index" }
+        ) { index, item ->
+            val song = item.presentation
             val isCurrentSong = when {
                 currentSong != null -> song.id == currentSong.id || song.uri == currentSong.uri
                 displayOrder == QueueDisplayOrder.PlaybackOrder &&
@@ -58,7 +60,7 @@ internal fun PlayerQueueList(
             }
 
             PlayerQueueItem(
-                song = song,
+                item = item,
                 isCurrentSong = isCurrentSong,
                 onClick = if (interactionEnabled) {
                     onSongClick

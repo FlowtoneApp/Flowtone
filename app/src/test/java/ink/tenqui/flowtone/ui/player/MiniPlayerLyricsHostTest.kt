@@ -17,13 +17,13 @@ class MiniPlayerLyricsHostTest {
     )
 
     @Test
-    fun positionIsUsedOnlyWhenItBelongsToTheCurrentSong() {
+    fun positionIsUsedWhenItBelongsToTheCurrentLogicalQueueTarget() {
         assertEquals(
             1_250L,
-            playbackPositionForSong(
-                songId = 2L,
+            playbackPositionForTarget(
+                expectedMediaId = "queue-2",
                 playbackPosition = PlaybackPositionSnapshot(
-                    mediaId = "2",
+                    mediaId = "queue-2",
                     positionMs = 1_250L
                 )
             )
@@ -31,13 +31,40 @@ class MiniPlayerLyricsHostTest {
     }
 
     @Test
-    fun previousSongsTailPositionIsRejectedDuringSongTransition() {
+    fun previousLogicalTargetsTailPositionIsRejectedDuringSongTransition() {
         assertNull(
-            playbackPositionForSong(
-                songId = 2L,
+            playbackPositionForTarget(
+                expectedMediaId = "queue-2",
                 playbackPosition = PlaybackPositionSnapshot(
-                    mediaId = "1",
+                    mediaId = "queue-1",
                     positionMs = 240_000L
+                )
+            )
+        )
+    }
+
+    @Test
+    fun duplicateSongEntriesDoNotSharePositionAcrossLogicalQueueIds() {
+        // 两个队列 entry 可以投影为同一个 Song；位置仍必须按 entry queueId 隔离。
+        assertNull(
+            playbackPositionForTarget(
+                expectedMediaId = "queue-entry-2",
+                playbackPosition = PlaybackPositionSnapshot(
+                    mediaId = "queue-entry-1",
+                    positionMs = 4_200L
+                )
+            )
+        )
+    }
+
+    @Test
+    fun staleSnapshotCannotDriveTheNewLogicalTargetAfterQueueSwitch() {
+        assertNull(
+            playbackPositionForTarget(
+                expectedMediaId = "queue-c",
+                playbackPosition = PlaybackPositionSnapshot(
+                    mediaId = "queue-b",
+                    positionMs = 128_000L
                 )
             )
         )

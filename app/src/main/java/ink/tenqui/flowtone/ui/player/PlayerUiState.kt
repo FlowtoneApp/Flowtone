@@ -11,34 +11,66 @@ data class PlayerUiState(
     val currentSong: Song?,
     val currentTrack: PersistentTrack?,
     val isPlaying: Boolean,
+    val playWhenReady: Boolean,
+    val isPlaybackWaitingForData: Boolean,
     val positionMs: Long,
+    val bufferedPositionMs: Long,
     val durationMs: Long,
     val artworkUri: Uri?,
     val extensionArtwork: ExtensionImage?,
     val extensionLargeArtwork: ExtensionImage?,
     val playbackOrderMode: PlaybackOrderMode,
+    val currentQueueId: String?,
     val hasCurrentSong: Boolean,
     val canPlay: Boolean
 ) {
     companion object {
-        fun from(playbackState: PlaybackState): PlayerUiState {
-            val currentSong = playbackState.currentSong
+        fun from(
+            playbackState: PlaybackState,
+            pendingSong: Song? = null,
+            pendingTrack: PersistentTrack? = null,
+            pendingExtensionArtwork: ExtensionImage? = null,
+            pendingExtensionLargeArtwork: ExtensionImage? = null,
+            pendingPlayWhenReady: Boolean = true
+        ): PlayerUiState {
+            val hasPendingTarget = pendingSong != null
+            val currentSong = pendingSong ?: playbackState.currentSong
             val durationMs = when {
+                hasPendingTarget -> currentSong?.durationMs?.coerceAtLeast(0L) ?: 0L
                 playbackState.durationMs > 0L -> playbackState.durationMs
                 currentSong?.durationMs != null && currentSong.durationMs > 0L -> currentSong.durationMs
                 else -> 0L
             }
+            val playWhenReady = if (hasPendingTarget) {
+                pendingPlayWhenReady
+            } else {
+                playbackState.playWhenReady
+            }
 
             return PlayerUiState(
                 currentSong = currentSong,
-                currentTrack = playbackState.currentTrack,
-                isPlaying = playbackState.isPlaying,
-                positionMs = playbackState.positionMs,
+                currentTrack = if (hasPendingTarget) pendingTrack else playbackState.currentTrack,
+                isPlaying = if (hasPendingTarget) false else playbackState.isPlaying,
+                playWhenReady = playWhenReady,
+                isPlaybackWaitingForData = currentSong != null &&
+                    playWhenReady &&
+                    (hasPendingTarget || playbackState.isBuffering),
+                positionMs = if (hasPendingTarget) 0L else playbackState.positionMs,
+                bufferedPositionMs = if (hasPendingTarget) 0L else playbackState.bufferedPositionMs,
                 durationMs = durationMs,
                 artworkUri = currentSong?.artworkUri,
-                extensionArtwork = playbackState.extensionArtwork,
-                extensionLargeArtwork = playbackState.extensionLargeArtwork,
+                extensionArtwork = if (hasPendingTarget) {
+                    pendingExtensionArtwork
+                } else {
+                    playbackState.extensionArtwork
+                },
+                extensionLargeArtwork = if (hasPendingTarget) {
+                    pendingExtensionLargeArtwork
+                } else {
+                    playbackState.extensionLargeArtwork
+                },
                 playbackOrderMode = playbackState.playbackOrderMode,
+                currentQueueId = playbackState.currentQueueId,
                 hasCurrentSong = currentSong != null,
                 canPlay = currentSong != null
             )

@@ -86,6 +86,7 @@ import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.providerAlbumsForArtist
 import ink.tenqui.flowtone.data.online.providerSongsForArtist
+import ink.tenqui.flowtone.data.online.resolveProviderArtistProfileMetadata
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.FlowtoneCollectionArtworkCard
@@ -283,9 +284,30 @@ internal fun ArtistPage(
         }
     }
 
+    val providerProfileMetadata = remember(
+        hasLocalContent,
+        providerId,
+        providerArtistId,
+        displayArtist,
+        providedMetadata,
+        providerSongs
+    ) {
+        if (!hasLocalContent && providerId != null && providerArtistId != null) {
+            resolveProviderArtistProfileMetadata(
+                providerId = providerId,
+                artistId = providerArtistId,
+                artistName = displayArtist,
+                destinationMetadata = providedMetadata,
+                songs = providerSongs
+            )
+        } else {
+            null
+        }
+    }
     val artistMetadata = rememberArtistMetadata(
         artistName = displayArtist,
-        providedMetadata = providedMetadata?.takeUnless { hasLocalContent }
+        providedMetadata = providerProfileMetadata,
+        allowNameResolver = hasLocalContent
     )
     val biography = artistMetadata?.biography?.trim()?.takeIf(String::isNotEmpty)
     val statistics = remember(

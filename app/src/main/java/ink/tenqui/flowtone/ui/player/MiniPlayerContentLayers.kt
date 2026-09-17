@@ -10,6 +10,7 @@ import androidx.compose.ui.zIndex
 import coil3.request.ImageRequest
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBlurredArtworkBackground
 
 @Composable
@@ -73,8 +74,8 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
 @Composable
 internal fun BoxScope.MiniPlayerQueueSheetHost(
     showQueueSheet: Boolean,
-    playbackQueue: List<Song>,
-    sourceQueue: List<Song>,
+    playbackQueue: List<PlaybackQueueItem>,
+    sourceQueue: List<PlaybackQueueItem>,
     currentQueueIndex: Int,
     currentSong: Song?,
     playbackOrderMode: PlaybackOrderMode,
