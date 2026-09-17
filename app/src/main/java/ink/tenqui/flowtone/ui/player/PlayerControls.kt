@@ -1,10 +1,8 @@
 package ink.tenqui.flowtone.ui.player
 
-import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -25,10 +23,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
-import kotlin.math.abs
-import kotlinx.coroutines.CancellationException
-
-private const val FULLSCREEN_MORE_GESTURE_TAG = "MoreGesture"
 
 @Composable
 internal fun SharedPlaybackControls(
@@ -252,7 +246,6 @@ internal fun FullscreenSideActionsOverlay(
     fullscreenProgress: Float,
     lyricsControlsOffsetY: Dp,
     layoutMetrics: MiniPlayerFullscreenLayoutMetrics,
-    fullscreenContentMode: FullscreenContentMode,
     liked: Boolean,
     hasCurrentSong: Boolean,
     iconColor: Color,
@@ -288,87 +281,6 @@ internal fun FullscreenSideActionsOverlay(
                 modifier = Modifier
                     .size(width = designPlayerWidth, height = designRootHeight)
                     .zIndex(if (moreMenuExpanded) 6f else 0f)
-                    .pointerInput("MoreGestureTrace", moreMenuExpanded, fullscreenContentMode) {
-                        if (
-                            !moreMenuExpanded ||
-                            fullscreenContentMode != FullscreenContentMode.Playback
-                        ) {
-                            return@pointerInput
-                        }
-
-                        try {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(
-                                    requireUnconsumed = false,
-                                    pass = PointerEventPass.Initial
-                                )
-                                Log.d(
-                                    FULLSCREEN_MORE_GESTURE_TAG,
-                                    "trace DOWN consumed=${down.isConsumed} " +
-                                        "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
-                                )
-                                var moveLogged = false
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    val change = event.changes.firstOrNull() ?: break
-                                    if (!change.pressed) {
-                                        Log.d(
-                                            FULLSCREEN_MORE_GESTURE_TAG,
-                                            "trace UP consumed=${change.isConsumed} " +
-                                                "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
-                                        )
-                                        break
-                                    }
-                                    val dy = change.position.y - change.previousPosition.y
-                                    if (!moveLogged && abs(dy) >= 8f) {
-                                        moveLogged = true
-                                        Log.d(
-                                            FULLSCREEN_MORE_GESTURE_TAG,
-                                            "trace MOVE dy=$dy consumed=${change.isConsumed} " +
-                                                "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
-                                        )
-                                    }
-                                }
-                            }
-                        } catch (cancelled: CancellationException) {
-                            Log.d(
-                                FULLSCREEN_MORE_GESTURE_TAG,
-                                "trace CANCEL expanded=$moreMenuExpanded " +
-                                    "contentMode=$fullscreenContentMode"
-                            )
-                            throw cancelled
-                        }
-                    }
-                    .pointerInput(moreMenuExpanded, fullscreenContentMode) {
-                        if (
-                            !moreMenuExpanded ||
-                            fullscreenContentMode != FullscreenContentMode.Playback
-                        ) {
-                            return@pointerInput
-                        }
-
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            Log.d(
-                                FULLSCREEN_MORE_GESTURE_TAG,
-                                "ancestor DOWN consumed=${down.isConsumed} " +
-                                    "expanded=$moreMenuExpanded contentMode=$fullscreenContentMode"
-                            )
-                            val up = waitForUpOrCancellation()
-                            Log.d(
-                                FULLSCREEN_MORE_GESTURE_TAG,
-                                    "ancestor ${if (up == null) "CANCEL" else "UP"} " +
-                                    "consumed=${up?.isConsumed} expanded=$moreMenuExpanded " +
-                                    "contentMode=$fullscreenContentMode"
-                            )
-                            handleExpandedMoreMenuPointerUp(
-                                up = up,
-                                onCollapse = {
-                                    onMoreMenuExpandedChange(false)
-                                }
-                            )
-                        }
-                    }
                     .graphicsLayer {
                         alpha = layoutMetrics.playbackContentAlpha
                         translationY = (
@@ -386,7 +298,6 @@ internal fun FullscreenSideActionsOverlay(
                     iconColor = iconColor,
                     moreMenuExpanded = moreMenuExpanded,
                     onMoreMenuExpandedChange = onMoreMenuExpandedChange,
-                    fullscreenContentMode = fullscreenContentMode,
                     onToggleLiked = onToggleLiked,
                     onAddToPlaylist = onAddToPlaylist,
                     onOpenSongInfo = onOpenSongInfo
@@ -407,7 +318,6 @@ private fun FullscreenSideActionsContent(
     iconColor: Color,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
-    fullscreenContentMode: FullscreenContentMode,
     onToggleLiked: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onOpenSongInfo: () -> Unit
@@ -500,32 +410,23 @@ private fun FullscreenSideActionsContent(
                 x = fullscreenMenuX,
                 y = fullscreenFavoriteY - buttonSize * 2f
             )
-            .pointerInput(visibility.moreMenuVisible, fullscreenContentMode) {
-                if (
-                    !visibility.moreMenuVisible ||
-                    fullscreenContentMode != FullscreenContentMode.Playback
-                ) {
-                    return@pointerInput
-                }
-
+            .pointerInput(visibility.moreMenuVisible) {
+                if (!visibility.moreMenuVisible) return@pointerInput
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    Log.d(
-                        FULLSCREEN_MORE_GESTURE_TAG,
-                        "menu DOWN consumed=${down.isConsumed} expanded=$moreMenuExpanded " +
-                            "contentMode=$fullscreenContentMode"
+                    awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial
                     )
-                    val up = waitForUpOrCancellation()
-                    Log.d(
-                        FULLSCREEN_MORE_GESTURE_TAG,
-                        "menu ${if (up == null) "CANCEL" else "UP"} " +
-                            "consumed=${up?.isConsumed} expanded=$moreMenuExpanded " +
-                            "contentMode=$fullscreenContentMode"
-                    )
-                    handleExpandedMoreMenuPointerUp(
-                        up = up,
-                        onCollapse = ::collapseMoreMenu
-                    )
+                    while (true) {
+                        val change = awaitPointerEvent(PointerEventPass.Initial)
+                            .changes
+                            .firstOrNull()
+                            ?: break
+                        if (!change.pressed) {
+                            collapseMoreMenu()
+                            break
+                        }
+                    }
                 }
             }
     )

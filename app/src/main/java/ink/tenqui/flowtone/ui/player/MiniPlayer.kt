@@ -10,12 +10,9 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -765,26 +762,6 @@ fun MiniPlayer(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .height(visualPanelHeight)
-                    .pointerInput(
-                        state.expandedMoreMenu,
-                        state.fullscreenContentMode
-                    ) {
-                        if (
-                            !state.expandedMoreMenu ||
-                            state.fullscreenContentMode != FullscreenContentMode.Playback
-                        ) {
-                            return@pointerInput
-                        }
-
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            val up = waitForUpOrCancellation()
-                            handleExpandedMoreMenuPointerUp(
-                                up = up,
-                                onCollapse = transitions::closeExpandedMoreMenu
-                            )
-                        }
-                    }
                     .graphicsLayer {
                         shape = playerShape
                         clip = true
@@ -1035,7 +1012,6 @@ fun MiniPlayer(
                     fullscreenProgress = fullscreenProgress,
                     lyricsControlsOffsetY = lyricsControlsOffsetY,
                     layoutMetrics = stableFullscreenLayoutMetrics,
-                    fullscreenContentMode = state.fullscreenContentMode,
                     liked = isCurrentSongLiked,
                     hasCurrentSong = hasCurrentSong,
                     iconColor = controlIconColor,
