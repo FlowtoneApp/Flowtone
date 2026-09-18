@@ -25,13 +25,19 @@ data class ConfigurationFieldSummary(
     val label: String
 )
 
+/** 仅包含经包边界校验的图标字节；不向 UI 暴露 preview snapshot 的文件路径。 */
+data class ExtensionPreviewIcon(
+    val bytes: ByteArray
+)
+
 data class ExtensionInstallPreview(
     val incoming: NormalizedExtensionDescriptor,
     val summaryCapabilities: List<SummaryCapability>,
     val configurationSummary: ConfigurationRequirementSummary,
     val existingInstallation: NormalizedExtensionDescriptor?,
     val updateDiff: ExtensionUpdateDiff?,
-    val snapshotHandle: ExtensionPackageSnapshotHandle? = null
+    val snapshotHandle: ExtensionPackageSnapshotHandle? = null,
+    val icon: ExtensionPreviewIcon? = null
 ) {
     val incomingManifest: ExtensionManifest get() = incoming.manifest
     val identity: ExtensionIdentity get() = incoming.identity
@@ -117,7 +123,8 @@ object ExtensionInstallPreviewBuilder {
     fun fromDescriptor(
         incoming: NormalizedExtensionDescriptor,
         existingInstallation: NormalizedExtensionDescriptor? = null,
-        snapshotHandle: ExtensionPackageSnapshotHandle? = null
+        snapshotHandle: ExtensionPackageSnapshotHandle? = null,
+        icon: ExtensionPreviewIcon? = null
     ): ExtensionInstallPreview {
         require(existingInstallation == null || existingInstallation.identity.id == incoming.identity.id) {
             "更新预览只能比较相同 extension ID"
@@ -137,7 +144,8 @@ object ExtensionInstallPreviewBuilder {
             ),
             existingInstallation = existingInstallation,
             updateDiff = existingInstallation?.let { ExtensionUpdateDiff.between(it, incoming) },
-            snapshotHandle = snapshotHandle
+            snapshotHandle = snapshotHandle,
+            icon = icon
         )
     }
 

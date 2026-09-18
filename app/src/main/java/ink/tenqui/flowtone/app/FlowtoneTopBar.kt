@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -79,6 +80,7 @@ internal fun FlowtoneTopBar(
     pagerState: PagerState,
     secondaryPage: SecondaryPage?,
     additionalPathSegments: List<String>,
+    titlePresentation: SecondaryTopBarPresentation? = null,
     titleVisible: Boolean,
     songSelectionState: PlaylistSelectionTopBarState?,
     hideBackButton: Boolean,
@@ -111,6 +113,8 @@ internal fun FlowtoneTopBar(
             listOf(SecondaryPage.Album.title)
         }
         SecondaryPage.Artist -> listOf(SecondaryPage.Artist.title) + additionalPathSegments
+        SecondaryPage.OnlineExtensions -> listOf(SecondaryPage.OnlineExtensions.title)
+        SecondaryPage.ExtensionInstall -> emptyList()
         SecondaryPage.ListeningRecords -> listOf(SecondaryPage.ListeningRecords.title)
         SecondaryPage.OpenSource -> listOf(
             SecondaryPage.About.title,
@@ -199,7 +203,30 @@ internal fun FlowtoneTopBar(
                     translationY = titleExitDistancePx * selectionProgress
                 }
         ) {
-            FlowtonePathTitle(
+            titlePresentation?.let { presentation ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { translationX = navigationShiftPx },
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                ) {
+                    presentation.overline?.let { overline ->
+                        Text(
+                            text = overline,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                    Text(
+                        text = presentation.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                }
+            } ?: FlowtonePathTitle(
                 pagerState = pagerState,
                 rootPage = selectedTopLevelPage,
                 segments = pathSegments,

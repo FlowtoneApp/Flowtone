@@ -2,27 +2,23 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
 
 @Composable
 internal fun CreatePlaylistPanel(
@@ -38,7 +34,6 @@ internal fun CreatePlaylistPanel(
     onCreate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val panelShape = RoundedCornerShape(CreatePlaylistPanelCornerRadius)
     val addToPlaylistStyle = visualStyle == PlaylistDialogVisualStyle.AddToPlaylist
     val containerColor = if (addToPlaylistStyle) {
         addToPlaylistDialogBackgroundColor.copy(alpha = 1f)
@@ -63,61 +58,52 @@ internal fun CreatePlaylistPanel(
     val shadowElevation = if (addToPlaylistStyle) 0.dp else 18.dp
     val showTitleError = showDuplicateNameMessage && !dialogLocked
 
-    Surface(
+    FlowtoneModalPanel(
         modifier = modifier,
-        shape = panelShape,
-        color = containerColor,
+        maxWidth = null,
+        horizontalPadding = 0.dp,
+        containerColor = containerColor,
+        contentColor = contentColor,
         border = panelBorder,
         tonalElevation = 0.dp,
-        shadowElevation = shadowElevation
+        shadowElevation = shadowElevation,
+        fillContentHeight = true
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(panelShape)
-        ) {
-            Column(
+        Text(
+            text = playlistDialogTitleText(mode),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor
+        )
+        if (mode == PlaylistDialogMode.Delete) {
+            DeletePlaylistDialogContent(
+                secondaryContentColor = secondaryContentColor,
+                modifier = Modifier.padding(top = 18.dp)
+            )
+        } else {
+            PlaylistNameDialogTextField(
+                playlistName = playlistName,
+                dialogLocked = dialogLocked,
+                showTitleError = showTitleError,
+                addToPlaylistStyle = addToPlaylistStyle,
+                contentColor = contentColor,
+                secondaryContentColor = secondaryContentColor,
+                onPlaylistNameChange = onPlaylistNameChange,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = playlistDialogTitleText(mode),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = contentColor
-                )
-                if (mode == PlaylistDialogMode.Delete) {
-                    DeletePlaylistDialogContent(
-                        secondaryContentColor = secondaryContentColor,
-                        modifier = Modifier.padding(top = 18.dp)
-                    )
-                } else {
-                    PlaylistNameDialogTextField(
-                        playlistName = playlistName,
-                        dialogLocked = dialogLocked,
-                        showTitleError = showTitleError,
-                        addToPlaylistStyle = addToPlaylistStyle,
-                        contentColor = contentColor,
-                        secondaryContentColor = secondaryContentColor,
-                        onPlaylistNameChange = onPlaylistNameChange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 18.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                PlaylistDialogActions(
-                    confirmText = playlistDialogConfirmText(mode),
-                    canCreate = canCreate,
-                    dialogLocked = dialogLocked,
-                    addToPlaylistStyle = addToPlaylistStyle,
-                    contentColor = contentColor,
-                    onCancel = onCancel,
-                    onCreate = onCreate
-                )
-            }
+                    .fillMaxWidth()
+                    .padding(top = 18.dp)
+            )
         }
+        Spacer(modifier = Modifier.weight(1f))
+        PlaylistDialogActions(
+            confirmText = playlistDialogConfirmText(mode),
+            canCreate = canCreate,
+            dialogLocked = dialogLocked,
+            addToPlaylistStyle = addToPlaylistStyle,
+            contentColor = contentColor,
+            onCancel = onCancel,
+            onCreate = onCreate
+        )
     }
 }
 

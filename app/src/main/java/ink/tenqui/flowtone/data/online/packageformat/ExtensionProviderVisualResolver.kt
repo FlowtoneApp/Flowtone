@@ -28,6 +28,15 @@ internal object ExtensionProviderVisualResolver {
         }
     }.getOrNull()
 
+    fun readPreviewIcon(root: File, relativePath: String?): ExtensionPreviewIcon? {
+        val path = relativePath ?: return null
+        return runCatching {
+            resolveIconFile(root, path)
+                ?.readBytes()
+                ?.let(::ExtensionPreviewIcon)
+        }.getOrNull()
+    }
+
     private fun resolveIconFile(root: File, relativePath: String): File? {
         val rootPath = runCatching { root.canonicalFile.toPath() }.getOrNull() ?: return null
         if (!relativePath.startsWith("assets/") || '\\' in relativePath || ".." in relativePath) return null

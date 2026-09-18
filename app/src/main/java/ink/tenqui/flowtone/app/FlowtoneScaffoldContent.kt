@@ -547,7 +547,7 @@ internal fun FlowtoneScaffoldContent(
                                             activeArtistRoute = activeArtistTopBarRoute
                                         )
                                     )
-                                SecondaryPageHost(
+                        SecondaryPageHost(
                         destination = page.destination,
                         navigationEntryKey = page.entry.uiStateKey(),
                         artistScrollStateOwner = artistScrollStateOwner,
@@ -619,6 +619,12 @@ internal fun FlowtoneScaffoldContent(
                     onOpenArtistAlbums = callbacks.onOpenArtistAlbums,
                     onFullTitleRequest = onFullTitleRequest,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
+                    onOpenOnlineExtensions = callbacks.onOpenOnlineExtensions,
+                    pendingExtensionPreview = state.pendingExtensionPreview,
+                    onOpenExtensionInstall = callbacks.onOpenExtensionInstall,
+                    onCloseExtensionInstall = callbacks.onCloseExtensionInstall,
+                    extensionInstallBusy = state.extensionInstallBusy,
+                    onConfirmExtensionInstall = callbacks.onConfirmExtensionInstall,
                     onSettingsBackActionChange = callbacks.settingsBackActionChange,
                     onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange,
                     onOpenSource = callbacks.onOpenSource,

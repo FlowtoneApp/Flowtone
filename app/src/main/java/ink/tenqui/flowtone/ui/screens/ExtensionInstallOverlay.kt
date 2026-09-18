@@ -2,8 +2,6 @@ package ink.tenqui.flowtone.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +36,7 @@ import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
+import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelExitScale
 import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelStartScale
@@ -57,7 +56,6 @@ internal fun ExtensionInstallOverlay(
     val presentation = remember(preview) { extensionInstallOverlayPresentation(preview) }
     val panelProgress = remember(preview.snapshotHandle) { Animatable(0f) }
     val currentDismissFinished by rememberUpdatedState(onDismissAnimationFinished)
-    val cardInteractionSource = remember { MutableInteractionSource() }
     val scrimAlpha = CreatePlaylistScrimMaxAlpha * panelProgress.value.coerceIn(0f, 1f)
 
     LaunchedEffect(preview.snapshotHandle, closing) {
@@ -96,74 +94,61 @@ internal fun ExtensionInstallOverlay(
         modifier = modifier.fillMaxSize()
     ) {
         val maximumPanelHeight = (maxHeight - 32.dp).coerceAtLeast(240.dp)
-        Surface(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .widthIn(max = 560.dp)
-                .heightIn(max = maximumPanelHeight)
-                .fillMaxWidth()
-                .clickable(
-                    interactionSource = cardInteractionSource,
-                    indication = null,
-                    onClick = {}
-                ),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
-            shadowElevation = 18.dp
+        FlowtoneModalPanel(
+            modifier = Modifier.heightIn(max = maximumPanelHeight),
+            maxWidth = 560.dp,
+            horizontalPadding = 16.dp
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    text = presentation.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            Text(
+                text = presentation.title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
-                        .padding(top = 18.dp)
-                ) {
-                    IdentitySection(preview, presentation)
-                    CapabilitySummarySection(preview)
-                    NetworkPermissionSection(preview, presentation)
-                    ConfigurationSection(preview, presentation)
-                    CredentialRequestSection(preview)
-                    if (preview.isUpdate && presentation.hasUpdateChanges) {
-                        UpdateChangesSection(presentation)
-                    }
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 18.dp)
+            ) {
+                IdentitySection(preview, presentation)
+                CapabilitySummarySection(preview)
+                NetworkPermissionSection(preview, presentation)
+                ConfigurationSection(preview, presentation)
+                CredentialRequestSection(preview)
+                if (preview.isUpdate && presentation.hasUpdateChanges) {
+                    UpdateChangesSection(presentation)
                 }
+            }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 20.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onDismissRequest,
+                    enabled = !installing && !closing
                 ) {
-                    TextButton(
-                        onClick = onDismissRequest,
-                        enabled = !installing && !closing
-                    ) {
-                        Text("取消")
+                    Text("取消")
+                }
+                Button(
+                    onClick = onConfirm,
+                    enabled = !installing && !closing,
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    if (installing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
                     }
-                    Button(
-                        onClick = onConfirm,
-                        enabled = !installing && !closing,
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
-                        if (installing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(modifier = Modifier.size(8.dp))
-                        }
-                        Text(if (installing) "处理中" else presentation.actionLabel)
-                    }
+                    Text(if (installing) "处理中" else presentation.actionLabel)
                 }
             }
         }
@@ -202,7 +187,7 @@ private fun IdentitySection(
 }
 
 @Composable
-private fun CapabilitySummarySection(preview: ExtensionInstallPreview) {
+internal fun CapabilitySummarySection(preview: ExtensionInstallPreview) {
     InstallSection(title = "功能支持") {
         preview.summaryCapabilities.forEach { capability ->
             val (statusText, statusColor) = when (capability.status) {
@@ -238,7 +223,7 @@ private fun CapabilitySummarySection(preview: ExtensionInstallPreview) {
 }
 
 @Composable
-private fun NetworkPermissionSection(
+internal fun NetworkPermissionSection(
     preview: ExtensionInstallPreview,
     presentation: ExtensionInstallOverlayPresentation
 ) {
@@ -286,7 +271,7 @@ private fun NetworkPermissionSection(
 }
 
 @Composable
-private fun ConfigurationSection(
+internal fun ConfigurationSection(
     preview: ExtensionInstallPreview,
     presentation: ExtensionInstallOverlayPresentation
 ) {
@@ -301,7 +286,7 @@ private fun ConfigurationSection(
 }
 
 @Composable
-private fun CredentialRequestSection(preview: ExtensionInstallPreview) {
+internal fun CredentialRequestSection(preview: ExtensionInstallPreview) {
     if (preview.credentialRequests.isEmpty()) return
     InstallSection(title = "凭证访问") {
         preview.credentialRequests.forEachIndexed { index, request ->
@@ -331,7 +316,7 @@ private fun CredentialRequestSection(preview: ExtensionInstallPreview) {
 }
 
 @Composable
-private fun UpdateChangesSection(presentation: ExtensionInstallOverlayPresentation) {
+internal fun UpdateChangesSection(presentation: ExtensionInstallOverlayPresentation) {
     InstallSection(title = "权限变化") {
         if (!presentation.added.isEmpty) {
             ChangeItems(title = "新增", items = presentation.added)
@@ -380,7 +365,7 @@ private fun UpdateChangesSection(presentation: ExtensionInstallOverlayPresentati
 }
 
 @Composable
-private fun ChangeItems(
+internal fun ChangeItems(
     title: String,
     items: ExtensionInstallChangeItems,
     modifier: Modifier = Modifier
@@ -399,7 +384,7 @@ private fun ChangeItems(
 }
 
 @Composable
-private fun ChangeLines(category: String, values: List<String>) {
+internal fun ChangeLines(category: String, values: List<String>) {
     values.forEach { value ->
         Text(
             text = "• $category：$value",
@@ -411,7 +396,7 @@ private fun ChangeLines(category: String, values: List<String>) {
 }
 
 @Composable
-private fun InstallSection(
+internal fun InstallSection(
     title: String,
     content: @Composable () -> Unit
 ) {

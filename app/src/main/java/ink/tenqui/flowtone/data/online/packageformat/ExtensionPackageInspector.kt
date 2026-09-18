@@ -41,6 +41,10 @@ class ExtensionPackageInspector(
         try {
             val prepared = ExtensionPackageArchive.prepare(fileName, source, snapshotDirectory)
             val digest = prepared.archive.sha256()
+            val previewIcon = ExtensionProviderVisualResolver.readPreviewIcon(
+                root = prepared.unpackedDirectory,
+                relativePath = prepared.descriptor.manifest.icon
+            )
             prepared.unpackedDirectory.deleteRecursively()
             snapshotDirectory.setLastModified(clockMillis())
             val handle = ExtensionPackageSnapshotHandle(token, digest)
@@ -50,7 +54,8 @@ class ExtensionPackageInspector(
             return ExtensionInstallPreviewBuilder.fromDescriptor(
                 incoming = prepared.descriptor,
                 existingInstallation = existing,
-                snapshotHandle = handle
+                snapshotHandle = handle,
+                icon = previewIcon
             )
         } catch (error: Throwable) {
             snapshotDirectory.deleteRecursively()

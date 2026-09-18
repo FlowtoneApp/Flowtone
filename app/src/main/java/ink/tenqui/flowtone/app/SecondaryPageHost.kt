@@ -51,7 +51,10 @@ import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
+import ink.tenqui.flowtone.ui.screens.OnlineExtensionsScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
@@ -171,6 +174,12 @@ internal fun SecondaryPageHost(
     onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
+    onOpenOnlineExtensions: () -> Unit,
+    pendingExtensionPreview: ExtensionInstallPreview?,
+    onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    onCloseExtensionInstall: () -> Unit,
+    extensionInstallBusy: Boolean,
+    onConfirmExtensionInstall: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
     onOpenSource: () -> Unit,
@@ -260,8 +269,28 @@ internal fun SecondaryPageHost(
                 onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
+                onOpenOnlineExtensions = onOpenOnlineExtensions,
                 modifier = Modifier.fillMaxSize()
             )
+
+            SecondaryPage.OnlineExtensions -> OnlineExtensionsScreen(
+                pageScope = pageScope,
+                onOpenExtensionInstall = onOpenExtensionInstall,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .rightSwipeBackGesture(onCloseSecondaryPage)
+            )
+
+            SecondaryPage.ExtensionInstall -> pendingExtensionPreview?.let { preview ->
+                ExtensionInstallScreen(
+                    preview = preview,
+                    installing = extensionInstallBusy,
+                    onConfirm = onConfirmExtensionInstall,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(onCloseExtensionInstall)
+                )
+            }
 
             SecondaryPage.About -> AboutScreen(
                 onOpenSource = onOpenSource,

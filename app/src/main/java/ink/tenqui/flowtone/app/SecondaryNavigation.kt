@@ -149,6 +149,10 @@ internal sealed interface SecondaryDestination {
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Artist
     }
+
+    data object ExtensionInstall : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionInstall
+    }
 }
 
 internal enum class SecondaryTopPresentationOwner { ArtistTopBar, StandardTopBar }
@@ -328,6 +332,7 @@ internal fun secondaryDestinationBreadcrumbs(
         )
         is SecondaryDestination.Playlist -> listOf(current.title)
         is SecondaryDestination.Standard -> nestedSegments
+        SecondaryDestination.ExtensionInstall -> emptyList()
         is SecondaryDestination.ArtistSongs,
         is SecondaryDestination.ArtistAlbums -> emptyList()
         is SecondaryDestination.Artist,

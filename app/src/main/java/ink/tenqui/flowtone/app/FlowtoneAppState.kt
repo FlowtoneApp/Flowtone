@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.unit.Dp
 import ink.tenqui.flowtone.data.search.GlobalSearchUiState
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.player.QueueDisplayOrder
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
@@ -41,6 +42,8 @@ internal class FlowtoneAppState(
     miniPlayerMinimizedState: MutableState<Boolean>,
     showSwipeHintState: MutableState<Boolean>,
     secondaryNavigationState: MutableState<SecondaryNavigationState>,
+    pendingExtensionPreviewState: MutableState<ExtensionInstallPreview?>,
+    extensionInstallBusyState: MutableState<Boolean>,
     listeningRecordInitialTabState: MutableState<ListeningRecordTab>,
     settingsBackActionState: MutableState<(() -> Unit)?>,
     openSourceBackActionState: MutableState<(() -> Unit)?>,
@@ -80,6 +83,8 @@ internal class FlowtoneAppState(
     var miniPlayerMinimized by miniPlayerMinimizedState
     var showSwipeHint by showSwipeHintState
     var secondaryNavigation by secondaryNavigationState
+    var pendingExtensionPreview by pendingExtensionPreviewState
+    var extensionInstallBusy by extensionInstallBusyState
     val secondaryPage: SecondaryPage?
         get() = secondaryNavigation.current?.page
     var listeningRecordInitialTab by listeningRecordInitialTabState
@@ -134,6 +139,12 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
     }
     val secondaryNavigation = remember {
         mutableStateOf(SecondaryNavigationState())
+    }
+    val pendingExtensionPreview = remember {
+        mutableStateOf<ExtensionInstallPreview?>(null)
+    }
+    val extensionInstallBusy = remember {
+        mutableStateOf(false)
     }
     val listeningRecordInitialTab = rememberSaveable {
         mutableStateOf(ListeningRecordTab.Today)
@@ -237,6 +248,8 @@ internal fun rememberFlowtoneAppState(appPreferences: AppPreferences): FlowtoneA
         miniPlayerMinimizedState = miniPlayerMinimized,
         showSwipeHintState = showSwipeHint,
         secondaryNavigationState = secondaryNavigation,
+        pendingExtensionPreviewState = pendingExtensionPreview,
+        extensionInstallBusyState = extensionInstallBusy,
         listeningRecordInitialTabState = listeningRecordInitialTab,
         settingsBackActionState = settingsBackAction,
         openSourceBackActionState = openSourceBackAction,
@@ -287,6 +300,8 @@ internal data class FlowtoneAppScaffoldState(
     val secondaryEntries: List<SecondaryStackEntry>,
     val secondaryEntry: SecondaryStackEntry?,
     val secondaryDestination: SecondaryDestination?,
+    val pendingExtensionPreview: ExtensionInstallPreview?,
+    val extensionInstallBusy: Boolean,
     val previousSecondaryDestination: SecondaryDestination?,
     val listeningRecordInitialTab: ListeningRecordTab,
     val likedSongKeys: List<String>,
@@ -361,6 +376,8 @@ internal fun flowtoneAppScaffoldState(
         secondaryEntries = appState.secondaryNavigation.entries,
         secondaryEntry = appState.secondaryNavigation.currentEntry,
         secondaryDestination = appState.secondaryNavigation.current,
+        pendingExtensionPreview = appState.pendingExtensionPreview,
+        extensionInstallBusy = appState.extensionInstallBusy,
         previousSecondaryDestination = appState.secondaryNavigation.previous,
         listeningRecordInitialTab = appState.listeningRecordInitialTab,
         likedSongKeys = appState.likedSongKeys,

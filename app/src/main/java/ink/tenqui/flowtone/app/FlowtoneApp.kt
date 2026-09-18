@@ -314,7 +314,48 @@ fun FlowtoneApp(
     }
 
     val navigateBack: () -> Unit = {
-        navigateFlowtoneAppBack(appState)
+        if (appState.secondaryPage == SecondaryPage.ExtensionInstall) {
+            if (!appState.extensionInstallBusy) {
+                appState.pendingExtensionPreview?.snapshotHandle?.let { handle ->
+                    ink.tenqui.flowtone.data.online.ExtensionManager.get(context)
+                        .discardInstallPreview(handle)
+                }
+                appState.pendingExtensionPreview = null
+                closeFlowtoneSecondaryPage(appState)
+            }
+        } else {
+            navigateFlowtoneAppBack(appState)
+        }
+    }
+    fun confirmExtensionInstall() {
+        val preview = appState.pendingExtensionPreview ?: return
+        if (appState.extensionInstallBusy) return
+        appState.extensionInstallBusy = true
+        coroutineScope.launch {
+            val result = ink.tenqui.flowtone.ui.screens.confirmExtensionPreview(
+                preview = preview,
+                install = ink.tenqui.flowtone.data.online.ExtensionManager.get(context)::install
+            )
+            Toast.makeText(
+                context,
+                result.fold(
+                    onSuccess = { installed ->
+                        if (preview.isUpdate) {
+                            "扩展 " + installed.manifest.name + " 已更新"
+                        } else {
+                            "扩展 " + installed.manifest.name + " 已安装"
+                        }
+                    },
+                    onFailure = { error ->
+                        error.message ?: "扩展安装失败"
+                    }
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+            appState.extensionInstallBusy = false
+            appState.pendingExtensionPreview = null
+            closeFlowtoneSecondaryPage(appState)
+        }
     }
     fun clearFrozenSearchColors() {
         appState.searchFrozenAccentArgb = null
@@ -531,6 +572,11 @@ fun FlowtoneApp(
             callbacks = flowtoneAppCallbacks(
             appState = appState,
             appPreferences = appPreferences,
+            discardExtensionPreview = {
+                ink.tenqui.flowtone.data.online.ExtensionManager.get(context)
+                    .discardInstallPreview(it)
+            },
+            onConfirmExtensionInstall = ::confirmExtensionInstall,
             onThemeModeChange = onThemeModeChange,
             onNavigateBack = navigateBack,
             onRequestPermission = {
