@@ -171,6 +171,25 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         }
     }
 
+    /** 安装 inspect 时生成的同一份不可变快照，不再访问原始 DocumentsProvider URI。 */
+    suspend fun install(handle: ExtensionPackageSnapshotHandle): InstalledExtension = mutex.withLock {
+        withContext(NonCancellable) {
+            val installedIdsBefore = installer.scan().mapTo(mutableSetOf()) { it.manifest.id }
+            val installed = withContext(Dispatchers.IO) {
+                inspector.consumeSnapshot(handle) { fileName, input ->
+                    installer.install(fileName, input)
+                }
+            }
+            val reason = if (installed.manifest.id in installedIdsBefore) {
+                ExtensionRuntimeReloadReason.Update
+            } else {
+                ExtensionRuntimeReloadReason.Install
+            }
+            check(reloadRuntimeLocked(reason)) { "扩展已写入，但运行环境重载失败" }
+            installed.copy(runtimeAvailable = runtimes.containsKey(installed.manifest.id))
+        }
+    }
+
     fun discardInstallPreview(handle: ExtensionPackageSnapshotHandle) {
         inspector.discard(handle)
     }

@@ -150,13 +150,14 @@ class ExtensionPackageInspectorTest {
         val inspector = ExtensionPackageInspector(root.resolve("previews")) { now }
         val discarded = inspector.inspect("a.flowtone", zipPackage(manifest()))
         inspector.discard(requireNotNull(discarded.snapshotHandle))
-        assertThrows(IllegalArgumentException::class.java) {
+        val discardedError = assertThrows(ExtensionInstallPreviewUnavailableException::class.java) {
             inspector.consumeSnapshot(requireNotNull(discarded.snapshotHandle)) { _, _ -> Unit }
         }
+        assertEquals("安装预览已失效，请重新选择扩展包。", discardedError.message)
 
         val expired = inspector.inspect("b.flowtone", zipPackage(manifest()))
         now += ExtensionPackageInspector.SnapshotTtlMillis + 1L
-        assertThrows(IllegalArgumentException::class.java) {
+        assertThrows(ExtensionInstallPreviewUnavailableException::class.java) {
             inspector.consumeSnapshot(requireNotNull(expired.snapshotHandle)) { _, _ -> Unit }
         }
         assertFalse(inspector.hasSnapshot(requireNotNull(expired.snapshotHandle)))
@@ -170,7 +171,7 @@ class ExtensionPackageInspectorTest {
         val handle = requireNotNull(preview.snapshotHandle)
         previewRoot.resolve(handle.token).resolve("package.flowtone").appendText("tampered")
 
-        assertThrows(IllegalArgumentException::class.java) {
+        assertThrows(ExtensionInstallPreviewUnavailableException::class.java) {
             inspector.consumeSnapshot(handle) { _, _ -> Unit }
         }
         assertFalse(inspector.hasSnapshot(handle))

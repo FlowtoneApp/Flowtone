@@ -5,6 +5,10 @@ import java.io.InputStream
 import java.security.MessageDigest
 import java.util.UUID
 
+class ExtensionInstallPreviewUnavailableException : IllegalArgumentException(
+    "安装预览已失效，请重新选择扩展包。"
+)
+
 class ExtensionPackageSnapshotHandle internal constructor(
     internal val token: String,
     internal val sha256: String
@@ -68,10 +72,11 @@ class ExtensionPackageInspector(
     ): T {
         val directory = snapshotDirectory(handle)
         try {
-            require(!isExpired(directory)) { "扩展安装预览已过期，请重新选择扩展包" }
+            if (isExpired(directory)) throw ExtensionInstallPreviewUnavailableException()
             val archive = directory.resolve(SnapshotFileName)
-            require(archive.isFile) { "扩展安装预览已丢失，请重新选择扩展包" }
-            require(archive.sha256() == handle.sha256) { "扩展安装预览内容已变化" }
+            if (!archive.isFile || archive.sha256() != handle.sha256) {
+                throw ExtensionInstallPreviewUnavailableException()
+            }
             return archive.inputStream().buffered().use { input ->
                 block("preview.flowtone", input)
             }

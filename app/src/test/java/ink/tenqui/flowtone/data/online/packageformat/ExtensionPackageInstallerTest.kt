@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
+import ink.tenqui.flowtone.data.online.permission.ExtensionNetworkAccessPolicy
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -94,6 +95,36 @@ class ExtensionPackageInstallerTest {
     }
 
     @Test
+    fun replacementDescriptorImmediatelyRevokesRemovedOriginFromRuntimePolicy() {
+        val root = Files.createTempDirectory("flowtone-permission-update-test").toFile()
+        try {
+            val installer = ExtensionPackageInstaller(root)
+            installer.install(
+                "old.flowtone",
+                zip(validEntries(manifest = manifest(origins = listOf("https://old.example.com"))))
+            )
+            val oldPolicy = ExtensionNetworkAccessPolicy(
+                installer.scan().single().descriptor.networkPermissions
+            )
+            oldPolicy.requireAllowed("https://old.example.com/data")
+
+            installer.install(
+                "new.flowtone",
+                zip(validEntries(manifest = manifest(origins = emptyList())))
+            )
+            val reloadedPolicy = ExtensionNetworkAccessPolicy(
+                installer.scan().single().descriptor.networkPermissions
+            )
+
+            assertThrows(SecurityException::class.java) {
+                reloadedPolicy.requireAllowed("https://old.example.com/data")
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun missingFilesDeprecatedFormatInvalidIdAndBrokenZipAreRejected() {
         val cases = listOf(
             zip(mapOf("main.js" to "x")),
@@ -152,10 +183,11 @@ class ExtensionPackageInstallerTest {
         id: String = "example.provider",
         capabilities: String = "\"artist.avatar.lookup\"",
         musicSources: String? = null,
-        color: String? = null
+        color: String? = null,
+        origins: List<String> = listOf("https://example.com")
     ) = """
         {"formatVersion":$formatVersion,"id":"$id","name":"Example","version":"1","author":"Test",
-        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()}${color?.let { ",\"color\":\"$it\"" }.orEmpty()},"permissions":{"network":{"origins":["https://example.com"]}}}
+        "entry":"main.js","capabilities":[$capabilities]${musicSources?.let { ",\"musicSources\":[$it]" }.orEmpty()}${color?.let { ",\"color\":\"$it\"" }.orEmpty()},"permissions":{"network":{"origins":[${origins.joinToString(",") { "\"$it\"" }}]}}}
     """.trimIndent()
 
     private fun zip(entries: Map<String, String>): ByteArrayInputStream {

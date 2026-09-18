@@ -64,10 +64,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.app.FlowtonePageEasing
 import ink.tenqui.flowtone.app.TopLevelPage
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreviewUnavailableException
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
@@ -133,6 +136,10 @@ internal fun SettingsScreen(
     val extensionManager = remember(context) { ExtensionManager.get(context) }
     val extensionScope = rememberCoroutineScope()
     var installedExtensions by remember { mutableStateOf<List<InstalledExtension>>(emptyList()) }
+    var pendingExtensionPreview by remember { mutableStateOf<ExtensionInstallPreview?>(null) }
+    var extensionOverlayClosing by remember { mutableStateOf(false) }
+    var extensionInstallBusy by remember { mutableStateOf(false) }
+    var pendingSnapshotConsumed by remember { mutableStateOf(false) }
     fun refreshExtensions() {
         installedExtensions = extensionManager.installedExtensions()
     }
@@ -141,16 +148,25 @@ internal fun SettingsScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         extensionScope.launch {
-            val result = runCatching { extensionManager.install(uri) }
-            refreshExtensions()
-            Toast.makeText(
-                context,
-                result.fold(
-                    onSuccess = { "扩展 ${it.manifest.name} 已安装" },
-                    onFailure = { it.message ?: "扩展安装失败" }
-                ),
-                Toast.LENGTH_LONG
-            ).show()
+            val previous = pendingExtensionPreview
+            pendingExtensionPreview = null
+            extensionOverlayClosing = false
+            pendingSnapshotConsumed = false
+            val result = inspectReplacingExtensionPreview(
+                current = previous,
+                discard = extensionManager::discardInstallPreview,
+                inspect = { extensionManager.inspect(uri) }
+            )
+            result.fold(
+                onSuccess = { preview -> pendingExtensionPreview = preview },
+                onFailure = { error ->
+                    Toast.makeText(
+                        context,
+                        error.message ?: "扩展包检查失败",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
         }
     }
     val musicViewModel: MusicViewModel = viewModel()
@@ -178,6 +194,15 @@ internal fun SettingsScreen(
     val currentOnBack by rememberUpdatedState(onBack)
     val currentOnBackActionChange by rememberUpdatedState(onBackActionChange)
     val currentOnPathSegmentsChange by rememberUpdatedState(onPathSegmentsChange)
+    val currentSnapshotConsumed by rememberUpdatedState(pendingSnapshotConsumed)
+    DisposableEffect(pendingExtensionPreview?.snapshotHandle) {
+        val handle = pendingExtensionPreview?.snapshotHandle
+        onDispose {
+            if (handle != null && !currentSnapshotConsumed) {
+                extensionManager.discardInstallPreview(handle)
+            }
+        }
+    }
     LaunchedEffect(managingLyricsFolders) {
         if (managingLyricsFolders) musicViewModel.refreshLyricsFolders()
     }
@@ -188,10 +213,17 @@ internal fun SettingsScreen(
         selectedSection,
         showingOnlineSettings,
         showingLyricsSettings,
-        managingLyricsFolders
+        managingLyricsFolders,
+        pendingExtensionPreview,
+        extensionOverlayClosing,
+        extensionInstallBusy
     ) {
         {
-            if (managingLyricsFolders) {
+            if (pendingExtensionPreview != null) {
+                if (!extensionInstallBusy && !extensionOverlayClosing) {
+                    extensionOverlayClosing = true
+                }
+            } else if (managingLyricsFolders) {
                 managingLyricsFolders = false
             } else if (showingLyricsSettings) {
                 showingLyricsSettings = false
@@ -235,6 +267,7 @@ internal fun SettingsScreen(
     }
     BackHandler(onBack = handleBack)
 
+    Box(modifier = modifier.fillMaxSize()) {
     PageTransitionHost(
         targetState = SettingsPageState(
             section = selectedSection,
@@ -243,9 +276,15 @@ internal fun SettingsScreen(
             managingLyricsFolders = managingLyricsFolders
         ),
         parentScope = pageScope,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
-            .rightSwipeBackGesture(handleBack)
+            .then(
+                if (pendingExtensionPreview == null) {
+                    Modifier.rightSwipeBackGesture(handleBack)
+                } else {
+                    Modifier
+                }
+            )
     ) { state ->
         val localScope = this
         val elementCount = when {
@@ -369,6 +408,69 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
                 )
         }
+    }
+
+    pendingExtensionPreview?.let { preview ->
+        ExtensionInstallOverlay(
+            preview = preview,
+            closing = extensionOverlayClosing,
+            installing = extensionInstallBusy,
+            onDismissRequest = {
+                if (!extensionInstallBusy && !extensionOverlayClosing) {
+                    extensionOverlayClosing = true
+                }
+            },
+            onDismissAnimationFinished = {
+                if (!pendingSnapshotConsumed) {
+                    discardExtensionPreview(
+                        preview = pendingExtensionPreview,
+                        discard = extensionManager::discardInstallPreview
+                    )
+                }
+                pendingExtensionPreview = null
+                extensionOverlayClosing = false
+                extensionInstallBusy = false
+                pendingSnapshotConsumed = false
+            },
+            onConfirm = {
+                if (!extensionInstallBusy && !extensionOverlayClosing) {
+                    extensionInstallBusy = true
+                    pendingSnapshotConsumed = true
+                    extensionScope.launch {
+                        val result = confirmExtensionPreview(
+                            preview = preview,
+                            install = extensionManager::install
+                        )
+                        refreshExtensions()
+                        Toast.makeText(
+                            context,
+                            result.fold(
+                                onSuccess = { installed ->
+                                    if (preview.isUpdate) {
+                                        "扩展 ${installed.manifest.name} 已更新"
+                                    } else {
+                                        "扩展 ${installed.manifest.name} 已安装"
+                                    }
+                                },
+                                onFailure = { error ->
+                                    if (error is ExtensionInstallPreviewUnavailableException) {
+                                        "安装预览已失效，请重新选择扩展包。"
+                                    } else {
+                                        error.message ?: "扩展安装失败"
+                                    }
+                                }
+                            ),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        extensionOverlayClosing = true
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(50f)
+        )
+    }
     }
 }
 }
