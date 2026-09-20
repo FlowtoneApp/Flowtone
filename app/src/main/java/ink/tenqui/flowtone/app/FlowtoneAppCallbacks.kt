@@ -48,6 +48,7 @@ internal data class FlowtoneAppCallbacks(
     val onCloseSecondaryPage: () -> Unit,
     val onOpenOnlineExtensions: () -> Unit,
     val onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    val onOpenExtensionNetworkAccess: () -> Unit,
     val onCloseExtensionInstall: () -> Unit,
     val onConfirmExtensionInstall: () -> Unit,
     val onOpenSettings: () -> Unit,
@@ -267,6 +268,11 @@ internal fun flowtoneAppCallbacks(
             appState.pendingExtensionPreview = preview
             appState.secondaryNavigation = appState.secondaryNavigation.push(
                 SecondaryDestination.ExtensionInstall
+            )
+        },
+        onOpenExtensionNetworkAccess = {
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionNetworkAccess
             )
         },
         onCloseExtensionInstall = {

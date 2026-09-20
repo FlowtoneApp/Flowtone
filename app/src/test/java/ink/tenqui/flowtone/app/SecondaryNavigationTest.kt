@@ -69,6 +69,34 @@ class SecondaryNavigationTest {
     }
 
     @Test
+    fun extensionNetworkAccessPopsBackToInstallWithoutReplacingTheInstallEntry() {
+        val installState = SecondaryNavigationState()
+            .push(SecondaryDestination.Standard(SecondaryPage.OnlineExtensions))
+            .push(SecondaryDestination.ExtensionInstall)
+        val installEntry = installState.currentEntry
+
+        val result = installState
+            .push(SecondaryDestination.ExtensionNetworkAccess)
+            .pop()
+
+        assertEquals(SecondaryDestination.ExtensionInstall, result.current)
+        assertEquals(installEntry, result.currentEntry)
+        assertEquals(2, result.entries.size)
+    }
+
+    @Test
+    fun extensionNetworkAccessUsesInstallAndDetailBreadcrumbs() {
+        assertEquals(
+            listOf("网络详情"),
+            secondaryDestinationBreadcrumbs(
+                current = SecondaryDestination.ExtensionNetworkAccess,
+                previous = SecondaryDestination.ExtensionInstall,
+                nestedSegments = emptyList()
+            )
+        )
+    }
+
+    @Test
     fun artistThenAlbumPopsBackToArtist() {
         val artist = SecondaryDestination.Artist("A")
         val artistState = SecondaryNavigationState().push(artist)

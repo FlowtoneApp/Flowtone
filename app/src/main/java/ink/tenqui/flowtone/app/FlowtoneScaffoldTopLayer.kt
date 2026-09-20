@@ -102,21 +102,21 @@ internal fun FlowtoneScaffoldTopLayer(
             previous = state.previousSecondaryDestination,
             nestedSegments = state.secondaryPathSegments
         )
-        val titlePresentation = state.pendingExtensionPreview
-            ?.takeIf { state.secondaryDestination is SecondaryDestination.ExtensionInstall }
-            ?.let { preview ->
-                SecondaryTopBarPresentation(
-                    overline = null,
-                    title = if (preview.isUpdate) "更新扩展" else "安装扩展"
-                )
-            }
+        val extensionWorkflowTitle = state.pendingExtensionPreview?.let { preview ->
+            if (preview.isUpdate) "更新扩展" else "安装扩展"
+        }
+        val pathRootTitle = when (state.secondaryDestination) {
+            SecondaryDestination.ExtensionInstall,
+            SecondaryDestination.ExtensionNetworkAccess -> extensionWorkflowTitle
+            else -> null
+        }
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,
             additionalPathSegments = standardPathSegments,
-            titlePresentation = titlePresentation,
+            pathRootTitle = pathRootTitle,
             titleVisible = titleVisible,
             songSelectionState = songSelectionState,
             hideBackButton = state.hideSecondaryBackButton,

@@ -622,6 +622,7 @@ internal fun FlowtoneScaffoldContent(
                     onOpenOnlineExtensions = callbacks.onOpenOnlineExtensions,
                     pendingExtensionPreview = state.pendingExtensionPreview,
                     onOpenExtensionInstall = callbacks.onOpenExtensionInstall,
+                    onOpenExtensionNetworkAccess = callbacks.onOpenExtensionNetworkAccess,
                     onCloseExtensionInstall = callbacks.onCloseExtensionInstall,
                     extensionInstallBusy = state.extensionInstallBusy,
                     onConfirmExtensionInstall = callbacks.onConfirmExtensionInstall,

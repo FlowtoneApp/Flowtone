@@ -81,6 +81,7 @@ internal fun FlowtoneTopBar(
     secondaryPage: SecondaryPage?,
     additionalPathSegments: List<String>,
     titlePresentation: SecondaryTopBarPresentation? = null,
+    pathRootTitle: String? = null,
     titleVisible: Boolean,
     songSelectionState: PlaylistSelectionTopBarState?,
     hideBackButton: Boolean,
@@ -115,6 +116,7 @@ internal fun FlowtoneTopBar(
         SecondaryPage.Artist -> listOf(SecondaryPage.Artist.title) + additionalPathSegments
         SecondaryPage.OnlineExtensions -> listOf(SecondaryPage.OnlineExtensions.title)
         SecondaryPage.ExtensionInstall -> emptyList()
+        SecondaryPage.ExtensionNetworkAccess -> additionalPathSegments
         SecondaryPage.ListeningRecords -> listOf(SecondaryPage.ListeningRecords.title)
         SecondaryPage.OpenSource -> listOf(
             SecondaryPage.About.title,
@@ -229,6 +231,7 @@ internal fun FlowtoneTopBar(
             } ?: FlowtonePathTitle(
                 pagerState = pagerState,
                 rootPage = selectedTopLevelPage,
+                rootTitleOverride = pathRootTitle,
                 segments = pathSegments,
                 navigationShiftPx = navigationShiftPx,
                 onFullTitleRequest = onFullTitleRequest,

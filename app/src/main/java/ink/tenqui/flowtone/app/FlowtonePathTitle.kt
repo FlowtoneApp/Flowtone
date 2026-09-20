@@ -43,6 +43,7 @@ import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 internal fun FlowtonePathTitle(
     pagerState: PagerState,
     rootPage: TopLevelPage,
+    rootTitleOverride: String? = null,
     segments: List<String>,
     navigationShiftPx: Float,
     onFullTitleRequest: (String) -> Unit = {},
@@ -77,7 +78,8 @@ internal fun FlowtonePathTitle(
         }
     }
     val levelProgress = levelAnimations.map { it.value }
-    val currentTitle = segments.lastOrNull() ?: rootPage.title
+    val rootTitle = rootTitleOverride ?: rootPage.title
+    val currentTitle = segments.lastOrNull() ?: rootTitle
     var currentTitleHasVisualOverflow by remember(currentTitle) { mutableStateOf(false) }
     val titleInteractionSource = remember { MutableInteractionSource() }
 
@@ -102,11 +104,11 @@ internal fun FlowtonePathTitle(
     val ancestorYPx = titleBaseOffsetYPx + ancestorOffsetYPx + pathBaselineCorrectionPx
     val pagePosition = pagerState.currentPage + pagerState.currentPageOffsetFraction
     val rootCompactWidthPx = textMeasurer.measure(
-        text = rootPage.title,
+        text = rootTitle,
         style = compactStyle
     ).size.width.toFloat()
     val rootExpandedWidthPx = textMeasurer.measure(
-        text = rootPage.title,
+        text = rootTitle,
         style = expandedRootStyle
     ).size.width.toFloat()
     val separatorWidthPx = textMeasurer.measure(
@@ -135,43 +137,62 @@ internal fun FlowtonePathTitle(
         val leafAvailableWidth = (maxWidth - with(density) {
             navigationShiftPx.coerceAtLeast(0f).toDp()
         }).coerceAtLeast(0.dp)
-        TopLevelPage.entries.forEach { page ->
-            val distance = page.index - pagePosition
-            val isRoot = page == rootPage
-            val pageAlpha = (1f - abs(distance)).coerceIn(0f, 1f)
-            val rootTitleAnimating = isRoot && rootProgress > 0.001f && rootProgress < 0.999f
+        if (rootTitleOverride == null) {
+            TopLevelPage.entries.forEach { page ->
+                val distance = page.index - pagePosition
+                val isRoot = page == rootPage
+                val pageAlpha = (1f - abs(distance)).coerceIn(0f, 1f)
+                val rootTitleAnimating =
+                    isRoot && rootProgress > 0.001f && rootProgress < 0.999f
+                Text(
+                    text = page.title,
+                    maxLines = 1,
+                    overflow = if (rootTitleAnimating) TextOverflow.Clip else TextOverflow.Ellipsis,
+                    style = if (isRoot) rootStyle else expandedRootStyle,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isRoot) {
+                        lerp(
+                            MaterialTheme.colorScheme.onSurface,
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                            rootProgress
+                        )
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            translationX = distance * slideDistancePx +
+                                if (isRoot) {
+                                    navigationShiftPx + rootOpticalOffsetXPx * rootProgress
+                                } else {
+                                    0f
+                                }
+                            translationY = titleBaseOffsetYPx +
+                                if (isRoot) ancestorOffsetYPx * rootProgress else 0f
+                            alpha = pageAlpha * if (isRoot) 1f else 1f - rootProgress
+                        }
+                )
+            }
+        } else {
+            val rootTitleAnimating = rootProgress > 0.001f && rootProgress < 0.999f
             Text(
-                text = page.title,
+                text = rootTitle,
                 maxLines = 1,
-                overflow = if (rootTitleAnimating) {
-                    TextOverflow.Clip
-                } else {
-                    TextOverflow.Ellipsis
-                },
-                style = if (isRoot) rootStyle else expandedRootStyle,
+                overflow = if (rootTitleAnimating) TextOverflow.Clip else TextOverflow.Ellipsis,
+                style = rootStyle,
                 fontWeight = FontWeight.Medium,
-                color = if (isRoot) {
-                    lerp(
-                        MaterialTheme.colorScheme.onSurface,
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                        rootProgress
-                    )
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
+                color = lerp(
+                    MaterialTheme.colorScheme.onSurface,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    rootProgress
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer {
-                    translationX = distance * slideDistancePx +
-                        if (isRoot) {
-                            navigationShiftPx + rootOpticalOffsetXPx * rootProgress
-                        } else {
-                            0f
-                        }
-                    translationY = titleBaseOffsetYPx +
-                        if (isRoot) ancestorOffsetYPx * rootProgress else 0f
-                    alpha = pageAlpha * if (isRoot) 1f else 1f - rootProgress
-                }
+                        translationX = navigationShiftPx + rootOpticalOffsetXPx * rootProgress
+                        translationY = titleBaseOffsetYPx + ancestorOffsetYPx * rootProgress
+                    }
             )
         }
 

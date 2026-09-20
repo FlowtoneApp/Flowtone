@@ -54,6 +54,7 @@ import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
 import ink.tenqui.flowtone.ui.screens.OnlineExtensionsScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
@@ -177,6 +178,7 @@ internal fun SecondaryPageHost(
     onOpenOnlineExtensions: () -> Unit,
     pendingExtensionPreview: ExtensionInstallPreview?,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    onOpenExtensionNetworkAccess: () -> Unit,
     onCloseExtensionInstall: () -> Unit,
     extensionInstallBusy: Boolean,
     onConfirmExtensionInstall: () -> Unit,
@@ -286,9 +288,20 @@ internal fun SecondaryPageHost(
                     preview = preview,
                     installing = extensionInstallBusy,
                     onConfirm = onConfirmExtensionInstall,
+                    onOpenNetworkAccess = onOpenExtensionNetworkAccess,
                     modifier = Modifier
                         .fillMaxSize()
                         .rightSwipeBackGesture(onCloseExtensionInstall)
+                )
+            }
+
+            SecondaryPage.ExtensionNetworkAccess -> pendingExtensionPreview?.let { preview ->
+                ExtensionNetworkAccessScreen(
+                    preview = preview,
+                    pageScope = pageScope,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(onCloseSecondaryPage)
                 )
             }
 

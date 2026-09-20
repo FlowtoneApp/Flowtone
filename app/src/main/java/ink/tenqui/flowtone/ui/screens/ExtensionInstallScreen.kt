@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.screens
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +65,7 @@ internal fun ExtensionInstallScreen(
     preview: ExtensionInstallPreview,
     installing: Boolean,
     onConfirm: () -> Unit,
+    onOpenNetworkAccess: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -98,8 +102,8 @@ internal fun ExtensionInstallScreen(
                 ExtensionInstallHeaderCloud(
                     color = iconColor,
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(660.dp)
+                        .align(Alignment.TopEnd)
+                        .requiredSize(1000.dp)
                 )
                 Row(
                     modifier = Modifier
@@ -188,6 +192,7 @@ internal fun ExtensionInstallScreen(
             if (preview.networkPermissions.isNotEmpty()) {
                 ExtensionNetworkSummaryCard(
                     preview = preview,
+                    onClick = onOpenNetworkAccess,
                     modifier = Modifier.padding(top = 28.dp)
                 )
             }
@@ -330,6 +335,7 @@ private fun ExtensionCapabilityRow(capability: SummaryCapability) {
 @Composable
 private fun ExtensionNetworkSummaryCard(
     preview: ExtensionInstallPreview,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -343,7 +349,8 @@ private fun ExtensionNetworkSummaryCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 14.dp),
+            .padding(top = 14.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
         color = colorScheme.surfaceContainer
     ) {
@@ -438,18 +445,23 @@ private fun ExtensionInstallHeaderCloud(
 ) {
     Box(
         modifier = modifier
-            .offset(x = 260.dp, y = 240.dp)
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        color.copy(alpha = 0.26f),
-                        color.copy(alpha = 0.12f),
-                        color.copy(alpha = 0.04f),
-                        Color.Transparent
-                    )
-                ),
-                shape = CircleShape
-            )
+            .drawBehind {
+                val radius = size.width
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.26f),
+                            color.copy(alpha = 0.12f),
+                            color.copy(alpha = 0.04f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width, 0f),
+                        radius = radius
+                    ),
+                    radius = radius,
+                    center = Offset(size.width, 0f)
+                )
+            }
     )
 }
 
