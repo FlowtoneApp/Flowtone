@@ -116,6 +116,7 @@ class ExtensionInstallPresentationTest {
         assertEquals("更新", presentation.actionLabel)
         assertEquals("1 → 2", presentation.versionLine)
         assertFalse(presentation.hasUpdateChanges)
+        assertFalse(shouldShowExtensionUpdateChanges(preview, presentation))
     }
 
     @Test
@@ -151,6 +152,24 @@ class ExtensionInstallPresentationTest {
         assertEquals("http://example.com", presentation.securityDowngrades.single().incomingOrigin)
         assertTrue(presentation.hasInsecureNetworkPermissions)
         assertTrue(presentation.hasUpdateChanges)
+        assertTrue(
+            shouldShowExtensionUpdateChanges(
+                ExtensionInstallPreviewBuilder.fromDescriptor(incoming, existing, handle("visible")),
+                presentation
+            )
+        )
+    }
+
+    @Test
+    fun firstInstallNeverShowsUpdateChanges() {
+        val preview = preview(version = "1")
+
+        assertFalse(
+            shouldShowExtensionUpdateChanges(
+                preview,
+                extensionInstallOverlayPresentation(preview)
+            )
+        )
     }
 
     @Test

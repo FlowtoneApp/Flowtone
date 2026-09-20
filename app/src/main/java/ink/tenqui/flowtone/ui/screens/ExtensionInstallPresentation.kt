@@ -92,6 +92,11 @@ internal fun extensionInstallOverlayPresentation(
     )
 }
 
+internal fun shouldShowExtensionUpdateChanges(
+    preview: ExtensionInstallPreview,
+    presentation: ExtensionInstallOverlayPresentation
+): Boolean = preview.isUpdate && presentation.hasUpdateChanges
+
 internal suspend fun inspectReplacingExtensionPreview(
     current: ExtensionInstallPreview?,
     discard: (ExtensionPackageSnapshotHandle) -> Unit,
