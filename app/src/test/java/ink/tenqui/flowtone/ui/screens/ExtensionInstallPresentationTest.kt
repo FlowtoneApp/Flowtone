@@ -116,7 +116,8 @@ class ExtensionInstallPresentationTest {
         assertEquals("更新", presentation.actionLabel)
         assertEquals("1 → 2", presentation.versionLine)
         assertFalse(presentation.hasUpdateChanges)
-        assertFalse(shouldShowExtensionUpdateChanges(preview, presentation))
+        assertTrue(shouldShowExtensionUpdateChanges(preview, presentation))
+        assertEquals(ExtensionUpdateNoChangesLabel, "无变更")
     }
 
     @Test

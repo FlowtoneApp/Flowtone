@@ -269,7 +269,19 @@ private fun ExtensionUpdateChangesCard(
         color = colors.surfaceContainer
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            if (!presentation.added.isEmpty) {
+            if (!presentation.hasUpdateChanges) {
+                Text(
+                    text = ExtensionUpdateNoChangesLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurface
+                )
+                Text(
+                    text = "此更新未更改扩展请求的功能、网络访问、配置或凭证。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 5.dp)
+                )
+            } else if (!presentation.added.isEmpty) {
                 ExtensionUpdateChangeGroup(
                     title = "新增",
                     items = presentation.added.allItems(),
@@ -277,7 +289,7 @@ private fun ExtensionUpdateChangesCard(
                     iconTint = colors.primary
                 )
             }
-            if (!presentation.removed.isEmpty) {
+            if (presentation.hasUpdateChanges && !presentation.removed.isEmpty) {
                 if (!presentation.added.isEmpty) {
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 12.dp),
@@ -291,7 +303,7 @@ private fun ExtensionUpdateChangesCard(
                     iconTint = colors.onSurfaceVariant
                 )
             }
-            if (presentation.securityDowngrades.isNotEmpty()) {
+            if (presentation.hasUpdateChanges && presentation.securityDowngrades.isNotEmpty()) {
                 if (!presentation.added.isEmpty || !presentation.removed.isEmpty) {
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 12.dp),

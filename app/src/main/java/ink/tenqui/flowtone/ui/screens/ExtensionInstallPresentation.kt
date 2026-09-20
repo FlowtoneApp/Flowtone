@@ -95,7 +95,9 @@ internal fun extensionInstallOverlayPresentation(
 internal fun shouldShowExtensionUpdateChanges(
     preview: ExtensionInstallPreview,
     presentation: ExtensionInstallOverlayPresentation
-): Boolean = preview.isUpdate && presentation.hasUpdateChanges
+): Boolean = preview.isUpdate
+
+internal const val ExtensionUpdateNoChangesLabel = "无变更"
 
 internal suspend fun inspectReplacingExtensionPreview(
     current: ExtensionInstallPreview?,
