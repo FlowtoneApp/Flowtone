@@ -219,6 +219,12 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         reason: ExtensionRuntimeReloadReason = ExtensionRuntimeReloadReason.Manual
     ): Boolean = mutex.withLock { reloadRuntimeLocked(reason) }
 
+    /** Refreshes one running isolate's Host-owned ordinary configuration snapshot. */
+    internal suspend fun refreshRuntimeConfiguration(extensionId: String): Boolean = mutex.withLock {
+        val runtime = runtimes[extensionId] ?: return@withLock false
+        runtimeLifecycle.execute { runtime.refreshConfiguration() }
+    }
+
     /** 由 Flowtone Host 调用；JS 只提供资源字段，扩展身份不从 JS 参数读取。 */
     internal fun createPlaybackMediaItem(
         extensionId: String,
@@ -575,7 +581,13 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             capability = "media_stream",
             allowedPermissions = installed.descriptor.networkPermissions
         )
-        val runtime = JavaScriptExtensionRuntime(installed, isolate, networkClient, privateCache)
+        val runtime = JavaScriptExtensionRuntime(
+            installed = installed,
+            isolate = isolate,
+            network = networkClient,
+            privateCache = privateCache,
+            configStore = configStore
+        )
         return runCatching { runtime.start() }
             .onSuccess {
                 runtimes[installed.manifest.id] = runtime

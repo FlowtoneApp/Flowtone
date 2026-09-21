@@ -195,6 +195,7 @@ internal fun ExtensionSettingsScreen(
                         val persisted = withContext(Dispatchers.IO) {
                             configStore.save(installed.manifest.id, installed.descriptor.configurationSchema, draft)
                         }
+                        extensionManager.refreshRuntimeConfiguration(installed.manifest.id)
                         savedValues = persisted
                         baseline = extensionConfigurationDraft(installed.descriptor.configurationSchema, persisted)
                         draft = baseline
