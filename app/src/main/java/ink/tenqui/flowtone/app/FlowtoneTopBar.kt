@@ -114,7 +114,10 @@ internal fun FlowtoneTopBar(
             listOf(SecondaryPage.Album.title)
         }
         SecondaryPage.Artist -> listOf(SecondaryPage.Artist.title) + additionalPathSegments
-        SecondaryPage.OnlineExtensions -> listOf(SecondaryPage.OnlineExtensions.title)
+        SecondaryPage.OnlineExtensions -> listOf(SecondaryPage.Settings.title) +
+            additionalPathSegments +
+            SecondaryPage.OnlineExtensions.title
+        SecondaryPage.ExtensionSettings -> additionalPathSegments
         SecondaryPage.ExtensionInstall -> emptyList()
         SecondaryPage.ExtensionNetworkAccess -> additionalPathSegments
         SecondaryPage.ListeningRecords -> listOf(SecondaryPage.ListeningRecords.title)

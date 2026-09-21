@@ -29,6 +29,7 @@ import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import ink.tenqui.flowtone.data.online.capability.ExtensionRuntimeCapabilityPolicy
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
+import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistMetadataExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptExtensionRuntime
@@ -88,6 +89,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         appContext.filesDir.resolve("extension-data")
     )
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
+    private val configStore = ExtensionConfigStore.from(appContext)
     private val mutex = Mutex()
     private val runtimeLifecycle = ExtensionRuntimeLifecycle { requestGeneration, currentGeneration ->
         Log.d(
@@ -208,6 +210,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     clearExtensionDataFor = setOf(extensionId)
                 )
             ) { "扩展已删除，但运行环境重载失败" }
+            withContext(Dispatchers.IO) { configStore.delete(extensionId) }
             true
         }
     }

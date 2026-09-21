@@ -125,10 +125,14 @@ internal fun SettingsScreen(
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     onOpenOnlineExtensions: () -> Unit,
+    restoredPathSegments: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    var selectedSection by rememberSaveable {
-        mutableStateOf<SettingsSection?>(null)
+    val restoredSection = remember(restoredPathSegments) {
+        settingsSectionForPathSegments(restoredPathSegments)
+    }
+    var selectedSection by remember(restoredSection) {
+        mutableStateOf(restoredSection)
     }
     var showingLyricsSettings by rememberSaveable { mutableStateOf(false) }
     var managingLyricsFolders by rememberSaveable { mutableStateOf(false) }
@@ -309,7 +313,10 @@ internal fun SettingsScreen(
                 onHideSecondaryBackButtonChange = onHideSecondaryBackButtonChange,
                 skipExpandedMiniPlayer = skipExpandedMiniPlayer,
                 onSkipExpandedMiniPlayerChange = onSkipExpandedMiniPlayerChange,
-                onOpenOnlineSettings = onOpenOnlineExtensions,
+                onOpenOnlineSettings = {
+                    currentOnPathSegmentsChange(listOf(SettingsSection.General.title))
+                    onOpenOnlineExtensions()
+                },
                 onOpenLyricsSettings = { showingLyricsSettings = true },
                 elementModifier = ::viewElementModifier
                 )
@@ -381,8 +388,13 @@ internal fun SettingsScreen(
     }
     */
 }
+
 }
+
 }
+
+internal fun settingsSectionForPathSegments(pathSegments: List<String>): SettingsSection? =
+    SettingsSection.entries.firstOrNull { section -> section.title == pathSegments.firstOrNull() }
 
 // Android DocumentsProvider 往往把自定义 .flowtone 包标成 ZIP 或通用二进制流，
 // 因而不能只请求自定义 MIME；实际后缀与包内容仍由 Host 安装器校验。

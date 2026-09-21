@@ -16,6 +16,8 @@ import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 
 internal data class FlowtoneAppCallbacks(
     val onThemeModeChange: (AppThemeMode) -> Unit,
@@ -48,7 +50,8 @@ internal data class FlowtoneAppCallbacks(
     val onCloseSecondaryPage: () -> Unit,
     val onOpenOnlineExtensions: () -> Unit,
     val onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
-    val onOpenExtensionNetworkAccess: () -> Unit,
+    val onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    val onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
     val onCloseExtensionInstall: () -> Unit,
     val onConfirmExtensionInstall: () -> Unit,
     val onOpenSettings: () -> Unit,
@@ -270,9 +273,14 @@ internal fun flowtoneAppCallbacks(
                 SecondaryDestination.ExtensionInstall
             )
         },
-        onOpenExtensionNetworkAccess = {
+        onOpenExtensionSettings = { installed ->
             appState.secondaryNavigation = appState.secondaryNavigation.push(
-                SecondaryDestination.ExtensionNetworkAccess
+                SecondaryDestination.ExtensionSettings(installed)
+            )
+        },
+        onOpenExtensionNetworkAccess = { permissions ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionNetworkAccess(permissions)
             )
         },
         onCloseExtensionInstall = {

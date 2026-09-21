@@ -169,6 +169,9 @@ internal fun FlowtoneScaffold(
     )
     var fullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
     var retainedFullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
+    var extensionDiscardChangesConfirmation by remember {
+        mutableStateOf<ExtensionDiscardChangesConfirmation?>(null)
+    }
     val fullTitleOverlayProgress by animateFloatAsState(
         targetValue = if (fullTitleOverlayTitle != null) 1f else 0f,
         animationSpec = tween(
@@ -377,6 +380,9 @@ internal fun FlowtoneScaffold(
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
                 onFullTitleRequest = showFullTitle,
+                onExtensionDiscardChangesConfirmationChange = { confirmation ->
+                    extensionDiscardChangesConfirmation = confirmation
+                },
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
                 artistHeroStateStore = artistHeroStateStore,
@@ -465,6 +471,19 @@ internal fun FlowtoneScaffold(
                 refreshLibraryPlaylistsFromRepository(createdPlaylistId)
             }
         )
+        extensionDiscardChangesConfirmation?.let { confirmation ->
+            ExtensionDiscardChangesOverlay(
+                onKeepEditing = {
+                    extensionDiscardChangesConfirmation = null
+                    confirmation.onKeepEditing()
+                },
+                onDiscard = {
+                    extensionDiscardChangesConfirmation = null
+                    confirmation.onDiscard()
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         retainedFullTitleOverlayTitle?.let { title ->
             FullTitleOverlay(
                 title = title,

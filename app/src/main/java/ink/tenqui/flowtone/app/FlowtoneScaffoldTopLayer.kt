@@ -97,17 +97,24 @@ internal fun FlowtoneScaffoldTopLayer(
 
     if (artistRoute == null) {
         val titleVisible = state.secondaryPage != null
-        val standardPathSegments = secondaryDestinationBreadcrumbs(
-            current = state.secondaryDestination,
-            previous = state.previousSecondaryDestination,
-            nestedSegments = state.secondaryPathSegments
-        )
+        val standardPathSegments = if (state.secondaryEntries.usesExtensionSettingsBreadcrumbs()) {
+            secondaryStackBreadcrumbs(
+                entries = state.secondaryEntries,
+                settingsPathSegments = state.secondaryPathSegments
+            )
+        } else {
+            secondaryDestinationBreadcrumbs(
+                current = state.secondaryDestination,
+                previous = state.previousSecondaryDestination,
+                nestedSegments = state.secondaryPathSegments
+            )
+        }
         val extensionWorkflowTitle = state.pendingExtensionPreview?.let { preview ->
             if (preview.isUpdate) "更新扩展" else "安装扩展"
         }
         val pathRootTitle = when (state.secondaryDestination) {
             SecondaryDestination.ExtensionInstall,
-            SecondaryDestination.ExtensionNetworkAccess -> extensionWorkflowTitle
+            is SecondaryDestination.ExtensionNetworkAccess -> extensionWorkflowTitle
             else -> null
         }
 

@@ -55,7 +55,10 @@ import ink.tenqui.flowtone.ui.screens.OnlineExtensionsScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionSettingsScreen
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
@@ -178,12 +181,15 @@ internal fun SecondaryPageHost(
     onOpenOnlineExtensions: () -> Unit,
     pendingExtensionPreview: ExtensionInstallPreview?,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
-    onOpenExtensionNetworkAccess: () -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
     onCloseExtensionInstall: () -> Unit,
     extensionInstallBusy: Boolean,
     onConfirmExtensionInstall: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
+    onExtensionDiscardChangesConfirmationChange: (ExtensionDiscardChangesConfirmation?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
+    settingsPathSegments: List<String>,
     onOpenSource: () -> Unit,
     onOpenSourceBack: () -> Unit,
     onOpenSourceBackActionChange: ((() -> Unit)?) -> Unit,
@@ -191,6 +197,7 @@ internal fun SecondaryPageHost(
     modifier: Modifier = Modifier
 ) {
     var songSelectionActive by remember { mutableStateOf(false) }
+    var extensionSettingsRequestBack by remember(destination) { mutableStateOf<(() -> Unit)?>(null) }
     val activeBatchActions = playlistBatchActions.copy(
         onSelectionModeChange = { active ->
             songSelectionActive = active
@@ -272,12 +279,14 @@ internal fun SecondaryPageHost(
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 onOpenOnlineExtensions = onOpenOnlineExtensions,
+                restoredPathSegments = settingsPathSegments,
                 modifier = Modifier.fillMaxSize()
             )
 
             SecondaryPage.OnlineExtensions -> OnlineExtensionsScreen(
                 pageScope = pageScope,
                 onOpenExtensionInstall = onOpenExtensionInstall,
+                onOpenExtensionSettings = onOpenExtensionSettings,
                 modifier = Modifier
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)
@@ -288,16 +297,37 @@ internal fun SecondaryPageHost(
                     preview = preview,
                     installing = extensionInstallBusy,
                     onConfirm = onConfirmExtensionInstall,
-                    onOpenNetworkAccess = onOpenExtensionNetworkAccess,
+                    onOpenNetworkAccess = { onOpenExtensionNetworkAccess(preview.networkPermissions) },
                     modifier = Modifier
                         .fillMaxSize()
                         .rightSwipeBackGesture(onCloseExtensionInstall)
                 )
             }
 
-            SecondaryPage.ExtensionNetworkAccess -> pendingExtensionPreview?.let { preview ->
+            SecondaryPage.ExtensionSettings -> (destination as? SecondaryDestination.ExtensionSettings)?.let {
+                ExtensionSettingsScreen(
+                    installed = it.installed,
+                    pageScope = pageScope,
+                    onOpenNetworkAccess = { permissions -> onOpenExtensionNetworkAccess(permissions) },
+                    onUninstalled = onCloseSecondaryPage,
+                    onBack = onCloseSecondaryPage,
+                    onBackActionChange = { requestBack ->
+                        extensionSettingsRequestBack = requestBack
+                        onSettingsBackActionChange(requestBack)
+                    },
+                    onDiscardChangesConfirmationChange =
+                        onExtensionDiscardChangesConfirmationChange,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture {
+                            extensionSettingsRequestBack?.invoke() ?: onCloseSecondaryPage()
+                        }
+                )
+            }
+
+            SecondaryPage.ExtensionNetworkAccess -> (destination as? SecondaryDestination.ExtensionNetworkAccess)?.let { network ->
                 ExtensionNetworkAccessScreen(
-                    preview = preview,
+                    permissions = network.permissions,
                     pageScope = pageScope,
                     modifier = Modifier
                         .fillMaxSize()

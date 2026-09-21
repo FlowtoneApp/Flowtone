@@ -34,6 +34,7 @@ import ink.tenqui.flowtone.ui.components.OptionGroup
 internal fun OnlineSettingsPage(
     installedExtensions: List<InstalledExtension>,
     onInstall: () -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
     onUninstall: (String) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
@@ -51,6 +52,7 @@ internal fun OnlineSettingsPage(
                 installedExtensions.forEachIndexed { index, installed ->
                     InstalledExtensionCard(
                         installed = installed,
+                        onOpenDetails = { onOpenExtensionSettings(installed) },
                         onUninstall = { onUninstall(installed.manifest.id) },
                         modifier = elementModifier(index + 2)
                             .padding(top = if (index == 0) 0.dp else 12.dp)
@@ -102,6 +104,7 @@ private fun ExtensionInstallCard(onClick: () -> Unit, modifier: Modifier = Modif
 @Composable
 private fun InstalledExtensionCard(
     installed: InstalledExtension,
+    onOpenDetails: () -> Unit,
     onUninstall: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -124,7 +127,9 @@ private fun InstalledExtensionCard(
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Column(
-            modifier = Modifier.padding(
+            modifier = Modifier
+                .clickable(onClick = onOpenDetails)
+                .padding(
                 horizontal = SettingsRowHorizontalPadding,
                 vertical = SettingsRowVerticalPadding
             )

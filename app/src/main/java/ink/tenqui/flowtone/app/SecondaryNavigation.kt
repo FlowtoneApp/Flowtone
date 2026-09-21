@@ -6,6 +6,8 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.displayTitleOrNull
 import ink.tenqui.flowtone.data.online.preferredProfileArtwork
@@ -154,7 +156,21 @@ internal sealed interface SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.ExtensionInstall
     }
 
-    data object ExtensionNetworkAccess : SecondaryDestination {
+    class ExtensionSettings(
+        val installed: InstalledExtension
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionSettings
+        val extensionId: String get() = installed.manifest.id
+
+        override fun equals(other: Any?): Boolean =
+            other is ExtensionSettings && extensionId == other.extensionId
+
+        override fun hashCode(): Int = extensionId.hashCode()
+    }
+
+    data class ExtensionNetworkAccess(
+        val permissions: Set<NetworkOriginPermission>
+    ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.ExtensionNetworkAccess
     }
 }
@@ -337,10 +353,33 @@ internal fun secondaryDestinationBreadcrumbs(
         is SecondaryDestination.Playlist -> listOf(current.title)
         is SecondaryDestination.Standard -> nestedSegments
         SecondaryDestination.ExtensionInstall -> emptyList()
-        SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
+        is SecondaryDestination.ExtensionSettings -> listOf(current.installed.manifest.name)
+        is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
         is SecondaryDestination.ArtistSongs,
         is SecondaryDestination.ArtistAlbums -> emptyList()
         is SecondaryDestination.Artist,
         null -> emptyList()
     }
 }
+
+/** Standard secondary paths retain the actual navigation lineage rather than a special title mode. */
+internal fun secondaryStackBreadcrumbs(
+    entries: List<SecondaryStackEntry>,
+    settingsPathSegments: List<String>
+): List<String> =
+    entries.flatMap { entry ->
+        when (val destination = entry.destination) {
+            is SecondaryDestination.Standard -> when (destination.page) {
+                SecondaryPage.Settings -> listOf(destination.page.title) + settingsPathSegments
+                SecondaryPage.OnlineExtensions -> listOf(destination.page.title)
+                else -> emptyList()
+            }
+            is SecondaryDestination.ExtensionSettings -> listOf(destination.installed.manifest.name)
+            is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
+            else -> emptyList()
+        }
+    }
+
+/** Installed-extension detail descendants keep the same standard breadcrumb ancestry. */
+internal fun List<SecondaryStackEntry>.usesExtensionSettingsBreadcrumbs(): Boolean =
+    any { entry -> entry.destination is SecondaryDestination.ExtensionSettings }

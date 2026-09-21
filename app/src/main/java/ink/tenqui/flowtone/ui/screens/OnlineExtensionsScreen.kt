@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 internal fun OnlineExtensionsScreen(
     pageScope: PageTransitionScope,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -54,11 +55,10 @@ internal fun OnlineExtensionsScreen(
     OnlineSettingsPage(
         installedExtensions = installedExtensions,
         onInstall = { extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes) },
+        onOpenExtensionSettings = onOpenExtensionSettings,
         onUninstall = { id ->
             scope.launch {
-                val result = runCatching {
-                    check(extensionManager.uninstall(id)) { "扩展删除失败" }
-                }
+                val result = uninstallInstalledExtension(extensionManager, id)
                 refreshExtensions()
                 Toast.makeText(
                     context,
@@ -75,4 +75,12 @@ internal fun OnlineExtensionsScreen(
         },
         modifier = modifier
     )
+}
+
+/** Keeps both entry points on the same ExtensionManager uninstall path. */
+internal suspend fun uninstallInstalledExtension(
+    extensionManager: ExtensionManager,
+    extensionId: String
+): Result<Unit> = runCatching {
+    check(extensionManager.uninstall(extensionId)) { "扩展删除失败" }
 }

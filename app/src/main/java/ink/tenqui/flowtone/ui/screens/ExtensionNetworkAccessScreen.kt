@@ -26,19 +26,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 @Composable
 internal fun ExtensionNetworkAccessScreen(
-    preview: ExtensionInstallPreview,
+    permissions: Set<NetworkOriginPermission>,
     pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
-    val presentation = remember(preview.networkPermissions) {
-        extensionNetworkAccessPresentation(preview.networkPermissions)
+    val presentation = remember(permissions) {
+        extensionNetworkAccessPresentation(permissions)
     }
 
     val sectionCount = listOf(

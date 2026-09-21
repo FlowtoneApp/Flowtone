@@ -9,6 +9,7 @@ internal enum class SecondaryPage(val title: String) {
     Artist("\u827a\u672f\u5bb6"),
     ListeningRecords("听歌记录"),
     OnlineExtensions("在线扩展"),
+    ExtensionSettings("扩展"),
     ExtensionInstall("安装扩展"),
     ExtensionNetworkAccess("网络访问"),
     OpenSource("\u5f00\u6e90\u7ec4\u4ef6")
