@@ -298,14 +298,14 @@ internal fun CredentialRequestSection(preview: ExtensionInstallPreview) {
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "此扩展支持请求使用 Flowtone 中保存的 ${request.credentialType.label} 凭证。",
+                text = "此扩展支持请求使用 Flowtone 中保存的 ${request.credentialType.label}。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 3.dp)
             )
             if (request.required) {
                 Text(
-                    text = "使用相关功能时可能需要提供 ${request.credentialType.label} 凭证。",
+                    text = "使用相关功能时可能需要提供 ${request.credentialType.label}。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 3.dp)

@@ -1,7 +1,143 @@
 package ink.tenqui.flowtone.data.online.credential
 
 enum class CredentialType(val value: String, val label: String) {
-    WebDav("webdav", "WebDAV")
+    WebDav("webdav", "WebDAV 凭证"),
+    AccountPassword("account_password", "账户密码凭证");
+
+    companion object {
+        fun fromValue(value: String): CredentialType? = entries.firstOrNull { it.value == value }
+    }
+}
+
+/** Host 定义的凭据字段 ID；扩展只能选择既有语义，不能声明自己的共享字段。 */
+enum class CredentialFieldId(val value: String) {
+    Endpoint("endpoint"),
+    Username("username"),
+    UserId("userId"),
+    Email("email"),
+    Phone("phone"),
+    Password("password")
+}
+
+enum class CredentialFieldValueType {
+    String,
+    Url
+}
+
+enum class CredentialFieldSensitivity {
+    Normal,
+    Secret
+}
+
+data class CredentialFieldDefinition(
+    val id: CredentialFieldId,
+    val label: String,
+    val valueType: CredentialFieldValueType,
+    val sensitivity: CredentialFieldSensitivity,
+    val order: Int,
+    val description: String? = null
+) {
+    val isSensitive: Boolean get() = sensitivity == CredentialFieldSensitivity.Secret
+}
+
+/** 所有可跨扩展复用的字段均由 Host 固定定义，供后续 Vault 与账户页共同使用。 */
+object CredentialFieldDefinitions {
+    val Endpoint = CredentialFieldDefinition(
+        id = CredentialFieldId.Endpoint,
+        label = "服务器地址",
+        valueType = CredentialFieldValueType.Url,
+        sensitivity = CredentialFieldSensitivity.Normal,
+        order = 0
+    )
+    val Username = CredentialFieldDefinition(
+        id = CredentialFieldId.Username,
+        label = "用户名",
+        valueType = CredentialFieldValueType.String,
+        sensitivity = CredentialFieldSensitivity.Normal,
+        order = 1
+    )
+    val UserId = CredentialFieldDefinition(
+        id = CredentialFieldId.UserId,
+        label = "用户 ID",
+        valueType = CredentialFieldValueType.String,
+        sensitivity = CredentialFieldSensitivity.Normal,
+        order = 2
+    )
+    val Email = CredentialFieldDefinition(
+        id = CredentialFieldId.Email,
+        label = "邮箱",
+        valueType = CredentialFieldValueType.String,
+        sensitivity = CredentialFieldSensitivity.Normal,
+        order = 3
+    )
+    val Phone = CredentialFieldDefinition(
+        id = CredentialFieldId.Phone,
+        label = "手机号",
+        valueType = CredentialFieldValueType.String,
+        sensitivity = CredentialFieldSensitivity.Normal,
+        order = 4
+    )
+    val Password = CredentialFieldDefinition(
+        id = CredentialFieldId.Password,
+        label = "密码",
+        valueType = CredentialFieldValueType.String,
+        sensitivity = CredentialFieldSensitivity.Secret,
+        order = 5
+    )
+
+    val all: List<CredentialFieldDefinition> = listOf(
+        Endpoint, Username, UserId, Email, Phone, Password
+    )
+
+    fun get(id: CredentialFieldId): CredentialFieldDefinition = all.first { it.id == id }
+}
+
+/** AccountPassword 只可选择 Host 已定义的身份标识。 */
+enum class CredentialIdentifierType(val value: String, val fieldId: CredentialFieldId) {
+    Username("username", CredentialFieldId.Username),
+    UserId("userId", CredentialFieldId.UserId),
+    Email("email", CredentialFieldId.Email),
+    Phone("phone", CredentialFieldId.Phone);
+
+    val field: CredentialFieldDefinition get() = CredentialFieldDefinitions.get(fieldId)
+
+    companion object {
+        fun fromValue(value: String): CredentialIdentifierType? = entries.firstOrNull {
+            it.value == value
+        }
+    }
+}
+
+data class CredentialRequestContract(
+    val credentialType: CredentialType,
+    val identifiers: Set<CredentialIdentifierType>
+) {
+    val fields: List<CredentialFieldDefinition>
+        get() = when (credentialType) {
+            CredentialType.WebDav -> listOf(
+                CredentialFieldDefinitions.Endpoint,
+                CredentialFieldDefinitions.Username,
+                CredentialFieldDefinitions.Password
+            )
+
+            CredentialType.AccountPassword -> (
+                identifiers.map(CredentialIdentifierType::field) + CredentialFieldDefinitions.Password
+                ).sortedBy(CredentialFieldDefinition::order)
+        }
+
+    /** WebDAV 的三项均为必填；账户密码凭证仅固定要求密码，身份标识由用户择一提供。 */
+    val requiredFieldIds: Set<CredentialFieldId>
+        get() = when (credentialType) {
+            CredentialType.WebDav -> fields.mapTo(linkedSetOf()) { it.id }
+            CredentialType.AccountPassword -> setOf(CredentialFieldId.Password)
+        }
+
+    /** 账户密码凭证需要在声明的 identifier 中至少提供一项；WebDAV 使用固定字段。 */
+    val minimumIdentifierCount: Int
+        get() = when (credentialType) {
+            CredentialType.WebDav -> 0
+            CredentialType.AccountPassword -> 1
+        }
 }
 
 data class CredentialRequestDefinition(
@@ -9,8 +145,12 @@ data class CredentialRequestDefinition(
     val credentialType: CredentialType,
     val label: String,
     val required: Boolean = false,
-    val description: String? = null
-)
+    val description: String? = null,
+    val identifiers: List<CredentialIdentifierType> = emptyList()
+) {
+    val contract: CredentialRequestContract
+        get() = CredentialRequestContract(credentialType, identifiers.toSet())
+}
 
 data class CredentialRequestIdentity(
     val id: String,
@@ -55,6 +195,20 @@ object CredentialRequestValidator {
                 request.description.length > CredentialRequestLimits.MaxDescriptionLength
             ) {
                 add(CredentialRequestViolation("$path.description", "description 超过长度上限"))
+            }
+            when (request.credentialType) {
+                CredentialType.WebDav -> if (request.identifiers.isNotEmpty()) {
+                    add(CredentialRequestViolation("$path.identifiers", "WebDAV 凭证不允许声明身份标识"))
+                }
+
+                CredentialType.AccountPassword -> {
+                    if (request.identifiers.isEmpty()) {
+                        add(CredentialRequestViolation("$path.identifiers", "账户密码凭证至少需要一个身份标识"))
+                    }
+                    if (request.identifiers.size != request.identifiers.toSet().size) {
+                        add(CredentialRequestViolation("$path.identifiers", "身份标识不能重复"))
+                    }
+                }
             }
         }
     }

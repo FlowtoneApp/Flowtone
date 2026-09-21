@@ -5,6 +5,8 @@ import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityId
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
+import ink.tenqui.flowtone.data.online.credential.CredentialFieldId
+import ink.tenqui.flowtone.data.online.credential.CredentialIdentifierType
 import ink.tenqui.flowtone.data.online.credential.CredentialType
 import ink.tenqui.flowtone.data.online.permission.NetworkHostScope
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
@@ -115,6 +117,56 @@ class ExtensionManifestV2ParserTest {
                 v2Manifest(
                     credentialRequests = """
                         [{"id":"future","type":"oauth2","label":"未来凭证","required":true}]
+                    """.trimIndent()
+                )
+            )
+        }
+    }
+
+    @Test
+    fun accountPasswordParsesOnlyHostDefinedIdentifiers() {
+        val descriptor = ExtensionManifestParser.parseNormalized(
+            v2Manifest(
+                credentialRequests = """
+                    [{"id":"account","type":"account_password","label":"Account",
+                      "identifiers":["username","email"]}]
+                """.trimIndent()
+            )
+        )
+        val request = descriptor.credentialRequests.single()
+
+        assertEquals(CredentialType.AccountPassword, request.credentialType)
+        assertEquals(
+            listOf(CredentialIdentifierType.Username, CredentialIdentifierType.Email),
+            request.identifiers
+        )
+        assertEquals(
+            listOf(CredentialFieldId.Username, CredentialFieldId.Email, CredentialFieldId.Password),
+            request.contract.fields.map { it.id }
+        )
+    }
+
+    @Test
+    fun accountPasswordRejectsMissingDuplicateAndUnknownIdentifiers() {
+        listOf(
+            """[{"id":"account","type":"account_password","label":"Account","identifiers":[]}]""",
+            """[{"id":"account","type":"account_password","label":"Account","identifiers":["email","email"]}]""",
+            """[{"id":"account","type":"account_password","label":"Account","identifiers":["login_name"]}]"""
+        ).forEach { credentialRequests ->
+            assertThrows(IllegalArgumentException::class.java) {
+                ExtensionManifestParser.parseNormalized(v2Manifest(credentialRequests = credentialRequests))
+            }
+        }
+    }
+
+    @Test
+    fun webDavRejectsManifestIdentifiers() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ExtensionManifestParser.parseNormalized(
+                v2Manifest(
+                    credentialRequests = """
+                        [{"id":"webdav","type":"webdav","label":"WebDAV",
+                          "identifiers":["username"]}]
                     """.trimIndent()
                 )
             )

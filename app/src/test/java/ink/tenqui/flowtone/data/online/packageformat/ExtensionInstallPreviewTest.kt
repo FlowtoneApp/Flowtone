@@ -8,6 +8,7 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinitio
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
+import ink.tenqui.flowtone.data.online.credential.CredentialIdentifierType
 import ink.tenqui.flowtone.data.online.credential.CredentialType
 import ink.tenqui.flowtone.data.online.credential.identity
 import ink.tenqui.flowtone.data.online.permission.NetworkOrigin
@@ -123,6 +124,26 @@ class ExtensionInstallPreviewTest {
 
         assertTrue(diff.addedCredentialRequests.isEmpty())
         assertTrue(diff.removedCredentialRequests.isEmpty())
+    }
+
+    @Test
+    fun accountPasswordIdentifierChangeIsReportedAsContractChange() {
+        val previous = CredentialRequestDefinition(
+            id = "account",
+            credentialType = CredentialType.AccountPassword,
+            label = "Account",
+            identifiers = listOf(CredentialIdentifierType.Username, CredentialIdentifierType.Email)
+        )
+        val incoming = previous.copy(identifiers = listOf(CredentialIdentifierType.Phone))
+
+        val diff = ExtensionUpdateDiff.between(
+            snapshot(credentialRequests = listOf(previous)),
+            snapshot(credentialRequests = listOf(incoming))
+        )
+
+        assertTrue(diff.addedCredentialRequests.isEmpty())
+        assertTrue(diff.removedCredentialRequests.isEmpty())
+        assertEquals(listOf(CredentialRequestChange(previous, incoming)), diff.changedCredentialRequests)
     }
 
     @Test

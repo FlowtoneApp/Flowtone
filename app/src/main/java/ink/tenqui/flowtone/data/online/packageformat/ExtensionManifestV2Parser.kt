@@ -9,6 +9,7 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchemaValidator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
+import ink.tenqui.flowtone.data.online.credential.CredentialIdentifierType
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialType
@@ -109,16 +110,38 @@ internal object ExtensionManifestV2Parser {
         val requests = json.optJSONArray("credentialRequests")?.let { array ->
             List(array.length()) { index ->
                 val item = array.getJSONObject(index)
-                val type = when (item.getString("type").lowercase()) {
-                    CredentialType.WebDav.value -> CredentialType.WebDav
-                    else -> throw IllegalArgumentException("未知 credential request type")
+                val type = CredentialType.fromValue(item.getString("type").lowercase())
+                    ?: throw IllegalArgumentException("未知 credential request type")
+                require(!item.has("fields")) {
+                    "credential request 不允许重新声明 Host 定义的字段"
+                }
+                val identifiers = when (type) {
+                    CredentialType.WebDav -> {
+                        require(!item.has("identifiers")) {
+                            "WebDAV credential request 不允许 identifiers"
+                        }
+                        emptyList()
+                    }
+
+                    CredentialType.AccountPassword -> {
+                        val identifiersJson = item.optJSONArray("identifiers")
+                            ?: throw IllegalArgumentException(
+                                "AccountPassword credential request 必须声明 identifiers"
+                            )
+                        List(identifiersJson.length()) { identifierIndex ->
+                            val value = identifiersJson.getString(identifierIndex)
+                            CredentialIdentifierType.fromValue(value)
+                                ?: throw IllegalArgumentException("未知 credential identifier")
+                        }
+                    }
                 }
                 CredentialRequestDefinition(
                     id = item.getString("id"),
                     credentialType = type,
                     label = item.getString("label"),
                     required = item.optBoolean("required", false),
-                    description = item.optionalText("description")
+                    description = item.optionalText("description"),
+                    identifiers = identifiers
                 )
             }
         }.orEmpty()

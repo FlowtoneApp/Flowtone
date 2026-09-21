@@ -49,6 +49,11 @@ data class ExtensionInstallPreview(
     val isUpdate: Boolean get() = existingInstallation != null
 }
 
+data class CredentialRequestChange(
+    val previous: CredentialRequestDefinition,
+    val incoming: CredentialRequestDefinition
+)
+
 data class ExtensionUpdateDiff(
     val addedCapabilities: Set<AtomicCapabilityId>,
     val removedCapabilities: Set<AtomicCapabilityId>,
@@ -57,6 +62,7 @@ data class ExtensionUpdateDiff(
     val securityDowngrades: List<NetworkSecurityDowngrade>,
     val addedCredentialRequests: List<CredentialRequestDefinition>,
     val removedCredentialRequests: List<CredentialRequestDefinition>,
+    val changedCredentialRequests: List<CredentialRequestChange>,
     val addedRequiredFields: List<ConfigurationFieldDefinition>,
     val removedFields: List<ConfigurationFieldDefinition>
 ) {
@@ -105,6 +111,11 @@ data class ExtensionUpdateDiff(
                     .filterKeys { it !in incomingCredentials }
                     .values
                     .toList(),
+                changedCredentialRequests = incomingCredentials.mapNotNull { (identity, incomingRequest) ->
+                    previousCredentials[identity]
+                        ?.takeIf { it.contract != incomingRequest.contract }
+                        ?.let { previousRequest -> CredentialRequestChange(previousRequest, incomingRequest) }
+                },
                 addedRequiredFields = incomingFields.values.filter { incomingField ->
                     incomingField.required && previousFields[incomingField.id]?.required != true
                 },
