@@ -117,6 +117,8 @@ internal fun FlowtoneTopBar(
         SecondaryPage.OnlineExtensions -> listOf(SecondaryPage.Settings.title) +
             additionalPathSegments +
             SecondaryPage.OnlineExtensions.title
+        SecondaryPage.CredentialSources,
+        SecondaryPage.CredentialSourceEdit -> additionalPathSegments
         SecondaryPage.ExtensionSettings -> additionalPathSegments
         SecondaryPage.ExtensionInstall -> emptyList()
         SecondaryPage.ExtensionNetworkAccess -> additionalPathSegments

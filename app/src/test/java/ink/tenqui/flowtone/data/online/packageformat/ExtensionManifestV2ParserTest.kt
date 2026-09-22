@@ -174,6 +174,69 @@ class ExtensionManifestV2ParserTest {
     }
 
     @Test
+    fun genericAccountParsesCanonicalRealmAndHostOrderedFields() {
+        val descriptor = ExtensionManifestParser.parseNormalized(
+            v2Manifest(
+                credentialRequests = """
+                    [
+                      {"id":"account","type":"generic_account","realm":" MUSIC.163.COM ",
+                       "label":"网易云账户","fields":["cookie","account"]},
+                      {"id":"cookie","type":"generic_account","realm":"soundcloud.com",
+                       "label":"SoundCloud","fields":["cookie"]},
+                      {"id":"all","type":"generic_account","realm":"example.com",
+                       "label":"Example","fields":["account","password","cookie"]}
+                    ]
+                """.trimIndent()
+            )
+        )
+
+        val account = descriptor.credentialRequests.first()
+        assertEquals(CredentialType.GenericAccount, account.credentialType)
+        assertEquals("music.163.com", account.realm)
+        assertEquals(
+            listOf(CredentialFieldId.Account, CredentialFieldId.Cookie),
+            account.genericFieldIds
+        )
+        assertEquals(
+            listOf(CredentialFieldId.Account, CredentialFieldId.Password, CredentialFieldId.Cookie),
+            descriptor.credentialRequests.last().genericFieldIds
+        )
+    }
+
+    @Test
+    fun genericAccountRejectsMissingInvalidAndUnsupportedContractInputs() {
+        listOf(
+            """[{"id":"account","type":"generic_account","label":"Account","fields":["account"]}]""",
+            """[{"id":"account","type":"generic_account","realm":" ","label":"Account","fields":["account"]}]""",
+            """[{"id":"account","type":"generic_account","realm":"https://music.163.com","label":"Account","fields":["account"]}]""",
+            """[{"id":"account","type":"generic_account","realm":"music.163.com/path","label":"Account","fields":["account"]}]""",
+            """[{"id":"account","type":"generic_account","realm":"music.163.com","label":"Account"}]""",
+            """[{"id":"account","type":"generic_account","realm":"music.163.com","label":"Account","fields":[]}]""",
+            """[{"id":"account","type":"generic_account","realm":"music.163.com","label":"Account","fields":["account","account"]}]""",
+            """[{"id":"account","type":"generic_account","realm":"music.163.com","label":"Account","fields":["login_name"]}]""",
+            """[{"id":"account","type":"generic_account","realm":"music.163.com","label":"Account","fields":["username"]}]"""
+        ).forEach { credentialRequests ->
+            assertThrows(IllegalArgumentException::class.java) {
+                ExtensionManifestParser.parseNormalized(v2Manifest(credentialRequests = credentialRequests))
+            }
+        }
+    }
+
+    @Test
+    fun fixedCredentialTypesRejectGenericAccountProperties() {
+        listOf(
+            """[{"id":"webdav","type":"webdav","realm":"music.163.com","label":"WebDAV"}]""",
+            """[{"id":"webdav","type":"webdav","label":"WebDAV","fields":["account"]}]""",
+            """[{"id":"account","type":"account_password","realm":"music.163.com","label":"Account","identifiers":["username"]}]""",
+            """[{"id":"account","type":"account_password","label":"Account","identifiers":["username"],"fields":["account"]}]"""
+        ).forEach { credentialRequests ->
+            assertThrows(IllegalArgumentException::class.java) {
+                ExtensionManifestParser.parseNormalized(v2Manifest(credentialRequests = credentialRequests))
+            }
+        }
+    }
+
+    @Test
     fun v2RejectsLegacyNetworkHostsKey() {
         val manifest = v2Manifest().replace(
             "\"origins\":[",

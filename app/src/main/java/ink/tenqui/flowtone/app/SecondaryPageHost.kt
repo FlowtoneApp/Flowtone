@@ -56,6 +56,8 @@ import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionSettingsScreen
+import ink.tenqui.flowtone.ui.screens.CredentialSourcesScreen
+import ink.tenqui.flowtone.ui.screens.CredentialSourceEditScreen
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
@@ -179,6 +181,8 @@ internal fun SecondaryPageHost(
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
     onOpenOnlineExtensions: () -> Unit,
+    onOpenCredentialSources: () -> Unit,
+    onOpenCredentialSourceEdit: (String?) -> Unit,
     pendingExtensionPreview: ExtensionInstallPreview?,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
@@ -198,6 +202,7 @@ internal fun SecondaryPageHost(
 ) {
     var songSelectionActive by remember { mutableStateOf(false) }
     var extensionSettingsRequestBack by remember(destination) { mutableStateOf<(() -> Unit)?>(null) }
+    var credentialSourceEditRequestBack by remember(destination) { mutableStateOf<(() -> Unit)?>(null) }
     val activeBatchActions = playlistBatchActions.copy(
         onSelectionModeChange = { active ->
             songSelectionActive = active
@@ -287,10 +292,33 @@ internal fun SecondaryPageHost(
                 pageScope = pageScope,
                 onOpenExtensionInstall = onOpenExtensionInstall,
                 onOpenExtensionSettings = onOpenExtensionSettings,
+                onOpenCredentialSources = onOpenCredentialSources,
                 modifier = Modifier
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)
             )
+
+            SecondaryPage.CredentialSources -> CredentialSourcesScreen(
+                pageScope = pageScope,
+                onOpenSource = onOpenCredentialSourceEdit,
+                modifier = Modifier.fillMaxSize().rightSwipeBackGesture(onCloseSecondaryPage)
+            )
+
+            SecondaryPage.CredentialSourceEdit -> (destination as? SecondaryDestination.CredentialSourceEdit)?.let {
+                CredentialSourceEditScreen(
+                    sourceId = it.sourceId,
+                    pageScope = pageScope,
+                    onBack = onCloseSecondaryPage,
+                    onBackActionChange = { requestBack ->
+                        credentialSourceEditRequestBack = requestBack
+                        onSettingsBackActionChange(requestBack)
+                    },
+                    onDiscardChangesConfirmationChange = onExtensionDiscardChangesConfirmationChange,
+                    modifier = Modifier.fillMaxSize().rightSwipeBackGesture {
+                        credentialSourceEditRequestBack?.invoke() ?: onCloseSecondaryPage()
+                    }
+                )
+            }
 
             SecondaryPage.ExtensionInstall -> pendingExtensionPreview?.let { preview ->
                 ExtensionInstallScreen(

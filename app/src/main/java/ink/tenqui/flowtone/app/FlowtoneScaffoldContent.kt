@@ -621,6 +621,8 @@ internal fun FlowtoneScaffoldContent(
                     onFullTitleRequest = onFullTitleRequest,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
                     onOpenOnlineExtensions = callbacks.onOpenOnlineExtensions,
+                    onOpenCredentialSources = callbacks.onOpenCredentialSources,
+                    onOpenCredentialSourceEdit = callbacks.onOpenCredentialSourceEdit,
                     pendingExtensionPreview = state.pendingExtensionPreview,
                     onOpenExtensionInstall = callbacks.onOpenExtensionInstall,
                     onOpenExtensionSettings = callbacks.onOpenExtensionSettings,

@@ -9,7 +9,9 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchemaValidator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
+import ink.tenqui.flowtone.data.online.credential.CredentialFieldId
 import ink.tenqui.flowtone.data.online.credential.CredentialIdentifierType
+import ink.tenqui.flowtone.data.online.credential.CredentialRealm
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialType
@@ -18,6 +20,12 @@ import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import org.json.JSONObject
 
 internal object ExtensionManifestV2Parser {
+    private data class ParsedCredentialContract(
+        val identifiers: List<CredentialIdentifierType> = emptyList(),
+        val realm: String? = null,
+        val genericFieldIds: List<CredentialFieldId> = emptyList()
+    )
+
     private val LegacyCapabilityIds = setOf(
         "artist_avatar",
         "artist_metadata",
@@ -112,27 +120,59 @@ internal object ExtensionManifestV2Parser {
                 val item = array.getJSONObject(index)
                 val type = CredentialType.fromValue(item.getString("type").lowercase())
                     ?: throw IllegalArgumentException("未知 credential request type")
-                require(!item.has("fields")) {
-                    "credential request 不允许重新声明 Host 定义的字段"
-                }
-                val identifiers = when (type) {
+                val contract = when (type) {
                     CredentialType.WebDav -> {
+                        require(!item.has("realm")) {
+                            "WebDAV credential request 不允许 realm"
+                        }
+                        require(!item.has("fields")) {
+                            "WebDAV credential request 不允许 fields"
+                        }
                         require(!item.has("identifiers")) {
                             "WebDAV credential request 不允许 identifiers"
                         }
-                        emptyList()
+                        ParsedCredentialContract()
                     }
 
                     CredentialType.AccountPassword -> {
+                        require(!item.has("realm")) {
+                            "AccountPassword credential request 不允许 realm"
+                        }
+                        require(!item.has("fields")) {
+                            "AccountPassword credential request 不允许 fields"
+                        }
                         val identifiersJson = item.optJSONArray("identifiers")
                             ?: throw IllegalArgumentException(
                                 "AccountPassword credential request 必须声明 identifiers"
                             )
-                        List(identifiersJson.length()) { identifierIndex ->
+                        val identifiers = List(identifiersJson.length()) { identifierIndex ->
                             val value = identifiersJson.getString(identifierIndex)
                             CredentialIdentifierType.fromValue(value)
                                 ?: throw IllegalArgumentException("未知 credential identifier")
                         }
+                        ParsedCredentialContract(identifiers = identifiers)
+                    }
+
+                    CredentialType.GenericAccount -> {
+                        require(!item.has("identifiers")) {
+                            "GenericAccount credential request 不允许 identifiers"
+                        }
+                        require(item.has("realm")) {
+                            "GenericAccount credential request 必须声明 realm"
+                        }
+                        val fieldsJson = item.optJSONArray("fields")
+                            ?: throw IllegalArgumentException(
+                                "GenericAccount credential request 必须声明 fields"
+                            )
+                        val fields = List(fieldsJson.length()) { fieldIndex ->
+                            val value = fieldsJson.getString(fieldIndex)
+                            CredentialFieldId.fromValue(value)
+                                ?: throw IllegalArgumentException("未知 generic account credential field")
+                        }
+                        ParsedCredentialContract(
+                            realm = CredentialRealm.normalize(item.getString("realm")),
+                            genericFieldIds = fields
+                        )
                     }
                 }
                 CredentialRequestDefinition(
@@ -141,12 +181,20 @@ internal object ExtensionManifestV2Parser {
                     label = item.getString("label"),
                     required = item.optBoolean("required", false),
                     description = item.optionalText("description"),
-                    identifiers = identifiers
+                    identifiers = contract.identifiers,
+                    realm = contract.realm,
+                    genericFieldIds = contract.genericFieldIds
                 )
             }
         }.orEmpty()
         CredentialRequestValidator.requireValid(requests)
-        return requests
+        return requests.map { request ->
+            if (request.credentialType == CredentialType.GenericAccount) {
+                request.copy(genericFieldIds = request.contract.fields.map { it.id })
+            } else {
+                request
+            }
+        }
     }
 
     private fun parseNetworkPermissions(json: JSONObject): Set<NetworkOriginPermission> {

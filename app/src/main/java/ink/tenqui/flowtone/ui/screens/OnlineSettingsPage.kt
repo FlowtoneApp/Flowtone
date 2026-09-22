@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import ink.tenqui.flowtone.ui.components.OptionGroup
 internal fun OnlineSettingsPage(
     installedExtensions: List<InstalledExtension>,
     onInstall: () -> Unit,
+    onOpenCredentialSources: () -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
     onUninstall: (String) -> Unit,
     elementModifier: (Int) -> Modifier,
@@ -41,20 +44,37 @@ internal fun OnlineSettingsPage(
 ) {
     SettingsPageColumn(modifier = modifier) {
         ExtensionInstallCard(onClick = onInstall, modifier = elementModifier(0))
+        Surface(
+            modifier = elementModifier(1).fillMaxWidth().padding(top = 12.dp).clickable(onClick = onOpenCredentialSources),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = SettingsRowHorizontalPadding, vertical = SettingsRowVerticalPadding),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SettingsRowIconSize))
+                Spacer(modifier = Modifier.width(SettingsSectionRowIconGap))
+                Column {
+                    Text("凭据", style = MaterialTheme.typography.bodyLarge)
+                    Text("管理可供在线扩展使用的账户凭据", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = SettingsRowSubtitleTopPadding))
+                }
+            }
+        }
 
         if (installedExtensions.isEmpty()) {
-            ExtensionEmptyState(modifier = elementModifier(1).padding(top = 24.dp))
+            ExtensionEmptyState(modifier = elementModifier(2).padding(top = 24.dp))
         } else {
             OptionGroup(
                 title = "已安装扩展",
-                modifier = elementModifier(1).padding(top = 24.dp)
+                modifier = elementModifier(2).padding(top = 24.dp)
             ) {
                 installedExtensions.forEachIndexed { index, installed ->
                     InstalledExtensionCard(
                         installed = installed,
                         onOpenDetails = { onOpenExtensionSettings(installed) },
                         onUninstall = { onUninstall(installed.manifest.id) },
-                        modifier = elementModifier(index + 2)
+                    modifier = elementModifier(index + 3)
                             .padding(top = if (index == 0) 0.dp else 12.dp)
                     )
                 }

@@ -24,6 +24,7 @@ internal fun OnlineExtensionsScreen(
     pageScope: PageTransitionScope,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenCredentialSources: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -55,6 +56,7 @@ internal fun OnlineExtensionsScreen(
     OnlineSettingsPage(
         installedExtensions = installedExtensions,
         onInstall = { extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes) },
+        onOpenCredentialSources = onOpenCredentialSources,
         onOpenExtensionSettings = onOpenExtensionSettings,
         onUninstall = { id ->
             scope.launch {
@@ -71,7 +73,7 @@ internal fun OnlineExtensionsScreen(
             }
         },
         elementModifier = { index ->
-            pageScope.elementModifier(index, installedExtensions.size + 2)
+            pageScope.elementModifier(index, installedExtensions.size + 3)
         },
         modifier = modifier
     )

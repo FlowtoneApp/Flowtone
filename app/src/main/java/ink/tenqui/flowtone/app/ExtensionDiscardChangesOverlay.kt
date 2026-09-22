@@ -39,6 +39,10 @@ import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
 /** Uses the same full-viewport window structure and motion as the app's playlist confirmation. */
 @Composable
 internal fun ExtensionDiscardChangesOverlay(
+    title: String = "放弃未保存的更改？",
+    message: String = "未保存的配置更改将会丢失。",
+    keepLabel: String = "继续编辑",
+    discardLabel: String = "放弃更改",
     onKeepEditing: () -> Unit,
     onDiscard: () -> Unit,
     modifier: Modifier = Modifier
@@ -89,9 +93,9 @@ internal fun ExtensionDiscardChangesOverlay(
             maxWidth = null,
             horizontalPadding = 0.dp
         ) {
-            Text("放弃未保存的更改？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
-                "未保存的配置更改将会丢失。",
+                message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 18.dp)
@@ -102,12 +106,12 @@ internal fun ExtensionDiscardChangesOverlay(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { closeAfterAnimation(onKeepEditing) }) { Text("继续编辑") }
+                TextButton(onClick = { closeAfterAnimation(onKeepEditing) }) { Text(keepLabel) }
                 Button(
                     onClick = { closeAfterAnimation(onDiscard) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.padding(start = 8.dp)
-                ) { Text("放弃更改") }
+                ) { Text(discardLabel) }
             }
         }
     }

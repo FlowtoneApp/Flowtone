@@ -156,6 +156,16 @@ internal sealed interface SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.ExtensionInstall
     }
 
+    data object CredentialSources : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.CredentialSources
+    }
+
+    data class CredentialSourceEdit(
+        val sourceId: String?
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.CredentialSourceEdit
+    }
+
     class ExtensionSettings(
         val installed: InstalledExtension
     ) : SecondaryDestination {
@@ -353,6 +363,10 @@ internal fun secondaryDestinationBreadcrumbs(
         is SecondaryDestination.Playlist -> listOf(current.title)
         is SecondaryDestination.Standard -> nestedSegments
         SecondaryDestination.ExtensionInstall -> emptyList()
+        SecondaryDestination.CredentialSources -> listOf("凭据")
+        is SecondaryDestination.CredentialSourceEdit -> listOf(
+            if (current.sourceId == null) "添加凭据" else "编辑凭据"
+        )
         is SecondaryDestination.ExtensionSettings -> listOf(current.installed.manifest.name)
         is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
         is SecondaryDestination.ArtistSongs,
@@ -372,8 +386,12 @@ internal fun secondaryStackBreadcrumbs(
             is SecondaryDestination.Standard -> when (destination.page) {
                 SecondaryPage.Settings -> listOf(destination.page.title) + settingsPathSegments
                 SecondaryPage.OnlineExtensions -> listOf(destination.page.title)
+                SecondaryPage.CredentialSources -> listOf(destination.page.title)
                 else -> emptyList()
             }
+            is SecondaryDestination.CredentialSourceEdit -> listOf(
+                if (destination.sourceId == null) "添加凭据" else "编辑凭据"
+            )
             is SecondaryDestination.ExtensionSettings -> listOf(destination.installed.manifest.name)
             is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
             else -> emptyList()

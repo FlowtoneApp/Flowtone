@@ -7,6 +7,7 @@ import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
+import ink.tenqui.flowtone.data.online.credential.CredentialFieldId
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.credential.CredentialIdentifierType
 import ink.tenqui.flowtone.data.online.credential.CredentialType
@@ -147,6 +148,51 @@ class ExtensionInstallPreviewTest {
     }
 
     @Test
+    fun genericAccountRealmAndFieldsChangesAreReportedAsContractChanges() {
+        val previous = genericAccount(
+            realm = "music.163.com",
+            fields = listOf(CredentialFieldId.Account, CredentialFieldId.Cookie)
+        )
+        val realmChanged = previous.copy(realm = "music.example.com")
+        val fieldsChanged = previous.copy(genericFieldIds = listOf(CredentialFieldId.Cookie))
+
+        val realmDiff = ExtensionUpdateDiff.between(
+            snapshot(credentialRequests = listOf(previous)),
+            snapshot(credentialRequests = listOf(realmChanged))
+        )
+        val fieldsDiff = ExtensionUpdateDiff.between(
+            snapshot(credentialRequests = listOf(previous)),
+            snapshot(credentialRequests = listOf(fieldsChanged))
+        )
+
+        assertEquals(
+            listOf(CredentialRequestChange(previous, realmChanged)),
+            realmDiff.changedCredentialRequests
+        )
+        assertEquals(
+            listOf(CredentialRequestChange(previous, fieldsChanged)),
+            fieldsDiff.changedCredentialRequests
+        )
+    }
+
+    @Test
+    fun genericAccountFieldOrderDoesNotChangeItsContract() {
+        val previous = genericAccount(
+            fields = listOf(CredentialFieldId.Account, CredentialFieldId.Cookie)
+        )
+        val reordered = previous.copy(
+            genericFieldIds = listOf(CredentialFieldId.Cookie, CredentialFieldId.Account)
+        )
+
+        val diff = ExtensionUpdateDiff.between(
+            snapshot(credentialRequests = listOf(previous)),
+            snapshot(credentialRequests = listOf(reordered))
+        )
+
+        assertTrue(diff.changedCredentialRequests.isEmpty())
+    }
+
+    @Test
     fun identicalPermissionsHaveNoPermissionChanges() {
         val permission = permission("https", "example.com")
 
@@ -256,6 +302,17 @@ class ExtensionInstallPreviewTest {
         id = id,
         credentialType = CredentialType.WebDav,
         label = label
+    )
+
+    private fun genericAccount(
+        realm: String = "music.163.com",
+        fields: List<CredentialFieldId>
+    ) = CredentialRequestDefinition(
+        id = "account",
+        credentialType = CredentialType.GenericAccount,
+        label = "Account",
+        realm = realm,
+        genericFieldIds = fields
     )
 
     private fun field(id: String, required: Boolean) = ConfigurationFieldDefinition(

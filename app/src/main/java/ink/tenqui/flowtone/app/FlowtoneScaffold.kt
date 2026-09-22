@@ -473,6 +473,10 @@ internal fun FlowtoneScaffold(
         )
         extensionDiscardChangesConfirmation?.let { confirmation ->
             ExtensionDiscardChangesOverlay(
+                title = confirmation.title,
+                message = confirmation.message,
+                keepLabel = confirmation.keepLabel,
+                discardLabel = confirmation.discardLabel,
                 onKeepEditing = {
                     extensionDiscardChangesConfirmation = null
                     confirmation.onKeepEditing()

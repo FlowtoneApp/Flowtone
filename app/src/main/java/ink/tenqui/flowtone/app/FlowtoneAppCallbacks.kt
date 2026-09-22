@@ -49,6 +49,8 @@ internal data class FlowtoneAppCallbacks(
     val onNavigateBack: () -> Unit,
     val onCloseSecondaryPage: () -> Unit,
     val onOpenOnlineExtensions: () -> Unit,
+    val onOpenCredentialSources: () -> Unit,
+    val onOpenCredentialSourceEdit: (String?) -> Unit,
     val onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     val onOpenExtensionSettings: (InstalledExtension) -> Unit,
     val onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
@@ -265,6 +267,16 @@ internal fun flowtoneAppCallbacks(
         onOpenOnlineExtensions = {
             appState.secondaryNavigation = appState.secondaryNavigation.push(
                 SecondaryDestination.Standard(SecondaryPage.OnlineExtensions)
+            )
+        },
+        onOpenCredentialSources = {
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.CredentialSources
+            )
+        },
+        onOpenCredentialSourceEdit = { sourceId ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.CredentialSourceEdit(sourceId)
             )
         },
         onOpenExtensionInstall = { preview ->
