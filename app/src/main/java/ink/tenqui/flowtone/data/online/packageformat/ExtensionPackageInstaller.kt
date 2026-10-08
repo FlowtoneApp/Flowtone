@@ -11,11 +11,14 @@ class ExtensionPackageInstaller(private val extensionsRoot: File) {
         try {
             val prepared = ExtensionPackageArchive.prepare(fileName, source, staging)
             val finalDirectory = File(extensionsRoot, prepared.descriptor.identity.id)
+            val instanceId = readInstallationInstanceId(finalDirectory) ?: UUID.randomUUID().toString()
+            File(prepared.unpackedDirectory, InstallInstanceFile).writeText(instanceId, Charsets.UTF_8)
             ExtensionPackageArchive.replaceAtomically(prepared.unpackedDirectory, finalDirectory)
             return InstalledExtension(
                 descriptor = prepared.descriptor,
                 directory = finalDirectory,
-                runtimeAvailable = false
+                runtimeAvailable = false,
+                installationInstanceId = instanceId
             )
         } finally {
             staging.deleteRecursively()
@@ -32,10 +35,13 @@ class ExtensionPackageInstaller(private val extensionsRoot: File) {
                         directory.resolve("manifest.json").readText(Charsets.UTF_8)
                     )
                     require(directory.name == descriptor.identity.id && directory.resolve("main.js").isFile)
+                    val instanceId = readInstallationInstanceId(directory) ?:
+                        createInstallationInstanceId(directory)
                     InstalledExtension(
                         descriptor = descriptor,
                         directory = directory,
-                        runtimeAvailable = false
+                        runtimeAvailable = false,
+                        installationInstanceId = instanceId
                     )
                 }.getOrNull()
             }
@@ -53,5 +59,29 @@ class ExtensionPackageInstaller(private val extensionsRoot: File) {
         const val MaxFiles = ExtensionPackageArchive.MaxFiles
         const val MaxFileBytes = ExtensionPackageArchive.MaxFileBytes
         const val MaxMainBytes = ExtensionPackageArchive.MaxMainBytes
+    }
+
+    private fun readInstallationInstanceId(directory: File): String? {
+        val identityFile = File(directory, InstallInstanceFile)
+        val value = runCatching { identityFile.readText(Charsets.UTF_8).trim() }.getOrNull()
+            ?: return null
+        return runCatching { UUID.fromString(value).toString().takeIf { it == value } }.getOrNull()
+    }
+
+    private fun createInstallationInstanceId(directory: File): String? = runCatching {
+        val identityFile = File(directory, InstallInstanceFile)
+        val temporary = File(directory, "$InstallInstanceFile.tmp")
+        val instanceId = UUID.randomUUID().toString()
+        temporary.writeText(instanceId, Charsets.UTF_8)
+        if (!temporary.renameTo(identityFile)) {
+            temporary.delete()
+            null
+        } else {
+            instanceId
+        }
+    }.getOrNull()
+
+    private companion object {
+        const val InstallInstanceFile = ".flowtone-install-instance"
     }
 }

@@ -95,6 +95,26 @@ class ExtensionPackageInstallerTest {
     }
 
     @Test
+    fun installationIdentitySurvivesUpdateButChangesAfterUninstallAndReinstall() {
+        val root = Files.createTempDirectory("flowtone-install-instance-test").toFile()
+        try {
+            val installer = ExtensionPackageInstaller(root)
+            val first = installer.install("test.flowtone", zip(validEntries()))
+            val scanned = installer.scan().single()
+            val updated = installer.install("update.flowtone", zip(validEntries(main = "globalThis.updated=true;")))
+
+            assertEquals(first.installationInstanceId, scanned.installationInstanceId)
+            assertEquals(first.installationInstanceId, updated.installationInstanceId)
+            assertTrue(installer.uninstall("example.provider"))
+
+            val reinstalled = installer.install("reinstall.flowtone", zip(validEntries()))
+            assertTrue(first.installationInstanceId != reinstalled.installationInstanceId)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun replacementDescriptorImmediatelyRevokesRemovedOriginFromRuntimePolicy() {
         val root = Files.createTempDirectory("flowtone-permission-update-test").toFile()
         try {

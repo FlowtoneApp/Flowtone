@@ -70,7 +70,9 @@ object ExtensionManifestParser {
 data class InstalledExtension(
     val descriptor: NormalizedExtensionDescriptor,
     val directory: java.io.File,
-    val runtimeAvailable: Boolean
+    val runtimeAvailable: Boolean,
+    /** Host-owned identity that survives package updates and changes after uninstall/reinstall. */
+    val installationInstanceId: String? = null
 ) {
     val manifest: ExtensionManifest get() = descriptor.manifest
 }

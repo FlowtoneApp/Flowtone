@@ -5,7 +5,8 @@ import android.content.Context
 /** 统一编排元数据与 Secret 密文存储；CredentialSource 不承载 Secret 明文。 */
 class CredentialSourceRepository(
     private val sourceStore: CredentialSourceStore,
-    private val secretStore: CredentialSecretStore
+    private val secretStore: CredentialSecretStore,
+    private val grantStore: CredentialGrantStore? = null
 ) {
     fun list(): List<CredentialSource> = sourceStore.list().map(::withSecretPresence)
 
@@ -47,11 +48,13 @@ class CredentialSourceRepository(
         return withSecretPresence(savedMetadata)
     }
 
-    /** 删除时先移除 Secret，Secret 清理失败则保留 metadata。 */
-    fun delete(id: String): Boolean {
-        if (sourceStore.get(id) == null) return false
+    /** 先撤销引用，再删除 Secret 和 metadata；中途失败会向调用方报告且不留下可用授权。 */
+    fun delete(id: String): Boolean = CredentialGrantLifecycleLocks.withSource(id) {
+        if (sourceStore.get(id) == null) return@withSource false
+        // Revoke references first so a partially failed deletion cannot leave usable authorization.
+        grantStore?.deleteForCredentialSource(id)
         secretStore.deleteAll(id)
-        return sourceStore.delete(id)
+        sourceStore.delete(id)
     }
 
     private fun withSecretPresence(source: CredentialSource): CredentialSource = source.copy(
@@ -64,7 +67,8 @@ class CredentialSourceRepository(
             val appContext = context.applicationContext
             return CredentialSourceRepository(
                 CredentialSourceStore(appContext.filesDir.resolve("credential-sources")),
-                CredentialSecretStore(appContext.noBackupFilesDir.resolve("credential-secrets"))
+                CredentialSecretStore(appContext.noBackupFilesDir.resolve("credential-secrets")),
+                CredentialGrantStore.from(appContext)
             )
         }
 

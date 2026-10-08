@@ -56,6 +56,8 @@ import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionSettingsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionCredentialGrantsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionCredentialSourcePickerScreen
 import ink.tenqui.flowtone.ui.screens.CredentialSourcesScreen
 import ink.tenqui.flowtone.ui.screens.CredentialSourceEditScreen
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
@@ -187,6 +189,8 @@ internal fun SecondaryPageHost(
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
     onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
+    onOpenExtensionCredentialGrants: (InstalledExtension) -> Unit,
+    onOpenExtensionCredentialSourcePicker: (InstalledExtension, String) -> Unit,
     onCloseExtensionInstall: () -> Unit,
     extensionInstallBusy: Boolean,
     onConfirmExtensionInstall: () -> Unit,
@@ -337,6 +341,7 @@ internal fun SecondaryPageHost(
                     installed = it.installed,
                     pageScope = pageScope,
                     onOpenNetworkAccess = { permissions -> onOpenExtensionNetworkAccess(permissions) },
+                    onOpenCredentialGrants = onOpenExtensionCredentialGrants,
                     onUninstalled = onCloseSecondaryPage,
                     onBack = onCloseSecondaryPage,
                     onBackActionChange = { requestBack ->
@@ -360,6 +365,27 @@ internal fun SecondaryPageHost(
                     modifier = Modifier
                         .fillMaxSize()
                         .rightSwipeBackGesture(onCloseSecondaryPage)
+                )
+            }
+
+            SecondaryPage.ExtensionCredentialGrants -> (destination as? SecondaryDestination.ExtensionCredentialGrants)?.let { grants ->
+                ExtensionCredentialGrantsScreen(
+                    installed = grants.installed,
+                    pageScope = pageScope,
+                    onChooseSource = onOpenExtensionCredentialSourcePicker,
+                    onBack = onCloseSecondaryPage,
+                    modifier = Modifier.fillMaxSize().rightSwipeBackGesture(onCloseSecondaryPage)
+                )
+            }
+
+            SecondaryPage.ExtensionCredentialSourcePicker -> (destination as? SecondaryDestination.ExtensionCredentialSourcePicker)?.let { picker ->
+                ExtensionCredentialSourcePickerScreen(
+                    installed = picker.installed,
+                    requestId = picker.requestId,
+                    pageScope = pageScope,
+                    onOpenCredentialSources = onOpenCredentialSources,
+                    onBack = onCloseSecondaryPage,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 

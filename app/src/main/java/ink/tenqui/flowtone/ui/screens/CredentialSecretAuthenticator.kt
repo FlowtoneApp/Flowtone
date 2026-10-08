@@ -42,7 +42,8 @@ internal class CredentialSecretAuthenticator(
     fun authenticate(
         onAuthenticated: () -> Unit,
         onUseDeviceCredential: () -> Unit,
-        onFailure: () -> Unit
+        onFailure: () -> Unit,
+        promptSubtitle: String = "查看已保存的凭证"
     ): CredentialSecretAuthenticationLaunch {
         cancel()
         val requestGeneration = generation
@@ -104,7 +105,7 @@ internal class CredentialSecretAuthenticator(
         prompt = biometricPrompt
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("验证身份")
-            .setSubtitle("查看已保存的凭证")
+            .setSubtitle(promptSubtitle)
             .setAllowedAuthenticators(allowedAuthenticators)
             .apply {
                 if (legacyFallback) setNegativeButtonText("使用设备密码")

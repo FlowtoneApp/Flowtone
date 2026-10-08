@@ -14,5 +14,7 @@ internal enum class SecondaryPage(val title: String) {
     ExtensionSettings("扩展"),
     ExtensionInstall("安装扩展"),
     ExtensionNetworkAccess("网络访问"),
+    ExtensionCredentialGrants("凭据授权"),
+    ExtensionCredentialSourcePicker("选择凭据"),
     OpenSource("\u5f00\u6e90\u7ec4\u4ef6")
 }

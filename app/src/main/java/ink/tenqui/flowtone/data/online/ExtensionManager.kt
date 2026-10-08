@@ -30,6 +30,8 @@ import ink.tenqui.flowtone.data.online.capability.ExtensionRuntimeCapabilityPoli
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantStore
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantLifecycleLocks
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistMetadataExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptExtensionRuntime
@@ -90,6 +92,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     )
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val configStore = ExtensionConfigStore.from(appContext)
+    private val credentialGrantStore = CredentialGrantStore.from(appContext)
     private val mutex = Mutex()
     private val runtimeLifecycle = ExtensionRuntimeLifecycle { requestGeneration, currentGeneration ->
         Log.d(
@@ -153,6 +156,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 requireNotNull(appContext.contentResolver.openInputStream(uri)) { "无法读取扩展包" }
                     .use { input -> installer.install(name, input) }
             }
+            withContext(Dispatchers.IO) {
+                CredentialGrantLifecycleLocks.withExtension(installed.manifest.id) {
+                    credentialGrantStore.reconcileExtension(
+                        installed.manifest.id,
+                        installed.installationInstanceId ?: "",
+                        installed.descriptor.credentialRequests
+                    )
+                }
+            }
             val reason = if (installed.manifest.id in installedIdsBefore) {
                 ExtensionRuntimeReloadReason.Update
             } else {
@@ -182,6 +194,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     installer.install(fileName, input)
                 }
             }
+            withContext(Dispatchers.IO) {
+                CredentialGrantLifecycleLocks.withExtension(installed.manifest.id) {
+                    credentialGrantStore.reconcileExtension(
+                        installed.manifest.id,
+                        installed.installationInstanceId ?: "",
+                        installed.descriptor.credentialRequests
+                    )
+                }
+            }
             val reason = if (installed.manifest.id in installedIdsBefore) {
                 ExtensionRuntimeReloadReason.Update
             } else {
@@ -202,7 +223,13 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     suspend fun uninstall(extensionId: String): Boolean = mutex.withLock {
         withContext(NonCancellable) {
-            val removed = withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
+            // Serialize grant creation against the last cleanup and remove the install identity.
+            val removed = withContext(Dispatchers.IO) {
+                CredentialGrantLifecycleLocks.withExtension(extensionId) {
+                    credentialGrantStore.deleteForExtension(extensionId)
+                    installer.uninstall(extensionId)
+                }
+            }
             if (!removed) return@withContext false
             check(
                 reloadRuntimeLocked(

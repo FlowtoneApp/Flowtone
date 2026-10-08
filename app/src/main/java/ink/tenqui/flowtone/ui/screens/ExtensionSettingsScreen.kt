@@ -113,6 +113,7 @@ internal fun ExtensionSettingsScreen(
     installed: InstalledExtension,
     pageScope: PageTransitionScope,
     onOpenNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
+    onOpenCredentialGrants: (InstalledExtension) -> Unit,
     onUninstalled: () -> Unit,
     onBack: () -> Unit,
     onBackActionChange: ((() -> Unit)?) -> Unit,
@@ -176,6 +177,13 @@ internal fun ExtensionSettingsScreen(
             onClick = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
             modifier = pageScope.elementModifier(2)
         )
+        if (installed.descriptor.credentialRequests.isNotEmpty()) {
+            ExtensionCredentialGrantsSection(
+                count = installed.descriptor.credentialRequests.size,
+                onClick = { onOpenCredentialGrants(installed) },
+                modifier = pageScope.elementModifier(3)
+            )
+        }
         ExtensionConfigurationSection(
             fields = installed.descriptor.configurationSchema.fields,
             stateLabel = presentation.configurationStatus,
@@ -203,13 +211,13 @@ internal fun ExtensionSettingsScreen(
                     }
                 }
             },
-            modifier = pageScope.elementModifier(3)
+            modifier = pageScope.elementModifier(4)
         )
         if (presentation.credentialLabels.isNotEmpty()) {
             ExtensionReadOnlySection(
                 title = "凭证请求",
                 values = presentation.credentialLabels,
-                modifier = pageScope.elementModifier(4)
+                modifier = pageScope.elementModifier(5)
             )
         }
         // The action stays visually separated from the read-only descriptor data.
@@ -365,6 +373,25 @@ private fun ExtensionNetworkSection(count: Int, onClick: () -> Unit, modifier: M
             Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             Text("$count 条网络访问规则", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 12.dp))
             Text("查看详情", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ExtensionCredentialGrantsSection(count: Int, onClick: () -> Unit, modifier: Modifier) {
+    ExtensionSection(title = "凭据授权", modifier = modifier, onClick = onClick) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "$count 项凭据请求",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Text("管理授权", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

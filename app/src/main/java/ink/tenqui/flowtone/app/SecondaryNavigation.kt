@@ -183,6 +183,25 @@ internal sealed interface SecondaryDestination {
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.ExtensionNetworkAccess
     }
+
+    class ExtensionCredentialGrants(val installed: InstalledExtension) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionCredentialGrants
+        val extensionId: String get() = installed.manifest.id
+        override fun equals(other: Any?): Boolean =
+            other is ExtensionCredentialGrants && extensionId == other.extensionId
+        override fun hashCode(): Int = extensionId.hashCode()
+    }
+
+    class ExtensionCredentialSourcePicker(
+        val installed: InstalledExtension,
+        val requestId: String
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionCredentialSourcePicker
+        val extensionId: String get() = installed.manifest.id
+        override fun equals(other: Any?): Boolean = other is ExtensionCredentialSourcePicker &&
+            extensionId == other.extensionId && requestId == other.requestId
+        override fun hashCode(): Int = 31 * extensionId.hashCode() + requestId.hashCode()
+    }
 }
 
 internal enum class SecondaryTopPresentationOwner { ArtistTopBar, StandardTopBar }
@@ -369,6 +388,8 @@ internal fun secondaryDestinationBreadcrumbs(
         )
         is SecondaryDestination.ExtensionSettings -> listOf(current.installed.manifest.name)
         is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
+        is SecondaryDestination.ExtensionCredentialGrants -> listOf(current.installed.manifest.name, "凭据授权")
+        is SecondaryDestination.ExtensionCredentialSourcePicker -> listOf(current.installed.manifest.name, "选择凭据")
         is SecondaryDestination.ArtistSongs,
         is SecondaryDestination.ArtistAlbums -> emptyList()
         is SecondaryDestination.Artist,
@@ -394,6 +415,8 @@ internal fun secondaryStackBreadcrumbs(
             )
             is SecondaryDestination.ExtensionSettings -> listOf(destination.installed.manifest.name)
             is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
+            is SecondaryDestination.ExtensionCredentialGrants -> listOf("凭据授权")
+            is SecondaryDestination.ExtensionCredentialSourcePicker -> listOf("选择凭据")
             else -> emptyList()
         }
     }
