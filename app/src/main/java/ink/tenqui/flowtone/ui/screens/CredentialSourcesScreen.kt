@@ -1,6 +1,12 @@
 package ink.tenqui.flowtone.ui.screens
 
+import android.app.Activity
+import android.app.KeyguardManager
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -47,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -60,6 +67,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle.State
 import ink.tenqui.flowtone.app.ExtensionDiscardChangesConfirmation
 import ink.tenqui.flowtone.data.online.credential.CredentialFieldDefinitions
 import ink.tenqui.flowtone.data.online.credential.CredentialFieldId
@@ -148,6 +156,10 @@ internal fun CredentialSourceEditScreen(
     val scope = rememberCoroutineScope()
     val repository = remember(context) { CredentialSourceRepository.from(context) }
     val revealedSecret = remember(sourceId) { CredentialSecretRevealState() }
+    val accessGate = remember(sourceId) { CredentialSecretAccessGate() }
+    val hostActivity = remember(context) { context.findFragmentActivity() }
+    val systemAuthenticator = remember(hostActivity) { hostActivity?.let(::CredentialSecretAuthenticator) }
+    val windowFlag = remember(hostActivity) { CredentialSecretWindowFlag() }
     val passwordInput = remember(sourceId) { TextFieldState() }
     var existing by remember(sourceId) { mutableStateOf<CredentialSource?>(null) }
     var type by remember(sourceId) { mutableStateOf<CredentialType?>(null) }
@@ -160,9 +172,15 @@ internal fun CredentialSourceEditScreen(
     var passwordInputFocused by remember(sourceId) { mutableStateOf(false) }
     var cookieInputVisible by remember(sourceId) { mutableStateOf(false) }
     var revealJob by remember(sourceId) { mutableStateOf<Job?>(null) }
+    var pendingKeyguardRequest by remember(sourceId) { mutableStateOf<CredentialSecretAccessRequest?>(null) }
+    var deferredAuthentication by remember(sourceId) { mutableStateOf<CredentialSecretAccessRequest?>(null) }
     var errors by remember(sourceId) { mutableStateOf(emptyMap<String, String>()) }
     var operationError by remember(sourceId) { mutableStateOf<String?>(null) }
+    var authenticationError by remember(sourceId) { mutableStateOf<String?>(null) }
+    var authenticationErrorField by remember(sourceId) { mutableStateOf<CredentialFieldId?>(null) }
+
     fun hideSavedSecret() {
+        accessGate.activeRequest?.let(accessGate::cancelRead)
         revealJob?.cancel()
         revealJob = null
         revealedSecret.hide()
@@ -173,20 +191,152 @@ internal fun CredentialSourceEditScreen(
         passwordInputFocused = false
         cookieInputVisible = false
     }
+    fun cancelAuthentication() {
+        pendingKeyguardRequest?.let(accessGate::cancel)
+        pendingKeyguardRequest = null
+        deferredAuthentication = null
+        accessGate.cancelAll()
+        systemAuthenticator?.cancel()
+    }
     fun leavePage() {
         hideSecretDisplays()
+        cancelAuthentication()
+        accessGate.close()
         onBack()
     }
-    DisposableEffect(lifecycleOwner, revealedSecret) {
+
+    fun startReadAfterAuthentication(request: CredentialSecretAccessRequest) {
+        if (!accessGate.authorizeRead(request, sourceId.orEmpty())) return
+        deferredAuthentication = null
+        authenticationError = null
+        authenticationErrorField = null
+        revealJob?.cancel()
+        revealJob = scope.launch {
+            try {
+                revealedSecret.reveal(request.fieldId) { field ->
+                    withContext(Dispatchers.IO) {
+                        repository.readSecret(request.sourceId, field)
+                    }
+                }
+            } finally {
+                accessGate.finishRead(request)
+            }
+        }
+    }
+
+    fun receiveAuthenticationSuccess(request: CredentialSecretAccessRequest) {
+        if (!accessGate.canCompleteAuthentication(request, sourceId.orEmpty())) return
+        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(State.STARTED)) {
+            // Keyguard briefly stops this Activity. Keep only this field-scoped result until return.
+            deferredAuthentication = request
+            return
+        }
+        startReadAfterAuthentication(request)
+    }
+
+    fun failAuthentication(request: CredentialSecretAccessRequest, message: String) {
+        if (!accessGate.canCompleteAuthentication(request, sourceId.orEmpty())) return
+        accessGate.cancel(request)
+        if (pendingKeyguardRequest == request) pendingKeyguardRequest = null
+        deferredAuthentication = null
+        authenticationErrorField = request.fieldId
+        authenticationError = message
+    }
+
+    val keyguardLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val request = pendingKeyguardRequest
+        pendingKeyguardRequest = null
+        if (request != null) {
+            if (result.resultCode == Activity.RESULT_OK) {
+                receiveAuthenticationSuccess(request)
+            } else {
+                failAuthentication(request, "身份认证未完成，请重试。")
+            }
+        }
+    }
+
+    fun startKeyguardConfirmation(request: CredentialSecretAccessRequest) {
+        val activity = hostActivity
+        val keyguard = activity?.getSystemService(KeyguardManager::class.java)
+        if (activity == null || keyguard?.isDeviceSecure != true) {
+            failAuthentication(request, "请先设置设备锁屏保护，再查看已保存的凭证。")
+            return
+        }
+        val intent = keyguard.createConfirmDeviceCredentialIntent(
+            "验证身份",
+            "查看已保存的凭证"
+        )
+        if (intent == null) {
+            failAuthentication(request, "系统设备认证暂不可用，请确认设备已设置安全锁屏。")
+            return
+        }
+        pendingKeyguardRequest = request
+        try {
+            keyguardLauncher.launch(intent)
+        } catch (_: Exception) {
+            pendingKeyguardRequest = null
+            failAuthentication(request, "无法启动系统设备认证，请重试。")
+        }
+    }
+
+    fun requestSavedSecret(field: CredentialFieldId) {
+        val id = sourceId ?: return
+        if (existing == null || accessGate.isBusy) return
+        hideSavedSecret()
+        authenticationError = null
+        authenticationErrorField = field
+        val request = accessGate.begin(id, field) ?: return
+        when (
+            val result = systemAuthenticator?.authenticate(
+                onAuthenticated = { receiveAuthenticationSuccess(request) },
+                onUseDeviceCredential = { startKeyguardConfirmation(request) },
+                onFailure = { failAuthentication(request, "身份认证未完成，请重试。") }
+            ) ?: CredentialSecretAuthenticationLaunch.Unavailable
+        ) {
+            CredentialSecretAuthenticationLaunch.PromptStarted -> Unit
+            CredentialSecretAuthenticationLaunch.UseDeviceCredential -> startKeyguardConfirmation(request)
+            CredentialSecretAuthenticationLaunch.MissingDeviceSecurity ->
+                failAuthentication(request, "请先设置设备锁屏保护，再查看已保存的凭证。")
+            CredentialSecretAuthenticationLaunch.Unavailable ->
+                failAuthentication(request, "系统身份认证暂不可用，请检查设备锁屏设置后重试。")
+            }
+    }
+
+    val showsSavedSecret = revealedSecret.result is CredentialSecretReadResult.Available
+    val showsPlaintext = showsSavedSecret ||
+        passwordInput.text.isNotEmpty() ||
+        (cookieInputVisible && cookieDraft.input.isNotEmpty())
+    val currentShowsPlaintext by rememberUpdatedState(showsPlaintext)
+    DisposableEffect(lifecycleOwner, revealedSecret, accessGate, sourceId) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) hideSecretDisplays()
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    if (currentShowsPlaintext) windowFlag.retainUntilForeground(lifecycleOwner.lifecycle)
+                    hideSecretDisplays()
+                }
+                Lifecycle.Event.ON_START -> deferredAuthentication?.let(::receiveAuthenticationSuccess)
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             revealJob?.cancel()
             revealedSecret.close()
+            accessGate.close()
+            systemAuthenticator?.cancel()
+            pendingKeyguardRequest = null
+            deferredAuthentication = null
+            windowFlag.hide()
         }
+    }
+
+    DisposableEffect(hostActivity?.window, showsPlaintext, windowFlag) {
+        val window = hostActivity?.window
+        if (window != null && showsPlaintext) windowFlag.show(window) else windowFlag.hide()
+        onDispose { windowFlag.hide() }
     }
     LaunchedEffect(sourceId) {
         existing = sourceId?.let(repository::get)
@@ -275,24 +425,24 @@ internal fun CredentialSourceEditScreen(
                                 storedState == CredentialSecretState.Configured -> "已保存"
                                 else -> "已保存，但无法解密；请重新设置"
                             }
+                            val fieldAuthenticationPending = accessGate.activeRequest?.fieldId == field
                             if (!isPassword) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(definition.label, style = MaterialTheme.typography.titleSmall)
-                                    Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        if (fieldAuthenticationPending) "等待系统身份认证…" else status,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                                 if (storedState == CredentialSecretState.Configured && existing != null) {
                                     val shown = revealedSecret.field == field
-                                    IconButton(onClick = {
-                                        if (shown) hideSavedSecret() else {
-                                            hideSavedSecret()
-                                            val id = existing?.id ?: return@IconButton
-                                            revealJob = scope.launch {
-                                                revealedSecret.reveal(field) { requested ->
-                                                    withContext(Dispatchers.IO) { repository.readSecret(id, requested) }
-                                                }
-                                            }
+                                    IconButton(
+                                        enabled = !accessGate.isBusy,
+                                        onClick = {
+                                            if (shown) hideSavedSecret() else requestSavedSecret(field)
                                         }
-                                    }) {
+                                    ) {
                                         Icon(
                                             if (shown) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                                             contentDescription = "${if (shown) "隐藏" else "显示"}已保存的${definition.label}"
@@ -315,6 +465,11 @@ internal fun CredentialSourceEditScreen(
                                     is CredentialSecretReadResult.Unavailable -> Text("已保存的${definition.label}不可用，请输入新值重新设置。", color = MaterialTheme.colorScheme.error)
                                     CredentialSecretReadResult.NotConfigured -> Text("已保存的${definition.label}已不存在，请输入新值重新设置。", color = MaterialTheme.colorScheme.error)
                                     null -> Text("正在读取已保存的${definition.label}…", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            if (!isPassword && authenticationErrorField == field) {
+                                authenticationError?.let {
+                                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                             if (isPassword) {
@@ -341,7 +496,7 @@ internal fun CredentialSourceEditScreen(
                                         textObfuscationMode = credentialPasswordObfuscationMode(passwordInputVisible),
                                         trailingIcon = {
                                             IconButton(
-                                                enabled = hasInput || canRevealSaved || showSavedValue,
+                                                enabled = (hasInput || canRevealSaved || showSavedValue) && !accessGate.isBusy,
                                                 onClick = {
                                                     when {
                                                         showSavedValue -> {
@@ -350,15 +505,9 @@ internal fun CredentialSourceEditScreen(
                                                         }
                                                         hasInput -> passwordInputVisible = !passwordInputVisible
                                                         canRevealSaved -> {
-                                                            val id = existing?.id ?: return@IconButton
                                                             passwordInputVisible = false
                                                             passwordInputFocused = false
-                                                            revealJob?.cancel()
-                                                            revealJob = scope.launch {
-                                                                revealedSecret.reveal(field) { requested ->
-                                                                    withContext(Dispatchers.IO) { repository.readSecret(id, requested) }
-                                                                }
-                                                            }
+                                                            requestSavedSecret(field)
                                                         }
                                                     }
                                                 }
@@ -372,6 +521,7 @@ internal fun CredentialSourceEditScreen(
                                         isError = "secrets.${field.value}" in errors || revealFailure,
                                         modifier = Modifier.fillMaxWidth().onFocusChanged { focus ->
                                             passwordInputFocused = focus.isFocused
+                                            if (focus.isFocused && accessGate.isBusy) cancelAuthentication()
                                             if (focus.isFocused && showSavedValue) hideSavedSecret()
                                         }
                                     )
@@ -411,8 +561,10 @@ internal fun CredentialSourceEditScreen(
                                 }
 
                                 val passwordSupportingText = when {
+                                    fieldAuthenticationPending -> "等待系统身份认证…"
                                     revealPending -> "正在读取已保存的密码…"
                                     revealFailure -> "已保存的密码不可用，请输入新密码重新设置。"
+                                    authenticationErrorField == field -> authenticationError.orEmpty()
                                     "secrets.${field.value}" in errors -> errors.getValue("secrets.${field.value}")
                                     else -> status
                                 }
@@ -420,7 +572,10 @@ internal fun CredentialSourceEditScreen(
                                     passwordSupportingText,
                                     modifier = Modifier.padding(start = 16.dp, top = 4.dp),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (revealFailure || "secrets.${field.value}" in errors) MaterialTheme.colorScheme.error
+                                    color = if (
+                                        revealFailure || authenticationErrorField == field ||
+                                        "secrets.${field.value}" in errors
+                                    ) MaterialTheme.colorScheme.error
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             } else {
@@ -443,11 +598,19 @@ internal fun CredentialSourceEditScreen(
                                     },
                                     isError = "secrets.${field.value}" in errors,
                                     supportingText = { errors["secrets.${field.value}"]?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
-                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(max = 220.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(max = 220.dp)
+                                        .onFocusChanged { focus ->
+                                            if (focus.isFocused && accessGate.isBusy) cancelAuthentication()
+                                        },
                                     singleLine = false,
                                     minLines = 4,
                                     maxLines = 6
                                 )
+                                if (authenticationErrorField == field) {
+                                    authenticationError?.let {
+                                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                             }
                             if (deleting) {
                                 TextButton(onClick = {
@@ -459,6 +622,7 @@ internal fun CredentialSourceEditScreen(
                                         passwordInput.edit { replace(0, length, "") }
                                         passwordClearPending = true
                                     } else cookieDraft = cookieDraft.clear()
+                                    cancelAuthentication()
                                     hideSavedSecret()
                                     errors = errors - "secrets.${field.value}"
                                     operationError = null
@@ -585,4 +749,10 @@ internal fun credentialSourceSummary(source: CredentialSource): String = when (s
     CredentialType.WebDav -> listOfNotNull(source.publicFields[CredentialFieldId.Endpoint], source.publicFields[CredentialFieldId.Username]).joinToString(" · ").ifBlank { "密码未设置" }
     CredentialType.AccountPassword -> listOfNotNull(source.publicFields[CredentialFieldId.Username], source.publicFields[CredentialFieldId.Email], source.publicFields[CredentialFieldId.Phone], source.publicFields[CredentialFieldId.UserId]).firstOrNull() ?: "未填写身份标识"
     CredentialType.GenericAccount -> listOfNotNull(source.realm, source.publicFields[CredentialFieldId.Account]).joinToString(" · ")
+}
+
+private tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is ContextWrapper -> baseContext.findFragmentActivity()
+    else -> null
 }
