@@ -51,7 +51,7 @@ class CredentialSourceStore(
         return updated
     }
 
-    fun delete(id: String): Boolean {
+    internal fun delete(id: String): Boolean {
         val existing = readSources()
         val retained = existing.filterNot { it.id == id }
         if (retained.size == existing.size) return false

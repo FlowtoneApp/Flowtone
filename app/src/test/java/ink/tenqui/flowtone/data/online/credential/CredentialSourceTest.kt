@@ -183,7 +183,7 @@ class CredentialSourceTest {
         assertTrue(summary.contains("music.163.com"))
         assertTrue(summary.contains("tenqui"))
         assertFalse(summary.contains("password", ignoreCase = true))
-        assertTrue(source.secretFieldStates.values.all { it == CredentialSecretState.Unavailable })
+        assertTrue(source.secretFieldStates.isEmpty())
     }
 
     @Test
@@ -191,9 +191,10 @@ class CredentialSourceTest {
         val webDav = source(CredentialType.WebDav, fields = mapOf(
             CredentialFieldId.Endpoint to "https://nas.example.com",
             CredentialFieldId.Username to "tenqui"
-        ))
+        )).copy(secretFieldStates = mapOf(CredentialFieldId.Password to CredentialSecretState.Configured))
         val webDavRequest = CredentialRequestDefinition("dav", CredentialType.WebDav, "DAV")
         val account = source(CredentialType.AccountPassword, fields = mapOf(CredentialFieldId.Email to "a@b.com"))
+            .copy(secretFieldStates = mapOf(CredentialFieldId.Password to CredentialSecretState.Configured))
         val accountRequest = CredentialRequestDefinition(
             "account", CredentialType.AccountPassword, "Account",
             identifiers = listOf(CredentialIdentifierType.Email)
@@ -202,7 +203,7 @@ class CredentialSourceTest {
             CredentialType.GenericAccount,
             realm = "music.163.com",
             fields = mapOf(CredentialFieldId.Account to "tenqui")
-        )
+        ).copy(secretFieldStates = mapOf(CredentialFieldId.Cookie to CredentialSecretState.Configured))
         val genericRequest = CredentialRequestDefinition(
             "generic", CredentialType.GenericAccount, "Generic",
             realm = "music.163.com",
@@ -210,14 +211,211 @@ class CredentialSourceTest {
         )
 
         assertTrue(CredentialSourceMatcher.match(webDav, webDavRequest).metadataCompatible)
-        assertFalse(CredentialSourceMatcher.match(webDav, webDavRequest).secretReady)
+        assertTrue(CredentialSourceMatcher.match(webDav, webDavRequest).secretReady)
         assertTrue(CredentialSourceMatcher.match(account, accountRequest).metadataCompatible)
+        assertTrue(CredentialSourceMatcher.match(account, accountRequest).secretReady)
         assertTrue(CredentialSourceMatcher.match(generic, genericRequest).contractCompatible)
-        assertFalse(CredentialSourceMatcher.match(generic, genericRequest).secretReady)
+        assertTrue(CredentialSourceMatcher.match(generic, genericRequest).secretReady)
         assertFalse(CredentialSourceMatcher.match(
             generic.copy(realm = "soundcloud.com"), genericRequest
         ).contractCompatible)
         assertFalse(CredentialSourceMatcher.match(generic, webDavRequest).contractCompatible)
+    }
+
+    @Test
+    fun matcherRequiresOnlySecretsRequestedByGenericContract() {
+        val accountAndCookieRequest = CredentialRequestDefinition(
+            "account-cookie", CredentialType.GenericAccount, "Generic",
+            realm = "music.163.com",
+            genericFieldIds = listOf(CredentialFieldId.Account, CredentialFieldId.Cookie)
+        )
+        val cookieOnlyRequest = accountAndCookieRequest.copy(
+            id = "cookie-only",
+            genericFieldIds = listOf(CredentialFieldId.Cookie)
+        )
+        val base = source(
+            CredentialType.GenericAccount,
+            realm = "music.163.com",
+            fields = mapOf(CredentialFieldId.Account to "tenqui")
+        ).copy(secretFieldStates = mapOf(CredentialFieldId.Cookie to CredentialSecretState.Configured))
+
+        assertTrue(CredentialSourceMatcher.match(base, accountAndCookieRequest).fullyReady)
+        assertTrue(CredentialSourceMatcher.match(base, cookieOnlyRequest).fullyReady)
+        assertFalse(CredentialSourceMatcher.match(
+            base.copy(secretFieldStates = mapOf(CredentialFieldId.Password to CredentialSecretState.Configured)),
+            cookieOnlyRequest
+        ).secretReady)
+    }
+
+    @Test
+    fun repositoryKeepReplaceDeleteAndSourceDeletionCoordinateStores() {
+        val root = Files.createTempDirectory("credential-source-repository").toFile()
+        val secretRoot = root.resolve("noBackupFilesDir/credential-secrets")
+        val keyProvider = TestKeyProvider()
+        val repository = CredentialSourceRepository(
+            CredentialSourceStore(root.resolve("files/credential-sources"), nextId = { "cs_repository-source" }),
+            CredentialSecretStore(secretRoot, keyProvider)
+        )
+        val input = CredentialSourceInput(CredentialType.AccountPassword, "Account")
+
+        val created = repository.save(
+            null,
+            input,
+            mapOf(CredentialFieldId.Password to CredentialSecretMutation.Replace("first-unit-secret"))
+        )
+        assertTrue(created.secretFieldStates[CredentialFieldId.Password] == CredentialSecretState.Configured)
+        assertFalse(root.resolve("files/credential-sources/sources.json").readText().contains("first-unit-secret"))
+
+        val kept = repository.save(
+            created.id,
+            input.copy(label = "Renamed"),
+            mapOf(CredentialFieldId.Password to CredentialSecretMutation.Keep)
+        )
+        assertTrue(CredentialSecretStore(secretRoot, keyProvider)
+            .get(created.id, CredentialFieldId.Password).hasPlaintext("first-unit-secret"))
+        assertTrue(kept.secretFieldStates[CredentialFieldId.Password] == CredentialSecretState.Configured)
+        assertTrue(CredentialSecretDraft().input.isEmpty())
+
+        repository.save(
+            created.id,
+            input.copy(label = "Renamed"),
+            mapOf(CredentialFieldId.Password to CredentialSecretMutation.Replace("second-unit-secret"))
+        )
+        assertTrue(CredentialSecretStore(secretRoot, keyProvider)
+            .get(created.id, CredentialFieldId.Password).hasPlaintext("second-unit-secret"))
+
+        repository.save(
+            created.id,
+            input.copy(label = "Renamed"),
+            mapOf(CredentialFieldId.Password to CredentialSecretMutation.Delete)
+        )
+        assertTrue(CredentialSecretStore(secretRoot, keyProvider)
+            .state(created.id, CredentialFieldId.Password) == CredentialSecretState.NotConfigured)
+
+        repository.save(
+            created.id,
+            input.copy(label = "Renamed"),
+            mapOf(CredentialFieldId.Password to CredentialSecretMutation.Replace("delete-with-source-secret"))
+        )
+        assertTrue(repository.delete(created.id))
+        assertFalse(root.resolve("files/credential-sources/sources.json").readText().contains("delete-with-source-secret"))
+        assertFalse(secretRoot.resolve(created.id).exists())
+        assertNull(CredentialSourceStore(root.resolve("files/credential-sources")).get(created.id))
+    }
+
+    @Test
+    fun sourceNameValidationUsesCredentialNameWording() {
+        val invalid = CredentialSourceInput(CredentialType.AccountPassword, "  ")
+        assertEquals(
+            "请输入凭证名称",
+            CredentialSourceValidator.validateInput(invalid).single { it.field == "label" }.reason
+        )
+    }
+
+    @Test
+    fun secretDraftStartsBlankAndKeepReplaceDeleteAreDistinct() {
+        val fresh = CredentialSecretDraft()
+        assertTrue(fresh.input.isEmpty())
+        assertTrue(fresh.mutation == CredentialSecretMutation.Keep)
+
+        val replacement = fresh.edit("new-unit-secret")
+        assertTrue(replacement.mutation == CredentialSecretMutation.Replace("new-unit-secret"))
+        assertTrue(replacement.edit("").mutation == CredentialSecretMutation.Keep)
+        assertTrue(fresh.clear().mutation == CredentialSecretMutation.Delete)
+    }
+
+    @Test
+    fun genericPasswordAndCookieStayOutOfMetadataJson() {
+        val root = Files.createTempDirectory("credential-source-generic").toFile()
+        val secretRoot = root.resolve("noBackupFilesDir/credential-secrets")
+        val repository = CredentialSourceRepository(
+            CredentialSourceStore(root.resolve("files/credential-sources"), nextId = { "cs_generic-source123" }),
+            CredentialSecretStore(secretRoot, TestKeyProvider())
+        )
+        val passwordValue = "generic-password-unit"
+        val cookieValue = "generic-cookie-unit; sid=x"
+        val source = repository.save(
+            null,
+            CredentialSourceInput(
+                CredentialType.GenericAccount,
+                "Music",
+                realm = "music.example.com",
+                publicFields = mapOf(CredentialFieldId.Account to "account")
+            ),
+            mapOf(
+                CredentialFieldId.Password to CredentialSecretMutation.Replace(passwordValue),
+                CredentialFieldId.Cookie to CredentialSecretMutation.Replace(cookieValue)
+            )
+        )
+        val metadataJson = root.resolve("files/credential-sources/sources.json").readText()
+
+        assertFalse(metadataJson.contains(passwordValue))
+        assertFalse(metadataJson.contains(cookieValue))
+        assertTrue(secretRoot.resolve("${source.id}/password.secret").isFile)
+        assertTrue(secretRoot.resolve("${source.id}/cookie.secret").isFile)
+        assertTrue(source.secretFieldStates[CredentialFieldId.Password] == CredentialSecretState.Configured)
+        assertTrue(source.secretFieldStates[CredentialFieldId.Cookie] == CredentialSecretState.Configured)
+    }
+
+    @Test
+    fun secretSaveFailureKeepsMetadataAndDeletionFailureKeepsSource() {
+        val root = Files.createTempDirectory("credential-source-partial-save").toFile()
+        val sourceRoot = root.resolve("files/credential-sources")
+        val secretRoot = root.resolve("noBackupFilesDir/credential-secrets")
+        val failingRepository = CredentialSourceRepository(
+            CredentialSourceStore(sourceRoot, nextId = { "cs_partial-save123" }),
+            CredentialSecretStore(secretRoot, FailingKeyProvider())
+        )
+        val input = CredentialSourceInput(CredentialType.AccountPassword, "Account")
+        val saveResult = runCatching {
+            failingRepository.save(
+                null,
+                input,
+                mapOf(CredentialFieldId.Password to CredentialSecretMutation.Replace("partial-save-test-secret"))
+            )
+        }
+
+        assertTrue(saveResult.exceptionOrNull() is CredentialSourceSaveException)
+        assertTrue(CredentialSourceStore(sourceRoot).get("cs_partial-save123") != null)
+
+        val normalKeyProvider = TestKeyProvider()
+        val sourceStore = CredentialSourceStore(sourceRoot)
+        val existing = sourceStore.get("cs_partial-save123")!!
+        val obstructedDirectory = secretRoot.resolve(existing.id)
+        obstructedDirectory.mkdirs()
+        obstructedDirectory.resolve("unexpected-entry").writeText("")
+        val repository = CredentialSourceRepository(
+            sourceStore,
+            CredentialSecretStore(secretRoot, normalKeyProvider)
+        )
+
+        assertTrue(runCatching { repository.delete(existing.id) }.isFailure)
+        assertTrue(sourceStore.get(existing.id) != null)
+    }
+
+    private fun CredentialSecretReadResult.hasPlaintext(expected: String): Boolean =
+        this is CredentialSecretReadResult.Available && plaintext == expected
+
+    private class TestKeyProvider : CredentialSecretKeyProvider {
+        private var key: javax.crypto.SecretKey? = null
+
+        override fun getExistingKey(): javax.crypto.SecretKey? = key
+
+        override fun getOrCreateKey(): javax.crypto.SecretKey = key ?: javax.crypto.KeyGenerator.getInstance("AES")
+            .apply { init(256) }
+            .generateKey()
+            .also { key = it }
+
+        override fun recreateKey(): javax.crypto.SecretKey = javax.crypto.KeyGenerator.getInstance("AES")
+            .apply { init(256) }
+            .generateKey()
+            .also { key = it }
+    }
+
+    private class FailingKeyProvider : CredentialSecretKeyProvider {
+        override fun getExistingKey(): javax.crypto.SecretKey? = null
+        override fun getOrCreateKey(): javax.crypto.SecretKey = error("Key is unavailable")
+        override fun recreateKey(): javax.crypto.SecretKey = error("Key is unavailable")
     }
 
     private fun source(

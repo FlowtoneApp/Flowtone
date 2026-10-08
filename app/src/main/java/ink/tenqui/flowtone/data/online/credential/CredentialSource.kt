@@ -8,12 +8,10 @@ data class CredentialSource(
     val credentialType: CredentialType,
     val label: String,
     val realm: String? = null,
-    val publicFields: Map<CredentialFieldId, String> = emptyMap()
-) {
-    val secretFieldStates: Map<CredentialFieldId, CredentialSecretState>
-        get() = CredentialSourceContracts.secretFields(credentialType)
-            .associateWith { CredentialSecretState.Unavailable }
-}
+    val publicFields: Map<CredentialFieldId, String> = emptyMap(),
+    /** 由 Secret Store 派生的运行时状态，不参与 CredentialSourceStore 序列化。 */
+    val secretFieldStates: Map<CredentialFieldId, CredentialSecretState> = emptyMap()
+)
 
 data class CredentialSourceInput(
     val credentialType: CredentialType,
@@ -23,8 +21,32 @@ data class CredentialSourceInput(
 )
 
 enum class CredentialSecretState {
-    /** 当前没有安全存储，不能代表任何 Secret 已保存。 */
+    NotConfigured,
+    Configured,
     Unavailable
+}
+
+sealed interface CredentialSecretMutation {
+    data object Keep : CredentialSecretMutation
+    data class Replace(val value: String) : CredentialSecretMutation {
+        override fun toString(): String = "Replace([redacted])"
+    }
+    data object Delete : CredentialSecretMutation
+}
+
+/** 输入始终从空值开始；清空输入表示 Keep，显式清除操作才表示 Delete。 */
+data class CredentialSecretDraft(
+    val input: String = "",
+    val mutation: CredentialSecretMutation = CredentialSecretMutation.Keep
+) {
+    fun edit(value: String): CredentialSecretDraft = copy(
+        input = value,
+        mutation = if (value.isEmpty()) CredentialSecretMutation.Keep else CredentialSecretMutation.Replace(value)
+    )
+
+    fun clear(): CredentialSecretDraft = copy(input = "", mutation = CredentialSecretMutation.Delete)
+
+    override fun toString(): String = "CredentialSecretDraft(input=[redacted], mutation=$mutation)"
 }
 
 object CredentialSourceContracts {
@@ -69,8 +91,10 @@ object CredentialSourceValidator {
     }
 
     fun validateInput(input: CredentialSourceInput): List<CredentialSourceViolation> = buildList {
-        if (input.label.isBlank() || input.label.length > 80) {
-            add(CredentialSourceViolation("label", "名称不能为空或过长"))
+        if (input.label.isBlank()) {
+            add(CredentialSourceViolation("label", "请输入凭证名称"))
+        } else if (input.label.length > 80) {
+            add(CredentialSourceViolation("label", "凭证名称不能超过 80 个字符"))
         }
         when (input.credentialType) {
             CredentialType.WebDav -> {
@@ -156,7 +180,9 @@ object CredentialSourceMatcher {
         return CredentialSourceMatch(
             contractCompatible = true,
             metadataCompatible = metadataCompatible,
-            secretReady = requestedSecretFields.isEmpty()
+            secretReady = requestedSecretFields.all {
+                source.secretFieldStates[it.id] == CredentialSecretState.Configured
+            }
         )
     }
 
