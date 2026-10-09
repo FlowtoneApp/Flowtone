@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,9 +34,12 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import ink.tenqui.flowtone.R
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.capability.SummaryCapability
+import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionProviderVisualResolver
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.search.SearchProviderVisual
+import ink.tenqui.flowtone.ui.components.OptionGroup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -93,6 +97,7 @@ internal fun OnlineManagementEntry(
     subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitleMaxLines: Int = 2,
     leading: @Composable () -> Unit
 ) {
     Surface(
@@ -114,12 +119,50 @@ internal fun OnlineManagementEntry(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = subtitleMaxLines,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = SettingsRowSubtitleTopPadding)
                 )
             }
             Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+internal fun OnlineCapabilitySection(
+    capabilities: List<SummaryCapability>,
+    modifier: Modifier = Modifier
+) {
+    OptionGroup(title = "功能支持", modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                capabilities.forEachIndexed { index, capability ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(capability.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(
+                            when (capability.status) {
+                                SummaryCapabilityStatus.Supported -> "支持"
+                                SummaryCapabilityStatus.Partial -> "部分支持"
+                                SummaryCapabilityStatus.Unsupported -> "不支持"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
+                    }
+                    if (index != capabilities.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .48f))
+                    }
+                }
+            }
         }
     }
 }

@@ -1,21 +1,21 @@
 package ink.tenqui.flowtone.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,11 +23,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.data.online.permission.NetworkHostScope
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
+import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 @Composable
@@ -36,40 +37,76 @@ internal fun ExtensionNetworkAccessScreen(
     pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
-    val presentation = remember(permissions) {
-        extensionNetworkAccessPresentation(permissions)
+    val presentation = remember(permissions) { extensionNetworkAccessPresentation(permissions) }
+    val httpsRules = remember(presentation.httpsOrigins) {
+        presentation.httpsOrigins.map(::extensionNetworkRulePresentation)
     }
+    val httpRules = remember(presentation.httpOrigins) {
+        presentation.httpOrigins.map(::extensionNetworkRulePresentation)
+    }
+    val orderCount = 1 + httpsRules.size + httpRules.size +
+        (if (httpsRules.isNotEmpty()) 1 else 0) + (if (httpRules.isNotEmpty()) 1 else 0)
+    val httpHeaderOrder = 1 + (if (httpsRules.isNotEmpty()) 1 + httpsRules.size else 0)
+    val context = LocalContext.current
 
-    val sectionCount = listOf(
-        presentation.httpsOrigins,
-        presentation.httpOrigins
-    ).count { it.isNotEmpty() }
-    var sectionIndex = 0
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(28.dp)
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = 20.dp, vertical = 16.dp
+        )
     ) {
-        presentation.httpsOrigins.takeIf { it.isNotEmpty() }?.let { origins ->
-            NetworkOriginSection(
-                title = "HTTPS 请求",
-                description = "这些地址使用加密的 HTTPS 连接。",
-                origins = origins,
-                insecure = false,
-                modifier = pageScope.elementModifier(sectionIndex++, sectionCount)
+        item(key = "network-summary") {
+            Text(
+                "以下是扩展声明的网络目标。实际请求仍须通过 Flowtone 运行时校验。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = pageScope.elementModifier(0, orderCount).padding(bottom = 24.dp)
             )
         }
-        presentation.httpOrigins.takeIf { it.isNotEmpty() }?.let { origins ->
-            NetworkOriginSection(
-                title = "HTTP 请求（不安全）",
-                description = "通过 HTTP 传输的数据可能不会被加密。\n当前 Flowtone 版本暂不支持扩展通过 HTTP 进行网络访问。",
-                origins = origins,
-                insecure = true,
-                modifier = pageScope.elementModifier(sectionIndex, sectionCount)
-            )
+        if (httpsRules.isNotEmpty()) {
+            item(key = "https-heading") {
+                NetworkRuleHeading(
+                    title = "HTTPS · 已声明",
+                    description = "当前运行时支持按规则发起 HTTPS 请求；这不表示任何目标都能连接成功。",
+                    modifier = pageScope.elementModifier(1, orderCount)
+                )
+            }
+            itemsIndexed(httpsRules, key = { _, rule -> "https:${rule.origin}" }) { index, rule ->
+                NetworkRuleRow(
+                    rule = rule,
+                    onCopy = { copyNetworkRule(context, rule.origin) },
+                    modifier = pageScope.elementModifier(index + 2, orderCount)
+                        .padding(top = 9.dp)
+                )
+            }
+        }
+        if (httpRules.isNotEmpty()) {
+            item(key = "http-heading") {
+                NetworkRuleHeading(
+                    title = "HTTP · 已声明但当前不可用",
+                    description = "这些 HTTP 地址仍按原声明完整列出。当前 Flowtone 运行时不允许扩展通过 HTTP 访问网络。",
+                    modifier = pageScope.elementModifier(httpHeaderOrder, orderCount)
+                        .padding(top = if (httpsRules.isEmpty()) 0.dp else 28.dp)
+                )
+            }
+            itemsIndexed(httpRules, key = { _, rule -> "http:${rule.origin}" }) { index, rule ->
+                NetworkRuleRow(
+                    rule = rule,
+                    onCopy = { copyNetworkRule(context, rule.origin) },
+                    modifier = pageScope.elementModifier(httpHeaderOrder + index + 1, orderCount)
+                        .padding(top = 9.dp)
+                )
+            }
+        }
+        if (httpsRules.isEmpty() && httpRules.isEmpty()) {
+            item(key = "network-empty") {
+                Text(
+                    "此扩展没有声明网络访问规则。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = pageScope.elementModifier(1, orderCount + 1)
+                )
+            }
         }
     }
 }
@@ -77,6 +114,13 @@ internal fun ExtensionNetworkAccessScreen(
 internal data class ExtensionNetworkAccessPresentation(
     val httpsOrigins: List<NetworkOriginPermission>,
     val httpOrigins: List<NetworkOriginPermission>
+)
+
+internal data class ExtensionNetworkRulePresentation(
+    val origin: String,
+    val scope: String,
+    val runtimeStatus: String,
+    val runtimeSchemeSupported: Boolean
 )
 
 internal fun extensionNetworkAccessPresentation(
@@ -90,98 +134,76 @@ internal fun extensionNetworkAccessPresentation(
         .sortedBy(Any::toString)
 )
 
+internal fun extensionNetworkRulePresentation(
+    permission: NetworkOriginPermission
+): ExtensionNetworkRulePresentation {
+    val hostScope = when (permission.hostScope) {
+        NetworkHostScope.Exact -> "仅匹配 ${permission.origin.host}"
+        NetworkHostScope.SubdomainsOnly -> "仅匹配 ${permission.origin.host} 的子域名，不包含主域名"
+    }
+    val supported = permission.security == NetworkSecurity.Secure
+    return ExtensionNetworkRulePresentation(
+        origin = permission.toString(),
+        scope = "$hostScope · 端口 ${permission.origin.effectivePort}",
+        runtimeStatus = if (supported) "HTTPS 可按规则请求" else "当前运行时不支持 HTTP",
+        runtimeSchemeSupported = supported
+    )
+}
+
 @Composable
-private fun NetworkOriginSection(
-    title: String,
-    description: String,
-    origins: List<NetworkOriginPermission>,
-    insecure: Boolean,
+private fun NetworkRuleHeading(title: String, description: String, modifier: Modifier = Modifier) {
+    OptionGroup(title = title, modifier = modifier) {
+        Text(
+            description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun NetworkRuleRow(
+    rule: ExtensionNetworkRulePresentation,
+    onCopy: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
-    Column(modifier = modifier) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (insecure) colors.error else colors.onSurface
-        )
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (insecure) colors.error else colors.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Column(
-            modifier = Modifier.padding(top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            origins.forEach { origin ->
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (insecure) {
-                        colors.errorContainer.copy(alpha = 0.42f)
-                    } else {
-                        colors.surfaceContainer
-                    }
-                ) {
-                    NetworkOriginRow(origin = origin, insecure = insecure)
-                }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(SettingsRowCornerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Row(modifier = Modifier.padding(start = 16.dp, top = 13.dp, end = 6.dp, bottom = 13.dp), verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f).padding(top = 2.dp)) {
+                Text(
+                    rule.origin,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    softWrap = true
+                )
+                Text(
+                    rule.scope,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+                Text(
+                    rule.runtimeStatus,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (rule.runtimeSchemeSupported) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 7.dp)
+                )
+            }
+            IconButton(onClick = onCopy) {
+                Icon(Icons.Rounded.ContentCopy, contentDescription = "复制完整网络规则")
             }
         }
     }
 }
 
-@Composable
-private fun NetworkOriginRow(origin: NetworkOriginPermission, insecure: Boolean) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier.size(38.dp),
-            shape = CircleShape,
-            color = if (insecure) {
-                colors.error.copy(alpha = 0.12f)
-            } else {
-                colors.surfaceContainerHighest
-            }
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (insecure) Icons.Rounded.Language else Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = if (insecure) colors.error else colors.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-        Text(
-            text = origin.toString(),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp)
-        )
-        if (insecure) {
-            Surface(
-                shape = RoundedCornerShape(99.dp),
-                color = colors.error.copy(alpha = 0.12f)
-            ) {
-                Text(
-                    text = "不安全",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.error,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        }
+private fun copyNetworkRule(context: android.content.Context, rule: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText("网络规则", rule))
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+        Toast.makeText(context, "已复制网络规则", Toast.LENGTH_SHORT).show()
     }
 }

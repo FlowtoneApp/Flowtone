@@ -1,69 +1,55 @@
 package ink.tenqui.flowtone.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Album
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.PlayCircle
-import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Remove
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.WarningAmber
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.verticalScroll
-import ink.tenqui.flowtone.data.online.capability.SummaryCapability
-import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityId
+import coil3.compose.AsyncImage
+import coil3.imageLoader
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
+import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
-import coil3.compose.AsyncImage
-import coil3.imageLoader
 
 @Composable
 internal fun ExtensionInstallScreen(
@@ -71,61 +57,144 @@ internal fun ExtensionInstallScreen(
     installing: Boolean,
     onConfirm: () -> Unit,
     onOpenNetworkAccess: () -> Unit,
+    pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val colorScheme = MaterialTheme.colorScheme
+    val colors = MaterialTheme.colorScheme
     val extractedIconColor = rememberArtworkBackgroundColor(
         artworkData = preview.icon?.bytes,
         imageLoader = context.imageLoader,
-        fallbackColor = colorScheme.primaryContainer,
-        isDarkTheme = colorScheme.background.luminance() <= 0.5f
-    ) ?: colorScheme.primaryContainer
-    val iconColor = preview.incomingManifest.color
-        ?.let(::extensionThemeColor)
-        ?: extractedIconColor
-    val providerType = preview.incomingManifest.musicSources
-        .firstOrNull()
-        ?.takeIf(String::isNotBlank)
-        ?: "未指定类型"
-    val cardShape = RoundedCornerShape(28.dp)
-    val updatePresentation = remember(preview) {
-        extensionInstallOverlayPresentation(preview)
-    }
-    val versionAndAuthor = preview.existingInstallation?.let { existing ->
-        "\${existing.identity.version} → \${preview.identity.version} · \${preview.incomingManifest.author}"
-    } ?: "\${preview.incomingManifest.version} · \${preview.incomingManifest.author}"
+        fallbackColor = colors.primaryContainer,
+        isDarkTheme = colors.background.luminance() <= 0.5f
+    ) ?: colors.primaryContainer
+    val iconColor = preview.incomingManifest.color?.let(::extensionThemeColor) ?: extractedIconColor
+    val presentation = remember(preview) { extensionInstallOverlayPresentation(preview) }
+    val action = remember(preview, installing) { extensionInstallActionPresentation(preview, installing) }
+    val credentialViews = remember(preview) { preview.credentialRequests.map(::extensionCredentialRequestPresentation) }
+    val configurationViews = remember(preview) { extensionInstallConfigurationFields(preview) }
+    val hasNetwork = preview.networkPermissions.isNotEmpty()
+    val hasCredentials = credentialViews.isNotEmpty()
+    val hasConfiguration = configurationViews.isNotEmpty()
+    val orderCount = 4 + listOf(preview.isUpdate, hasNetwork, hasCredentials, hasConfiguration).count { it }
+    var order = 0
 
     Column(modifier = modifier.fillMaxSize()) {
-        Surface(
+        Column(
             modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp)
-                .fillMaxWidth()
-                .height(180.dp),
-            shape = cardShape,
-            color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(cardShape)
-            ) {
-                ExtensionInstallHeaderCloud(
-                    color = iconColor,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .requiredSize(1000.dp)
+            ExtensionPreviewIdentity(
+                preview = preview,
+                accent = iconColor,
+                modifier = pageScope.elementModifier(order++, orderCount)
+            )
+            ExtensionOperationSummary(
+                preview = preview,
+                modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+            )
+            if (preview.isUpdate) {
+                ExtensionUpdateChangesSection(
+                    presentation = presentation,
+                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
+            }
+            if (hasNetwork) {
+                ExtensionPreviewNetworkSection(
+                    preview = preview,
+                    onOpenNetworkAccess = onOpenNetworkAccess,
+                    enabled = !installing,
+                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                )
+            }
+            if (hasCredentials) {
+                ExtensionPreviewCredentialsSection(
+                    requests = credentialViews,
+                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                )
+            }
+            OnlineCapabilitySection(
+                preview.summaryCapabilities,
+                pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+            )
+            if (hasConfiguration) {
+                ExtensionPreviewConfigurationSection(
+                    configurationViews,
+                    pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                )
+            }
+        }
+
+        Column(
+            modifier = pageScope.elementModifier(order, orderCount)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+        ) {
+            val previewAvailable = preview.snapshotHandle != null
+            if (!previewAvailable) {
+                Text(
+                    "安装预览不可用，请重新选择扩展包。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.error,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            Button(
+                onClick = { if (action.enabled) onConfirm() },
+                enabled = action.enabled,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                shape = RoundedCornerShape(28.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = iconColor,
+                    contentColor = if (iconColor.luminance() > .5f) Color.Black else Color.White
+                )
+            ) {
+                if (installing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = if (iconColor.luminance() > .5f) Color.Black else Color.White
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(
+                    action.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionPreviewIdentity(
+    preview: ExtensionInstallPreview,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    val identity = remember(preview) { extensionInstallIdentityPresentation(preview) }
+    val shape = RoundedCornerShape(28.dp)
+    Surface(modifier = modifier.fillMaxWidth(), shape = shape, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Box(modifier = Modifier.clip(shape)) {
+            ExtensionInstallHeaderCloud(
+                color = accent,
+                modifier = Modifier.matchParentSize()
+            )
+            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+                Text(
+                    identity.operation,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(modifier = Modifier.padding(top = 14.dp), verticalAlignment = Alignment.Top) {
                     Surface(
-                        modifier = Modifier.size(80.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        color = iconColor.copy(alpha = 0.82f)
+                        modifier = Modifier.size(68.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = accent.copy(alpha = .7f)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             preview.icon?.let { icon ->
@@ -133,542 +202,321 @@ internal fun ExtensionInstallScreen(
                                     model = icon.bytes,
                                     contentDescription = null,
                                     contentScale = ContentScale.Fit,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(12.dp)
+                                    modifier = Modifier.fillMaxSize().padding(10.dp)
                                 )
                             } ?: Icon(
-                                imageVector = Icons.Rounded.Extension,
+                                Icons.Rounded.Extension,
                                 contentDescription = null,
-                                tint = colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(36.dp)
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(34.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(18.dp))
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
                         Text(
-                            text = preview.incomingManifest.name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            identity.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = providerType,
+                            identity.versionLine,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 6.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                         Text(
-                            text = versionAndAuthor,
+                            "开发者：${identity.author}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }
-                preview.incomingManifest.description
-                    .takeIf(String::isNotBlank)
-                    ?.let { description ->
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(start = 24.dp, top = 122.dp, end = 24.dp)
-                        )
-                    }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-        ) {
-            if (shouldShowExtensionUpdateChanges(preview, updatePresentation)) {
-                ExtensionUpdateChangesCard(updatePresentation)
-                Spacer(modifier = Modifier.height(28.dp))
-            }
-            ExtensionCapabilitiesCard(preview.summaryCapabilities)
-            if (preview.networkPermissions.isNotEmpty()) {
-                ExtensionNetworkSummaryCard(
-                    preview = preview,
-                    onClick = onOpenNetworkAccess,
-                    modifier = Modifier.padding(top = 28.dp)
-                )
-            }
-        }
-
-        Column(modifier = Modifier.navigationBarsPadding()) {
-            ExtensionInstallEnvironmentNotice(
-                modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 4.dp)
-            )
-            val actionLabel = if (preview.isUpdate) "更新 " else "安装 "
-            Button(
-                onClick = onConfirm,
-                enabled = !installing,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp)
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = iconColor,
-                    contentColor = if (iconColor.luminance() > 0.5f) Color.Black else Color.White
-                )
-            ) {
-                if (installing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = if (iconColor.luminance() > 0.5f) Color.Black else Color.White
+                identity.description?.let { description ->
+                    Text(
+                        description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 16.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
                 }
-                Text(
-                    text = if (installing) "处理中" else actionLabel + preview.incomingManifest.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
 }
 
 @Composable
-private fun ExtensionUpdateChangesCard(
-    presentation: ExtensionInstallOverlayPresentation
-) {
-    val colors = MaterialTheme.colorScheme
-    Text(
-        text = "本次更新",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = colors.onSurface
-    )
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = colors.surfaceContainer
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            if (!presentation.hasUpdateChanges) {
+private fun ExtensionOperationSummary(preview: ExtensionInstallPreview, modifier: Modifier = Modifier) {
+    OptionGroup(title = "本次操作", modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = ExtensionUpdateNoChangesLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurface
+                    if (preview.isUpdate) "将更新已安装扩展" else "将安装新扩展",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "此更新未更改扩展请求的功能、网络访问、配置或凭证。",
+                    "${preview.summaryCapabilities.count { it.status != SummaryCapabilityStatus.Unsupported }} 项功能 · " +
+                        "${preview.networkPermissions.size} 条网络规则 · ${preview.credentialRequests.size} 项凭据请求",
                     style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 5.dp)
                 )
-            } else if (!presentation.added.isEmpty) {
-                ExtensionUpdateChangeGroup(
-                    title = "新增",
-                    items = presentation.added.allItems(),
-                    icon = Icons.Rounded.Add,
-                    iconTint = colors.primary
+                Text(
+                    "扩展将在 Flowtone 扩展环境中运行，网络访问仍受当前运行时规则限制。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 9.dp)
                 )
-            }
-            if (presentation.hasUpdateChanges && !presentation.removed.isEmpty) {
-                if (!presentation.added.isEmpty) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = colors.outlineVariant.copy(alpha = 0.48f)
-                    )
-                }
-                ExtensionUpdateChangeGroup(
-                    title = "不再需要",
-                    items = presentation.removed.allItems(),
-                    icon = Icons.Rounded.Remove,
-                    iconTint = colors.onSurfaceVariant
-                )
-            }
-            if (presentation.hasUpdateChanges && presentation.securityDowngrades.isNotEmpty()) {
-                if (!presentation.added.isEmpty || !presentation.removed.isEmpty) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = colors.outlineVariant.copy(alpha = 0.48f)
-                    )
-                }
-                ExtensionSecurityDowngradeGroup(presentation.securityDowngrades)
             }
         }
     }
 }
 
-private fun ExtensionInstallChangeItems.allItems(): List<String> =
-    capabilities + networkPermissions + credentialRequests + configurationFields
+@Composable
+private fun ExtensionUpdateChangesSection(
+    presentation: ExtensionInstallOverlayPresentation,
+    modifier: Modifier = Modifier
+) {
+    OptionGroup(title = "本次更新的变化", modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (!presentation.hasUpdateChanges) {
+                    Text(ExtensionUpdateNoChangesLabel, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "功能、网络规则、凭据请求和配置要求没有可报告的变化。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 5.dp)
+                    )
+                } else {
+                    if (!presentation.added.isEmpty) {
+                        ExtensionChangeGroup("新增", presentation.added)
+                    }
+                    if (!presentation.removed.isEmpty) {
+                        if (!presentation.added.isEmpty) HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                        ExtensionChangeGroup("移除", presentation.removed)
+                    }
+                    if (presentation.changedCredentialRequests.isNotEmpty()) {
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                        Text("凭据请求范围变化", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        presentation.changedCredentialRequests.forEach { change ->
+                            Column(modifier = Modifier.padding(top = 10.dp)) {
+                                Text(change.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                Text("原范围：${change.previous}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 3.dp))
+                                Text("新范围：${change.incoming}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 3.dp))
+                            }
+                        }
+                        Text(
+                            "若已授权这些请求，旧契约对应的授权将在更新时清理；更新后需重新授权。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
+                    }
+                    if (presentation.securityDowngrades.isNotEmpty()) {
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                        Text(
+                            "安全性降低",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        presentation.securityDowngrades.forEach { downgrade ->
+                            Column(modifier = Modifier.padding(top = 10.dp)) {
+                                Text(downgrade.previousOrigin, style = MaterialTheme.typography.bodyMedium)
+                                Text("↓", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                Text(downgrade.incomingOrigin, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        Text(
+                            "这些声明从 HTTPS 变为 HTTP；当前 Flowtone 运行时仍不支持 HTTP 访问。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
-private fun ExtensionUpdateChangeGroup(
-    title: String,
-    items: List<String>,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconTint: Color
-) {
-    val colors = MaterialTheme.colorScheme
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = colors.onSurface
-    )
-    items.forEach { item ->
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(18.dp)
-            )
+private fun ExtensionChangeGroup(title: String, items: ExtensionInstallChangeItems) {
+    Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+    listOf(
+        "功能" to items.capabilities,
+        "网络" to items.networkPermissions,
+        "凭据" to items.credentialRequests,
+        "配置" to items.configurationFields
+    ).forEach { (category, values) ->
+        values.forEach { value ->
             Text(
-                text = item,
+                "• $category：$value",
                 style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 10.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = 7.dp)
             )
         }
     }
 }
 
 @Composable
-private fun ExtensionSecurityDowngradeGroup(
-    downgrades: List<ExtensionSecurityDowngradePresentation>
-) {
-    val colors = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = Icons.Rounded.WarningAmber,
-            contentDescription = null,
-            tint = colors.error,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            text = "安全性降低",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.error,
-            modifier = Modifier.padding(start = 8.dp)
-        )
-    }
-    Text(
-        text = "此更新将部分网络访问从加密连接更改为未加密的 HTTP 连接。",
-        style = MaterialTheme.typography.bodySmall,
-        color = colors.onSurfaceVariant,
-        modifier = Modifier.padding(top = 6.dp)
-    )
-    downgrades.forEach { downgrade ->
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.WarningAmber,
-                contentDescription = null,
-                tint = colors.error,
-                modifier = Modifier.size(18.dp)
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 10.dp)
-            ) {
-                Text(
-                    text = downgrade.previousOrigin,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    imageVector = Icons.Rounded.ArrowDownward,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .padding(top = 2.dp)
-                )
-                Text(
-                    text = downgrade.incomingOrigin,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(99.dp),
-                color = colors.error.copy(alpha = 0.12f)
-            ) {
-                Text(
-                    text = "不安全",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.error,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExtensionCapabilitiesCard(capabilities: List<SummaryCapability>) {
-    val colorScheme = MaterialTheme.colorScheme
-    Text(
-        text = "功能支持",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = colorScheme.onSurface
-    )
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = colorScheme.surfaceContainer
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp)) {
-            capabilities.forEachIndexed { index, capability ->
-                ExtensionCapabilityRow(capability)
-                if (index != capabilities.lastIndex) {
-                    HorizontalDivider(color = colorScheme.outlineVariant.copy(alpha = 0.48f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExtensionCapabilityRow(capability: SummaryCapability) {
-    val colorScheme = MaterialTheme.colorScheme
-    val (statusText, statusColor, statusBackground) = when (capability.status) {
-        SummaryCapabilityStatus.Supported -> Triple(
-            "支持",
-            Color(0xFF237A3B),
-            Color(0xFF237A3B).copy(alpha = 0.14f)
-        )
-        SummaryCapabilityStatus.Partial -> Triple(
-            "部分支持",
-            Color(0xFF9A6700),
-            Color(0xFFB77900).copy(alpha = 0.16f)
-        )
-        SummaryCapabilityStatus.Unsupported -> Triple(
-            "不支持",
-            colorScheme.error,
-            colorScheme.error.copy(alpha = 0.12f)
-        )
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier.size(38.dp),
-            shape = CircleShape,
-            color = colorScheme.surfaceContainerHighest.copy(alpha = 0.68f)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = when (capability.id) {
-                        SummaryCapabilityId.SearchAndDiscovery -> Icons.Rounded.Search
-                        SummaryCapabilityId.Playback -> Icons.Rounded.PlayCircle
-                        SummaryCapabilityId.Artist -> Icons.Rounded.Person
-                        SummaryCapabilityId.Album -> Icons.Rounded.Album
-                        SummaryCapabilityId.Playlist -> Icons.Rounded.QueueMusic
-                    },
-                    contentDescription = null,
-                    tint = colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        Text(
-            text = capability.label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = colorScheme.onSurface,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 14.dp)
-        )
-        Surface(
-            shape = RoundedCornerShape(99.dp),
-            color = statusBackground
-        ) {
-            Text(
-                text = statusText,
-                style = MaterialTheme.typography.labelMedium,
-                color = statusColor,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ExtensionNetworkSummaryCard(
+private fun ExtensionPreviewNetworkSection(
     preview: ExtensionInstallPreview,
-    onClick: () -> Unit,
+    onOpenNetworkAccess: () -> Unit,
+    enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    Text(
-        text = "网络访问",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = colorScheme.onSurface,
-        modifier = modifier
-    )
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = colorScheme.surfaceContainer
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    val permissions = remember(preview) { preview.networkPermissions.sortedBy(Any::toString) }
+    val hasHttp = permissions.any { it.security == NetworkSecurity.Insecure }
+    OptionGroup(title = "网络访问", modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                color = colorScheme.surfaceContainerHighest.copy(alpha = 0.68f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.Language,
-                        contentDescription = null,
-                        tint = colorScheme.primary,
-                        modifier = Modifier.size(25.dp)
-                    )
+            Column(modifier = Modifier.padding(16.dp)) {
+                permissions.forEachIndexed { index, permission ->
+                    Text(permission.toString(), style = MaterialTheme.typography.bodyMedium)
+                    if (index != permissions.lastIndex) HorizontalDivider(Modifier.padding(vertical = 9.dp))
+                }
+                TextButton(onClick = onOpenNetworkAccess, enabled = enabled, modifier = Modifier.align(Alignment.End)) {
+                    Icon(Icons.Rounded.Language, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("查看权限详情")
                 }
             }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 14.dp)
-            ) {
-                Text(
-                    text = "可访问 ${preview.incomingManifest.name} 网络服务",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${preview.networkPermissions.size} 条网络访问规则",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 3.dp)
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "查看详情",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.onSurfaceVariant
-                )
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+        }
+        if (hasHttp) {
+            Text(
+                "已声明 HTTP 地址，但当前 Flowtone 运行时不支持扩展通过 HTTP 访问网络。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
-    if (preview.networkPermissions.any { it.security == NetworkSecurity.Insecure }) {
-        Text(
-            text = "包含不安全 HTTP 访问；当前 Flowtone 不支持扩展通过 HTTP 访问网络。",
-            style = MaterialTheme.typography.bodySmall,
-            color = colorScheme.error,
-            modifier = Modifier.padding(top = 10.dp)
-        )
-    }
 }
 
 @Composable
-private fun ExtensionInstallEnvironmentNotice(modifier: Modifier = Modifier) {
-    val colorScheme = MaterialTheme.colorScheme
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.Top
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Info,
-            contentDescription = null,
-            tint = colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(28.dp)
-        )
-        Text(
-            text = "扩展将在 Flowtone 扩展环境中运行，并只能访问声明的网络地址。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp)
-        )
-    }
-}
-
-@Composable
-private fun ExtensionInstallHeaderCloud(
-    color: Color,
+private fun ExtensionPreviewCredentialsSection(
+    requests: List<ExtensionCredentialRequestPresentation>,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .drawBehind {
-                val radius = size.width
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            color.copy(alpha = 0.26f),
-                            color.copy(alpha = 0.12f),
-                            color.copy(alpha = 0.04f),
-                            Color.Transparent
-                        ),
-                        center = Offset(size.width, 0f),
-                        radius = radius
-                    ),
-                    radius = radius,
-                    center = Offset(size.width, 0f)
-                )
+    OptionGroup(title = "凭据请求", modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                requests.forEachIndexed { index, request ->
+                    Column {
+                        Text(request.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(
+                            request.typeLabel + if (request.required) " · 使用相关功能时需要" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        request.realm?.let { realm ->
+                            Text("服务：$realm", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                        }
+                        Text("请求字段：${request.fields.joinToString("、")}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                        request.identityConstraint?.let { constraint ->
+                            Text(constraint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                        }
+                        request.description?.takeIf(String::isNotBlank)?.let { description ->
+                            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
+                        }
+                    }
+                    if (index != requests.lastIndex) HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                }
             }
+        }
+        Text(
+            "安装扩展不等于授权使用账户凭据。安装后仍需在凭据授权页面由你明确选择并确认。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 9.dp)
+        )
+    }
+}
+
+@Composable
+private fun ExtensionPreviewConfigurationSection(
+    fields: List<ExtensionConfigurationFieldPresentation>,
+    modifier: Modifier = Modifier
+) {
+    OptionGroup(title = "安装后配置", modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(SettingsRowCornerRadius),
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                fields.forEachIndexed { index, field ->
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        Text(field.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(
+                            if (field.required) "必填" else "可选",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 10.dp)
+                        )
+                    }
+                    if (field.unavailable) {
+                        Text(
+                            "此 Secret 配置项在当前版本暂不可填写。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    if (index != fields.lastIndex) HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                }
+            }
+        }
+        Text(
+            "安装预览不会写入扩展配置；安装后可在扩展详情页填写。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 9.dp)
+        )
+    }
+}
+
+@Composable
+private fun ExtensionInstallHeaderCloud(color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.drawBehind {
+            val radius = size.width
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        color.copy(alpha = .26f),
+                        color.copy(alpha = .12f),
+                        color.copy(alpha = .04f),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width, 0f),
+                    radius = radius
+                ),
+                radius = radius,
+                center = Offset(size.width, 0f)
+            )
+        }
     )
 }
 

@@ -4,6 +4,8 @@ import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityDefinitions
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageSnapshotHandle
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 
 internal data class ExtensionInstallChangeItems(
@@ -22,6 +24,97 @@ internal data class ExtensionSecurityDowngradePresentation(
     val incomingOrigin: String
 )
 
+internal data class ExtensionCredentialRequestPresentation(
+    val label: String,
+    val typeLabel: String,
+    val realm: String?,
+    val fields: List<String>,
+    val identityConstraint: String?,
+    val required: Boolean,
+    val description: String?
+)
+
+internal data class ExtensionConfigurationFieldPresentation(
+    val label: String,
+    val required: Boolean,
+    val unavailable: Boolean
+)
+
+internal data class ExtensionCredentialContractChangePresentation(
+    val label: String,
+    val previous: String,
+    val incoming: String
+)
+
+internal data class ExtensionInstallIdentityPresentation(
+    val name: String,
+    val versionLine: String,
+    val author: String,
+    val description: String?,
+    val operation: String
+)
+
+internal fun extensionInstallIdentityPresentation(
+    preview: ExtensionInstallPreview
+): ExtensionInstallIdentityPresentation = ExtensionInstallIdentityPresentation(
+    name = preview.incomingManifest.name,
+    versionLine = preview.existingInstallation?.let { existing ->
+        "版本 ${existing.identity.version} → ${preview.identity.version}"
+    } ?: "版本 ${preview.identity.version}",
+    author = preview.incomingManifest.author,
+    description = preview.incomingManifest.description.takeIf(String::isNotBlank),
+    operation = if (preview.isUpdate) "扩展更新" else "首次安装"
+)
+
+internal data class ExtensionInstallActionPresentation(val label: String, val enabled: Boolean)
+
+internal fun extensionInstallActionPresentation(
+    preview: ExtensionInstallPreview,
+    installing: Boolean
+): ExtensionInstallActionPresentation = ExtensionInstallActionPresentation(
+    label = if (installing) "正在处理…" else if (preview.isUpdate) "更新扩展" else "安装扩展",
+    enabled = !installing && preview.snapshotHandle != null
+)
+
+internal fun extensionCredentialRequestPresentation(
+    request: CredentialRequestDefinition
+): ExtensionCredentialRequestPresentation {
+    val contract = request.contract
+    return ExtensionCredentialRequestPresentation(
+        label = request.label,
+        typeLabel = request.credentialType.label,
+        realm = contract.realm,
+        fields = contract.fields.map { it.label },
+        identityConstraint = contract.identifiers
+            .takeIf { it.isNotEmpty() }
+            ?.map { it.field.label }
+            ?.sorted()
+            ?.joinToString("、", prefix = "身份标识至少填写一项："),
+        required = request.required,
+        description = request.description
+    )
+}
+
+internal fun extensionInstallConfigurationFields(
+    preview: ExtensionInstallPreview
+): List<ExtensionConfigurationFieldPresentation> = preview.configurationSchema.fields.map { field ->
+    ExtensionConfigurationFieldPresentation(
+        label = field.label,
+        required = field.required,
+        unavailable = field.type == ConfigurationFieldType.Secret
+    )
+}
+
+internal fun extensionCredentialContractDescription(request: CredentialRequestDefinition): String {
+    val view = extensionCredentialRequestPresentation(request)
+    return buildList {
+        add(view.typeLabel)
+        view.realm?.let { add("服务：$it") }
+        add("字段：${view.fields.joinToString("、")}")
+        view.identityConstraint?.let(::add)
+    }.joinToString(" · ")
+}
+
 internal data class ExtensionInstallOverlayPresentation(
     val title: String,
     val actionLabel: String,
@@ -30,10 +123,12 @@ internal data class ExtensionInstallOverlayPresentation(
     val hasInsecureNetworkPermissions: Boolean,
     val added: ExtensionInstallChangeItems,
     val removed: ExtensionInstallChangeItems,
+    val changedCredentialRequests: List<ExtensionCredentialContractChangePresentation>,
     val securityDowngrades: List<ExtensionSecurityDowngradePresentation>
 ) {
     val hasUpdateChanges: Boolean
-        get() = !added.isEmpty || !removed.isEmpty || securityDowngrades.isNotEmpty()
+        get() = !added.isEmpty || !removed.isEmpty || changedCredentialRequests.isNotEmpty() ||
+            securityDowngrades.isNotEmpty()
 }
 
 internal fun extensionInstallOverlayPresentation(
@@ -69,7 +164,9 @@ internal fun extensionInstallOverlayPresentation(
                 .filterNot { it in downgradeNew }
                 .map(Any::toString)
                 .sorted(),
-            credentialRequests = diff?.addedCredentialRequests.orEmpty().map { it.label },
+            credentialRequests = diff?.addedCredentialRequests.orEmpty().map {
+                "${it.label} · ${extensionCredentialContractDescription(it)}"
+            },
             configurationFields = diff?.addedRequiredFields.orEmpty().map { it.label }
         ),
         removed = ExtensionInstallChangeItems(
@@ -80,9 +177,18 @@ internal fun extensionInstallOverlayPresentation(
                 .filterNot { it in downgradeOld }
                 .map(Any::toString)
                 .sorted(),
-            credentialRequests = diff?.removedCredentialRequests.orEmpty().map { it.label },
+            credentialRequests = diff?.removedCredentialRequests.orEmpty().map {
+                "${it.label} · ${extensionCredentialContractDescription(it)}"
+            },
             configurationFields = diff?.removedFields.orEmpty().map { it.label }
         ),
+        changedCredentialRequests = diff?.changedCredentialRequests.orEmpty().map { change ->
+            ExtensionCredentialContractChangePresentation(
+                label = change.incoming.label,
+                previous = extensionCredentialContractDescription(change.previous),
+                incoming = extensionCredentialContractDescription(change.incoming)
+            )
+        },
         securityDowngrades = diff?.securityDowngrades.orEmpty().map {
             ExtensionSecurityDowngradePresentation(
                 previousOrigin = it.previous.toString(),
@@ -97,7 +203,7 @@ internal fun shouldShowExtensionUpdateChanges(
     presentation: ExtensionInstallOverlayPresentation
 ): Boolean = preview.isUpdate
 
-internal const val ExtensionUpdateNoChangesLabel = "无变更"
+internal const val ExtensionUpdateNoChangesLabel = "无权限变化"
 
 internal suspend fun inspectReplacingExtensionPreview(
     current: ExtensionInstallPreview?,

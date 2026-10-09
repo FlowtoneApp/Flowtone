@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -44,7 +43,6 @@ import ink.tenqui.flowtone.app.ExtensionDiscardChangesConfirmation
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
-import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationStateResolver
@@ -326,7 +324,7 @@ internal fun ExtensionSettingsScreen(
                 onClick = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
                 modifier = pageScope.elementModifier(4, 7).padding(top = 24.dp)
             )
-            ExtensionCapabilitiesSection(
+            OnlineCapabilitySection(
                 presentation.capabilities,
                 pageScope.elementModifier(5, 7).padding(top = 24.dp)
             )
@@ -574,41 +572,6 @@ private fun ExtensionNetworkSection(count: Int, onClick: () -> Unit, modifier: M
             onClick = onClick
         ) {
             Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SettingsRowIconSize))
-        }
-    }
-}
-
-@Composable
-private fun ExtensionCapabilitiesSection(capabilities: List<SummaryCapability>, modifier: Modifier = Modifier) {
-    OptionGroup(title = "功能支持", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                capabilities.forEachIndexed { index, capability ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(capability.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Text(
-                            when (capability.status) {
-                                SummaryCapabilityStatus.Supported -> "支持"
-                                SummaryCapabilityStatus.Partial -> "部分支持"
-                                SummaryCapabilityStatus.Unsupported -> "不支持"
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 12.dp)
-                        )
-                    }
-                    if (index != capabilities.lastIndex) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .48f))
-                    }
-                }
-            }
         }
     }
 }

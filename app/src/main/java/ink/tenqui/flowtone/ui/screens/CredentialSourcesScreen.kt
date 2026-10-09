@@ -7,30 +7,21 @@ import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Button
@@ -38,7 +29,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -63,7 +53,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -83,7 +72,7 @@ import ink.tenqui.flowtone.data.online.credential.CredentialSourceSaveException
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialType
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.OptionGroup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -96,47 +85,74 @@ internal fun CredentialSourcesScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val repository = remember(context) { CredentialSourceRepository.from(context) }
     var sources by remember { mutableStateOf(emptyList<CredentialSource>()) }
-    LaunchedEffect(Unit) { sources = repository.list() }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf(false) }
+    var refreshGeneration by remember { mutableStateOf(0) }
+    var hasBeenCurrent by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshGeneration) {
+        val result = runCatching { withContext(Dispatchers.IO) { repository.list() } }
+        result.onSuccess { sources = it; error = false }.onFailure { error = true }
+        loading = false
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && !loading) refreshGeneration++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            if (hasBeenCurrent && !loading) refreshGeneration++
+            hasBeenCurrent = true
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Button(
-                onClick = { onOpenSource(null) },
-                modifier = pageScope.elementModifier(0).fillMaxWidth()
-            ) {
-                Icon(Icons.Rounded.Add, null)
-                Spacer(Modifier.width(8.dp))
-                Text("添加凭据")
+        item(key = "create") {
+            OptionGroup(title = "凭据管理", modifier = pageScope.elementModifier(0, 3)) {
+                OnlineManagementEntry(
+                    title = "创建凭据",
+                    subtitle = "为 WebDAV 或在线账户保存可复用的凭据信息",
+                    onClick = { onOpenSource(null) }
+                ) { Icon(Icons.Rounded.Key, contentDescription = null) }
             }
         }
-        if (sources.isEmpty()) {
+        if (loading && sources.isEmpty()) {
+            item(key = "loading") { Text("正在读取凭据…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else if (error && sources.isEmpty()) {
+            item(key = "error") {
+                Column {
+                    Text("凭据暂时无法读取", color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { refreshGeneration++ }) { Text("重试") }
+                }
+            }
+        } else if (sources.isEmpty()) {
             item {
                 CredentialSourceGroup(pageScope.elementModifier(1)) {
-                    Text("尚未添加凭据", style = MaterialTheme.typography.bodyMedium)
-                    Text("凭据是 Flowtone 用户级资源，可供未来兼容的在线扩展使用。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                    Text("还没有凭据", style = MaterialTheme.typography.titleSmall)
+                    Text("创建后可在扩展的凭据授权页选择。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         } else {
-            items(sources, key = CredentialSource::id) { source ->
-                CredentialSourceGroup(
-                    modifier = pageScope.elementModifier(1).clickable { onOpenSource(source.id) }
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(source.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(source.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp))
-                            Text(credentialSourceSummary(source), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 7.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+            item(key = "heading") { Text("已保存的凭据", style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(1, sources.size + 2)) }
+            itemsIndexed(sources, key = { _, source -> source.id }) { index, source ->
+                OnlineManagementEntry(
+                    title = source.label,
+                    subtitle = "${credentialSourceStatus(source)}\n${source.credentialType.label} · ${credentialSourceSummary(source)}",
+                    onClick = { onOpenSource(source.id) },
+                    modifier = pageScope.elementModifier(2 + index, sources.size + 2),
+                    subtitleMaxLines = 4
+                ) { Icon(Icons.Rounded.Key, contentDescription = null) }
             }
+            if (error) item(key = "refresh_error") { TextButton(onClick = { refreshGeneration++ }) { Text("刷新失败，重试") } }
         }
     }
 }
@@ -162,6 +178,8 @@ internal fun CredentialSourceEditScreen(
     val windowFlag = remember(hostActivity) { CredentialSecretWindowFlag() }
     val passwordInput = remember(sourceId) { TextFieldState() }
     var existing by remember(sourceId) { mutableStateOf<CredentialSource?>(null) }
+    var sourceLoading by remember(sourceId) { mutableStateOf(sourceId != null) }
+    var sourceLoadError by remember(sourceId) { mutableStateOf(false) }
     var type by remember(sourceId) { mutableStateOf<CredentialType?>(null) }
     var label by remember(sourceId) { mutableStateOf("") }
     var realm by remember(sourceId) { mutableStateOf("") }
@@ -169,7 +187,6 @@ internal fun CredentialSourceEditScreen(
     var passwordClearPending by remember(sourceId) { mutableStateOf(false) }
     var cookieDraft by remember(sourceId) { mutableStateOf(CredentialSecretDraft()) }
     var passwordInputVisible by remember(sourceId) { mutableStateOf(false) }
-    var passwordInputFocused by remember(sourceId) { mutableStateOf(false) }
     var cookieInputVisible by remember(sourceId) { mutableStateOf(false) }
     var revealJob by remember(sourceId) { mutableStateOf<Job?>(null) }
     var pendingKeyguardRequest by remember(sourceId) { mutableStateOf<CredentialSecretAccessRequest?>(null) }
@@ -178,6 +195,8 @@ internal fun CredentialSourceEditScreen(
     var operationError by remember(sourceId) { mutableStateOf<String?>(null) }
     var authenticationError by remember(sourceId) { mutableStateOf<String?>(null) }
     var authenticationErrorField by remember(sourceId) { mutableStateOf<CredentialFieldId?>(null) }
+    var saving by remember(sourceId) { mutableStateOf(false) }
+    var deletingSource by remember(sourceId) { mutableStateOf(false) }
 
     fun hideSavedSecret() {
         accessGate.activeRequest?.let(accessGate::cancelRead)
@@ -188,7 +207,6 @@ internal fun CredentialSourceEditScreen(
     fun hideSecretDisplays() {
         hideSavedSecret()
         passwordInputVisible = false
-        passwordInputFocused = false
         cookieInputVisible = false
     }
     fun cancelAuthentication() {
@@ -224,11 +242,11 @@ internal fun CredentialSourceEditScreen(
         }
     }
 
-    fun receiveAuthenticationSuccess(request: CredentialSecretAccessRequest) {
+    fun receiveAuthenticationSuccess(request: CredentialSecretAccessRequest, allowDeferred: Boolean = false) {
         if (!accessGate.canCompleteAuthentication(request, sourceId.orEmpty())) return
         if (!lifecycleOwner.lifecycle.currentState.isAtLeast(State.STARTED)) {
-            // Keyguard briefly stops this Activity. Keep only this field-scoped result until return.
-            deferredAuthentication = request
+            // Only the system Keyguard return may be deferred across an Activity stop.
+            if (allowDeferred) deferredAuthentication = request else accessGate.cancel(request)
             return
         }
         startReadAfterAuthentication(request)
@@ -250,7 +268,7 @@ internal fun CredentialSourceEditScreen(
         pendingKeyguardRequest = null
         if (request != null) {
             if (result.resultCode == Activity.RESULT_OK) {
-                receiveAuthenticationSuccess(request)
+                receiveAuthenticationSuccess(request, allowDeferred = true)
             } else {
                 failAuthentication(request, "身份认证未完成，请重试。")
             }
@@ -315,8 +333,9 @@ internal fun CredentialSourceEditScreen(
                 Lifecycle.Event.ON_STOP -> {
                     if (currentShowsPlaintext) windowFlag.retainUntilForeground(lifecycleOwner.lifecycle)
                     hideSecretDisplays()
+                    if (pendingKeyguardRequest == null && deferredAuthentication == null) cancelAuthentication()
                 }
-                Lifecycle.Event.ON_START -> deferredAuthentication?.let(::receiveAuthenticationSuccess)
+                Lifecycle.Event.ON_START -> deferredAuthentication?.let { receiveAuthenticationSuccess(it) }
                 else -> Unit
             }
         }
@@ -339,7 +358,10 @@ internal fun CredentialSourceEditScreen(
         onDispose { windowFlag.hide() }
     }
     LaunchedEffect(sourceId) {
-        existing = sourceId?.let(repository::get)
+        val result = runCatching { withContext(Dispatchers.IO) { sourceId?.let(repository::get) } }
+        existing = result.getOrNull()
+        sourceLoadError = sourceId != null && existing == null
+        sourceLoading = false
         existing?.let { source ->
             type = source.credentialType
             label = source.label
@@ -354,11 +376,21 @@ internal fun CredentialSourceEditScreen(
         CredentialSourceInput(it.credentialType, it.label, it.realm, it.publicFields)
     }
     val hasSecretChanges = credentialSecretDraftHasChanges(passwordInput.text, passwordClearPending, cookieDraft)
+    LaunchedEffect(passwordInput.text.length) {
+        if (passwordInput.text.isNotEmpty() && revealedSecret.field == CredentialFieldId.Password) hideSavedSecret()
+    }
+    LaunchedEffect(revealedSecret.result) {
+        if (revealedSecret.result is CredentialSecretReadResult.Available) {
+            kotlinx.coroutines.delay(30_000)
+            hideSavedSecret()
+        }
+    }
     val dirty = draft != null && (
         baseline == null || draft != baseline ||
             hasSecretChanges
         )
     fun requestBack() {
+        if (saving || deletingSource) return
         if (!dirty) leavePage() else onDiscardChangesConfirmationChange(
             ExtensionDiscardChangesConfirmation(
                 title = "放弃未保存的更改？",
@@ -370,34 +402,76 @@ internal fun CredentialSourceEditScreen(
     }
     val currentBackActionChange by rememberUpdatedState(onBackActionChange)
     val currentConfirmationChange by rememberUpdatedState(onDiscardChangesConfirmationChange)
-    DisposableEffect(dirty, draft, baseline) {
+    DisposableEffect(dirty, draft, baseline, saving, deletingSource) {
         currentBackActionChange(::requestBack)
         onDispose { currentBackActionChange(null); currentConfirmationChange(null) }
     }
     BackHandler(onBack = ::requestBack)
 
+    fun chooseType(candidate: CredentialType) {
+        if (type == candidate || saving || deletingSource) return
+        val resetDraft = {
+            type = candidate
+            label = ""
+            realm = ""
+            publicFields = emptyMap()
+            passwordInput.edit { replace(0, length, "") }
+            cookieDraft = CredentialSecretDraft()
+            passwordClearPending = false
+            hideSecretDisplays()
+            cancelAuthentication()
+            errors = emptyMap()
+            operationError = null
+        }
+        if (type != null && (label.isNotBlank() || realm.isNotBlank() || publicFields.isNotEmpty() || hasSecretChanges)) {
+            onDiscardChangesConfirmationChange(
+                ExtensionDiscardChangesConfirmation(
+                    title = "切换凭据类型？",
+                    message = "切换后将清空当前填写但尚未保存的信息。",
+                    onKeepEditing = { onDiscardChangesConfirmationChange(null) },
+                    onDiscard = { onDiscardChangesConfirmationChange(null); resetDraft() }
+                )
+            )
+        } else resetDraft()
+    }
+
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().imePadding(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (type == null) {
+        if (sourceLoading) {
+            item { Text("正在读取凭据…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else if (sourceLoadError) {
+            item { Text("凭据已不存在或暂时无法读取。", color = MaterialTheme.colorScheme.error) }
+        } else {
+        if (existing == null) {
             item {
-                Text("选择凭据类型", style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(0))
+                Text("凭据类型", style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(0))
                 CredentialType.entries.forEach { candidate ->
-                    OutlinedButton(onClick = { type = candidate }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                        Text(candidate.label)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).clickable { chooseType(candidate) },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(SettingsRowCornerRadius),
+                        color = if (type == candidate) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(if (type == candidate) "${candidate.label} · 已选择" else candidate.label, style = MaterialTheme.typography.titleSmall)
+                            Text(credentialTypeDescription(candidate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
-        } else {
+        }
+        if (type != null) {
             item {
-                CredentialSourceGroup(pageScope.elementModifier(0)) {
-                    Text(type!!.label, style = MaterialTheme.typography.titleMedium)
+                CredentialSourceGroup(pageScope.elementModifier(1)) {
+                    Text("基本信息", style = MaterialTheme.typography.titleMedium)
+                    Text(type!!.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(value = label, onValueChange = { label = it; errors = errors - "label" }, label = { Text("凭证名称") }, isError = "label" in errors, supportingText = { errors["label"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true)
                     if (type == CredentialType.GenericAccount) {
-                        OutlinedTextField(value = realm, onValueChange = { if (existing == null) { realm = it; errors = errors - "realm" } }, label = { Text("服务 realm") }, enabled = existing == null, isError = "realm" in errors, supportingText = { Text(errors["realm"] ?: if (existing == null) "例如 music.163.com" else "创建后不可修改") }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true)
+                        OutlinedTextField(value = realm, onValueChange = { if (existing == null) { realm = it; errors = errors - "realm" } }, label = { Text("服务标识（realm）") }, enabled = existing == null, isError = "realm" in errors, supportingText = { Text(if ("realm" in errors) "请输入有效的服务域名，例如 music.example.com" else if (existing == null) "用于限定凭据所属服务，例如 music.example.com" else "创建后不可修改") }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), singleLine = true)
                     }
+                    Text("账户与服务", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 20.dp))
                     CredentialSourcePublicFields(type!!, publicFields, errors) { field, value ->
                         publicFields = publicFields.toMutableMap().apply { if (value.isBlank()) remove(field) else put(field, value) }
                         errors = errors - credentialSourcePublicFieldErrorKey(field)
@@ -406,6 +480,8 @@ internal fun CredentialSourceEditScreen(
             }
             item {
                 CredentialSourceGroup(pageScope.elementModifier(1)) {
+                    Text("敏感信息", style = MaterialTheme.typography.titleMedium)
+                    Text("可稍后补齐。查看已保存内容需要通过系统身份认证。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     type!!.let { currentType ->
                         val secrets = CredentialSourceContracts.secretFields(currentType)
                             .sortedBy { CredentialFieldDefinitions.get(it).order }
@@ -426,167 +502,52 @@ internal fun CredentialSourceEditScreen(
                                 else -> "已保存，但无法解密；请重新设置"
                             }
                             val fieldAuthenticationPending = accessGate.activeRequest?.fieldId == field
-                            if (!isPassword) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(definition.label, style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        if (fieldAuthenticationPending) "等待系统身份认证…" else status,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (storedState == CredentialSecretState.Configured && existing != null) {
-                                    val shown = revealedSecret.field == field
-                                    IconButton(
-                                        enabled = !accessGate.isBusy,
-                                        onClick = {
-                                            if (shown) hideSavedSecret() else requestSavedSecret(field)
+                            CredentialSavedSecretRow(
+                                label = definition.label,
+                                state = storedState,
+                                status = if (fieldAuthenticationPending) "等待系统身份认证…" else status,
+                                result = if (revealedSecret.field == field) revealedSecret.result else null,
+                                revealing = revealedSecret.field == field,
+                                authenticationError = if (authenticationErrorField == field) authenticationError else null,
+                                onReveal = {
+                                    if (revealedSecret.field == field) hideSavedSecret()
+                                    else requestSavedSecret(field)
+                                },
+                                enabled = !accessGate.isBusy && !saving && !deletingSource,
+                                isPassword = isPassword
+                            )
+                            if (isPassword) {
+                                OutlinedSecureTextField(
+                                    state = passwordInput,
+                                    label = { Text("输入新密码") },
+                                    textObfuscationMode = credentialPasswordObfuscationMode(passwordInputVisible),
+                                    trailingIcon = {
+                                        IconButton(onClick = { passwordInputVisible = !passwordInputVisible }) {
+                                            Icon(
+                                                if (passwordInputVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                                contentDescription = if (passwordInputVisible) "隐藏新密码" else "显示新密码"
+                                            )
                                         }
-                                    ) {
-                                        Icon(
-                                            if (shown) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                            contentDescription = "${if (shown) "隐藏" else "显示"}已保存的${definition.label}"
-                                        )
-                                    }
-                                }
-                            }
-                            if (!isPassword && revealedSecret.field == field) {
-                                when (val result = revealedSecret.result) {
-                                    is CredentialSecretReadResult.Available -> OutlinedTextField(
-                                        value = result.plaintext,
-                                        onValueChange = {},
-                                        label = { Text("已保存的${definition.label}（只读）") },
-                                        readOnly = true,
-                                        singleLine = isPassword,
-                                        minLines = if (isPassword) 1 else 3,
-                                        maxLines = if (isPassword) 1 else 6,
-                                        modifier = Modifier.fillMaxWidth().then(if (isPassword) Modifier else Modifier.heightIn(max = 220.dp))
-                                    )
-                                    is CredentialSecretReadResult.Unavailable -> Text("已保存的${definition.label}不可用，请输入新值重新设置。", color = MaterialTheme.colorScheme.error)
-                                    CredentialSecretReadResult.NotConfigured -> Text("已保存的${definition.label}已不存在，请输入新值重新设置。", color = MaterialTheme.colorScheme.error)
-                                    null -> Text("正在读取已保存的${definition.label}…", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                            if (!isPassword && authenticationErrorField == field) {
-                                authenticationError?.let {
+                                    },
+                                    isError = "secrets.${field.value}" in errors,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                        .onFocusChanged { focus ->
+                                            if (focus.isFocused && accessGate.isBusy) cancelAuthentication()
+                                        }
+                                )
+                                errors["secrets.${field.value}"]?.let {
                                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                 }
-                            }
-                            if (isPassword) {
-                                val savedPasswordShown = revealedSecret.field == field
-                                val savedPassword = revealedSecret.result as? CredentialSecretReadResult.Available
-                                val revealPending = savedPasswordShown && revealedSecret.result == null
-                                val revealFailure = revealedSecret.result is CredentialSecretReadResult.Unavailable ||
-                                    revealedSecret.result == CredentialSecretReadResult.NotConfigured
-                                val canRevealSaved = storedState == CredentialSecretState.Configured && existing != null
-                                val hasInput = passwordInput.text.isNotEmpty()
-                                val showSavedValue = savedPasswordShown && savedPassword != null && !hasInput
-                                val showSavedPlaceholder = canRevealSaved && !hasInput &&
-                                    !passwordInputFocused && !passwordClearPending &&
-                                    revealedSecret.field == null
-
-                                LaunchedEffect(hasInput, savedPasswordShown) {
-                                    if (hasInput && savedPasswordShown) hideSavedSecret()
-                                }
-                                Text("密码", style = MaterialTheme.typography.titleSmall)
-                                Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                                    OutlinedSecureTextField(
-                                        state = passwordInput,
-                                        label = null,
-                                        textObfuscationMode = credentialPasswordObfuscationMode(passwordInputVisible),
-                                        trailingIcon = {
-                                            IconButton(
-                                                enabled = (hasInput || canRevealSaved || showSavedValue) && !accessGate.isBusy,
-                                                onClick = {
-                                                    when {
-                                                        showSavedValue -> {
-                                                            hideSavedSecret()
-                                                            passwordInputFocused = false
-                                                        }
-                                                        hasInput -> passwordInputVisible = !passwordInputVisible
-                                                        canRevealSaved -> {
-                                                            passwordInputVisible = false
-                                                            passwordInputFocused = false
-                                                            requestSavedSecret(field)
-                                                        }
-                                                    }
-                                                }
-                                            ) {
-                                                Icon(
-                                                    if (passwordInputVisible || showSavedValue) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                                    contentDescription = if (passwordInputVisible || showSavedValue) "隐藏密码" else "显示密码"
-                                                )
-                                            }
-                                        },
-                                        isError = "secrets.${field.value}" in errors || revealFailure,
-                                        modifier = Modifier.fillMaxWidth().onFocusChanged { focus ->
-                                            passwordInputFocused = focus.isFocused
-                                            if (focus.isFocused && accessGate.isBusy) cancelAuthentication()
-                                            if (focus.isFocused && showSavedValue) hideSavedSecret()
-                                        }
-                                    )
-                                    AnimatedContent(
-                                        showSavedValue,
-                                        transitionSpec = {
-                                            if (targetState) {
-                                                fadeIn(tween(FlowtoneMotion.ShortDurationMillis, easing = FlowtoneMotion.Easing)) togetherWith ExitTransition.None
-                                            } else {
-                                                EnterTransition.None togetherWith ExitTransition.None
-                                            }
-                                        },
-                                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp, end = 64.dp),
-                                        label = "credentialSavedPasswordContent"
-                                    ) { savedValueVisible ->
-                                        when {
-                                            savedValueVisible && showSavedValue -> Text(
-                                                savedPassword?.plaintext.orEmpty(),
-                                                maxLines = 1,
-                                                softWrap = false,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            showSavedPlaceholder -> Text(
-                                                "•••",
-                                                maxLines = 1,
-                                                softWrap = false,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            revealPending -> Text(
-                                                "…",
-                                                maxLines = 1,
-                                                softWrap = false,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-
-                                val passwordSupportingText = when {
-                                    fieldAuthenticationPending -> "等待系统身份认证…"
-                                    revealPending -> "正在读取已保存的密码…"
-                                    revealFailure -> "已保存的密码不可用，请输入新密码重新设置。"
-                                    authenticationErrorField == field -> authenticationError.orEmpty()
-                                    "secrets.${field.value}" in errors -> errors.getValue("secrets.${field.value}")
-                                    else -> status
-                                }
-                                Text(
-                                    passwordSupportingText,
-                                    modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (
-                                        revealFailure || authenticationErrorField == field ||
-                                        "secrets.${field.value}" in errors
-                                    ) MaterialTheme.colorScheme.error
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             } else {
                                 OutlinedTextField(
                                     value = cookieDraft.input,
                                     onValueChange = { value ->
                                         cookieDraft = cookieDraft.edit(value)
+                                        if (value.isNotEmpty() && revealedSecret.field == field) hideSavedSecret()
                                         errors = errors - "secrets.${field.value}"
                                         operationError = null
                                     },
-                                    label = { Text("新 Cookie") },
+                                    label = { Text("输入新 Cookie") },
                                     visualTransformation = credentialCookieVisualTransformation(cookieInputVisible),
                                     trailingIcon = {
                                         IconButton(onClick = { cookieInputVisible = !cookieInputVisible }) {
@@ -606,11 +567,6 @@ internal fun CredentialSourceEditScreen(
                                     minLines = 4,
                                     maxLines = 6
                                 )
-                                if (authenticationErrorField == field) {
-                                    authenticationError?.let {
-                                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
                             }
                             if (deleting) {
                                 TextButton(onClick = {
@@ -633,54 +589,76 @@ internal fun CredentialSourceEditScreen(
                 }
             }
             item {
-                Button(onClick = {
-                    val input = draft ?: return@Button
-                    val secretMutations = CredentialSourceContracts.secretFields(input.credentialType).associateWith { field ->
-                        if (field == CredentialFieldId.Password) credentialSecretInputMutation(passwordInput.text, passwordClearPending)
-                        else cookieDraft.mutation
-                    }
-                    val validation = CredentialSourceValidator.validateInput(input) +
-                        CredentialSourceRepository.validateSecretMutations(type!!, secretMutations)
-                    errors = validation.associate { it.field to it.reason }
-                    operationError = null
-                    if (validation.isEmpty()) {
-                        try {
-                            val saved = repository.save(existing?.id ?: sourceId, input, secretMutations)
-                            existing = saved
-                            leavePage()
-                        } catch (failure: CredentialSourceSaveException) {
-                            existing = repository.get(failure.persistedMetadata.id) ?: failure.persistedMetadata
-                            operationError = "凭证信息已保存，但 Secret 保存失败。请重试。"
-                        } catch (_: Exception) {
-                            operationError = "凭证保存失败，请检查信息或安全存储状态后重试。"
+                Button(
+                    onClick = {
+                        if (saving || deletingSource) return@Button
+                        val input = draft ?: return@Button
+                        val secretMutations = CredentialSourceContracts.secretFields(input.credentialType).associateWith { field ->
+                            if (field == CredentialFieldId.Password) credentialSecretInputMutation(passwordInput.text, passwordClearPending)
+                            else cookieDraft.mutation
                         }
-                    }
-                }, enabled = dirty, modifier = Modifier.fillMaxWidth()) { Text("保存") }
+                        val validation = CredentialSourceValidator.validateInput(input) +
+                            CredentialSourceRepository.validateSecretMutations(input.credentialType, secretMutations)
+                        errors = validation.associate { it.field to it.reason }
+                        operationError = null
+                        if (validation.isNotEmpty()) return@Button
+                        saving = true
+                        scope.launch {
+                            val result = runCatching {
+                                withContext(Dispatchers.IO) { repository.save(existing?.id ?: sourceId, input, secretMutations) }
+                            }
+                            saving = false
+                            result.onSuccess { saved ->
+                                existing = saved
+                                leavePage()
+                            }.onFailure { failure ->
+                                if (failure is CredentialSourceSaveException) {
+                                    existing = withContext(Dispatchers.IO) {
+                                        repository.get(failure.persistedMetadata.id)
+                                    } ?: failure.persistedMetadata
+                                    operationError = "凭据信息已保存，但敏感字段保存失败。草稿已保留，请重试。"
+                                } else {
+                                    operationError = "凭据保存失败，草稿已保留，请重试。"
+                                }
+                            }
+                        }
+                    },
+                    enabled = dirty && !saving && !deletingSource,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (saving) "正在保存…" else "保存凭据") }
                 operationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 if (existing != null) {
-                    TextButton(onClick = {
-                        onDiscardChangesConfirmationChange(
-                            ExtensionDiscardChangesConfirmation(
-                                title = "删除凭据？",
-                                message = "此操作将删除凭证元数据及其已保存的 Secret。",
-                                keepLabel = "取消",
-                                discardLabel = "删除",
-                                onKeepEditing = { onDiscardChangesConfirmationChange(null) },
-                                onDiscard = {
-                                    val id = existing!!.id
-                                    onDiscardChangesConfirmationChange(null)
-                                    try {
-                                        if (repository.delete(id)) leavePage()
-                                        else operationError = "凭证不存在，未完成删除。"
-                                    } catch (_: Exception) {
-                                        operationError = "无法完整删除凭证及其 Secret，请重试。"
+                    TextButton(
+                        onClick = {
+                            if (saving || deletingSource) return@TextButton
+                            onDiscardChangesConfirmationChange(
+                                ExtensionDiscardChangesConfirmation(
+                                    title = "删除凭据？",
+                                    message = "将删除凭据信息、已保存的敏感字段及相关授权。",
+                                    keepLabel = "取消",
+                                    discardLabel = "删除",
+                                    onKeepEditing = { onDiscardChangesConfirmationChange(null) },
+                                    onDiscard = {
+                                        val id = existing!!.id
+                                        onDiscardChangesConfirmationChange(null)
+                                        deletingSource = true
+                                        scope.launch {
+                                            val result = runCatching { withContext(Dispatchers.IO) { repository.delete(id) } }
+                                            deletingSource = false
+                                            result.onSuccess { deleted ->
+                                                if (deleted) leavePage() else operationError = "凭据不存在，未完成删除。"
+                                            }.onFailure { operationError = "无法完整删除凭据及敏感信息，请重试。" }
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
-                    }, modifier = Modifier.fillMaxWidth()) { Text("删除凭据", color = MaterialTheme.colorScheme.error) }
+                        },
+                        enabled = !saving && !deletingSource,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (deletingSource) "正在删除…" else "删除凭据", color = MaterialTheme.colorScheme.error) }
                 }
             }
+        }
         }
     }
 }
@@ -700,11 +678,91 @@ private fun CredentialSourcePublicFields(
             onValueChange = { onChange(field, it) },
             label = { Text(definition.label) },
             isError = error != null,
-            supportingText = { if (error != null) Text(error) },
+            supportingText = {
+                when {
+                    error != null -> Text(error)
+                    type == CredentialType.WebDav && field == CredentialFieldId.Username -> Text("授权 WebDAV 扩展时需要")
+                    type == CredentialType.AccountPassword -> Text("至少填写一种扩展请求接受的账户标识")
+                }
+            },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             singleLine = true
         )
     }
+}
+
+@Composable
+private fun CredentialSavedSecretRow(
+    label: String,
+    state: CredentialSecretState,
+    status: String,
+    result: CredentialSecretReadResult?,
+    revealing: Boolean,
+    authenticationError: String?,
+    onReveal: () -> Unit,
+    enabled: Boolean,
+    isPassword: Boolean
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleSmall)
+                Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (state == CredentialSecretState.Configured) {
+                IconButton(onClick = onReveal, enabled = enabled) {
+                    Icon(
+                        if (revealing) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        contentDescription = if (revealing) "隐藏已保存的$label" else "认证后查看已保存的$label"
+                    )
+                }
+            }
+        }
+        if (revealing) when (result) {
+            is CredentialSecretReadResult.Available -> OutlinedTextField(
+                value = result.plaintext,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("已保存的$label（只读）") },
+                singleLine = isPassword,
+                minLines = if (isPassword) 1 else 3,
+                maxLines = if (isPassword) 1 else 6,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp)
+            )
+            is CredentialSecretReadResult.Unavailable -> Text("已保存的${label}不可用，请输入新值重新设置。", color = MaterialTheme.colorScheme.error)
+            CredentialSecretReadResult.NotConfigured -> Text("已保存的${label}已不存在，请输入新值重新设置。", color = MaterialTheme.colorScheme.error)
+            null -> Text("正在读取已保存的$label…", style = MaterialTheme.typography.bodySmall)
+        }
+        authenticationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+internal fun credentialSourceStatus(source: CredentialSource): String {
+    val requiredPublic = when (source.credentialType) {
+        CredentialType.WebDav -> listOf(CredentialFieldId.Endpoint, CredentialFieldId.Username)
+        CredentialType.AccountPassword -> emptyList()
+        CredentialType.GenericAccount -> emptyList()
+    }
+    val missingPublic = requiredPublic.any { source.publicFields[it].isNullOrBlank() } ||
+        (source.credentialType == CredentialType.AccountPassword && listOf(
+            CredentialFieldId.Username, CredentialFieldId.UserId, CredentialFieldId.Email, CredentialFieldId.Phone
+        ).all { source.publicFields[it].isNullOrBlank() })
+    val states = CredentialSourceContracts.secretFields(source.credentialType).map {
+        source.secretFieldStates[it] ?: CredentialSecretState.NotConfigured
+    }
+    return when {
+        missingPublic -> "需要补齐公开信息"
+        CredentialSecretState.Unavailable in states -> "敏感信息不可用，需重新设置"
+        states.all { it == CredentialSecretState.NotConfigured } -> "敏感信息尚未设置"
+        CredentialSecretState.NotConfigured in states -> "已保存部分敏感信息"
+        else -> "敏感信息已保存"
+    }
+}
+
+internal fun credentialTypeDescription(type: CredentialType): String = when (type) {
+    CredentialType.WebDav -> "用于 WebDAV 服务，填写服务器地址与用户名。"
+    CredentialType.AccountPassword -> "用于以用户名、邮箱、手机号或用户 ID 识别的账户。"
+    CredentialType.GenericAccount -> "用于指定服务的账户，可按扩展请求保存密码或 Cookie。"
 }
 
 internal fun credentialSourcePublicFieldErrorKey(field: CredentialFieldId): String =
@@ -746,7 +804,7 @@ private fun CredentialSourceGroup(modifier: Modifier = Modifier, content: @Compo
 }
 
 internal fun credentialSourceSummary(source: CredentialSource): String = when (source.credentialType) {
-    CredentialType.WebDav -> listOfNotNull(source.publicFields[CredentialFieldId.Endpoint], source.publicFields[CredentialFieldId.Username]).joinToString(" · ").ifBlank { "密码未设置" }
+    CredentialType.WebDav -> listOfNotNull(source.publicFields[CredentialFieldId.Endpoint], source.publicFields[CredentialFieldId.Username]).joinToString(" · ").ifBlank { "未填写服务器和用户名" }
     CredentialType.AccountPassword -> listOfNotNull(source.publicFields[CredentialFieldId.Username], source.publicFields[CredentialFieldId.Email], source.publicFields[CredentialFieldId.Phone], source.publicFields[CredentialFieldId.UserId]).firstOrNull() ?: "未填写身份标识"
     CredentialType.GenericAccount -> listOfNotNull(source.realm, source.publicFields[CredentialFieldId.Account]).joinToString(" · ")
 }

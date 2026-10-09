@@ -330,6 +330,7 @@ internal fun SecondaryPageHost(
                     installing = extensionInstallBusy,
                     onConfirm = onConfirmExtensionInstall,
                     onOpenNetworkAccess = { onOpenExtensionNetworkAccess(preview.networkPermissions) },
+                    pageScope = pageScope,
                     modifier = Modifier
                         .fillMaxSize()
                         .rightSwipeBackGesture(onCloseExtensionInstall)

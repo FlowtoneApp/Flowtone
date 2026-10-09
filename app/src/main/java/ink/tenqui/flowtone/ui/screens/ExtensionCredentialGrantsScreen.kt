@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,11 +17,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -62,6 +65,7 @@ import ink.tenqui.flowtone.data.online.credential.CredentialSource
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceMatch
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceMatcher
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceRepository
+import ink.tenqui.flowtone.data.online.credential.CredentialSecretState
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
@@ -75,6 +79,16 @@ private data class CredentialGrantRow(
     val request: CredentialRequestDefinition,
     val evaluation: CredentialGrantEvaluation
 )
+
+internal fun credentialGrantStatus(evaluation: CredentialGrantEvaluation): String = when {
+    evaluation.grant == null -> "未授权"
+    evaluation.invalidReason == CredentialGrantInvalidReason.RequestContractChanged -> "请求范围已变化，需重新授权"
+    evaluation.invalidReason == CredentialGrantInvalidReason.ExtensionInstallationChanged -> "扩展已重新安装，需重新授权"
+    evaluation.invalidReason == CredentialGrantInvalidReason.RequestRemoved -> "请求已移除，授权失效"
+    !evaluation.authorizationValid -> "授权已失效，需重新选择"
+    !evaluation.sourceReady -> "已授权，凭据当前不可用"
+    else -> "已授权且可用"
+}
 
 @Composable
 internal fun ExtensionCredentialGrantsScreen(
@@ -95,10 +109,13 @@ internal fun ExtensionCredentialGrantsScreen(
     var error by remember(installed.manifest.id) { mutableStateOf<String?>(null) }
     var revokeRequest by remember(installed.manifest.id) { mutableStateOf<CredentialRequestDefinition?>(null) }
     var revoking by remember(installed.manifest.id) { mutableStateOf(false) }
+    var refreshGeneration by remember(installed.manifest.id) { mutableStateOf(0) }
+    var hasBeenCurrent by remember(installed.manifest.id) { mutableStateOf(false) }
 
     fun refresh() {
+        val generation = ++refreshGeneration
         scope.launch {
-            loading = true
+            if (rows.isEmpty()) loading = true
             error = null
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -110,22 +127,30 @@ internal fun ExtensionCredentialGrantsScreen(
                     current to results
                 }
             }.onSuccess { (current, results) ->
-                currentInstalled = current
-                rows = results
+                if (generation == refreshGeneration) {
+                    currentInstalled = current
+                    rows = results
+                }
             }.onFailure {
-                error = "凭据授权状态暂不可用，请稍后重试。"
+                if (generation == refreshGeneration) error = "凭据授权状态暂不可用，请稍后重试。"
             }
-            loading = false
+            if (generation == refreshGeneration) loading = false
         }
     }
     LaunchedEffect(installed.manifest.id) { refresh() }
     val currentRefresh by androidx.compose.runtime.rememberUpdatedState(::refresh)
     DisposableEffect(currentRefresh) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) currentRefresh()
+            if (event == Lifecycle.Event.ON_RESUME && !loading) currentRefresh()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            if (hasBeenCurrent && !loading) refresh()
+            hasBeenCurrent = true
+        }
     }
 
     LazyColumn(
@@ -141,7 +166,7 @@ internal fun ExtensionCredentialGrantsScreen(
                 modifier = pageScope.elementModifier(0)
             )
         }
-        if (loading) item { GrantInfoCard("正在读取授权状态…", Modifier) }
+        if (loading) item(key = "loading") { GrantInfoCard("正在读取授权状态…", Modifier) }
         error?.let { message ->
             item {
                 Column {
@@ -150,13 +175,15 @@ internal fun ExtensionCredentialGrantsScreen(
                 }
             }
         }
-        if (!loading && error == null && rows.isEmpty()) {
-            item { GrantInfoCard("此扩展没有声明凭据请求。", pageScope.elementModifier(1)) }
+        if (!loading && error == null && currentInstalled == null) {
+            item(key = "uninstalled") { GrantInfoCard("扩展已卸载，无法管理凭据授权。", pageScope.elementModifier(1)) }
+        } else if (!loading && error == null && rows.isEmpty()) {
+            item(key = "empty") { GrantInfoCard("此扩展没有声明凭据请求。", pageScope.elementModifier(1)) }
         }
-        items(rows, key = { it.request.id }) { row ->
+        itemsIndexed(if (error == null) rows else emptyList(), key = { _, row -> row.request.id }) { index, row ->
             CredentialGrantRequestCard(
                 row = row,
-                modifier = pageScope.elementModifier(1),
+                modifier = pageScope.elementModifier(index + 1, rows.size + 1),
                 onChoose = {
                     currentInstalled?.let { onChooseSource(it, row.request.id) }
                 },
@@ -171,6 +198,7 @@ internal fun ExtensionCredentialGrantsScreen(
             description = "扩展将不再拥有此请求对应的授权。",
             confirmLabel = "撤销授权",
             destructive = true,
+            busy = revoking,
             onDismiss = { if (!revoking) revokeRequest = null },
             onConfirm = {
                 if (!revoking) {
@@ -200,19 +228,12 @@ private fun CredentialGrantRequestCard(
 ) {
     val request = row.request
     val evaluation = row.evaluation
-    val status = when {
-        evaluation.grant == null -> "未授权"
-        !evaluation.authorizationValid -> when (evaluation.invalidReason) {
-            CredentialGrantInvalidReason.RequestContractChanged,
-            CredentialGrantInvalidReason.RequestRemoved,
-            CredentialGrantInvalidReason.ExtensionInstallationChanged -> "请求范围已变化，需重新授权"
-            else -> "授权当前无效"
-        }
-        !evaluation.sourceReady -> "已授权，凭据当前未就绪"
-        else -> "已授权"
-    }
+    val status = credentialGrantStatus(evaluation)
     GrantCard(modifier) {
         Text(request.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        request.description?.takeIf(String::isNotBlank)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        }
         Text(request.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         request.realm?.let {
             Text("服务：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
@@ -223,6 +244,9 @@ private fun CredentialGrantRequestCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)
         )
+        if (request.identifiers.isNotEmpty()) {
+            Text("账户标识可使用：${request.identifiers.joinToString("、") { it.field.label }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        }
         Text(status, style = MaterialTheme.typography.labelLarge, color = if (evaluation.grant != null && evaluation.authorizationValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
         evaluation.grant?.let {
             Text(
@@ -278,12 +302,15 @@ internal fun ExtensionCredentialSourcePickerScreen(
     var keyguardToken by remember(installed.manifest.id, requestId) { mutableStateOf<CredentialGrantAuthorizationToken?>(null) }
     var authenticating by remember(installed.manifest.id, requestId) { mutableStateOf(false) }
     var authError by remember(installed.manifest.id, requestId) { mutableStateOf<String?>(null) }
+    var refreshGeneration by remember(installed.manifest.id, requestId) { mutableStateOf(0) }
+    var hasBeenCurrent by remember(installed.manifest.id, requestId) { mutableStateOf(false) }
     val hostActivity = remember(context) { context.findGrantFragmentActivity() }
     val authenticator = remember(hostActivity) { hostActivity?.let(::CredentialSecretAuthenticator) }
 
     fun refresh() {
+        val generation = ++refreshGeneration
         scope.launch {
-            loading = true
+            if (candidates.isEmpty()) loading = true
             loadError = null
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -294,20 +321,34 @@ internal fun ExtensionCredentialSourcePickerScreen(
                     Triple(current, currentRequest, sources)
                 }
             }.onSuccess { (current, currentRequest, sources) ->
-                liveInstalled = current
-                request = currentRequest
-                candidates = if (currentRequest == null) emptyList() else sources.map {
-                    CredentialCandidate(it, CredentialSourceMatcher.match(it, currentRequest))
+                if (generation == refreshGeneration) {
+                    val updatedCandidates = if (currentRequest == null) emptyList() else sources.map {
+                        CredentialCandidate(it, CredentialSourceMatcher.match(it, currentRequest))
+                    }
+                    if (authToken != null && (liveInstalled?.installationInstanceId != current?.installationInstanceId || request != currentRequest || updatedCandidates.none { it.source.id == selectedSource?.id && it.match.fullyReady })) {
+                        gate.cancel(authToken)
+                        authenticator?.cancel()
+                        authToken = null
+                        keyguardToken = null
+                        authenticating = false
+                        selectedSource = null
+                        authError = "扩展请求或凭据状态已变化，请重新选择。"
+                    } else if (selectedSource != null && updatedCandidates.none { it.source.id == selectedSource?.id && it.match.fullyReady }) {
+                        selectedSource = null
+                    }
+                    liveInstalled = current
+                    request = currentRequest
+                    candidates = updatedCandidates
                 }
-            }.onFailure { loadError = "凭据来源暂不可用，请重试。" }
-            loading = false
+            }.onFailure { if (generation == refreshGeneration) loadError = "凭据来源暂不可用，请重试。" }
+            if (generation == refreshGeneration) loading = false
         }
     }
     LaunchedEffect(installed.manifest.id, requestId) { refresh() }
     val currentRefresh by androidx.compose.runtime.rememberUpdatedState(::refresh)
     DisposableEffect(lifecycleOwner, gate) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) currentRefresh()
+            if (event == Lifecycle.Event.ON_RESUME && !loading) currentRefresh()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
@@ -316,6 +357,12 @@ internal fun ExtensionCredentialSourcePickerScreen(
             authenticator?.cancel()
             authToken = null
             keyguardToken = null
+        }
+    }
+    LaunchedEffect(pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            if (hasBeenCurrent && !loading) refresh()
+            hasBeenCurrent = true
         }
     }
 
@@ -342,7 +389,6 @@ internal fun ExtensionCredentialSourcePickerScreen(
 
     fun finishAuthentication(token: CredentialGrantAuthorizationToken) {
         if (!gate.isCurrent(token) || !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
-        authenticating = false
         scope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
@@ -363,6 +409,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
             }
             authToken = null
             selectedSource = null
+            authenticating = false
             if (result.isSuccess) {
                 onBack()
             } else {
@@ -410,6 +457,11 @@ internal fun ExtensionCredentialSourcePickerScreen(
     }
 
     fun requestAuthorization(source: CredentialSource) {
+        if (candidates.none { it.source.id == source.id && it.match.fullyReady }) {
+            selectedSource = null
+            authError = "凭据状态已变化，请重新选择。"
+            return
+        }
         val currentInstalled = liveInstalled ?: return
         val currentRequest = request ?: return
         val contract = CredentialRequestContractSnapshot.from(currentRequest) ?: run {
@@ -473,7 +525,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    BackHandler(enabled = authToken != null) { backAndCancel() }
+    BackHandler(enabled = authenticating) { backAndCancel() }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().rightSwipeBackGesture(::backAndCancel),
@@ -494,7 +546,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
                 }
             }
         }
-        if (loading) item { GrantInfoCard("正在检查凭据兼容性…", Modifier) }
+        if (loading) item(key = "loading") { GrantInfoCard("正在检查凭据兼容性…", Modifier) }
         loadError?.let { message ->
             item {
                 Column {
@@ -520,12 +572,26 @@ internal fun ExtensionCredentialSourcePickerScreen(
                     }
                 }
             }
-            items(candidates, key = { it.source.id }) { candidate ->
-                CredentialCandidateCard(
-                    candidate = candidate,
-                    modifier = pageScope.elementModifier(1),
-                    onClick = { if (candidate.match.fullyReady && !authenticating) selectedSource = candidate.source }
-                )
+            val sections = listOf(
+                "可用凭据" to candidates.filter { it.match.fullyReady },
+                "需要补充信息" to candidates.filter { it.match.contractCompatible && !it.match.fullyReady },
+                "不兼容" to candidates.filter { !it.match.contractCompatible }
+            ).filter { it.second.isNotEmpty() }
+            var order = 1
+            sections.forEach { (heading, entries) ->
+                val headingOrder = order++
+                item(key = "section_$heading") {
+                    Text(heading, style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(headingOrder, candidates.size + sections.size + 1))
+                }
+                itemsIndexed(entries, key = { _, candidate -> candidate.source.id }) { index, candidate ->
+                    CredentialCandidateCard(
+                        candidate = candidate,
+                        request = currentRequest,
+                        modifier = pageScope.elementModifier(headingOrder + index + 1, candidates.size + sections.size + 1),
+                        onClick = { if (candidate.match.fullyReady && !authenticating) selectedSource = candidate.source }
+                    )
+                }
+                order += entries.size
             }
         }
         authError?.let { message -> item { GrantInfoCard(message, Modifier) } }
@@ -551,6 +617,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
 @Composable
 private fun CredentialCandidateCard(
     candidate: CredentialCandidate,
+    request: CredentialRequestDefinition?,
     modifier: Modifier,
     onClick: () -> Unit
 ) {
@@ -569,18 +636,33 @@ private fun CredentialCandidateCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(candidateReason(candidate.match), style = MaterialTheme.typography.bodySmall, color = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 7.dp))
+                Text(candidateReason(candidate.source, request, candidate.match), style = MaterialTheme.typography.bodySmall, color = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 7.dp))
             }
             if (ready) androidx.compose.material3.Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-private fun candidateReason(match: CredentialSourceMatch): String = when {
+internal fun candidateReason(source: CredentialSource, request: CredentialRequestDefinition?, match: CredentialSourceMatch): String = when {
     match.fullyReady -> "兼容且就绪 · 可选择"
-    !match.contractCompatible -> "不兼容：凭据类型、服务 realm 或请求字段不匹配"
-    !match.metadataCompatible -> "兼容，但缺少请求所需的普通字段"
-    else -> "兼容，但请求所需的 Secret 未配置或不可用"
+    request == null -> "请求已不可用"
+    !match.contractCompatible && source.credentialType != request.credentialType -> "凭据类型不符合请求"
+    !match.contractCompatible && source.realm != request.contract.realm -> "服务标识不符合请求"
+    !match.contractCompatible -> "请求字段不符合此凭据类型"
+    !match.metadataCompatible -> when (source.credentialType) {
+        ink.tenqui.flowtone.data.online.credential.CredentialType.WebDav -> "缺少服务器地址或用户名"
+        ink.tenqui.flowtone.data.online.credential.CredentialType.AccountPassword -> "缺少请求接受的账户标识"
+        ink.tenqui.flowtone.data.online.credential.CredentialType.GenericAccount -> {
+            val missing = request.contract.fields.filter { !it.isSensitive && source.publicFields[it.id].isNullOrBlank() }
+            "缺少${missing.joinToString("、") { it.label }}"
+        }
+    }
+    else -> {
+        val secrets = request.contract.fields.filter { it.isSensitive }
+        val unavailable = secrets.filter { source.secretFieldStates[it.id] == CredentialSecretState.Unavailable }
+        if (unavailable.isNotEmpty()) "${unavailable.joinToString("、") { it.label }}不可用，需重新设置"
+        else "缺少${secrets.filter { source.secretFieldStates[it.id] != CredentialSecretState.Configured }.joinToString("、") { it.label }}"
+    }
 }
 
 @Composable
@@ -600,15 +682,20 @@ private fun GrantConsentOverlay(
         shadowSafePadding = 12.dp,
         onDismissRequest = onDismiss
     ) {
-        FlowtoneModalPanel {
+        FlowtoneModalPanel(modifier = Modifier.heightIn(max = 560.dp)) {
             Text("确认凭据授权", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text("扩展：${installed.manifest.name}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
-            Text("请求：${request?.label ?: "请求不可用"}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
-            Text("凭证：${source.label}（${source.credentialType.label}）", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
-            Text("来源信息：${credentialSourceSummary(source)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-            request?.realm?.let { Text("服务：$it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp)) }
-            Text("字段：${request?.contract?.fields?.joinToString("、") { it.label }.orEmpty()}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
-            Text("通过系统身份认证后，Flowtone 会保存这条授权。此操作不会向扩展显示凭据明文。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                Text("扩展：${installed.manifest.name}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
+                Text("请求：${request?.label ?: "请求不可用"}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
+                Text("凭证：${source.label}（${source.credentialType.label}）", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
+                Text("来源信息：${credentialSourceSummary(source)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                request?.realm?.let { Text("服务：$it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp)) }
+                Text("字段：${request?.contract?.fields?.joinToString("、") { it.label }.orEmpty()}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
+                request?.identifiers?.takeIf { it.isNotEmpty() }?.let { identifiers ->
+                    Text("账户标识：${identifiers.joinToString("、") { it.field.label }}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
+                }
+                Text("通过系统身份认证后，Flowtone 会保存这条授权。此操作不会向扩展显示凭据明文。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+            }
             Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss, enabled = !authenticating) { Text("取消") }
                 Button(onClick = onConfirm, enabled = !authenticating && request != null) { Text(if (authenticating) "等待系统认证…" else "确认并认证") }
@@ -623,6 +710,7 @@ private fun GrantConfirmationOverlay(
     description: String,
     confirmLabel: String,
     destructive: Boolean,
+    busy: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -638,8 +726,8 @@ private fun GrantConfirmationOverlay(
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
             Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("取消") }
-                TextButton(onClick = onConfirm) { Text(confirmLabel, color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
+                TextButton(onClick = onDismiss, enabled = !busy) { Text("取消") }
+                TextButton(onClick = onConfirm, enabled = !busy) { Text(if (busy) "正在处理…" else confirmLabel, color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
             }
         }
     }
