@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.ui.screens
 
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifestParser
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantEvaluation
+import ink.tenqui.flowtone.data.online.credential.CredentialSourceMatch
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -68,7 +70,7 @@ class ExtensionSettingsPresentationTest {
     }
 
     @Test
-    fun configurationAndCredentialSectionsStayReadOnly() {
+    fun configurationAndCredentialStatusReflectSavedMetadata() {
         val installed = installed(
             configuration = "{\"fields\":[{\"id\":\"url\",\"type\":\"text\",\"label\":\"服务器\",\"required\":true}],\"actions\":[]}",
             credentials = "[{\"id\":\"webdav\",\"type\":\"webdav\",\"label\":\"WebDAV 凭证\"}]"
@@ -79,6 +81,37 @@ class ExtensionSettingsPresentationTest {
         assertEquals("尚未配置", presentation.configurationStatus)
         assertEquals(listOf("WebDAV 凭证"), presentation.credentialLabels)
         assertFalse(presentation.configurationStatus == "已配置")
+    }
+
+    @Test
+    fun unsavedConfigurationDoesNotClaimTheDraftIsConfigured() {
+        assertEquals(
+            "有未保存的更改",
+            extensionConfigurationDisplayStatus("已配置", dirty = true, saving = false, loading = false)
+        )
+        assertEquals(
+            "正在保存…",
+            extensionConfigurationDisplayStatus("尚未配置", dirty = true, saving = true, loading = false)
+        )
+        assertEquals(
+            "正在读取配置…",
+            extensionConfigurationDisplayStatus("尚未配置", dirty = false, saving = false, loading = true)
+        )
+    }
+
+    @Test
+    fun grantSummarySeparatesAuthorizationFromReadiness() {
+        val summary = extensionGrantSummary(
+            listOf(
+                CredentialGrantEvaluation(null, false),
+                CredentialGrantEvaluation(null, true, sourceMatch = CredentialSourceMatch(true, true, true)),
+                CredentialGrantEvaluation(null, true)
+            )
+        )
+        assertEquals(3, summary.requestCount)
+        assertEquals(2, summary.authorizedCount)
+        assertEquals(1, summary.readyCount)
+        assertEquals("2 项已授权 · 1 项未授权 · 1 项凭据未就绪", summary.label)
     }
 
     private fun installed(
