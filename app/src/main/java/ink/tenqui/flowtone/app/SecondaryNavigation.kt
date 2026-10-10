@@ -410,6 +410,7 @@ internal fun secondaryStackBreadcrumbs(
                 SecondaryPage.CredentialSources -> listOf(destination.page.title)
                 else -> emptyList()
             }
+            is SecondaryDestination.CredentialSources -> listOf(destination.page.title)
             is SecondaryDestination.CredentialSourceEdit -> listOf(
                 if (destination.sourceId == null) "添加凭据" else "编辑凭据"
             )
@@ -421,6 +422,26 @@ internal fun secondaryStackBreadcrumbs(
         }
     }
 
-/** Installed-extension detail descendants keep the same standard breadcrumb ancestry. */
-internal fun List<SecondaryStackEntry>.usesExtensionSettingsBreadcrumbs(): Boolean =
-    any { entry -> entry.destination is SecondaryDestination.ExtensionSettings }
+/** Online settings and their detail pages keep their full secondary-stack ancestry. */
+internal fun List<SecondaryStackEntry>.usesOnlineSettingsBreadcrumbs(): Boolean {
+    val current = lastOrNull()?.destination ?: return false
+    val hasSettingsEntry = any { entry ->
+        (entry.destination as? SecondaryDestination.Standard)?.page == SecondaryPage.Settings
+    }
+    val hasExtensionSettings = any { entry ->
+        entry.destination is SecondaryDestination.ExtensionSettings
+    }
+    return when (current) {
+        is SecondaryDestination.Standard -> current.page == SecondaryPage.OnlineExtensions &&
+            hasSettingsEntry
+        SecondaryDestination.CredentialSources -> hasSettingsEntry || hasExtensionSettings
+        is SecondaryDestination.CredentialSourceEdit ->
+            (hasSettingsEntry || hasExtensionSettings) &&
+                any { it.destination == SecondaryDestination.CredentialSources }
+        is SecondaryDestination.ExtensionSettings,
+        is SecondaryDestination.ExtensionNetworkAccess,
+        is SecondaryDestination.ExtensionCredentialGrants,
+        is SecondaryDestination.ExtensionCredentialSourcePicker -> hasExtensionSettings
+        else -> false
+    }
+}

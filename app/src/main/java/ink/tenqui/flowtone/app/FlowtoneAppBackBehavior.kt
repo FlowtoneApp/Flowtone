@@ -42,7 +42,7 @@ internal fun closeFlowtoneSecondaryPage(appState: FlowtoneAppState) {
     }
 }
 
-/** The settings subsection is shared by its Online Extensions descendants. */
+/** The settings subsection is shared by Online settings and their descendants. */
 internal fun SecondaryNavigationState.retainsSettingsPathSegments(): Boolean =
     entries.any { entry ->
         (entry.destination as? SecondaryDestination.Standard)?.page in setOf(

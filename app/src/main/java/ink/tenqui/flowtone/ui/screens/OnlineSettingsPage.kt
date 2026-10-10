@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,7 +47,6 @@ internal fun OnlineSettingsPage(
     inspectError: String?,
     onRetry: () -> Unit,
     onInstall: () -> Unit,
-    onOpenCredentialSources: () -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
@@ -103,17 +101,6 @@ internal fun OnlineSettingsPage(
             )
             if (index != installedExtensions.lastIndex) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
-            }
-        }
-        item(key = "credentials") {
-            Column(modifier = elementModifier(installedExtensions.size + 2).padding(top = 30.dp)) {
-                OnlineSectionHeading("你的凭据", "独立保存，由你决定授权给哪个扩展")
-                OnlineManagementEntry(
-                    title = "管理凭据",
-                    subtitle = "创建、查看或更新账户凭据",
-                    onClick = onOpenCredentialSources,
-                    modifier = Modifier.padding(top = 6.dp)
-                ) { Icon(Icons.Rounded.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
             }
         }
     }

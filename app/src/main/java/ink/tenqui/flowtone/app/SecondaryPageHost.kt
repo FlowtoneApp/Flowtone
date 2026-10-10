@@ -288,6 +288,7 @@ internal fun SecondaryPageHost(
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
                 onOpenOnlineExtensions = onOpenOnlineExtensions,
+                onOpenCredentialSources = onOpenCredentialSources,
                 restoredPathSegments = settingsPathSegments,
                 modifier = Modifier.fillMaxSize()
             )
@@ -296,7 +297,6 @@ internal fun SecondaryPageHost(
                 pageScope = pageScope,
                 onOpenExtensionInstall = onOpenExtensionInstall,
                 onOpenExtensionSettings = onOpenExtensionSettings,
-                onOpenCredentialSources = onOpenCredentialSources,
                 modifier = Modifier
                     .fillMaxSize()
                     .rightSwipeBackGesture(onCloseSecondaryPage)

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Settings
@@ -97,32 +98,39 @@ internal fun SettingsSectionList(
             modifier = elementModifier(0)
         )
         SettingsSectionRow(
+            title = "在线",
+            subtitle = "扩展与凭据",
+            icon = Icons.Rounded.Language,
+            onClick = { onSectionClick(SettingsSection.Online) },
+            modifier = elementModifier(1).padding(top = 12.dp)
+        )
+        SettingsSectionRow(
             title = "主题",
             subtitle = "主题模式与播放器外观",
             icon = Icons.Rounded.Palette,
             onClick = { onSectionClick(SettingsSection.Appearance) },
-            modifier = elementModifier(1).padding(top = 12.dp)
+            modifier = elementModifier(2).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "播放",
             subtitle = "播放恢复行为",
             icon = Icons.Rounded.PlayCircle,
             onClick = { onSectionClick(SettingsSection.Playback) },
-            modifier = elementModifier(2).padding(top = 12.dp)
+            modifier = elementModifier(3).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "记录",
             subtitle = "听歌记录规则",
             icon = Icons.Rounded.History,
             onClick = { onSectionClick(SettingsSection.Record) },
-            modifier = elementModifier(3).padding(top = 12.dp)
+            modifier = elementModifier(4).padding(top = 12.dp)
         )
         SettingsSectionRow(
             title = "高级",
             subtitle = "预载与性能",
             icon = Icons.Rounded.Tune,
             onClick = { onSectionClick(SettingsSection.Advanced) },
-            modifier = elementModifier(4).padding(top = 12.dp)
+            modifier = elementModifier(5).padding(top = 12.dp)
         )
     }
 }

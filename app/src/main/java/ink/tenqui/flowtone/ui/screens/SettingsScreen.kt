@@ -125,6 +125,7 @@ internal fun SettingsScreen(
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
     onOpenOnlineExtensions: () -> Unit,
+    onOpenCredentialSources: () -> Unit,
     restoredPathSegments: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
@@ -237,8 +238,9 @@ internal fun SettingsScreen(
     ) { state ->
         val localScope = this
         val elementCount = when {
-            state.section == null -> 5
+            state.section == null -> 6
             state.section == SettingsSection.Appearance -> 3
+            state.section == SettingsSection.Online -> 3
             state.section == SettingsSection.General && state.managingLyricsFolders -> 1
             state.section == SettingsSection.General && state.showingLyricsSettings -> 1
             state.section == SettingsSection.General -> 3
@@ -326,15 +328,23 @@ internal fun SettingsScreen(
                 onHideSecondaryBackButtonChange = onHideSecondaryBackButtonChange,
                 skipExpandedMiniPlayer = skipExpandedMiniPlayer,
                 onSkipExpandedMiniPlayerChange = onSkipExpandedMiniPlayerChange,
-                onOpenOnlineSettings = {
-                    currentOnPathSegmentsChange(listOf(SettingsSection.General.title))
-                    onOpenOnlineExtensions()
-                },
                 onOpenLyricsSettings = { showingLyricsSettings = true },
                 elementModifier = ::viewElementModifier
                 )
+            }
+
+            SettingsSection.Online -> OnlineSettingsSectionPage(
+                pageScope = localScope,
+                onOpenExtensions = {
+                    currentOnPathSegmentsChange(listOf(SettingsSection.Online.title))
+                    onOpenOnlineExtensions()
+                },
+                onOpenCredentialSources = {
+                    currentOnPathSegmentsChange(listOf(SettingsSection.Online.title))
+                    onOpenCredentialSources()
+                }
+            )
         }
-    }
 
     /*
     pendingExtensionPreview?.let { preview ->

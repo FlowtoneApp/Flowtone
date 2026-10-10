@@ -97,7 +97,7 @@ internal fun FlowtoneScaffoldTopLayer(
 
     if (artistRoute == null) {
         val titleVisible = state.secondaryPage != null
-        val standardPathSegments = if (state.secondaryEntries.usesExtensionSettingsBreadcrumbs()) {
+        val standardPathSegments = if (state.secondaryEntries.usesOnlineSettingsBreadcrumbs()) {
             secondaryStackBreadcrumbs(
                 entries = state.secondaryEntries,
                 settingsPathSegments = state.secondaryPathSegments

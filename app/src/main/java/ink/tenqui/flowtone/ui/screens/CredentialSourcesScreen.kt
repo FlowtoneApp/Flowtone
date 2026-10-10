@@ -117,13 +117,20 @@ internal fun CredentialSourcesScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item(key = "your-credentials") {
+            OnlineSectionHeading(
+                title = "你的凭据",
+                subtitle = "独立保存，由你决定授权给哪个扩展",
+                modifier = pageScope.elementModifier(0, sources.size + 3)
+            )
+        }
         item(key = "create") {
             OnlinePrimaryAction(
                 title = "创建凭据",
                 subtitle = "为在线服务保存账户信息",
                 icon = Icons.Rounded.Key,
                 onClick = { onOpenSource(null) },
-                modifier = pageScope.elementModifier(0, sources.size + 2)
+                modifier = pageScope.elementModifier(1, sources.size + 3)
             )
         }
         if (loading && sources.isEmpty()) {
@@ -137,14 +144,14 @@ internal fun CredentialSourcesScreen(
             }
         } else if (sources.isEmpty()) {
             item {
-                Column(pageScope.elementModifier(1).padding(vertical = 16.dp)) {
+                Column(pageScope.elementModifier(2).padding(vertical = 16.dp)) {
                     Text("还没有凭据", style = MaterialTheme.typography.titleSmall)
                     Text("创建后可在扩展的凭据授权页选择。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         } else {
             item(key = "heading") {
-                OnlineSectionHeading("已保存的凭据", "${sources.size} 份凭据", pageScope.elementModifier(1, sources.size + 2).padding(top = 18.dp))
+                OnlineSectionHeading("已保存的凭据", "${sources.size} 份凭据", pageScope.elementModifier(2, sources.size + 3).padding(top = 18.dp))
             }
             if (error) item(key = "refresh_error") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -154,7 +161,7 @@ internal fun CredentialSourcesScreen(
                 }
             }
             itemsIndexed(sources, key = { _, source -> source.id }) { index, source ->
-                CredentialSourceLine(source, { onOpenSource(source.id) }, pageScope.elementModifier(2 + index, sources.size + 2))
+                CredentialSourceLine(source, { onOpenSource(source.id) }, pageScope.elementModifier(3 + index, sources.size + 3))
                 if (index != sources.lastIndex) androidx.compose.material3.HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f)
                 )
