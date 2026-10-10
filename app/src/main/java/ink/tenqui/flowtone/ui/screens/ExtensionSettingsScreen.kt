@@ -20,7 +20,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +55,7 @@ import ink.tenqui.flowtone.data.online.credential.CredentialGrantEvaluation
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantRepository
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
+import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
 import ink.tenqui.flowtone.ui.components.OptionGroup
@@ -492,7 +492,7 @@ private fun ExtensionConfigurationSection(
                                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-                                Switch(
+                                FlowtoneSwitch(
                                     checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value ?: false,
                                     onCheckedChange = { onValueChange(field.id, ConfigurationValue.BooleanValue(it)) },
                                     enabled = !busy

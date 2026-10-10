@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
 import ink.tenqui.flowtone.ui.components.SettingsOptionIcon
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
 
@@ -54,7 +54,7 @@ internal fun SettingSwitchRow(
                     modifier = Modifier.padding(top = SettingsRowSubtitleTopPadding)
                 )
             }
-            Switch(
+            FlowtoneSwitch(
                 checked = checked,
                 onCheckedChange = onCheckedChange
             )
