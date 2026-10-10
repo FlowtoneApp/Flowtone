@@ -11,13 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -28,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.online.permission.NetworkHostScope
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
-import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 
 @Composable
@@ -56,18 +54,17 @@ internal fun ExtensionNetworkAccessScreen(
         )
     ) {
         item(key = "network-summary") {
-            Text(
-                "以下是扩展声明的网络目标。实际请求仍须通过 Flowtone 运行时校验。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            OnlineSectionHeading(
+                title = "网络访问范围",
+                subtitle = "${httpsRules.size} 条 HTTPS · ${httpRules.size} 条 HTTP。以下均为扩展声明的完整目标。",
                 modifier = pageScope.elementModifier(0, orderCount).padding(bottom = 24.dp)
             )
         }
         if (httpsRules.isNotEmpty()) {
             item(key = "https-heading") {
                 NetworkRuleHeading(
-                    title = "HTTPS · 已声明",
-                    description = "当前运行时支持按规则发起 HTTPS 请求；这不表示任何目标都能连接成功。",
+                    title = "HTTPS · 可按规则请求",
+                    description = "请求仍须通过运行时权限校验。",
                     modifier = pageScope.elementModifier(1, orderCount)
                 )
             }
@@ -76,15 +73,14 @@ internal fun ExtensionNetworkAccessScreen(
                     rule = rule,
                     onCopy = { copyNetworkRule(context, rule.origin) },
                     modifier = pageScope.elementModifier(index + 2, orderCount)
-                        .padding(top = 9.dp)
                 )
             }
         }
         if (httpRules.isNotEmpty()) {
             item(key = "http-heading") {
                 NetworkRuleHeading(
-                    title = "HTTP · 已声明但当前不可用",
-                    description = "这些 HTTP 地址仍按原声明完整列出。当前 Flowtone 运行时不允许扩展通过 HTTP 访问网络。",
+                    title = "HTTP · 当前不可用",
+                    description = "这些地址虽被声明，Flowtone 当前运行时不允许扩展通过 HTTP 访问。",
                     modifier = pageScope.elementModifier(httpHeaderOrder, orderCount)
                         .padding(top = if (httpsRules.isEmpty()) 0.dp else 28.dp)
                 )
@@ -94,7 +90,6 @@ internal fun ExtensionNetworkAccessScreen(
                     rule = rule,
                     onCopy = { copyNetworkRule(context, rule.origin) },
                     modifier = pageScope.elementModifier(httpHeaderOrder + index + 1, orderCount)
-                        .padding(top = 9.dp)
                 )
             }
         }
@@ -152,13 +147,7 @@ internal fun extensionNetworkRulePresentation(
 
 @Composable
 private fun NetworkRuleHeading(title: String, description: String, modifier: Modifier = Modifier) {
-    OptionGroup(title = title, modifier = modifier) {
-        Text(
-            description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    OnlineSectionHeading(title, description, modifier)
 }
 
 @Composable
@@ -167,12 +156,8 @@ private fun NetworkRuleRow(
     onCopy: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(SettingsRowCornerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Row(modifier = Modifier.padding(start = 16.dp, top = 13.dp, end = 6.dp, bottom = 13.dp), verticalAlignment = Alignment.Top) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.padding(start = 4.dp, top = 15.dp, end = 2.dp, bottom = 15.dp), verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f).padding(top = 2.dp)) {
                 Text(
                     rule.origin,
@@ -197,6 +182,7 @@ private fun NetworkRuleRow(
                 Icon(Icons.Rounded.ContentCopy, contentDescription = "复制完整网络规则")
             }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
     }
 }
 

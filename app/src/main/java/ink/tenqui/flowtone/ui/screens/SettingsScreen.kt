@@ -131,11 +131,13 @@ internal fun SettingsScreen(
     val restoredSection = remember(restoredPathSegments) {
         settingsSectionForPathSegments(restoredPathSegments)
     }
-    var selectedSection by remember(restoredSection) {
+    val selectedSectionState = remember(restoredSection) {
         mutableStateOf(restoredSection)
     }
+    var selectedSection by selectedSectionState
     var showingLyricsSettings by rememberSaveable { mutableStateOf(false) }
     var managingLyricsFolders by rememberSaveable { mutableStateOf(false) }
+    var settingsPageTransitioning by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val musicViewModel: MusicViewModel = viewModel()
     val lyricsFolders by musicViewModel.lyricsFolders.collectAsState()
@@ -166,7 +168,7 @@ internal fun SettingsScreen(
         if (managingLyricsFolders) musicViewModel.refreshLyricsFolders()
     }
     val handleBack = remember(
-        selectedSection,
+        selectedSectionState,
         showingLyricsSettings,
         managingLyricsFolders,
     ) {
@@ -175,10 +177,10 @@ internal fun SettingsScreen(
                 managingLyricsFolders = false
             } else if (showingLyricsSettings) {
                 showingLyricsSettings = false
-            } else if (selectedSection == null) {
+            } else if (selectedSectionState.value == null) {
                 currentOnBack()
             } else {
-                selectedSection = null
+                selectedSectionState.value = null
             }
         }
     }
@@ -210,17 +212,28 @@ internal fun SettingsScreen(
     }
     BackHandler(onBack = handleBack)
 
+    val settingsPageState = SettingsPageState(
+        section = selectedSection,
+        showingLyricsSettings = showingLyricsSettings,
+        managingLyricsFolders = managingLyricsFolders
+    )
     Box(modifier = modifier.fillMaxSize()) {
     PageTransitionHost(
-        targetState = SettingsPageState(
-            section = selectedSection,
-            showingLyricsSettings = showingLyricsSettings,
-            managingLyricsFolders = managingLyricsFolders
-        ),
+        targetState = settingsPageState,
         parentScope = pageScope,
+        onSlotsChanged = { slots ->
+            val transitioning = slots.outgoing != null ||
+                slots.incoming != null ||
+                slots.current != settingsPageState
+            if (settingsPageTransitioning != transitioning) {
+                settingsPageTransitioning = transitioning
+            }
+        },
         modifier = Modifier
             .fillMaxSize()
-            .rightSwipeBackGesture(handleBack)
+            .rightSwipeBackGesture {
+                if (!settingsPageTransitioning) handleBack()
+            }
     ) { state ->
         val localScope = this
         val elementCount = when {

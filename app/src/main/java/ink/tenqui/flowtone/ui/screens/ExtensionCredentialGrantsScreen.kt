@@ -23,13 +23,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -109,6 +107,7 @@ internal fun ExtensionCredentialGrantsScreen(
     var error by remember(installed.manifest.id) { mutableStateOf<String?>(null) }
     var revokeRequest by remember(installed.manifest.id) { mutableStateOf<CredentialRequestDefinition?>(null) }
     var revoking by remember(installed.manifest.id) { mutableStateOf(false) }
+    var expandedRequests by remember(installed.manifest.id) { mutableStateOf<Set<String>>(emptySet()) }
     var refreshGeneration by remember(installed.manifest.id) { mutableStateOf(0) }
     var hasBeenCurrent by remember(installed.manifest.id) { mutableStateOf(false) }
 
@@ -158,12 +157,11 @@ internal fun ExtensionCredentialGrantsScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Text(
-                "为扩展 ${installed.manifest.name} 管理凭据授权。每条请求单独授权，扩展更新后如果请求范围改变，需要重新确认。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = pageScope.elementModifier(0)
+        item(key = "heading") {
+            OnlineSectionHeading(
+                title = installed.manifest.name,
+                subtitle = if (error != null) "授权状态暂不可用" else "${rows.size} 项凭据请求 · 逐项决定可使用的来源",
+                modifier = pageScope.elementModifier(0).padding(bottom = 8.dp)
             )
         }
         if (loading) item(key = "loading") { GrantInfoCard("正在读取授权状态…", Modifier) }
@@ -184,11 +182,17 @@ internal fun ExtensionCredentialGrantsScreen(
             CredentialGrantRequestCard(
                 row = row,
                 modifier = pageScope.elementModifier(index + 1, rows.size + 1),
+                expanded = row.request.id in expandedRequests,
+                onToggleDetails = {
+                    expandedRequests = if (row.request.id in expandedRequests)
+                        expandedRequests - row.request.id else expandedRequests + row.request.id
+                },
                 onChoose = {
                     currentInstalled?.let { onChooseSource(it, row.request.id) }
                 },
                 onRevoke = { revokeRequest = row.request }
             )
+            if (index != rows.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
         }
     }
 
@@ -223,6 +227,8 @@ internal fun ExtensionCredentialGrantsScreen(
 private fun CredentialGrantRequestCard(
     row: CredentialGrantRow,
     modifier: Modifier,
+    expanded: Boolean,
+    onToggleDetails: () -> Unit,
     onChoose: () -> Unit,
     onRevoke: () -> Unit
 ) {
@@ -231,32 +237,40 @@ private fun CredentialGrantRequestCard(
     val status = credentialGrantStatus(evaluation)
     GrantCard(modifier) {
         Text(request.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        request.description?.takeIf(String::isNotBlank)?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        }
-        Text(request.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(status, style = MaterialTheme.typography.labelMedium,
+            color = when {
+                evaluation.usable -> MaterialTheme.colorScheme.primary
+                evaluation.grant != null && !evaluation.authorizationValid -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }, modifier = Modifier.padding(top = 3.dp))
+        Text(request.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         request.realm?.let {
             Text("服务：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         }
-        Text(
-            "所需字段：${request.contract.fields.joinToString("、") { it.label }}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-        if (request.identifiers.isNotEmpty()) {
-            Text("账户标识可使用：${request.identifiers.joinToString("、") { it.field.label }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        }
-        Text(status, style = MaterialTheme.typography.labelLarge, color = if (evaluation.grant != null && evaluation.authorizationValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
         evaluation.grant?.let {
             Text(
                 "绑定凭证：${evaluation.sourceLabel ?: "来源不可用"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+        TextButton(onClick = onToggleDetails, modifier = Modifier.padding(top = 2.dp)) {
+            Text(if (expanded) "收起请求范围" else "查看请求范围")
+        }
+        if (expanded) {
+            request.description?.takeIf(String::isNotBlank)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+            }
+            Text("所需字段：${request.contract.fields.joinToString("、") { it.label }}",
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+            if (request.identifiers.isNotEmpty()) {
+                Text("账户标识可使用：${request.identifiers.joinToString("、") { it.field.label }}",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+            }
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             if (evaluation.grant != null) {
@@ -581,7 +595,8 @@ internal fun ExtensionCredentialSourcePickerScreen(
             sections.forEach { (heading, entries) ->
                 val headingOrder = order++
                 item(key = "section_$heading") {
-                    Text(heading, style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(headingOrder, candidates.size + sections.size + 1))
+                    OnlineSectionHeading(heading, "${entries.size} 份凭据",
+                        pageScope.elementModifier(headingOrder, candidates.size + sections.size + 1).padding(top = 14.dp))
                 }
                 itemsIndexed(entries, key = { _, candidate -> candidate.source.id }) { index, candidate ->
                     CredentialCandidateCard(
@@ -589,6 +604,9 @@ internal fun ExtensionCredentialSourcePickerScreen(
                         request = currentRequest,
                         modifier = pageScope.elementModifier(headingOrder + index + 1, candidates.size + sections.size + 1),
                         onClick = { if (candidate.match.fullyReady && !authenticating) selectedSource = candidate.source }
+                    )
+                    if (index != entries.lastIndex) HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f)
                     )
                 }
                 order += entries.size
@@ -625,7 +643,7 @@ private fun CredentialCandidateCard(
     GrantCard(modifier.then(if (ready) Modifier.clickable(onClick = onClick) else Modifier)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(candidate.source.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(candidate.source.label, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(candidate.source.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp))
                 candidate.source.realm?.let { Text("服务：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp)) }
                 Text(
@@ -685,16 +703,24 @@ private fun GrantConsentOverlay(
         FlowtoneModalPanel(modifier = Modifier.heightIn(max = 560.dp)) {
             Text("确认凭据授权", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                Text("扩展：${installed.manifest.name}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
-                Text("请求：${request?.label ?: "请求不可用"}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
-                Text("凭证：${source.label}（${source.credentialType.label}）", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
-                Text("来源信息：${credentialSourceSummary(source)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                request?.realm?.let { Text("服务：$it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp)) }
-                Text("字段：${request?.contract?.fields?.joinToString("、") { it.label }.orEmpty()}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
+                Text("${installed.manifest.name} 将使用", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 14.dp))
+                Text(source.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 3.dp))
+                Text("${source.credentialType.label} · ${credentialSourceSummary(source)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp))
+                HorizontalDivider(Modifier.padding(vertical = 16.dp))
+                Text(request?.label ?: "请求不可用", style = MaterialTheme.typography.titleSmall)
+                request?.realm?.let { Text("服务范围：$it", style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 5.dp)) }
+                Text("请求字段：${request?.contract?.fields?.joinToString("、") { it.label }.orEmpty()}",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                 request?.identifiers?.takeIf { it.isNotEmpty() }?.let { identifiers ->
-                    Text("账户标识：${identifiers.joinToString("、") { it.field.label }}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 5.dp))
+                    Text("账户标识：${identifiers.joinToString("、") { it.field.label }}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                 }
-                Text("通过系统身份认证后，Flowtone 会保存这条授权。此操作不会向扩展显示凭据明文。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+                Text("通过系统身份认证后才会保存此授权；此处不会展示凭据明文。",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp))
             }
             Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss, enabled = !authenticating) { Text("取消") }
@@ -742,13 +768,7 @@ private fun GrantInfoCard(message: String, modifier: Modifier) {
 
 @Composable
 private fun GrantCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Column(modifier = Modifier.padding(16.dp), content = { content() })
-    }
+    Column(modifier = modifier.fillMaxWidth().padding(vertical = 14.dp), content = { content() })
 }
 
 private tailrec fun Context.findGrantFragmentActivity(): FragmentActivity? = when (this) {

@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,11 +38,9 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.imageLoader
-import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import ink.tenqui.flowtone.ui.components.OptionGroup
@@ -76,7 +72,7 @@ internal fun ExtensionInstallScreen(
     val hasNetwork = preview.networkPermissions.isNotEmpty()
     val hasCredentials = credentialViews.isNotEmpty()
     val hasConfiguration = configurationViews.isNotEmpty()
-    val orderCount = 4 + listOf(preview.isUpdate, hasNetwork, hasCredentials, hasConfiguration).count { it }
+    val orderCount = 3 + listOf(preview.isUpdate, hasNetwork, hasCredentials, hasConfiguration).count { it }
     var order = 0
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -91,14 +87,10 @@ internal fun ExtensionInstallScreen(
                 accent = iconColor,
                 modifier = pageScope.elementModifier(order++, orderCount)
             )
-            ExtensionOperationSummary(
-                preview = preview,
-                modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
-            )
             if (preview.isUpdate) {
                 ExtensionUpdateChangesSection(
                     presentation = presentation,
-                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 20.dp)
                 )
             }
             if (hasNetwork) {
@@ -106,23 +98,23 @@ internal fun ExtensionInstallScreen(
                     preview = preview,
                     onOpenNetworkAccess = onOpenNetworkAccess,
                     enabled = !installing,
-                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 26.dp)
                 )
             }
             if (hasCredentials) {
                 ExtensionPreviewCredentialsSection(
                     requests = credentialViews,
-                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                    modifier = pageScope.elementModifier(order++, orderCount).padding(top = 26.dp)
                 )
             }
             OnlineCapabilitySection(
                 preview.summaryCapabilities,
-                pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                pageScope.elementModifier(order++, orderCount).padding(top = 26.dp)
             )
             if (hasConfiguration) {
                 ExtensionPreviewConfigurationSection(
                     configurationViews,
-                    pageScope.elementModifier(order++, orderCount).padding(top = 24.dp)
+                    pageScope.elementModifier(order++, orderCount).padding(top = 26.dp)
                 )
             }
         }
@@ -146,17 +138,13 @@ internal fun ExtensionInstallScreen(
                 onClick = { if (action.enabled) onConfirm() },
                 enabled = action.enabled,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = iconColor,
-                    contentColor = if (iconColor.luminance() > .5f) Color.Black else Color.White
-                )
+                shape = RoundedCornerShape(28.dp)
             ) {
                 if (installing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
-                        color = if (iconColor.luminance() > .5f) Color.Black else Color.White
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(Modifier.width(10.dp))
                 }
@@ -237,43 +225,9 @@ private fun ExtensionPreviewIdentity(
                         description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 16.dp)
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExtensionOperationSummary(preview: ExtensionInstallPreview, modifier: Modifier = Modifier) {
-    OptionGroup(title = "本次操作", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    if (preview.isUpdate) "将更新已安装扩展" else "将安装新扩展",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    "${preview.summaryCapabilities.count { it.status != SummaryCapabilityStatus.Unsupported }} 项功能 · " +
-                        "${preview.networkPermissions.size} 条网络规则 · ${preview.credentialRequests.size} 项凭据请求",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 5.dp)
-                )
-                Text(
-                    "扩展将在 Flowtone 扩展环境中运行，网络访问仍受当前运行时规则限制。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 9.dp)
-                )
             }
         }
     }
@@ -380,13 +334,8 @@ private fun ExtensionPreviewNetworkSection(
 ) {
     val permissions = remember(preview) { preview.networkPermissions.sortedBy(Any::toString) }
     val hasHttp = permissions.any { it.security == NetworkSecurity.Insecure }
-    OptionGroup(title = "网络访问", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+    OptionGroup(title = "网络访问 · ${permissions.size} 条", modifier = modifier) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 permissions.forEachIndexed { index, permission ->
                     Text(permission.toString(), style = MaterialTheme.typography.bodyMedium)
                     if (index != permissions.lastIndex) HorizontalDivider(Modifier.padding(vertical = 9.dp))
@@ -396,7 +345,6 @@ private fun ExtensionPreviewNetworkSection(
                     Spacer(Modifier.width(6.dp))
                     Text("查看权限详情")
                 }
-            }
         }
         if (hasHttp) {
             Text(
@@ -414,13 +362,8 @@ private fun ExtensionPreviewCredentialsSection(
     requests: List<ExtensionCredentialRequestPresentation>,
     modifier: Modifier = Modifier
 ) {
-    OptionGroup(title = "凭据请求", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+    OptionGroup(title = "凭据请求 · ${requests.size} 项", modifier = modifier) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 requests.forEachIndexed { index, request ->
                     Column {
                         Text(request.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
@@ -443,7 +386,6 @@ private fun ExtensionPreviewCredentialsSection(
                     }
                     if (index != requests.lastIndex) HorizontalDivider(Modifier.padding(vertical = 12.dp))
                 }
-            }
         }
         Text(
             "安装扩展不等于授权使用账户凭据。安装后仍需在凭据授权页面由你明确选择并确认。",
@@ -460,12 +402,7 @@ private fun ExtensionPreviewConfigurationSection(
     modifier: Modifier = Modifier
 ) {
     OptionGroup(title = "安装后配置", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 fields.forEachIndexed { index, field ->
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         Text(field.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -486,7 +423,6 @@ private fun ExtensionPreviewConfigurationSection(
                     }
                     if (index != fields.lastIndex) HorizontalDivider(Modifier.padding(vertical = 10.dp))
                 }
-            }
         }
         Text(
             "安装预览不会写入扩展配置；安装后可在扩展详情页填写。",

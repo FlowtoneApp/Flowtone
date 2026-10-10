@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -157,6 +159,7 @@ internal fun ExtensionSettingsScreen(
     var grantSummary by remember(extensionId) { mutableStateOf<ExtensionGrantSummary?>(null) }
     var grantError by remember(extensionId) { mutableStateOf(false) }
     var grantRefreshing by remember(extensionId) { mutableStateOf(false) }
+    var hasBeenCurrent by remember(extensionId) { mutableStateOf(false) }
     var confirmUninstall by remember(extensionId) { mutableStateOf(false) }
     var uninstalling by remember(extensionId) { mutableStateOf(false) }
     var uninstallError by remember(extensionId) { mutableStateOf<String?>(null) }
@@ -207,6 +210,12 @@ internal fun ExtensionSettingsScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    LaunchedEffect(pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            if (hasBeenCurrent) refreshGrants()
+            hasBeenCurrent = true
+        }
+    }
 
     val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
     val attentionMessages = buildList {
@@ -245,11 +254,23 @@ internal fun ExtensionSettingsScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        SettingsPageColumn {
-            ExtensionIdentityHeader(installed, pageScope.elementModifier(0, 7))
+        SettingsPageColumn(modifier = Modifier.imePadding()) {
+            ExtensionIdentityHeader(installed, pageScope.elementModifier(0, 6))
             if (attentionMessages.isNotEmpty()) {
-                ExtensionAttentionSection(attentionMessages, pageScope.elementModifier(1, 7))
+                ExtensionAttentionSection(attentionMessages, pageScope.elementModifier(1, 6))
             }
+            ExtensionManagementSection(
+                credentialCount = installed.descriptor.credentialRequests.size,
+                grantSummary = when {
+                    grantError -> "授权状态读取失败"
+                    grantSummary == null -> "正在读取授权状态…"
+                    else -> grantSummary!!.label
+                },
+                networkCount = installed.descriptor.networkPermissions.size,
+                onOpenGrants = { onOpenCredentialGrants(installed) },
+                onOpenNetwork = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
+                modifier = pageScope.elementModifier(2, 6).padding(top = 26.dp)
+            )
             ExtensionConfigurationSection(
                 fields = installed.descriptor.configurationSchema.fields,
                 stateLabel = extensionConfigurationDisplayStatus(
@@ -304,31 +325,14 @@ internal fun ExtensionSettingsScreen(
                         }
                     }
                 },
-                modifier = pageScope.elementModifier(2, 7).padding(top = 24.dp)
-            )
-
-            if (installed.descriptor.credentialRequests.isNotEmpty()) {
-                ExtensionCredentialGrantsSection(
-                    summary = when {
-                        grantError -> "授权状态读取失败"
-                        grantSummary == null -> "正在读取授权状态…"
-                        else -> grantSummary!!.label
-                    },
-                    count = installed.descriptor.credentialRequests.size,
-                    onClick = { onOpenCredentialGrants(installed) },
-                    modifier = pageScope.elementModifier(3, 7).padding(top = 24.dp)
-                )
-            }
-            ExtensionNetworkSection(
-                count = installed.descriptor.networkPermissions.size,
-                onClick = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
-                modifier = pageScope.elementModifier(4, 7).padding(top = 24.dp)
+                modifier = pageScope.elementModifier(3, 6).padding(top = 26.dp)
             )
             OnlineCapabilitySection(
                 presentation.capabilities,
-                pageScope.elementModifier(5, 7).padding(top = 24.dp)
+                pageScope.elementModifier(4, 6).padding(top = 26.dp),
+                initiallyExpanded = false
             )
-            OptionGroup(title = "卸载", modifier = pageScope.elementModifier(6, 7).padding(top = 28.dp)) {
+            OptionGroup(title = "移除扩展", modifier = pageScope.elementModifier(5, 6).padding(top = 30.dp)) {
                 TextButton(
                     onClick = { if (!uninstalling) confirmUninstall = true },
                     enabled = !uninstalling && !saving,
@@ -399,16 +403,12 @@ private fun ExtensionIdentityHeader(installed: InstalledExtension, modifier: Mod
             Text(
                 manifest.name,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
+                fontWeight = FontWeight.Bold
             )
             Text(
                 "版本 ${manifest.version} · ${manifest.author}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp)
             )
             if (manifest.description.isNotBlank()) {
@@ -416,8 +416,6 @@ private fun ExtensionIdentityHeader(installed: InstalledExtension, modifier: Mod
                     manifest.description,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 10.dp)
                 )
             }
@@ -433,14 +431,17 @@ private fun ExtensionIdentityHeader(installed: InstalledExtension, modifier: Mod
 
 @Composable
 private fun ExtensionAttentionSection(messages: List<String>, modifier: Modifier = Modifier) {
-    OptionGroup(title = "需要处理", modifier = modifier.padding(top = 24.dp)) {
-        messages.forEach { message ->
-            Text(
-                message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 3.dp)
-            )
+    Surface(
+        modifier = modifier.fillMaxWidth().padding(top = 20.dp),
+        shape = RoundedCornerShape(SettingsRowCornerRadius),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text("需要处理", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            messages.forEach { message ->
+                Text(message, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
+            }
         }
     }
 }
@@ -461,13 +462,12 @@ private fun ExtensionConfigurationSection(
     modifier: Modifier = Modifier
 ) {
     OptionGroup(title = "扩展配置", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(stateLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (fields.isEmpty()) {
+                    Text("此扩展无需额外配置", style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 10.dp))
+                }
                 fields.forEach { field ->
                     when (field.type) {
                         ConfigurationFieldType.Text, ConfigurationFieldType.Url -> {
@@ -540,42 +540,42 @@ private fun ExtensionConfigurationSection(
                         modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)
                     ) { Text(if (busy && stateLabel == "正在保存…") "正在保存…" else "保存配置") }
                 }
-            }
         }
     }
 }
 
 @Composable
-private fun ExtensionCredentialGrantsSection(
-    count: Int,
-    summary: String,
-    onClick: () -> Unit,
+private fun ExtensionManagementSection(
+    credentialCount: Int,
+    grantSummary: String,
+    networkCount: Int,
+    onOpenGrants: () -> Unit,
+    onOpenNetwork: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    OptionGroup(title = "凭据授权", modifier = modifier) {
+    OptionGroup(title = "访问与授权", modifier = modifier) {
+        if (credentialCount > 0) {
+            OnlineManagementEntry(
+                title = "凭据授权",
+                subtitle = grantSummary,
+                onClick = onOpenGrants
+            ) {
+                Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(SettingsRowIconSize))
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+        }
         OnlineManagementEntry(
-            title = "$count 项凭据请求",
-            subtitle = summary,
-            onClick = onClick
+            title = "网络访问",
+            subtitle = if (networkCount == 0) "未申请网络访问"
+                else "$networkCount 条访问规则 · 查看完整目标",
+            onClick = onOpenNetwork
         ) {
-            Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SettingsRowIconSize))
+            Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(SettingsRowIconSize))
         }
     }
 }
-
-@Composable
-private fun ExtensionNetworkSection(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    OptionGroup(title = "网络访问", modifier = modifier) {
-        OnlineManagementEntry(
-            title = if (count == 0) "未声明网络访问规则" else "$count 条网络访问规则",
-            subtitle = if (count == 0) "查看网络访问详情" else "访问范围由扩展声明，请核对允许的服务",
-            onClick = onClick
-        ) {
-            Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(SettingsRowIconSize))
-        }
-    }
-}
-
 @Composable
 private fun ExtensionChoiceOverlay(
     field: ConfigurationFieldDefinition,

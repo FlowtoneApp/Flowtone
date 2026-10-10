@@ -1,6 +1,5 @@
 package ink.tenqui.flowtone.ui.screens
 
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -41,9 +40,16 @@ internal fun OnlineExtensionsScreen(
     var installedExtensions by remember { mutableStateOf<List<InstalledExtension>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    var inspecting by remember { mutableStateOf(false) }
+    var inspectError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var refreshAgain by remember { mutableStateOf(false) }
+    var hasBeenCurrent by remember { mutableStateOf(false) }
     fun refreshExtensions() {
-        if (refreshing) return
+        if (refreshing) {
+            refreshAgain = true
+            return
+        }
         refreshing = true
         scope.launch {
             runCatching { withContext(Dispatchers.IO) { extensionManager.installedExtensions() } }
@@ -57,44 +63,63 @@ internal fun OnlineExtensionsScreen(
                 }
             loading = false
             refreshing = false
+            if (refreshAgain) {
+                refreshAgain = false
+                refreshExtensions()
+            }
         }
     }
     val extensionPackageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (inspecting) return@rememberLauncherForActivityResult
+        inspecting = true
+        inspectError = null
         scope.launch {
-            runCatching { extensionManager.inspect(uri) }
-                .onSuccess(onOpenExtensionInstall)
-                .onFailure { error ->
-                    Toast.makeText(
-                        context,
-                        error.message ?: "扩展包检查失败",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+            try {
+                runCatching { extensionManager.inspect(uri) }
+                    .onSuccess(onOpenExtensionInstall)
+                    .onFailure { error ->
+                        if (error is CancellationException) throw error
+                        inspectError = error.message ?: "扩展包检查失败，请重新选择文件。"
+                    }
+            } finally {
+                inspecting = false
+            }
         }
     }
 
     LaunchedEffect(Unit) { refreshExtensions() }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refreshExtensions()
+            if (event == Lifecycle.Event.ON_RESUME && !loading) refreshExtensions()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            if (hasBeenCurrent && !loading) refreshExtensions()
+            hasBeenCurrent = true
+        }
     }
 
     OnlineSettingsPage(
         installedExtensions = installedExtensions,
         loading = loading,
         loadError = loadError,
+        inspecting = inspecting,
+        inspectError = inspectError,
         onRetry = ::refreshExtensions,
-        onInstall = { extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes) },
+        onInstall = {
+            inspectError = null
+            extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes)
+        },
         onOpenCredentialSources = onOpenCredentialSources,
         onOpenExtensionSettings = onOpenExtensionSettings,
         elementModifier = { index ->
-            pageScope.elementModifier(index, maxOf(installedExtensions.size, 1) + 2)
+            pageScope.elementModifier(index, installedExtensions.size + 3)
         },
         modifier = modifier
     )

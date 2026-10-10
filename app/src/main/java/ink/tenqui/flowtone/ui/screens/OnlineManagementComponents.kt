@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Icon
@@ -16,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -100,16 +104,12 @@ internal fun OnlineManagementEntry(
     subtitleMaxLines: Int = 2,
     leading: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(SettingsRowCornerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
         Row(
-            modifier = Modifier.padding(
-                horizontal = SettingsRowHorizontalPadding,
-                vertical = SettingsRowVerticalPadding
-            ),
+            modifier = modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(SettingsRowCornerRadius))
+                .clickable(onClick = onClick)
+                .heightIn(min = 64.dp)
+                .padding(horizontal = SettingsRowHorizontalPadding, vertical = SettingsRowVerticalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.size(SettingsRowIconSize), contentAlignment = Alignment.Center) { leading() }
@@ -125,6 +125,51 @@ internal fun OnlineManagementEntry(
                 )
             }
             Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+internal fun OnlineSectionHeading(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        subtitle?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 3.dp))
+        }
+    }
+}
+
+@Composable
+internal fun OnlinePrimaryAction(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 21.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(28.dp))
+            Column(modifier = Modifier.weight(1f).padding(start = 15.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .76f),
+                    modifier = Modifier.padding(top = 3.dp))
+            }
+            Icon(Icons.Rounded.ChevronRight, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }
@@ -132,16 +177,14 @@ internal fun OnlineManagementEntry(
 @Composable
 internal fun OnlineCapabilitySection(
     capabilities: List<SummaryCapability>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = true
 ) {
+    var expanded by remember(capabilities, initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    val shown = if (expanded || capabilities.size <= 4) capabilities else capabilities.take(3)
     OptionGroup(title = "功能支持", modifier = modifier) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                capabilities.forEachIndexed { index, capability ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                shown.forEachIndexed { index, capability ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -158,11 +201,15 @@ internal fun OnlineCapabilitySection(
                             modifier = Modifier.padding(start = 12.dp)
                         )
                     }
-                    if (index != capabilities.lastIndex) {
+                    if (index != shown.lastIndex) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .48f))
                     }
                 }
-            }
+                if (capabilities.size > 4) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(if (expanded) "收起功能" else "查看全部 ${capabilities.size} 项功能")
+                    }
+                }
         }
     }
 }

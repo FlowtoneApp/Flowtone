@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -72,7 +74,6 @@ import ink.tenqui.flowtone.data.online.credential.CredentialSourceSaveException
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialType
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.OptionGroup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -117,13 +118,13 @@ internal fun CredentialSourcesScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(key = "create") {
-            OptionGroup(title = "凭据管理", modifier = pageScope.elementModifier(0, 3)) {
-                OnlineManagementEntry(
-                    title = "创建凭据",
-                    subtitle = "为 WebDAV 或在线账户保存可复用的凭据信息",
-                    onClick = { onOpenSource(null) }
-                ) { Icon(Icons.Rounded.Key, contentDescription = null) }
-            }
+            OnlinePrimaryAction(
+                title = "创建凭据",
+                subtitle = "为在线服务保存账户信息",
+                icon = Icons.Rounded.Key,
+                onClick = { onOpenSource(null) },
+                modifier = pageScope.elementModifier(0, sources.size + 2)
+            )
         }
         if (loading && sources.isEmpty()) {
             item(key = "loading") { Text("正在读取凭据…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -136,23 +137,47 @@ internal fun CredentialSourcesScreen(
             }
         } else if (sources.isEmpty()) {
             item {
-                CredentialSourceGroup(pageScope.elementModifier(1)) {
+                Column(pageScope.elementModifier(1).padding(vertical = 16.dp)) {
                     Text("还没有凭据", style = MaterialTheme.typography.titleSmall)
                     Text("创建后可在扩展的凭据授权页选择。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         } else {
-            item(key = "heading") { Text("已保存的凭据", style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(1, sources.size + 2)) }
-            itemsIndexed(sources, key = { _, source -> source.id }) { index, source ->
-                OnlineManagementEntry(
-                    title = source.label,
-                    subtitle = "${credentialSourceStatus(source)}\n${source.credentialType.label} · ${credentialSourceSummary(source)}",
-                    onClick = { onOpenSource(source.id) },
-                    modifier = pageScope.elementModifier(2 + index, sources.size + 2),
-                    subtitleMaxLines = 4
-                ) { Icon(Icons.Rounded.Key, contentDescription = null) }
+            item(key = "heading") {
+                OnlineSectionHeading("已保存的凭据", "${sources.size} 份凭据", pageScope.elementModifier(1, sources.size + 2).padding(top = 18.dp))
             }
-            if (error) item(key = "refresh_error") { TextButton(onClick = { refreshGeneration++ }) { Text("刷新失败，重试") } }
+            if (error) item(key = "refresh_error") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("刷新失败，列表可能不是最新状态", color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { refreshGeneration++ }) { Text("重试") }
+                }
+            }
+            itemsIndexed(sources, key = { _, source -> source.id }) { index, source ->
+                CredentialSourceLine(source, { onOpenSource(source.id) }, pageScope.elementModifier(2 + index, sources.size + 2))
+                if (index != sources.lastIndex) androidx.compose.material3.HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CredentialSourceLine(source: CredentialSource, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(end = 14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(source.label, style = MaterialTheme.typography.bodyLarge)
+            Text("${source.credentialType.label} · ${credentialSourceSummary(source)}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(credentialSourceStatus(source), style = MaterialTheme.typography.labelMedium,
+                color = if (source.secretFieldStates.values.any { it == CredentialSecretState.Unavailable })
+                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 3.dp))
         }
     }
 }
@@ -435,8 +460,43 @@ internal fun CredentialSourceEditScreen(
         } else resetDraft()
     }
 
+    fun saveSource() {
+        if (saving || deletingSource) return
+        val input = draft ?: return
+        val secretMutations = CredentialSourceContracts.secretFields(input.credentialType).associateWith { field ->
+            if (field == CredentialFieldId.Password) credentialSecretInputMutation(passwordInput.text, passwordClearPending)
+            else cookieDraft.mutation
+        }
+        val validation = CredentialSourceValidator.validateInput(input) +
+            CredentialSourceRepository.validateSecretMutations(input.credentialType, secretMutations)
+        errors = validation.associate { it.field to it.reason }
+        operationError = null
+        if (validation.isNotEmpty()) return
+        saving = true
+        scope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { repository.save(existing?.id ?: sourceId, input, secretMutations) }
+            }
+            saving = false
+            result.onSuccess { saved ->
+                existing = saved
+                leavePage()
+            }.onFailure { failure ->
+                if (failure is CredentialSourceSaveException) {
+                    existing = withContext(Dispatchers.IO) {
+                        repository.get(failure.persistedMetadata.id)
+                    } ?: failure.persistedMetadata
+                    operationError = "凭据信息已保存，但敏感字段保存失败。草稿已保留，请重试。"
+                } else {
+                    operationError = "凭据保存失败，草稿已保留，请重试。"
+                }
+            }
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize().imePadding()) {
     LazyColumn(
-        modifier = modifier.fillMaxSize().imePadding(),
+        modifier = Modifier.weight(1f),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -449,15 +509,17 @@ internal fun CredentialSourceEditScreen(
             item {
                 Text("凭据类型", style = MaterialTheme.typography.titleMedium, modifier = pageScope.elementModifier(0))
                 CredentialType.entries.forEach { candidate ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).clickable { chooseType(candidate) },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(SettingsRowCornerRadius),
-                        color = if (type == candidate) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { chooseType(candidate) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(if (type == candidate) "${candidate.label} · 已选择" else candidate.label, style = MaterialTheme.typography.titleSmall)
-                            Text(credentialTypeDescription(candidate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(candidate.label, style = MaterialTheme.typography.bodyLarge)
+                            Text(credentialTypeDescription(candidate), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        RadioButton(selected = type == candidate, onClick = { chooseType(candidate) })
                     }
                 }
             }
@@ -589,44 +651,6 @@ internal fun CredentialSourceEditScreen(
                 }
             }
             item {
-                Button(
-                    onClick = {
-                        if (saving || deletingSource) return@Button
-                        val input = draft ?: return@Button
-                        val secretMutations = CredentialSourceContracts.secretFields(input.credentialType).associateWith { field ->
-                            if (field == CredentialFieldId.Password) credentialSecretInputMutation(passwordInput.text, passwordClearPending)
-                            else cookieDraft.mutation
-                        }
-                        val validation = CredentialSourceValidator.validateInput(input) +
-                            CredentialSourceRepository.validateSecretMutations(input.credentialType, secretMutations)
-                        errors = validation.associate { it.field to it.reason }
-                        operationError = null
-                        if (validation.isNotEmpty()) return@Button
-                        saving = true
-                        scope.launch {
-                            val result = runCatching {
-                                withContext(Dispatchers.IO) { repository.save(existing?.id ?: sourceId, input, secretMutations) }
-                            }
-                            saving = false
-                            result.onSuccess { saved ->
-                                existing = saved
-                                leavePage()
-                            }.onFailure { failure ->
-                                if (failure is CredentialSourceSaveException) {
-                                    existing = withContext(Dispatchers.IO) {
-                                        repository.get(failure.persistedMetadata.id)
-                                    } ?: failure.persistedMetadata
-                                    operationError = "凭据信息已保存，但敏感字段保存失败。草稿已保留，请重试。"
-                                } else {
-                                    operationError = "凭据保存失败，草稿已保留，请重试。"
-                                }
-                            }
-                        }
-                    },
-                    enabled = dirty && !saving && !deletingSource,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(if (saving) "正在保存…" else "保存凭据") }
-                operationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 if (existing != null) {
                     TextButton(
                         onClick = {
@@ -660,6 +684,24 @@ internal fun CredentialSourceEditScreen(
             }
         }
         }
+    }
+    if (!sourceLoading && !sourceLoadError && type != null) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp)) {
+                operationError?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp))
+                }
+                Button(
+                    onClick = ::saveSource,
+                    enabled = dirty && !saving && !deletingSource,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                ) { Text(if (saving) "正在保存…" else "保存凭据") }
+            }
+        }
+    }
     }
 }
 
@@ -798,9 +840,7 @@ internal object CookieMaskVisualTransformation : VisualTransformation {
 
 @Composable
 private fun CredentialSourceGroup(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(modifier = modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(modifier = Modifier.padding(16.dp), content = { content() })
-    }
+    Column(modifier = modifier.fillMaxWidth(), content = { content() })
 }
 
 internal fun credentialSourceSummary(source: CredentialSource): String = when (source.credentialType) {
