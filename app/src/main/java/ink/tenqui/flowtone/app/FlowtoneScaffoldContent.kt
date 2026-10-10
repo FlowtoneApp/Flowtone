@@ -5,6 +5,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.ScrollState
@@ -28,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
@@ -110,14 +112,24 @@ internal fun FlowtoneScaffoldContent(
         artistScrollStateStore.retainEntries(activeArtistEntryKeys)
         artistTopBarStateStore.retainEntries(activeArtistEntryKeys)
     }
-    val paletteDetailUsesSharedCloud = state.secondaryPage == SecondaryPage.Playlist ||
-        state.secondaryPage == SecondaryPage.LocalLibrary
+    val sharedCloudPaletteTarget = when (state.secondaryPage) {
+        SecondaryPage.Playlist,
+        SecondaryPage.LocalLibrary -> SharedCloudPaletteTarget.Detail
+
+        SecondaryPage.Settings -> SharedCloudPaletteTarget.Settings
+        else -> SharedCloudPaletteTarget.MainPages
+    }
     val pagePosition = topLevelContinuousPagePosition(
         currentPage = state.pagerState.currentPage,
         currentPageOffsetFraction = state.pagerState.currentPageOffsetFraction
     )
     val mainPagesCloudPalette = LocalMainPagesCloudPalette.current
     val mainPageCloudAccent = mainPagesCloudPalette.accentAt(pagePosition)
+    val settingsCloudAccent = lerp(
+        mainPagesCloudPalette.homeAccent,
+        MaterialTheme.colorScheme.background,
+        SettingsCloudBackgroundBlend
+    )
     val activeArtistTopBarRoute = artistTopBarRoute(state.secondaryEntries)
     val artistPathCloudAccent = activeArtistTopBarRoute?.let { route ->
         artistHeroStateStore.owner(route.artistEntryKey)?.resolvedCloudColor
@@ -191,36 +203,61 @@ internal fun FlowtoneScaffoldContent(
             )
         }
     }
-    val detailCloudTransition = updateTransition(
-        targetState = paletteDetailUsesSharedCloud,
-        label = "SharedDetailCloudTransition"
+    val sharedCloudPaletteTransition = updateTransition(
+        targetState = sharedCloudPaletteTarget,
+        label = "SharedCloudPaletteTransition"
     )
-    val animatedPrimaryCloudColor by detailCloudTransition.animateColor(
+    val animatedPrimaryCloudColor by sharedCloudPaletteTransition.animateColor(
         transitionSpec = {
             tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
         },
         label = "SharedCloudPrimaryColor"
-    ) { usesDetailPalette ->
-        if (usesDetailPalette) targetCloudPalette.primary else sharedCloudBaseAccent
+    ) { target ->
+        when (target) {
+            SharedCloudPaletteTarget.Detail -> targetCloudPalette.primary
+            SharedCloudPaletteTarget.Settings -> settingsCloudAccent
+            SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
+        }
     }
-    val animatedSecondaryCloudColor by detailCloudTransition.animateColor(
+    val animatedSecondaryCloudColor by sharedCloudPaletteTransition.animateColor(
         transitionSpec = {
             tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
         },
         label = "SharedCloudSecondaryColor"
-    ) { usesDetailPalette ->
-        if (usesDetailPalette) targetCloudPalette.secondary else sharedCloudBaseAccent
+    ) { target ->
+        when (target) {
+            SharedCloudPaletteTarget.Detail -> targetCloudPalette.secondary
+            SharedCloudPaletteTarget.Settings -> settingsCloudAccent
+            SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
+        }
     }
-    val animatedTertiaryCloudColor by detailCloudTransition.animateColor(
+    val animatedTertiaryCloudColor by sharedCloudPaletteTransition.animateColor(
         transitionSpec = {
             tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
         },
         label = "SharedCloudTertiaryColor"
-    ) { usesDetailPalette ->
-        if (usesDetailPalette) targetCloudPalette.tertiary else sharedCloudBaseAccent
+    ) { target ->
+        when (target) {
+            SharedCloudPaletteTarget.Detail -> targetCloudPalette.tertiary
+            SharedCloudPaletteTarget.Settings -> settingsCloudAccent
+            SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
+        }
     }
+    val settingsCloudPositionProgress by sharedCloudPaletteTransition.animateFloat(
+        transitionSpec = {
+            tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
+        },
+        label = "SettingsCloudPosition"
+    ) { target ->
+        if (target == SharedCloudPaletteTarget.Settings) 1f else 0f
+    }
+    val animatedCloudPlacement = cloudPlacement.copy(
+        cloudCenterRadiusOffsetYFactor = cloudPlacement.cloudCenterRadiusOffsetYFactor -
+            SettingsCloudUpwardShiftFactor * settingsCloudPositionProgress
+    )
     val animatedPaletteCloudPalette = if (
-        detailCloudTransition.currentState || detailCloudTransition.targetState
+        sharedCloudPaletteTransition.currentState != SharedCloudPaletteTarget.MainPages ||
+            sharedCloudPaletteTransition.targetState != SharedCloudPaletteTarget.MainPages
     ) {
         FlowtoneCloudPalette(
             primary = animatedPrimaryCloudColor,
@@ -325,14 +362,15 @@ internal fun FlowtoneScaffoldContent(
                     is FlowtoneScaffoldPage.Secondary ->
                         page.destination.page == SecondaryPage.Playlist ||
                             page.destination.page == SecondaryPage.Album ||
-                            page.destination.page == SecondaryPage.LocalLibrary
+                            page.destination.page == SecondaryPage.LocalLibrary ||
+                            page.destination.page == SecondaryPage.Settings
                 }
                 val pageCloudAlpha = if (pageUsesSharedCloud) 1f else 0f
                 val pageSecondaryBackgroundAlpha = if (pageUsesSharedCloud) 0f else 1f
                 val pageCloudPlacement = sharedCloudPlacementForSecondaryPage(
                     secondaryPage = (page as? FlowtoneScaffoldPage.Secondary)
                         ?.destination?.page,
-                    topLevelPlacement = cloudPlacement
+                    topLevelPlacement = animatedCloudPlacement
                 )
                 val pageTopBarSurfaceAlpha = when {
                     // FlowtoneAppEffects resets the shared scroll offset after navigation.
@@ -394,7 +432,7 @@ internal fun FlowtoneScaffoldContent(
                                                 .then(mainModeScope.backgroundModifier())
                                                 .topLevelPageBackground(
                                                     cloudPalette = animatedCloudPalette,
-                                                    cloudPlacement = cloudPlacement
+                                                    cloudPlacement = animatedCloudPlacement
                                                 )
                                         )
                                     Box(
@@ -774,6 +812,15 @@ internal enum class MainTabsContentMode {
 internal fun mainTabsContentMode(searchActive: Boolean): MainTabsContentMode {
     return if (searchActive) MainTabsContentMode.Search else MainTabsContentMode.Normal
 }
+
+private enum class SharedCloudPaletteTarget {
+    MainPages,
+    Detail,
+    Settings
+}
+
+private const val SettingsCloudBackgroundBlend = 0.22f
+private const val SettingsCloudUpwardShiftFactor = 0.08f
 
 private sealed interface FlowtoneScaffoldPage {
     data object MainTabs : FlowtoneScaffoldPage

@@ -49,7 +49,7 @@ internal fun SettingsCategoryCard(
                 spotColor = Color.Black.copy(alpha = 0.025f)
             ),
         shape = cardShape,
-        color = Color.White,
+        color = SettingsCategoryCardSurfaceColor,
         contentColor = SettingsCategoryCardTitleColor,
         shadowElevation = 0.dp
     ) {
@@ -101,3 +101,4 @@ internal fun SettingsCategoryCard(
 
 private val SettingsCategoryCardTitleColor = Color(0xFF1C1B1F)
 private val SettingsCategoryCardSubtitleColor = Color(0xFF49454F)
+private val SettingsCategoryCardSurfaceColor = Color(0xFFF5F8FF)
