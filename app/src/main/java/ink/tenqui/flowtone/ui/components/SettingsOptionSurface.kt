@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,12 +27,14 @@ import androidx.compose.ui.unit.dp
 internal val SettingsOptionCornerRadius = 20.dp
 internal val SettingsOptionShadowExtent = 16.dp
 internal val SettingsOptionSurfaceColor = Color(0xFFF5F8FF)
+internal val SettingsGroupSurfaceColor = Color(0xFFE4E9F6)
 
 @Composable
 internal fun SettingsOptionSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(SettingsOptionCornerRadius),
     surfaceColor: Color? = null,
+    border: BorderStroke? = null,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -54,7 +57,8 @@ internal fun SettingsOptionSurface(
         shape = shape,
         color = resolvedSurfaceColor,
         contentColor = contentColor,
-        shadowElevation = 0.dp
+        shadowElevation = 0.dp,
+        border = border
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
