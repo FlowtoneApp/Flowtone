@@ -1,7 +1,5 @@
 package ink.tenqui.flowtone.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
@@ -25,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.lyrics.LyricsFolder
 import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
+import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
 
 @Composable
 internal fun LyricsFolderSettingsPage(
@@ -107,44 +106,48 @@ private fun LyricsFolderRow(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceContainerHigh,
-                RoundedCornerShape(SettingsRowCornerRadius)
+    SettingsOptionSurface(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SettingsRowHorizontalPadding, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+        SettingsOptionIconTile(
+            containerColor = if (folder.isAccessible) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.errorContainer,
+            contentColor = if (folder.isAccessible) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.onErrorContainer
+        ) {
+            Icon(
+                Icons.Rounded.Folder,
+                contentDescription = null,
+                tint = if (folder.isAccessible) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onErrorContainer
             )
-            .clickable(enabled = false) {}
-            .padding(horizontal = SettingsRowHorizontalPadding, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            Icons.Rounded.Folder,
-            contentDescription = null,
-            tint = if (folder.isAccessible) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.error
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(folder.displayName, style = MaterialTheme.typography.bodyLarge)
-            folder.location?.let {
+        }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(folder.displayName, style = MaterialTheme.typography.bodyLarge)
+                folder.location?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
                 Text(
-                    it,
+                    if (folder.isAccessible) "已授权" else "需要重新授权",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (folder.isAccessible) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
-            Text(
-                if (folder.isAccessible) "已授权" else "需要重新授权",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (folder.isAccessible) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 2.dp)
-            )
-        }
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Rounded.DeleteOutline, contentDescription = "删除文件夹")
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = "删除文件夹")
+            }
         }
     }
 }

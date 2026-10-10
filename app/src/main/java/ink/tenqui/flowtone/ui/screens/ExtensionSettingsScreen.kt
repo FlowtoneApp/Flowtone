@@ -560,7 +560,7 @@ private fun ExtensionManagementSection(
                 subtitle = grantSummary,
                 onClick = onOpenGrants
             ) {
-                Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.primary,
+                Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(SettingsRowIconSize))
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
@@ -571,7 +571,7 @@ private fun ExtensionManagementSection(
                 else "$networkCount 条访问规则 · 查看完整目标",
             onClick = onOpenNetwork
         ) {
-            Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.primary,
+            Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(SettingsRowIconSize))
         }
     }

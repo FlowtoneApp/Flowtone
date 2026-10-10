@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +53,7 @@ internal fun DefaultStartPageRow(
         onExpandedChange = { nextExpanded ->
             expanded = nextExpanded
         },
+        icon = Icons.Rounded.Home,
         modifier = modifier
     ) {
         Column(modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {

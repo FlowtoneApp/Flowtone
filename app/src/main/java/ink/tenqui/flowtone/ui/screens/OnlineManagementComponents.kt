@@ -4,13 +4,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Icon
@@ -44,6 +45,8 @@ import ink.tenqui.flowtone.data.online.packageformat.ExtensionProviderVisualReso
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.search.SearchProviderVisual
 import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
+import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -104,16 +107,17 @@ internal fun OnlineManagementEntry(
     subtitleMaxLines: Int = 2,
     leading: @Composable () -> Unit
 ) {
+    SettingsOptionSurface(modifier = modifier) {
         Row(
-            modifier = modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(SettingsRowCornerRadius))
+            modifier = Modifier.fillMaxWidth()
                 .clickable(onClick = onClick)
                 .heightIn(min = 64.dp)
                 .padding(horizontal = SettingsRowHorizontalPadding, vertical = SettingsRowVerticalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size(SettingsRowIconSize), contentAlignment = Alignment.Center) { leading() }
-            Column(modifier = Modifier.weight(1f).padding(start = SettingsSectionRowIconGap)) {
+        SettingsOptionIconTile { leading() }
+        Spacer(modifier = Modifier.width(SettingsSectionRowIconGap))
+        Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     subtitle,
@@ -125,6 +129,7 @@ internal fun OnlineManagementEntry(
                 )
             }
             Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

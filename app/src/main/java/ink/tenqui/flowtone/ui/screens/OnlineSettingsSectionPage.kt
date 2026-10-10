@@ -42,7 +42,7 @@ internal fun OnlineSettingsSectionPage(
                 Icon(
                     imageVector = Icons.Rounded.Language,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }
@@ -56,7 +56,7 @@ internal fun OnlineSettingsSectionPage(
                 Icon(
                     imageVector = Icons.Rounded.Key,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }

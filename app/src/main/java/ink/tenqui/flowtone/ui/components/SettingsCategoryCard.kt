@@ -16,13 +16,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -37,21 +35,11 @@ internal fun SettingsCategoryCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val cardShape = RoundedCornerShape(20.dp)
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 12.dp,
-                shape = cardShape,
-                clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.025f),
-                spotColor = Color.Black.copy(alpha = 0.025f)
-            ),
-        shape = cardShape,
-        color = SettingsCategoryCardSurfaceColor,
-        contentColor = SettingsCategoryCardTitleColor,
-        shadowElevation = 0.dp
+    SettingsOptionSurface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        surfaceColor = SettingsOptionSurfaceColor,
+        contentColor = SettingsCategoryCardTitleColor
     ) {
         Row(
             modifier = Modifier
@@ -101,4 +89,3 @@ internal fun SettingsCategoryCard(
 
 private val SettingsCategoryCardTitleColor = Color(0xFF1C1B1F)
 private val SettingsCategoryCardSubtitleColor = Color(0xFF49454F)
-private val SettingsCategoryCardSurfaceColor = Color(0xFFF5F8FF)
