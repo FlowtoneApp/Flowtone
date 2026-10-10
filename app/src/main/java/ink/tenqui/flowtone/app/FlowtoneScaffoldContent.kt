@@ -658,7 +658,6 @@ internal fun FlowtoneScaffoldContent(
                     onOpenArtistAlbums = callbacks.onOpenArtistAlbums,
                     onFullTitleRequest = onFullTitleRequest,
                     onCloseSecondaryPage = callbacks.onCloseSecondaryPage,
-                    onOpenOnlineExtensions = callbacks.onOpenOnlineExtensions,
                     onOpenCredentialSources = callbacks.onOpenCredentialSources,
                     onOpenCredentialSourceEdit = callbacks.onOpenCredentialSourceEdit,
                     pendingExtensionPreview = state.pendingExtensionPreview,

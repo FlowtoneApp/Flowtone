@@ -10,11 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -22,12 +22,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.ui.components.OptionGroup
 
 internal enum class OnlineInstalledListState { Loading, Empty, Content, Error }
 
@@ -48,6 +50,7 @@ internal fun OnlineSettingsPage(
     onRetry: () -> Unit,
     onInstall: () -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenCredentialSources: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
@@ -56,51 +59,85 @@ internal fun OnlineSettingsPage(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 32.dp)
     ) {
-        item(key = "install") {
-            OnlinePrimaryAction(
-                title = if (inspecting) "正在检查扩展包…" else "安装扩展",
-                subtitle = "选择设备中的 .flowtone 扩展包",
-                icon = Icons.Rounded.Add,
-                onClick = onInstall,
-                enabled = !inspecting,
+        item(key = "extensions-group") {
+            OptionGroup(
+                title = "扩展",
                 modifier = elementModifier(0)
-            )
-        }
-        inspectError?.let { message ->
-            item(key = "inspect-error") {
-                Text(message, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
-            }
-        }
-        item(key = "installed-heading") {
-            OnlineSectionHeading(
-                title = "已安装扩展",
-                subtitle = if (loading && installedExtensions.isEmpty()) "正在读取…" else "${installedExtensions.size} 个扩展",
-                modifier = elementModifier(1).padding(top = 30.dp, bottom = 8.dp)
-            )
-        }
-        if (loadError != null) {
-            item(key = "load-error") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(loadError, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onRetry) { Text("重试") }
+            ) {
+                Text(
+                    text = "安装和管理在线服务扩展",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                OnlinePrimaryAction(
+                    title = if (inspecting) "正在检查扩展包…" else "安装扩展",
+                    subtitle = "选择设备中的 .flowtone 扩展包",
+                    icon = Icons.Rounded.Add,
+                    onClick = onInstall,
+                    enabled = !inspecting
+                )
+                inspectError?.let { message ->
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                OnlineSectionHeading(
+                    title = "已安装扩展",
+                    subtitle = if (loading && installedExtensions.isEmpty()) "正在读取…" else "${installedExtensions.size} 个扩展",
+                    modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                )
+                if (loadError != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            loadError,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        TextButton(onClick = onRetry) { Text("重试") }
+                    }
+                }
+                if (listState == OnlineInstalledListState.Loading) {
+                    OnlineListMessage("正在读取已安装扩展…")
+                } else if (listState == OnlineInstalledListState.Empty) {
+                    OnlineListMessage("还没有扩展。选择上方的扩展包即可开始。")
+                }
+                installedExtensions.forEachIndexed { index, installed ->
+                    key(installed.manifest.id) {
+                        InstalledExtensionLine(
+                            installed = installed,
+                            onClick = { onOpenExtensionSettings(installed) }
+                        )
+                    }
+                    if (index != installedExtensions.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+                    }
                 }
             }
         }
-        if (listState == OnlineInstalledListState.Loading) {
-            item(key = "loading") { OnlineListMessage("正在读取已安装扩展…") }
-        } else if (listState == OnlineInstalledListState.Empty) {
-            item(key = "empty") { OnlineListMessage("还没有扩展。选择上方的扩展包即可开始。") }
-        }
-        itemsIndexed(installedExtensions, key = { _, installed -> installed.manifest.id }) { index, installed ->
-            InstalledExtensionLine(
-                installed = installed,
-                onClick = { onOpenExtensionSettings(installed) },
-                modifier = elementModifier(index + 2)
+        item(key = "credentials-heading") {
+            OnlineSectionHeading(
+                title = "凭据",
+                subtitle = "管理在线服务使用的账户凭据",
+                modifier = elementModifier(1).padding(top = 24.dp, bottom = 8.dp)
             )
-            if (index != installedExtensions.lastIndex) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+        }
+        item(key = "credentials") {
+            OnlineManagementEntry(
+                title = "你的凭据",
+                subtitle = "创建和管理在线服务账户凭据",
+                onClick = onOpenCredentialSources,
+                modifier = elementModifier(2)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Key,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
     }

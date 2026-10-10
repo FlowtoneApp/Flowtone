@@ -24,12 +24,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
-/** Secondary destination for managing online extensions. */
+/** Online settings content: extension management and the credentials entry. */
 @Composable
 internal fun OnlineExtensionsScreen(
     pageScope: PageTransitionScope,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenCredentialSources: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -116,8 +117,9 @@ internal fun OnlineExtensionsScreen(
             extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes)
         },
         onOpenExtensionSettings = onOpenExtensionSettings,
+        onOpenCredentialSources = onOpenCredentialSources,
         elementModifier = { index ->
-            pageScope.elementModifier(index, installedExtensions.size + 2)
+            pageScope.elementModifier(index, 3)
         },
         modifier = modifier
     )

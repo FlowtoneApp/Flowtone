@@ -51,7 +51,6 @@ import ink.tenqui.flowtone.ui.screens.AboutScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
-import ink.tenqui.flowtone.ui.screens.OnlineExtensionsScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
@@ -182,7 +181,6 @@ internal fun SecondaryPageHost(
     onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
-    onOpenOnlineExtensions: () -> Unit,
     onOpenCredentialSources: () -> Unit,
     onOpenCredentialSourceEdit: (String?) -> Unit,
     pendingExtensionPreview: ExtensionInstallPreview?,
@@ -287,21 +285,12 @@ internal fun SecondaryPageHost(
                 onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
-                onOpenOnlineExtensions = onOpenOnlineExtensions,
                 onOpenCredentialSources = onOpenCredentialSources,
+                onOpenExtensionInstall = onOpenExtensionInstall,
+                onOpenExtensionSettings = onOpenExtensionSettings,
                 restoredPathSegments = settingsPathSegments,
                 modifier = Modifier.fillMaxSize()
             )
-
-            SecondaryPage.OnlineExtensions -> OnlineExtensionsScreen(
-                pageScope = pageScope,
-                onOpenExtensionInstall = onOpenExtensionInstall,
-                onOpenExtensionSettings = onOpenExtensionSettings,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .rightSwipeBackGesture(onCloseSecondaryPage)
-            )
-
             SecondaryPage.CredentialSources -> CredentialSourcesScreen(
                 pageScope = pageScope,
                 onOpenSource = onOpenCredentialSourceEdit,

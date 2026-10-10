@@ -124,8 +124,9 @@ internal fun SettingsScreen(
     onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
-    onOpenOnlineExtensions: () -> Unit,
     onOpenCredentialSources: () -> Unit,
+    onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
     restoredPathSegments: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
@@ -240,7 +241,7 @@ internal fun SettingsScreen(
         val elementCount = when {
             state.section == null -> 6
             state.section == SettingsSection.Appearance -> 3
-            state.section == SettingsSection.Online -> 3
+            state.section == SettingsSection.Online -> 1
             state.section == SettingsSection.General && state.managingLyricsFolders -> 1
             state.section == SettingsSection.General && state.showingLyricsSettings -> 1
             state.section == SettingsSection.General -> 3
@@ -258,6 +259,16 @@ internal fun SettingsScreen(
                     managingLyricsFolders = false
                 },
                 elementModifier = ::viewElementModifier
+            )
+
+            SettingsSection.Online -> OnlineExtensionsScreen(
+                pageScope = localScope,
+                onOpenExtensionInstall = onOpenExtensionInstall,
+                onOpenExtensionSettings = onOpenExtensionSettings,
+                onOpenCredentialSources = {
+                    currentOnPathSegmentsChange(listOf(SettingsSection.Online.title))
+                    onOpenCredentialSources()
+                }
             )
 
             SettingsSection.Appearance -> AppearanceSettingsPage(
@@ -333,17 +344,6 @@ internal fun SettingsScreen(
                 )
             }
 
-            SettingsSection.Online -> OnlineSettingsSectionPage(
-                pageScope = localScope,
-                onOpenExtensions = {
-                    currentOnPathSegmentsChange(listOf(SettingsSection.Online.title))
-                    onOpenOnlineExtensions()
-                },
-                onOpenCredentialSources = {
-                    currentOnPathSegmentsChange(listOf(SettingsSection.Online.title))
-                    onOpenCredentialSources()
-                }
-            )
         }
 
     /*

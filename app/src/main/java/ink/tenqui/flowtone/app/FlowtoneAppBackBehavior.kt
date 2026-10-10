@@ -45,10 +45,7 @@ internal fun closeFlowtoneSecondaryPage(appState: FlowtoneAppState) {
 /** The settings subsection is shared by Online settings and their descendants. */
 internal fun SecondaryNavigationState.retainsSettingsPathSegments(): Boolean =
     entries.any { entry ->
-        (entry.destination as? SecondaryDestination.Standard)?.page in setOf(
-            SecondaryPage.Settings,
-            SecondaryPage.OnlineExtensions
-        )
+        (entry.destination as? SecondaryDestination.Standard)?.page == SecondaryPage.Settings
     }
 
 internal fun navigateFlowtoneAppBack(appState: FlowtoneAppState) {

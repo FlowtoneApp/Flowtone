@@ -406,7 +406,6 @@ internal fun secondaryStackBreadcrumbs(
         when (val destination = entry.destination) {
             is SecondaryDestination.Standard -> when (destination.page) {
                 SecondaryPage.Settings -> listOf(destination.page.title) + settingsPathSegments
-                SecondaryPage.OnlineExtensions -> listOf(destination.page.title)
                 SecondaryPage.CredentialSources -> listOf(destination.page.title)
                 else -> emptyList()
             }
@@ -432,8 +431,6 @@ internal fun List<SecondaryStackEntry>.usesOnlineSettingsBreadcrumbs(): Boolean 
         entry.destination is SecondaryDestination.ExtensionSettings
     }
     return when (current) {
-        is SecondaryDestination.Standard -> current.page == SecondaryPage.OnlineExtensions &&
-            hasSettingsEntry
         SecondaryDestination.CredentialSources -> hasSettingsEntry || hasExtensionSettings
         is SecondaryDestination.CredentialSourceEdit ->
             (hasSettingsEntry || hasExtensionSettings) &&

@@ -114,7 +114,6 @@ internal fun FlowtoneTopBar(
             listOf(SecondaryPage.Album.title)
         }
         SecondaryPage.Artist -> listOf(SecondaryPage.Artist.title) + additionalPathSegments
-        SecondaryPage.OnlineExtensions,
         SecondaryPage.CredentialSources,
         SecondaryPage.CredentialSourceEdit -> additionalPathSegments
         SecondaryPage.ExtensionSettings -> additionalPathSegments
