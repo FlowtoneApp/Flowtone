@@ -359,6 +359,22 @@ internal fun FlowtoneScaffoldContent(
                 val pageScope = this
                 val pageUsesSharedCloud = when (page) {
                     FlowtoneScaffoldPage.MainTabs -> true
+                    is FlowtoneScaffoldPage.Secondary -> when (page.destination.page) {
+                        SecondaryPage.Playlist,
+                        SecondaryPage.Album,
+                        SecondaryPage.LocalLibrary,
+                        SecondaryPage.Settings,
+                        SecondaryPage.CredentialSources,
+                        SecondaryPage.CredentialSourceEdit,
+                        SecondaryPage.ExtensionSettings,
+                        SecondaryPage.ExtensionNetworkAccess,
+                        SecondaryPage.ExtensionCredentialGrants,
+                        SecondaryPage.ExtensionCredentialSourcePicker -> true
+                        else -> false
+                    }
+                }
+                val pageKeepsCloudTopBarTransparent = when (page) {
+                    FlowtoneScaffoldPage.MainTabs -> true
                     is FlowtoneScaffoldPage.Secondary ->
                         page.destination.page == SecondaryPage.Playlist ||
                             page.destination.page == SecondaryPage.Album ||
@@ -379,7 +395,7 @@ internal fun FlowtoneScaffoldContent(
                     // transparent scroll surface and PageTransitionHost reveals it as one layer.
                     pageScope.phase == PageTransitionPhase.Incoming -> 0f
 
-                    pageUsesSharedCloud -> 0f
+                    pageKeepsCloudTopBarTransparent -> 0f
 
                     page is FlowtoneScaffoldPage.Secondary &&
                         secondaryTopPresentationOwner(page.destination) ==

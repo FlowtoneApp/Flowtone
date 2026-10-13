@@ -17,6 +17,13 @@ import ink.tenqui.flowtone.data.online.permission.hasSameAuthoritySemanticsAs
 
 data class ConfigurationRequirementSummary(
     val requiredFields: List<ConfigurationFieldSummary>,
+    val omittedFieldCount: Int,
+    val atLeastOneGroups: List<ConfigurationAtLeastOneGroupSummary> = emptyList(),
+    val omittedAtLeastOneGroupCount: Int = 0
+)
+
+data class ConfigurationAtLeastOneGroupSummary(
+    val fields: List<ConfigurationFieldSummary>,
     val omittedFieldCount: Int
 )
 
@@ -142,8 +149,20 @@ object ExtensionInstallPreviewBuilder {
         }
         ConfigurationSchemaValidator.requireValid(incoming.configurationSchema)
         CredentialRequestValidator.requireValid(incoming.credentialRequests)
+        val fieldsById = incoming.configurationSchema.fields.associateBy(ConfigurationFieldDefinition::id)
         val requiredFields = incoming.configurationSchema.fields
             .filter(ConfigurationFieldDefinition::required)
+        val atLeastOneGroups = incoming.configurationSchema.atLeastOneGroups
+            .take(MaxConfigurationSummaryFields)
+            .map { group ->
+                val groupFields = group.fieldIds.mapNotNull { fieldId ->
+                    fieldsById[fieldId]?.let { field -> ConfigurationFieldSummary(field.id, field.label) }
+                }
+                ConfigurationAtLeastOneGroupSummary(
+                    fields = groupFields.take(MaxConfigurationSummaryFields),
+                    omittedFieldCount = (groupFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0)
+                )
+            }
         return ExtensionInstallPreview(
             incoming = incoming,
             summaryCapabilities = SummaryCapabilityAggregator.aggregate(incoming.canonicalCapabilities),
@@ -151,7 +170,10 @@ object ExtensionInstallPreviewBuilder {
                 requiredFields = requiredFields
                     .take(MaxConfigurationSummaryFields)
                     .map { ConfigurationFieldSummary(it.id, it.label) },
-                omittedFieldCount = (requiredFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0)
+                omittedFieldCount = (requiredFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0),
+                atLeastOneGroups = atLeastOneGroups,
+                omittedAtLeastOneGroupCount =
+                    (incoming.configurationSchema.atLeastOneGroups.size - atLeastOneGroups.size).coerceAtLeast(0)
             ),
             existingInstallation = existingInstallation,
             updateDiff = existingInstallation?.let { ExtensionUpdateDiff.between(it, incoming) },

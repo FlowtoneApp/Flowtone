@@ -111,5 +111,17 @@ internal fun validateExtensionConfiguration(
             persisted[field.id] = value
         }
     }
+    val fieldsById = schema.fields.associateBy(ConfigurationFieldDefinition::id)
+    schema.atLeastOneGroups.forEach { group ->
+        val groupSatisfied = group.fieldIds.any { fieldId ->
+            val field = fieldsById.getValue(fieldId)
+            ConfigurationSchemaValidator.hasValidValue(field, values[fieldId])
+        }
+        if (!groupSatisfied) {
+            group.fieldIds.forEach { fieldId ->
+                errors.putIfAbsent(fieldId, "至少填写此组中的一项")
+            }
+        }
+    }
     return ExtensionConfigurationValidation(persisted, errors)
 }

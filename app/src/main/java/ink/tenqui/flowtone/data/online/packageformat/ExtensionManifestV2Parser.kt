@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.online.packageformat
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationActionDefinition
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationChoice
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
@@ -73,7 +74,16 @@ internal object ExtensionManifestV2Parser {
                 )
             }
         }.orEmpty()
-        return ConfigurationSchema(fields, actions).also(ConfigurationSchemaValidator::requireValid)
+        val atLeastOneGroups = json.optJSONArray("atLeastOne")?.let { groups ->
+            List(groups.length()) { groupIndex ->
+                val group = groups.getJSONArray(groupIndex)
+                ConfigurationAtLeastOneGroup(
+                    fieldIds = List(group.length()) { fieldIndex -> group.getString(fieldIndex) }
+                )
+            }
+        }.orEmpty()
+        return ConfigurationSchema(fields, actions, atLeastOneGroups)
+            .also(ConfigurationSchemaValidator::requireValid)
     }
 
     private fun parseField(json: JSONObject): ConfigurationFieldDefinition {

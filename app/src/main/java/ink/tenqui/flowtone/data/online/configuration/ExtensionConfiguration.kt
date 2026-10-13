@@ -37,18 +37,26 @@ data class ConfigurationActionDefinition(
     val requiresValidConfig: Boolean = true
 )
 
+data class ConfigurationAtLeastOneGroup(
+    val fieldIds: List<String>
+)
+
 data class ConfigurationSchema(
     val fields: List<ConfigurationFieldDefinition> = emptyList(),
-    val actions: List<ConfigurationActionDefinition> = emptyList()
+    val actions: List<ConfigurationActionDefinition> = emptyList(),
+    /** Every group requires at least one valid, non-empty field value. */
+    val atLeastOneGroups: List<ConfigurationAtLeastOneGroup> = emptyList()
 ) {
     val hasSettings: Boolean get() = fields.isNotEmpty() || actions.isNotEmpty()
-    val requiresConfiguration: Boolean get() = fields.any(ConfigurationFieldDefinition::required)
+    val requiresConfiguration: Boolean
+        get() = fields.any(ConfigurationFieldDefinition::required) || atLeastOneGroups.isNotEmpty()
 }
 
 object ConfigurationSchemaLimits {
     const val MaxFields = 32
     const val MaxActions = 16
     const val MaxChoicesPerField = 32
+    const val MaxAtLeastOneGroups = 16
     const val MaxIdLength = 64
     const val MaxLabelLength = 80
     const val MaxDescriptionLength = 300
@@ -121,6 +129,31 @@ object ConfigurationSchemaValidator {
             }
         }
 
+        if (schema.atLeastOneGroups.size > ConfigurationSchemaLimits.MaxAtLeastOneGroups) {
+            add(ConfigurationSchemaViolation("atLeastOne", "至少一项约束数量超过上限"))
+        }
+        val groupKeys = mutableSetOf<Set<String>>()
+        schema.atLeastOneGroups.forEachIndexed { index, group ->
+            val path = "atLeastOne[$index]"
+            if (group.fieldIds.size !in 2..ConfigurationSchemaLimits.MaxFields) {
+                add(ConfigurationSchemaViolation(path, "每组必须引用 2 到 " + ConfigurationSchemaLimits.MaxFields + " 个字段"))
+            }
+            if (group.fieldIds.distinct().size != group.fieldIds.size) {
+                add(ConfigurationSchemaViolation("$path.fields", "同一组内字段不能重复"))
+            }
+            if (!groupKeys.add(group.fieldIds.toSet())) {
+                add(ConfigurationSchemaViolation(path, "至少一项约束重复"))
+            }
+            group.fieldIds.forEachIndexed { fieldIndex, fieldId ->
+                val field = schema.fields.firstOrNull { it.id == fieldId }
+                if (field == null) {
+                    add(ConfigurationSchemaViolation("$path.fields[$fieldIndex]", "引用了未声明的字段"))
+                } else if (field.type == ConfigurationFieldType.Secret) {
+                    add(ConfigurationSchemaViolation("$path.fields[$fieldIndex]", "此版本不能将 Secret 字段用于配置约束"))
+                }
+            }
+        }
+
         val actionIds = mutableSetOf<String>()
         schema.actions.forEachIndexed { index, action ->
             val path = "actions[$index]"
@@ -142,6 +175,11 @@ object ConfigurationSchemaValidator {
         }
     }
 
+    fun hasValidValue(
+        field: ConfigurationFieldDefinition,
+        value: ConfigurationValue?
+    ): Boolean = value != null && !isEmpty(value) && isValidValue(field, value)
+
     fun isValidValue(
         field: ConfigurationFieldDefinition,
         value: ConfigurationValue
@@ -153,6 +191,11 @@ object ConfigurationSchemaValidator {
         ConfigurationFieldType.Toggle -> value is ConfigurationValue.BooleanValue
         ConfigurationFieldType.Choice -> value is ConfigurationValue.StringValue &&
             field.choices.any { it.value == value.value }
+    }
+
+    private fun isEmpty(value: ConfigurationValue): Boolean = when (value) {
+        is ConfigurationValue.StringValue -> value.value.isBlank()
+        is ConfigurationValue.BooleanValue -> false
     }
 
     private fun MutableList<ConfigurationSchemaViolation>.validateId(value: String, path: String) {
@@ -197,17 +240,39 @@ object ConfigurationStateResolver {
     ): ConfigurationState {
         ConfigurationSchemaValidator.requireValid(schema)
         val requiredFields = schema.fields.filter(ConfigurationFieldDefinition::required)
-        if (requiredFields.isEmpty()) return ConfigurationState.NotRequired
-
-        val effectiveValues = requiredFields.associateWith { field ->
-            values[field.id] ?: field.defaultValue
+        if (requiredFields.isEmpty() && schema.atLeastOneGroups.isEmpty()) {
+            return ConfigurationState.NotRequired
         }
-        if (effectiveValues.values.all(::isEmpty)) return ConfigurationState.Unconfigured
 
-        return if (effectiveValues.all { (field, value) ->
-                value != null && !isEmpty(value) && ConfigurationSchemaValidator.isValidValue(field, value)
+        val fieldsById = schema.fields.associateBy(ConfigurationFieldDefinition::id)
+        val requiredValueIds = buildSet {
+            requiredFields.forEach { add(it.id) }
+            schema.atLeastOneGroups.forEach { group -> addAll(group.fieldIds) }
+        }
+        if (requiredValueIds.all { fieldId ->
+                val field = fieldsById.getValue(fieldId)
+                isEmpty(values[fieldId] ?: field.defaultValue)
             }
         ) {
+            return ConfigurationState.Unconfigured
+        }
+
+        val requiredFieldsSatisfied = requiredFields.all { field ->
+            ConfigurationSchemaValidator.hasValidValue(
+                field,
+                values[field.id] ?: field.defaultValue
+            )
+        }
+        val groupsSatisfied = schema.atLeastOneGroups.all { group ->
+            group.fieldIds.any { fieldId ->
+                val field = fieldsById.getValue(fieldId)
+                ConfigurationSchemaValidator.hasValidValue(
+                    field,
+                    values[fieldId] ?: field.defaultValue
+                )
+            }
+        }
+        return if (requiredFieldsSatisfied && groupsSatisfied) {
             ConfigurationState.Configured
         } else {
             ConfigurationState.Incomplete

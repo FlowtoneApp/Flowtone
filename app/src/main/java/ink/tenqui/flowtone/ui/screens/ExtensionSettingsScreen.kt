@@ -18,8 +18,6 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +50,7 @@ import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationStateResolver
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
 import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
@@ -64,7 +63,8 @@ import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
-import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
+import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -113,10 +113,11 @@ internal fun extensionSettingsPresentation(
     return ExtensionSettingsPresentation(
         capabilities = SummaryCapabilityAggregator.aggregate(installed.descriptor.canonicalCapabilities),
         configurationStatus = when (configurationState) {
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.NotRequired -> "此扩展无需配置"
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Unconfigured -> "尚未配置"
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Incomplete -> "配置不完整"
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Configured -> "已配置"
+            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.NotRequired ->
+                if (schema.fields.isEmpty()) "此扩展无需配置" else "可选配置"
+            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Unconfigured -> "需要配置"
+            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Incomplete -> "需要配置"
+            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Configured -> "必需配置已完成"
         },
         credentialLabels = installed.descriptor.credentialRequests.map { it.label }
     )
@@ -226,9 +227,6 @@ internal fun ExtensionSettingsScreen(
     val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
     val attentionMessages = buildList {
         if (configError != null) add("扩展配置读取失败，请重新进入页面。")
-        else if (!configLoading && presentation.configurationStatus in setOf("尚未配置", "配置不完整")) {
-            add("扩展配置尚未完成。")
-        }
         if (grantError) add("凭据授权状态读取失败，请进入授权页检查。")
         grantSummary?.let { summary ->
             if (summary.authorizedCount < summary.requestCount) add("部分凭据请求尚未授权。")
@@ -260,9 +258,9 @@ internal fun ExtensionSettingsScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         SettingsPageColumn(modifier = Modifier.imePadding()) {
-            ExtensionIdentityHeader(installed, pageScope.elementModifier(0, 6))
+            ExtensionIdentityHeader(installed, pageScope.elementModifier(0, 5))
             if (attentionMessages.isNotEmpty()) {
-                ExtensionAttentionSection(attentionMessages, pageScope.elementModifier(1, 6))
+                ExtensionAttentionSection(attentionMessages, pageScope.elementModifier(1, 5))
             }
             ExtensionManagementSection(
                 credentialCount = installed.descriptor.credentialRequests.size,
@@ -274,10 +272,10 @@ internal fun ExtensionSettingsScreen(
                 networkCount = installed.descriptor.networkPermissions.size,
                 onOpenGrants = { onOpenCredentialGrants(installed) },
                 onOpenNetwork = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
-                modifier = pageScope.elementModifier(2, 6).padding(top = 26.dp)
+                modifier = pageScope.elementModifier(2, 5).padding(top = 26.dp)
             )
             ExtensionConfigurationSection(
-                fields = installed.descriptor.configurationSchema.fields,
+                schema = installed.descriptor.configurationSchema,
                 stateLabel = extensionConfigurationDisplayStatus(
                     presentation.configurationStatus, draft != baseline, saving, configLoading
                 ),
@@ -290,7 +288,10 @@ internal fun ExtensionSettingsScreen(
                 onValueChange = { id, value ->
                     if (!saving) {
                         draft = draft.toMutableMap().apply { if (value == null) remove(id) else put(id, value) }
-                        errors = errors - id
+                        val relatedFieldIds = installed.descriptor.configurationSchema.atLeastOneGroups
+                            .filter { id in it.fieldIds }
+                            .flatMap { it.fieldIds }
+                        errors = errors - relatedFieldIds - id
                         saveFeedback = null
                     }
                 },
@@ -330,23 +331,25 @@ internal fun ExtensionSettingsScreen(
                         }
                     }
                 },
-                modifier = pageScope.elementModifier(3, 6).padding(top = 26.dp)
+                modifier = pageScope.elementModifier(3, 5).padding(top = 26.dp)
             )
-            OnlineCapabilitySection(
-                presentation.capabilities,
-                pageScope.elementModifier(4, 6).padding(top = 26.dp),
-                initiallyExpanded = false
-            )
-            OptionGroup(title = "移除扩展", modifier = pageScope.elementModifier(5, 6).padding(top = 30.dp)) {
-                TextButton(
-                    onClick = { if (!uninstalling) confirmUninstall = true },
-                    enabled = !uninstalling && !saving,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (uninstalling) "正在卸载…" else "卸载扩展", color = MaterialTheme.colorScheme.error)
-                }
-                uninstallError?.let { message ->
-                    Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Column(
+                modifier = pageScope.elementModifier(4, 5).padding(top = 30.dp).fillMaxWidth()
+            ) {
+                OnlineSectionHeading("移除扩展")
+                SettingsOptionSurface(modifier = Modifier.padding(top = 12.dp)) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        TextButton(
+                            onClick = { if (!uninstalling) confirmUninstall = true },
+                            enabled = !uninstalling && !saving,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (uninstalling) "正在卸载…" else "卸载扩展", color = MaterialTheme.colorScheme.error)
+                        }
+                        uninstallError?.let { message ->
+                            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             }
         }
@@ -358,7 +361,10 @@ internal fun ExtensionSettingsScreen(
                 onSelect = { value ->
                     if (!saving) {
                         draft = draft.toMutableMap().apply { put(field.id, ConfigurationValue.StringValue(value)) }
-                        errors = errors - field.id
+                        val relatedFieldIds = installed.descriptor.configurationSchema.atLeastOneGroups
+                            .filter { field.id in it.fieldIds }
+                            .flatMap { it.fieldIds }
+                        errors = errors - relatedFieldIds - field.id
                         saveFeedback = null
                     }
                     selectedChoice = null
@@ -469,24 +475,22 @@ private fun ExtensionIdentityHeader(installed: InstalledExtension, modifier: Mod
 
 @Composable
 private fun ExtensionAttentionSection(messages: List<String>, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth().padding(top = 20.dp),
-        shape = RoundedCornerShape(SettingsRowCornerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text("需要处理", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            messages.forEach { message ->
-                Text(message, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
-            }
+    Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp)) {
+        OnlineSectionHeading("状态提醒")
+        messages.forEach { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
         }
     }
 }
 
 @Composable
 private fun ExtensionConfigurationSection(
-    fields: List<ConfigurationFieldDefinition>,
+    schema: ConfigurationSchema,
     stateLabel: String,
     draft: Map<String, ConfigurationValue>,
     errors: Map<String, String>,
@@ -499,86 +503,193 @@ private fun ExtensionConfigurationSection(
     onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    OptionGroup(title = "扩展配置", modifier = modifier) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(stateLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (fields.isEmpty()) {
-                    Text("此扩展无需额外配置", style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 10.dp))
+    val fields = schema.fields
+    val fieldsById = fields.associateBy { it.id }
+    val requiredFields = fields.filter(ConfigurationFieldDefinition::required)
+    val groupedFieldIds = schema.atLeastOneGroups.flatMapTo(linkedSetOf()) { it.fieldIds }
+    val optionalFields = fields.filter { !it.required && it.id !in groupedFieldIds }
+    val renderedGroupFieldIds = mutableSetOf<String>()
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        OnlineSectionHeading(title = "扩展配置", subtitle = stateLabel)
+        if (fields.isEmpty()) {
+            Text(
+                "此扩展无需额外配置",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
+        if (requiredFields.isNotEmpty() || schema.atLeastOneGroups.isNotEmpty()) {
+            Text(
+                "需要配置",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 14.dp)
+            )
+            requiredFields.forEach { field ->
+                ExtensionConfigurationOption(modifier = Modifier.padding(top = 8.dp)) {
+                    ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
                 }
-                fields.forEach { field ->
-                    when (field.type) {
-                        ConfigurationFieldType.Text, ConfigurationFieldType.Url -> {
-                            val value = (draft[field.id] as? ConfigurationValue.StringValue)?.value.orEmpty()
-                            OutlinedTextField(
-                                value = value,
-                                onValueChange = { onValueChange(field.id, ConfigurationValue.StringValue(it)) },
-                                label = { Text(field.label) },
-                                placeholder = field.placeholder?.let { { Text(it) } },
-                                supportingText = { Text(errors[field.id] ?: field.description.orEmpty()) },
-                                isError = field.id in errors,
-                                enabled = !busy,
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-                            )
-                        }
-                        ConfigurationFieldType.Toggle -> {
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(field.label, style = MaterialTheme.typography.bodyMedium)
-                                    field.description?.let {
-                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
+            }
+            schema.atLeastOneGroups.forEach { group ->
+                val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
+                if (labels.isNotEmpty()) {
+                    Text(
+                        "至少填写一项：" + labels.joinToString("、"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                    group.fieldIds.forEach { fieldId ->
+                        fieldsById[fieldId]?.let { field ->
+                            if (!field.required && renderedGroupFieldIds.add(field.id)) {
+                                ExtensionConfigurationOption(modifier = Modifier.padding(top = 8.dp)) {
+                                    ExtensionConfigurationField(
+                                        field, draft, errors, busy, onValueChange, onChoiceClick
+                                    )
                                 }
-                                FlowtoneSwitch(
-                                    checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value ?: false,
-                                    onCheckedChange = { onValueChange(field.id, ConfigurationValue.BooleanValue(it)) },
-                                    enabled = !busy
-                                )
                             }
-                        }
-                        ConfigurationFieldType.Choice -> {
-                            val selected = (draft[field.id] as? ConfigurationValue.StringValue)?.value
-                            val label = field.choices.firstOrNull { it.value == selected }?.label ?: "请选择"
-                            Row(
-                                modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) { onChoiceClick(field) }.padding(vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(field.label, style = MaterialTheme.typography.bodyMedium)
-                                    field.description?.let {
-                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                                Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        ConfigurationFieldType.Secret -> {
-                            Text(
-                                field.description ?: "此配置需要安全存储支持，当前版本暂不可配置。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 12.dp)
-                            )
                         }
                     }
                 }
-                feedback?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (feedbackIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+            }
+        }
+        if (optionalFields.isNotEmpty()) {
+            Text(
+                "可选配置",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 14.dp)
+            )
+            optionalFields.forEach { field ->
+                ExtensionConfigurationOption(modifier = Modifier.padding(top = 8.dp)) {
+                    ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
+                }
+            }
+        }
+        feedback?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (feedbackIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+        if (fields.isNotEmpty()) {
+            Button(
+                onClick = onSave,
+                enabled = saveEnabled,
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)
+            ) { Text(if (busy && stateLabel == "正在保存…") "正在保存…" else "保存配置") }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionConfigurationOption(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    SettingsOptionSurface(modifier = modifier) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ExtensionConfigurationField(
+    field: ConfigurationFieldDefinition,
+    draft: Map<String, ConfigurationValue>,
+    errors: Map<String, String>,
+    busy: Boolean,
+    onValueChange: (String, ConfigurationValue?) -> Unit,
+    onChoiceClick: (ConfigurationFieldDefinition) -> Unit
+) {
+    when (field.type) {
+        ConfigurationFieldType.Text, ConfigurationFieldType.Url -> {
+            val value = (draft[field.id] as? ConfigurationValue.StringValue)?.value.orEmpty()
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onValueChange(field.id, ConfigurationValue.StringValue(it)) },
+                label = { Text(field.label + if (field.required) "（必须）" else "（可选）") },
+                placeholder = field.placeholder?.let { { Text(it) } },
+                supportingText = { Text(errors[field.id] ?: field.description.orEmpty()) },
+                isError = field.id in errors,
+                enabled = !busy,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        ConfigurationFieldType.Toggle -> {
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ConfigurationFieldTitle(field, Modifier.weight(1f))
+                    FlowtoneSwitch(
+                        checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value ?: false,
+                        onCheckedChange = { onValueChange(field.id, ConfigurationValue.BooleanValue(it)) },
+                        enabled = !busy
                     )
                 }
-                if (fields.isNotEmpty()) {
-                    Button(
-                        onClick = onSave,
-                        enabled = saveEnabled,
-                        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)
-                    ) { Text(if (busy && stateLabel == "正在保存…") "正在保存…" else "保存配置") }
+                field.description?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                errors[field.id]?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
+        ConfigurationFieldType.Choice -> {
+            val selected = (draft[field.id] as? ConfigurationValue.StringValue)?.value
+            val choiceLabel = field.choices.firstOrNull { it.value == selected }?.label ?: "请选择"
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) { onChoiceClick(field) }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ConfigurationFieldTitle(field, Modifier.weight(1f))
+                    Text(
+                        choiceLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+                field.description?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                errors[field.id]?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+        ConfigurationFieldType.Secret -> {
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                ConfigurationFieldTitle(field)
+                Text(
+                    field.description ?: "此配置需要安全存储支持，当前版本暂不可配置。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfigurationFieldTitle(field: ConfigurationFieldDefinition, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(field.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(
+            if (field.required) "必须" else "可选",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (field.required) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp)
+        )
     }
 }
 
@@ -591,27 +702,29 @@ private fun ExtensionManagementSection(
     onOpenNetwork: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    OptionGroup(title = "访问与授权", modifier = modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        OnlineSectionHeading("访问与授权")
         if (credentialCount > 0) {
-            OnlineManagementEntry(
+            SettingsCategoryCard(
                 title = "凭据授权",
                 subtitle = grantSummary,
-                onClick = onOpenGrants
-            ) {
-                Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(SettingsRowIconSize))
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+                icon = Icons.Rounded.Key,
+                iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onOpenGrants,
+                modifier = Modifier.padding(top = 12.dp)
+            )
         }
-        OnlineManagementEntry(
+        SettingsCategoryCard(
             title = "网络访问",
             subtitle = if (networkCount == 0) "未申请网络访问"
                 else "$networkCount 条访问规则 · 查看完整目标",
-            onClick = onOpenNetwork
-        ) {
-            Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(SettingsRowIconSize))
-        }
+            icon = Icons.Rounded.Language,
+            iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = onOpenNetwork,
+            modifier = Modifier.padding(top = 12.dp)
+        )
     }
 }
 @Composable

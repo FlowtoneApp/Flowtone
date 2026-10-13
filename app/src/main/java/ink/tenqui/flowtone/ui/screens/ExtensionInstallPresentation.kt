@@ -143,16 +143,31 @@ internal fun extensionInstallOverlayPresentation(
         versionLine = preview.existingInstallation?.let { existing ->
             "${existing.identity.version} → ${preview.identity.version}"
         } ?: preview.identity.version,
-        configurationSummary = preview.configurationSummary.requiredFields
-            .takeIf { it.isNotEmpty() }
-            ?.let { fields ->
-                val labels = fields.joinToString("、") { it.label }
-                if (preview.configurationSummary.omittedFieldCount > 0) {
-                    "$labels 等 ${fields.size + preview.configurationSummary.omittedFieldCount} 项"
-                } else {
-                    labels
+        configurationSummary = buildList {
+            preview.configurationSummary.requiredFields
+                .takeIf { it.isNotEmpty() }
+                ?.let { fields ->
+                    val labels = fields.joinToString("、") { it.label }
+                    add(
+                        if (preview.configurationSummary.omittedFieldCount > 0) {
+                            labels + " 等 " +
+                                (fields.size + preview.configurationSummary.omittedFieldCount) + " 项"
+                        } else {
+                            labels
+                        }
+                    )
                 }
-            },
+            preview.configurationSummary.atLeastOneGroups.forEach { group ->
+                var labels = group.fields.joinToString("、") { it.label }
+                if (group.omittedFieldCount > 0) {
+                    labels += " 等 " + (group.fields.size + group.omittedFieldCount) + " 项"
+                }
+                add("至少填写一项：" + labels)
+            }
+            if (preview.configurationSummary.omittedAtLeastOneGroupCount > 0) {
+                add("另有 " + preview.configurationSummary.omittedAtLeastOneGroupCount + " 组至少填写一项")
+            }
+        }.takeIf { it.isNotEmpty() }?.joinToString("；"),
         hasInsecureNetworkPermissions = preview.networkPermissions.any {
             it.security == NetworkSecurity.Insecure
         },
