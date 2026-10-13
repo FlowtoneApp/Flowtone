@@ -21,7 +21,9 @@ data class ExtensionManifest(
     /** 可选 Provider 品牌色，仅用于 Host 控制的展示。格式为 #RRGGBB。 */
     val color: String? = null,
     val icon: String? = null,
-    val iconColor: String? = null
+    val iconColor: String? = null,
+    /** 可选的作者主页链接，仅接受有效的 HTTP(S) 地址。 */
+    val authorUrl: String? = null
 )
 
 data class ExtensionIdentity(

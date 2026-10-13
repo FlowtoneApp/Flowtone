@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
+import java.net.URI
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
@@ -25,7 +26,8 @@ internal object ExtensionManifestJson {
                 .map { it.trim().lowercase(Locale.ROOT) },
             color = json.optionalString("color"),
             icon = json.optionalString("icon")?.takeIf(::isSafeIconPath),
-            iconColor = json.optionalString("iconColor")?.takeIf { it.matches(HexColor) }
+            iconColor = json.optionalString("iconColor")?.takeIf { it.matches(HexColor) },
+            authorUrl = json.optionalString("authorUrl")?.takeIf(::isValidAuthorUrl)
         )
         validateCommon(manifest)
         return manifest
@@ -40,6 +42,14 @@ internal object ExtensionManifestJson {
 
     private fun JSONObject.optionalString(name: String): String? =
         optString(name).trim().takeIf(String::isNotEmpty)
+
+    private fun isValidAuthorUrl(value: String): Boolean = runCatching {
+        val uri = URI(value)
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)
+        (scheme == "http" || scheme == "https") &&
+            !uri.host.isNullOrBlank() &&
+            (uri.port == -1 || uri.port in 1..65535)
+    }.getOrDefault(false)
 
     private fun validateCommon(manifest: ExtensionManifest) {
         require(manifest.formatVersion == 2) { "不支持的扩展包版本" }

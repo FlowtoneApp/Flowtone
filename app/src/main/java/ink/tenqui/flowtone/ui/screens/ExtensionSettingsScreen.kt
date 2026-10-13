@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,9 +17,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,9 +37,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -219,7 +225,6 @@ internal fun ExtensionSettingsScreen(
 
     val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
     val attentionMessages = buildList {
-        if (!installed.runtimeAvailable) add("运行环境当前不可用，扩展功能可能无法使用。")
         if (configError != null) add("扩展配置读取失败，请重新进入页面。")
         else if (!configLoading && presentation.configurationStatus in setOf("尚未配置", "配置不完整")) {
             add("扩展配置尚未完成。")
@@ -315,7 +320,7 @@ internal fun ExtensionSettingsScreen(
                                         if (it is CancellationException) throw it
                                         false
                                     }
-                                    saveFeedback = if (runtimeRefreshed) "配置已保存" else "配置已保存，运行环境尚未刷新"
+                                    saveFeedback = if (runtimeRefreshed) "配置已保存" else "配置已保存，但新配置尚未生效"
                                 }.onFailure {
                                     if (it is CancellationException) throw it
                                     saveFeedback = "保存失败，请重试。"
@@ -389,42 +394,75 @@ internal fun ExtensionSettingsScreen(
 @Composable
 private fun ExtensionIdentityHeader(installed: InstalledExtension, modifier: Modifier = Modifier) {
     val manifest = installed.manifest
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Surface(
-            modifier = Modifier.size(64.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                ExtensionInstalledIcon(installed, Modifier.size(36.dp))
+    val context = LocalContext.current
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Top) {
+            Surface(
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    ExtensionInstalledIcon(installed, Modifier.size(36.dp))
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(manifest.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "版本 ${manifest.version}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                val authorUrl = manifest.authorUrl
+                Text(
+                    text = "@${manifest.author.removePrefix("@")}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        textDecoration = if (authorUrl == null) TextDecoration.None else TextDecoration.Underline
+                    ),
+                    color = if (authorUrl == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .clickable(enabled = authorUrl != null) {
+                            authorUrl?.let { context.openExternalUrl(it) }
+                        }
+                )
             }
         }
-        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
-            Text(
-                manifest.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "版本 ${manifest.version} · ${manifest.author}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            if (manifest.description.isNotBlank()) {
+        if (manifest.description.isNotBlank()) {
+            var descriptionExpanded by remember(manifest.description) { mutableStateOf(false) }
+            var descriptionOverflows by remember(manifest.description) { mutableStateOf(false) }
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
                 Text(
                     manifest.description,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp)
+                    maxLines = if (descriptionExpanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    onTextLayout = { result ->
+                        if (!descriptionExpanded && descriptionOverflows != result.didOverflowHeight) {
+                            descriptionOverflows = result.didOverflowHeight
+                        }
+                    }
                 )
+                if (descriptionExpanded || descriptionOverflows) {
+                    OutlinedButton(
+                        onClick = { descriptionExpanded = !descriptionExpanded },
+                        shape = RoundedCornerShape(percent = 50),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                        modifier = Modifier.align(Alignment.Start).padding(top = 4.dp)
+                    ) {
+                        Text(
+                            if (descriptionExpanded) "收起简介" else "展开简介",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.Black
+                        )
+                    }
+                }
             }
-            Text(
-                if (installed.runtimeAvailable) "运行环境可用" else "运行环境不可用",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (installed.runtimeAvailable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 10.dp)
-            )
         }
     }
 }
