@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -65,11 +67,15 @@ import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
 import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
+import ink.tenqui.flowtone.ui.components.SettingsOptionSurfaceColor
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val ExtensionCardTintBlend = 0.08f
+private const val ExtensionIconBackgroundTintBlend = 0.28f
 
 internal data class ExtensionSettingsPresentation(
     val capabilities: List<SummaryCapability>,
@@ -149,6 +155,16 @@ internal fun ExtensionSettingsScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val extensionIconAccent = rememberInstalledExtensionIconAccent(installed, isDarkTheme)
+    val defaultOptionSurfaceColor = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+        SettingsOptionSurfaceColor
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+    val extensionOptionSurfaceColor = extensionIconAccent?.let { iconAccent ->
+        lerp(defaultOptionSurfaceColor, iconAccent, ExtensionCardTintBlend)
+    }
     val extensionManager = remember(context) { ExtensionManager.get(context) }
     val configStore = remember(context) { ExtensionConfigStore.from(context) }
     val grantRepository = remember(context) { CredentialGrantRepository.from(context) }
@@ -258,7 +274,11 @@ internal fun ExtensionSettingsScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         SettingsPageColumn(modifier = Modifier.imePadding()) {
-            ExtensionIdentityHeader(installed, pageScope.elementModifier(0, 5))
+            ExtensionIdentityHeader(
+                installed = installed,
+                iconAccent = extensionIconAccent,
+                modifier = pageScope.elementModifier(0, 5)
+            )
             if (attentionMessages.isNotEmpty()) {
                 ExtensionAttentionSection(attentionMessages, pageScope.elementModifier(1, 5))
             }
@@ -270,12 +290,14 @@ internal fun ExtensionSettingsScreen(
                     else -> grantSummary!!.label
                 },
                 networkCount = installed.descriptor.networkPermissions.size,
+                iconAccent = extensionIconAccent,
                 onOpenGrants = { onOpenCredentialGrants(installed) },
                 onOpenNetwork = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
                 modifier = pageScope.elementModifier(2, 5).padding(top = 26.dp)
             )
             ExtensionConfigurationSection(
                 schema = installed.descriptor.configurationSchema,
+                cardSurfaceColor = extensionOptionSurfaceColor,
                 stateLabel = extensionConfigurationDisplayStatus(
                     presentation.configurationStatus, draft != baseline, saving, configLoading
                 ),
@@ -337,7 +359,10 @@ internal fun ExtensionSettingsScreen(
                 modifier = pageScope.elementModifier(4, 5).padding(top = 30.dp).fillMaxWidth()
             ) {
                 OnlineSectionHeading("移除扩展")
-                SettingsOptionSurface(modifier = Modifier.padding(top = 12.dp)) {
+                SettingsOptionSurface(
+                    modifier = Modifier.padding(top = 12.dp),
+                    surfaceColor = extensionOptionSurfaceColor
+                ) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         TextButton(
                             onClick = { if (!uninstalling) confirmUninstall = true },
@@ -398,15 +423,22 @@ internal fun ExtensionSettingsScreen(
 }
 
 @Composable
-private fun ExtensionIdentityHeader(installed: InstalledExtension, modifier: Modifier = Modifier) {
+private fun ExtensionIdentityHeader(
+    installed: InstalledExtension,
+    iconAccent: Color?,
+    modifier: Modifier = Modifier
+) {
     val manifest = installed.manifest
     val context = LocalContext.current
+    val iconBackgroundColor = iconAccent?.let { accent ->
+        lerp(MaterialTheme.colorScheme.surfaceContainer, accent, ExtensionIconBackgroundTintBlend)
+    } ?: MaterialTheme.colorScheme.surfaceContainer
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Top) {
             Surface(
                 modifier = Modifier.size(64.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer
+                color = iconBackgroundColor
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     ExtensionInstalledIcon(installed, Modifier.size(36.dp))
@@ -501,7 +533,8 @@ private fun ExtensionConfigurationSection(
     onValueChange: (String, ConfigurationValue?) -> Unit,
     onChoiceClick: (ConfigurationFieldDefinition) -> Unit,
     onSave: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cardSurfaceColor: Color? = null
 ) {
     val fields = schema.fields
     val fieldsById = fields.associateBy { it.id }
@@ -527,7 +560,10 @@ private fun ExtensionConfigurationSection(
                 modifier = Modifier.padding(top = 14.dp)
             )
             requiredFields.forEach { field ->
-                ExtensionConfigurationOption(modifier = Modifier.padding(top = 8.dp)) {
+                ExtensionConfigurationOption(
+                    modifier = Modifier.padding(top = 8.dp),
+                    surfaceColor = cardSurfaceColor
+                ) {
                     ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
                 }
             }
@@ -543,7 +579,10 @@ private fun ExtensionConfigurationSection(
                     group.fieldIds.forEach { fieldId ->
                         fieldsById[fieldId]?.let { field ->
                             if (!field.required && renderedGroupFieldIds.add(field.id)) {
-                                ExtensionConfigurationOption(modifier = Modifier.padding(top = 8.dp)) {
+                                ExtensionConfigurationOption(
+                                    modifier = Modifier.padding(top = 8.dp),
+                                    surfaceColor = cardSurfaceColor
+                                ) {
                                     ExtensionConfigurationField(
                                         field, draft, errors, busy, onValueChange, onChoiceClick
                                     )
@@ -562,7 +601,10 @@ private fun ExtensionConfigurationSection(
                 modifier = Modifier.padding(top = 14.dp)
             )
             optionalFields.forEach { field ->
-                ExtensionConfigurationOption(modifier = Modifier.padding(top = 8.dp)) {
+                ExtensionConfigurationOption(
+                    modifier = Modifier.padding(top = 8.dp),
+                    surfaceColor = cardSurfaceColor
+                ) {
                     ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
                 }
             }
@@ -588,9 +630,10 @@ private fun ExtensionConfigurationSection(
 @Composable
 private fun ExtensionConfigurationOption(
     modifier: Modifier = Modifier,
+    surfaceColor: Color? = null,
     content: @Composable () -> Unit
 ) {
-    SettingsOptionSurface(modifier = modifier) {
+    SettingsOptionSurface(modifier = modifier, surfaceColor = surfaceColor) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
@@ -698,10 +741,20 @@ private fun ExtensionManagementSection(
     credentialCount: Int,
     grantSummary: String,
     networkCount: Int,
+    iconAccent: Color?,
     onOpenGrants: () -> Unit,
     onOpenNetwork: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val categorySurfaceColor = iconAccent?.let { accent ->
+        lerp(SettingsOptionSurfaceColor, accent, ExtensionCardTintBlend)
+    } ?: SettingsOptionSurfaceColor
+    val credentialIconContainerColor = iconAccent?.let { accent ->
+        lerp(MaterialTheme.colorScheme.primaryContainer, accent, ExtensionIconBackgroundTintBlend)
+    } ?: MaterialTheme.colorScheme.primaryContainer
+    val networkIconContainerColor = iconAccent?.let { accent ->
+        lerp(MaterialTheme.colorScheme.secondaryContainer, accent, ExtensionIconBackgroundTintBlend)
+    } ?: MaterialTheme.colorScheme.secondaryContainer
     Column(modifier = modifier.fillMaxWidth()) {
         OnlineSectionHeading("访问与授权")
         if (credentialCount > 0) {
@@ -709,10 +762,11 @@ private fun ExtensionManagementSection(
                 title = "凭据授权",
                 subtitle = grantSummary,
                 icon = Icons.Rounded.Key,
-                iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                iconContainerColor = credentialIconContainerColor,
                 iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 onClick = onOpenGrants,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier.padding(top = 12.dp),
+                surfaceColor = categorySurfaceColor
             )
         }
         SettingsCategoryCard(
@@ -720,10 +774,11 @@ private fun ExtensionManagementSection(
             subtitle = if (networkCount == 0) "未申请网络访问"
                 else "$networkCount 条访问规则 · 查看完整目标",
             icon = Icons.Rounded.Language,
-            iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            iconContainerColor = networkIconContainerColor,
             iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             onClick = onOpenNetwork,
-            modifier = Modifier.padding(top = 12.dp)
+            modifier = Modifier.padding(top = 12.dp),
+            surfaceColor = categorySurfaceColor
         )
     }
 }

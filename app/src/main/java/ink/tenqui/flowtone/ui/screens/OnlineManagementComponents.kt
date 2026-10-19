@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.imageLoader
 import coil3.compose.AsyncImage
 import ink.tenqui.flowtone.R
 import ink.tenqui.flowtone.data.online.ExtensionManager
@@ -47,6 +48,7 @@ import ink.tenqui.flowtone.data.search.SearchProviderVisual
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
+import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -95,6 +97,34 @@ internal fun ExtensionInstalledIcon(installed: InstalledExtension, modifier: Mod
             modifier = Modifier.fillMaxSize()
         )
     }
+}
+
+@Composable
+internal fun rememberInstalledExtensionIconAccent(
+    installed: InstalledExtension?,
+    isDarkTheme: Boolean
+): Color? {
+    val visual by produceState<SearchProviderVisual?>(
+        initialValue = null,
+        key1 = installed
+    ) {
+        value = installed?.let { extension ->
+            withContext(Dispatchers.IO) { ExtensionProviderVisualResolver.resolve(extension) }
+        }
+    }
+    val iconTintColor = visual
+        ?.takeIf { it.iconFile != null }
+        ?.iconColor
+        ?.removePrefix("#")
+        ?.toLongOrNull(16)
+        ?.let { Color((0xFF000000L or it).toInt()) }
+    val sampledIconColor = rememberArtworkBackgroundColor(
+        artworkData = visual?.iconFile?.takeUnless { iconTintColor != null },
+        imageLoader = LocalContext.current.imageLoader,
+        fallbackColor = MaterialTheme.colorScheme.primary,
+        isDarkTheme = isDarkTheme
+    )
+    return iconTintColor ?: sampledIconColor
 }
 
 /** A single full-width destination row for online management pages. */

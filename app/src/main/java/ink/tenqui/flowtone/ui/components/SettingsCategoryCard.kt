@@ -33,12 +33,13 @@ internal fun SettingsCategoryCard(
     iconContainerColor: Color,
     iconContentColor: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    surfaceColor: Color = SettingsOptionSurfaceColor
 ) {
     SettingsOptionSurface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        surfaceColor = SettingsOptionSurfaceColor,
+        surfaceColor = surfaceColor,
         contentColor = SettingsCategoryCardTitleColor
     ) {
         Row(
