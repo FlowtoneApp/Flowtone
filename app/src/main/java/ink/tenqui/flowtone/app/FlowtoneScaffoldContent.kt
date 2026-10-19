@@ -24,6 +24,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
@@ -32,12 +33,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.imageLoader
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.LocalPlaylistCreatorName
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionProviderVisualResolver
+import ink.tenqui.flowtone.data.search.SearchProviderVisual
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
@@ -50,6 +55,7 @@ import ink.tenqui.flowtone.ui.components.albumDetailCloudPalette
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 import ink.tenqui.flowtone.ui.components.playlistDetailCloudPaletteFor
 import ink.tenqui.flowtone.ui.components.rememberAlbumArtworkCloudColor
+import ink.tenqui.flowtone.ui.components.rememberArtworkBackgroundColor
 import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
@@ -65,6 +71,8 @@ import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
 import ink.tenqui.flowtone.ui.theme.accentAt
 import ink.tenqui.flowtone.ui.theme.monochromeFlowtoneCloudPalette
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -112,11 +120,28 @@ internal fun FlowtoneScaffoldContent(
         artistScrollStateStore.retainEntries(activeArtistEntryKeys)
         artistTopBarStateStore.retainEntries(activeArtistEntryKeys)
     }
-    val sharedCloudPaletteTarget = when (state.secondaryPage) {
-        SecondaryPage.Playlist,
-        SecondaryPage.LocalLibrary -> SharedCloudPaletteTarget.Detail
+    val extensionSettingsDestination = state.secondaryEntries
+        .asReversed()
+        .firstNotNullOfOrNull { entry ->
+            entry.destination as? SecondaryDestination.ExtensionSettings
+        }
+    val installedExtensionForCloud = extensionSettingsDestination?.installed
+    val extensionIconVisual by produceState<SearchProviderVisual?>(
+        initialValue = null,
+        key1 = installedExtensionForCloud
+    ) {
+        value = installedExtensionForCloud?.let { installed ->
+            withContext(Dispatchers.IO) {
+                ExtensionProviderVisualResolver.resolve(installed)
+            }
+        }
+    }
+    val sharedCloudPaletteTarget = when {
+        state.secondaryPage == SecondaryPage.Playlist ||
+            state.secondaryPage == SecondaryPage.LocalLibrary -> SharedCloudPaletteTarget.Detail
 
-        SecondaryPage.Settings -> SharedCloudPaletteTarget.Settings
+        state.secondaryPage == SecondaryPage.Settings -> SharedCloudPaletteTarget.Settings
+        extensionSettingsDestination != null -> SharedCloudPaletteTarget.ExtensionSettings
         else -> SharedCloudPaletteTarget.MainPages
     }
     val pagePosition = topLevelContinuousPagePosition(
@@ -165,6 +190,22 @@ internal fun FlowtoneScaffoldContent(
         state.uiState.albums.firstOrNull { album -> album.id == selectedLocalAlbumId }
     }
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val extensionIconTintColor = extensionIconVisual
+        ?.takeIf { it.iconFile != null }
+        ?.iconColor
+        ?.removePrefix("#")
+        ?.toLongOrNull(16)
+        ?.let { Color((0xFF000000L or it).toInt()) }
+    val sampledExtensionIconColor = rememberArtworkBackgroundColor(
+        artworkData = extensionIconVisual?.iconFile?.takeUnless { extensionIconTintColor != null },
+        imageLoader = LocalContext.current.imageLoader,
+        fallbackColor = settingsCloudAccent,
+        isDarkTheme = isDarkTheme
+    )
+    val extensionSettingsCloudAccent =
+        (extensionIconTintColor ?: sampledExtensionIconColor)?.let { iconColor ->
+            lerp(iconColor, MaterialTheme.colorScheme.background, SettingsCloudBackgroundBlend)
+        } ?: settingsCloudAccent
     val albumArtworkCloudColor = rememberAlbumArtworkCloudColor(
         artworkData = albumCloudArtworkData(
             destination = selectedAlbumDestination,
@@ -216,6 +257,7 @@ internal fun FlowtoneScaffoldContent(
         when (target) {
             SharedCloudPaletteTarget.Detail -> targetCloudPalette.primary
             SharedCloudPaletteTarget.Settings -> settingsCloudAccent
+            SharedCloudPaletteTarget.ExtensionSettings -> extensionSettingsCloudAccent
             SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
         }
     }
@@ -228,6 +270,7 @@ internal fun FlowtoneScaffoldContent(
         when (target) {
             SharedCloudPaletteTarget.Detail -> targetCloudPalette.secondary
             SharedCloudPaletteTarget.Settings -> settingsCloudAccent
+            SharedCloudPaletteTarget.ExtensionSettings -> extensionSettingsCloudAccent
             SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
         }
     }
@@ -240,6 +283,7 @@ internal fun FlowtoneScaffoldContent(
         when (target) {
             SharedCloudPaletteTarget.Detail -> targetCloudPalette.tertiary
             SharedCloudPaletteTarget.Settings -> settingsCloudAccent
+            SharedCloudPaletteTarget.ExtensionSettings -> extensionSettingsCloudAccent
             SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
         }
     }
@@ -249,7 +293,10 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SettingsCloudPosition"
     ) { target ->
-        if (target == SharedCloudPaletteTarget.Settings) 1f else 0f
+        if (
+            target == SharedCloudPaletteTarget.Settings ||
+                target == SharedCloudPaletteTarget.ExtensionSettings
+        ) 1f else 0f
     }
     val animatedCloudPlacement = cloudPlacement.copy(
         cloudCenterRadiusOffsetYFactor = cloudPlacement.cloudCenterRadiusOffsetYFactor -
@@ -831,7 +878,8 @@ internal fun mainTabsContentMode(searchActive: Boolean): MainTabsContentMode {
 private enum class SharedCloudPaletteTarget {
     MainPages,
     Detail,
-    Settings
+    Settings,
+    ExtensionSettings
 }
 
 private const val SettingsCloudBackgroundBlend = 0.22f
