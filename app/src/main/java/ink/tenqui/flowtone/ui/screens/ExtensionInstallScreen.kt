@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.imageLoader
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import ink.tenqui.flowtone.ui.components.OptionGroup
@@ -407,7 +408,11 @@ private fun ExtensionPreviewConfigurationSection(
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                         Text(field.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         Text(
-                            if (field.required) "必填" else "可选",
+                            when (field.requirement) {
+                                ConfigurationRequirementLevel.RuntimeRequired -> "运行必须"
+                                ConfigurationRequirementLevel.Recommended -> "推荐配置"
+                                ConfigurationRequirementLevel.Optional -> "可选配置"
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 10.dp)

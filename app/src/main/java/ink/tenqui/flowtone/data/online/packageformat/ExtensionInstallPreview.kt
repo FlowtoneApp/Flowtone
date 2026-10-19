@@ -3,7 +3,9 @@ package ink.tenqui.flowtone.data.online.packageformat
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchemaValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
@@ -19,7 +21,11 @@ data class ConfigurationRequirementSummary(
     val requiredFields: List<ConfigurationFieldSummary>,
     val omittedFieldCount: Int,
     val atLeastOneGroups: List<ConfigurationAtLeastOneGroupSummary> = emptyList(),
-    val omittedAtLeastOneGroupCount: Int = 0
+    val omittedAtLeastOneGroupCount: Int = 0,
+    val recommendedFields: List<ConfigurationFieldSummary> = emptyList(),
+    val omittedRecommendedFieldCount: Int = 0,
+    val recommendedAtLeastOneGroups: List<ConfigurationAtLeastOneGroupSummary> = emptyList(),
+    val omittedRecommendedAtLeastOneGroupCount: Int = 0
 )
 
 data class ConfigurationAtLeastOneGroupSummary(
@@ -71,7 +77,8 @@ data class ExtensionUpdateDiff(
     val removedCredentialRequests: List<CredentialRequestDefinition>,
     val changedCredentialRequests: List<CredentialRequestChange>,
     val addedRequiredFields: List<ConfigurationFieldDefinition>,
-    val removedFields: List<ConfigurationFieldDefinition>
+    val removedFields: List<ConfigurationFieldDefinition>,
+    val addedRecommendedFields: List<ConfigurationFieldDefinition> = emptyList()
 ) {
     val hasPermissionChanges: Boolean
         get() = addedNetworkPermissions.isNotEmpty() || removedNetworkPermissions.isNotEmpty()
@@ -124,12 +131,19 @@ data class ExtensionUpdateDiff(
                         ?.let { previousRequest -> CredentialRequestChange(previousRequest, incomingRequest) }
                 },
                 addedRequiredFields = incomingFields.values.filter { incomingField ->
-                    incomingField.required && previousFields[incomingField.id]?.required != true
+                    incomingField.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired &&
+                        previousFields[incomingField.id]?.effectiveRequirement !=
+                        ConfigurationRequirementLevel.RuntimeRequired
                 },
                 removedFields = previousFields
                     .filterKeys { it !in incomingFields }
                     .values
-                    .toList()
+                    .toList(),
+                addedRecommendedFields = incomingFields.values.filter { incomingField ->
+                    incomingField.effectiveRequirement == ConfigurationRequirementLevel.Recommended &&
+                        previousFields[incomingField.id]?.effectiveRequirement !=
+                        ConfigurationRequirementLevel.Recommended
+                }
             )
         }
     }
@@ -151,10 +165,15 @@ object ExtensionInstallPreviewBuilder {
         CredentialRequestValidator.requireValid(incoming.credentialRequests)
         val fieldsById = incoming.configurationSchema.fields.associateBy(ConfigurationFieldDefinition::id)
         val requiredFields = incoming.configurationSchema.fields
-            .filter(ConfigurationFieldDefinition::required)
-        val atLeastOneGroups = incoming.configurationSchema.atLeastOneGroups
-            .take(MaxConfigurationSummaryFields)
-            .map { group ->
+            .filter {
+                it.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired
+            }
+        val recommendedFields = incoming.configurationSchema.fields
+            .filter {
+                it.effectiveRequirement == ConfigurationRequirementLevel.Recommended
+            }
+        fun summarizeGroups(groups: List<ConfigurationAtLeastOneGroup>) =
+            groups.take(MaxConfigurationSummaryFields).map { group ->
                 val groupFields = group.fieldIds.mapNotNull { fieldId ->
                     fieldsById[fieldId]?.let { field -> ConfigurationFieldSummary(field.id, field.label) }
                 }
@@ -163,6 +182,16 @@ object ExtensionInstallPreviewBuilder {
                     omittedFieldCount = (groupFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0)
                 )
             }
+        val requiredGroups = summarizeGroups(
+            incoming.configurationSchema.atLeastOneGroups.filter {
+                it.requirement == ConfigurationRequirementLevel.RuntimeRequired
+            }
+        )
+        val recommendedGroups = summarizeGroups(
+            incoming.configurationSchema.atLeastOneGroups.filter {
+                it.requirement == ConfigurationRequirementLevel.Recommended
+            }
+        )
         return ExtensionInstallPreview(
             incoming = incoming,
             summaryCapabilities = SummaryCapabilityAggregator.aggregate(incoming.canonicalCapabilities),
@@ -171,9 +200,21 @@ object ExtensionInstallPreviewBuilder {
                     .take(MaxConfigurationSummaryFields)
                     .map { ConfigurationFieldSummary(it.id, it.label) },
                 omittedFieldCount = (requiredFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0),
-                atLeastOneGroups = atLeastOneGroups,
+                atLeastOneGroups = requiredGroups,
                 omittedAtLeastOneGroupCount =
-                    (incoming.configurationSchema.atLeastOneGroups.size - atLeastOneGroups.size).coerceAtLeast(0)
+                    (incoming.configurationSchema.atLeastOneGroups.count {
+                        it.requirement == ConfigurationRequirementLevel.RuntimeRequired
+                    } - requiredGroups.size).coerceAtLeast(0),
+                recommendedFields = recommendedFields
+                    .take(MaxConfigurationSummaryFields)
+                    .map { ConfigurationFieldSummary(it.id, it.label) },
+                omittedRecommendedFieldCount =
+                    (recommendedFields.size - MaxConfigurationSummaryFields).coerceAtLeast(0),
+                recommendedAtLeastOneGroups = recommendedGroups,
+                omittedRecommendedAtLeastOneGroupCount =
+                    (incoming.configurationSchema.atLeastOneGroups.count {
+                        it.requirement == ConfigurationRequirementLevel.Recommended
+                    } - recommendedGroups.size).coerceAtLeast(0)
             ),
             existingInstallation = existingInstallation,
             updateDiff = existingInstallation?.let { ExtensionUpdateDiff.between(it, incoming) },

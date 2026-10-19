@@ -53,6 +53,8 @@ import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementProgress
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationStateResolver
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
@@ -81,6 +83,7 @@ private const val ExtensionIconBackgroundTintBlend = 0.28f
 internal data class ExtensionSettingsPresentation(
     val capabilities: List<SummaryCapability>,
     val configurationStatus: String,
+    val configurationRequirements: ConfigurationRequirementProgress,
     val credentialLabels: List<String>
 )
 
@@ -116,16 +119,21 @@ internal fun extensionSettingsPresentation(
     savedValues: Map<String, ConfigurationValue> = emptyMap()
 ): ExtensionSettingsPresentation {
     val schema = installed.descriptor.configurationSchema
-    val configurationState = ConfigurationStateResolver.resolve(schema, savedValues)
+    val configurationRequirements = ConfigurationStateResolver.resolveRequirementProgress(schema, savedValues)
+    val configurationStatus = when {
+        !configurationRequirements.runtimeRequirementsSatisfied -> "运行必须待完成"
+        !configurationRequirements.recommendationsSatisfied -> "推荐配置待完善"
+        schema.hasRecommendedConfiguration -> "推荐配置已完成"
+        schema.requiresConfiguration -> "运行必须已完成"
+        schema.fields.any {
+            it.effectiveRequirement == ConfigurationRequirementLevel.Optional
+        } || schema.actions.isNotEmpty() -> "可选配置"
+        else -> "此扩展无需配置"
+    }
     return ExtensionSettingsPresentation(
         capabilities = SummaryCapabilityAggregator.aggregate(installed.descriptor.canonicalCapabilities),
-        configurationStatus = when (configurationState) {
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.NotRequired ->
-                if (schema.fields.isEmpty()) "此扩展无需配置" else "可选配置"
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Unconfigured -> "需要配置"
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Incomplete -> "需要配置"
-            ink.tenqui.flowtone.data.online.configuration.ConfigurationState.Configured -> "必需配置已完成"
-        },
+        configurationStatus = configurationStatus,
+        configurationRequirements = configurationRequirements,
         credentialLabels = installed.descriptor.credentialRequests.map { it.label }
     )
 }
@@ -244,6 +252,17 @@ internal fun ExtensionSettingsScreen(
     val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
     val attentionMessages = buildList {
         if (configError != null) add("扩展配置读取失败，请重新进入页面。")
+        if (
+            !configLoading &&
+            configError == null &&
+            !presentation.configurationRequirements.allRequiredAndRecommendedSatisfied
+        ) {
+            if (!presentation.configurationRequirements.runtimeRequirementsSatisfied) {
+                add("扩展运行必须配置尚未完成。")
+            } else {
+                add("扩展推荐配置尚未完成。")
+            }
+        }
         if (grantError) add("凭据授权状态读取失败，请进入授权页检查。")
         grantSummary?.let { summary ->
             if (summary.authorizedCount < summary.requestCount) add("部分凭据请求尚未授权。")
@@ -542,21 +561,34 @@ private fun ExtensionConfigurationSection(
     val fields = schema.fields
     if (fields.isEmpty()) return
     val fieldsById = fields.associateBy { it.id }
-    val requiredFields = fields.filter(ConfigurationFieldDefinition::required)
+    val runtimeFields = fields.filter {
+        it.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired
+    }
+    val recommendedFields = fields.filter {
+        it.effectiveRequirement == ConfigurationRequirementLevel.Recommended
+    }
+    val runtimeGroups = schema.atLeastOneGroups.filter {
+        it.requirement == ConfigurationRequirementLevel.RuntimeRequired
+    }
+    val recommendedGroups = schema.atLeastOneGroups.filter {
+        it.requirement == ConfigurationRequirementLevel.Recommended
+    }
     val groupedFieldIds = schema.atLeastOneGroups.flatMapTo(linkedSetOf()) { it.fieldIds }
-    val optionalFields = fields.filter { !it.required && it.id !in groupedFieldIds }
+    val optionalFields = fields.filter {
+        it.effectiveRequirement == ConfigurationRequirementLevel.Optional && it.id !in groupedFieldIds
+    }
     val renderedGroupFieldIds = mutableSetOf<String>()
 
     Column(modifier = modifier.fillMaxWidth()) {
         OnlineSectionHeading(title = "扩展配置", subtitle = stateLabel)
-        if (requiredFields.isNotEmpty() || schema.atLeastOneGroups.isNotEmpty()) {
+        if (runtimeFields.isNotEmpty() || runtimeGroups.isNotEmpty()) {
             Text(
-                "需要配置",
+                "运行必须",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 14.dp)
             )
-            requiredFields.forEach { field ->
+            runtimeFields.forEach { field ->
                 ExtensionConfigurationOption(
                     modifier = Modifier.padding(top = 8.dp),
                     surfaceColor = cardSurfaceColor
@@ -564,7 +596,7 @@ private fun ExtensionConfigurationSection(
                     ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
                 }
             }
-            schema.atLeastOneGroups.forEach { group ->
+            runtimeGroups.forEach { group ->
                 val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
                 if (labels.isNotEmpty()) {
                     Text(
@@ -575,13 +607,72 @@ private fun ExtensionConfigurationSection(
                     )
                     group.fieldIds.forEach { fieldId ->
                         fieldsById[fieldId]?.let { field ->
-                            if (!field.required && renderedGroupFieldIds.add(field.id)) {
+                            if (
+                                field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
+                                renderedGroupFieldIds.add(field.id)
+                            ) {
                                 ExtensionConfigurationOption(
                                     modifier = Modifier.padding(top = 8.dp),
                                     surfaceColor = cardSurfaceColor
                                 ) {
                                     ExtensionConfigurationField(
-                                        field, draft, errors, busy, onValueChange, onChoiceClick
+                                        field,
+                                        draft,
+                                        errors,
+                                        busy,
+                                        onValueChange,
+                                        onChoiceClick,
+                                        requirementOverride = group.requirement
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (recommendedFields.isNotEmpty() || recommendedGroups.isNotEmpty()) {
+            Text(
+                "推荐配置",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 14.dp)
+            )
+            recommendedFields.forEach { field ->
+                ExtensionConfigurationOption(
+                    modifier = Modifier.padding(top = 8.dp),
+                    surfaceColor = cardSurfaceColor
+                ) {
+                    ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
+                }
+            }
+            recommendedGroups.forEach { group ->
+                val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
+                if (labels.isNotEmpty()) {
+                    Text(
+                        "至少填写一项：" + labels.joinToString("、"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                    group.fieldIds.forEach { fieldId ->
+                        fieldsById[fieldId]?.let { field ->
+                            if (
+                                field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
+                                renderedGroupFieldIds.add(field.id)
+                            ) {
+                                ExtensionConfigurationOption(
+                                    modifier = Modifier.padding(top = 8.dp),
+                                    surfaceColor = cardSurfaceColor
+                                ) {
+                                    ExtensionConfigurationField(
+                                        field,
+                                        draft,
+                                        errors,
+                                        busy,
+                                        onValueChange,
+                                        onChoiceClick,
+                                        requirementOverride = group.requirement
                                     )
                                 }
                             }
@@ -646,15 +737,22 @@ private fun ExtensionConfigurationField(
     errors: Map<String, String>,
     busy: Boolean,
     onValueChange: (String, ConfigurationValue?) -> Unit,
-    onChoiceClick: (ConfigurationFieldDefinition) -> Unit
+    onChoiceClick: (ConfigurationFieldDefinition) -> Unit,
+    requirementOverride: ConfigurationRequirementLevel? = null
 ) {
+    val fieldRequirement = requirementOverride ?: field.effectiveRequirement
+    val requirementLabel = when (fieldRequirement) {
+        ConfigurationRequirementLevel.RuntimeRequired -> "运行必须"
+        ConfigurationRequirementLevel.Recommended -> "推荐配置"
+        ConfigurationRequirementLevel.Optional -> "可选配置"
+    }
     when (field.type) {
         ConfigurationFieldType.Text, ConfigurationFieldType.Url -> {
             val value = (draft[field.id] as? ConfigurationValue.StringValue)?.value.orEmpty()
             OutlinedTextField(
                 value = value,
                 onValueChange = { onValueChange(field.id, ConfigurationValue.StringValue(it)) },
-                label = { Text(field.label + if (field.required) "（必须）" else "（可选）") },
+                label = { Text("${field.label}（$requirementLabel）") },
                 placeholder = field.placeholder?.let { { Text(it) } },
                 supportingText = { Text(errors[field.id] ?: field.description.orEmpty()) },
                 isError = field.id in errors,
@@ -666,7 +764,7 @@ private fun ExtensionConfigurationField(
         ConfigurationFieldType.Toggle -> {
             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ConfigurationFieldTitle(field, Modifier.weight(1f))
+                    ConfigurationFieldTitle(field, Modifier.weight(1f), requirementOverride)
                     FlowtoneSwitch(
                         checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value ?: false,
                         onCheckedChange = { onValueChange(field.id, ConfigurationValue.BooleanValue(it)) },
@@ -690,7 +788,7 @@ private fun ExtensionConfigurationField(
                         .padding(vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ConfigurationFieldTitle(field, Modifier.weight(1f))
+                    ConfigurationFieldTitle(field, Modifier.weight(1f), requirementOverride)
                     Text(
                         choiceLabel,
                         style = MaterialTheme.typography.bodyMedium,
@@ -709,7 +807,7 @@ private fun ExtensionConfigurationField(
         }
         ConfigurationFieldType.Secret -> {
             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                ConfigurationFieldTitle(field)
+                ConfigurationFieldTitle(field, requirementOverride = requirementOverride)
                 Text(
                     field.description ?: "此配置需要安全存储支持，当前版本暂不可配置。",
                     style = MaterialTheme.typography.bodySmall,
@@ -721,13 +819,27 @@ private fun ExtensionConfigurationField(
 }
 
 @Composable
-private fun ConfigurationFieldTitle(field: ConfigurationFieldDefinition, modifier: Modifier = Modifier) {
+private fun ConfigurationFieldTitle(
+    field: ConfigurationFieldDefinition,
+    modifier: Modifier = Modifier,
+    requirementOverride: ConfigurationRequirementLevel? = null
+) {
+    val requirement = requirementOverride ?: field.effectiveRequirement
+    val label = when (requirement) {
+        ConfigurationRequirementLevel.RuntimeRequired -> "运行必须"
+        ConfigurationRequirementLevel.Recommended -> "推荐配置"
+        ConfigurationRequirementLevel.Optional -> "可选配置"
+    }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(field.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(
-            if (field.required) "必须" else "可选",
+            label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (field.required) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (requirement == ConfigurationRequirementLevel.RuntimeRequired) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
             modifier = Modifier.padding(start = 8.dp)
         )
     }

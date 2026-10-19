@@ -6,6 +6,7 @@ import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageSnapshotHan
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 
 internal data class ExtensionInstallChangeItems(
@@ -36,7 +37,7 @@ internal data class ExtensionCredentialRequestPresentation(
 
 internal data class ExtensionConfigurationFieldPresentation(
     val label: String,
-    val required: Boolean,
+    val requirement: ConfigurationRequirementLevel,
     val unavailable: Boolean
 )
 
@@ -100,7 +101,7 @@ internal fun extensionInstallConfigurationFields(
 ): List<ExtensionConfigurationFieldPresentation> = preview.configurationSchema.fields.map { field ->
     ExtensionConfigurationFieldPresentation(
         label = field.label,
-        required = field.required,
+        requirement = field.effectiveRequirement,
         unavailable = field.type == ConfigurationFieldType.Secret
     )
 }
@@ -149,7 +150,7 @@ internal fun extensionInstallOverlayPresentation(
                 ?.let { fields ->
                     val labels = fields.joinToString("、") { it.label }
                     add(
-                        if (preview.configurationSummary.omittedFieldCount > 0) {
+                        "运行必须：" + if (preview.configurationSummary.omittedFieldCount > 0) {
                             labels + " 等 " +
                                 (fields.size + preview.configurationSummary.omittedFieldCount) + " 项"
                         } else {
@@ -162,10 +163,33 @@ internal fun extensionInstallOverlayPresentation(
                 if (group.omittedFieldCount > 0) {
                     labels += " 等 " + (group.fields.size + group.omittedFieldCount) + " 项"
                 }
-                add("至少填写一项：" + labels)
+                add("运行必须：至少填写一项：" + labels)
             }
             if (preview.configurationSummary.omittedAtLeastOneGroupCount > 0) {
-                add("另有 " + preview.configurationSummary.omittedAtLeastOneGroupCount + " 组至少填写一项")
+                add("另有 " + preview.configurationSummary.omittedAtLeastOneGroupCount + " 组运行必须项需至少填写一项")
+            }
+            preview.configurationSummary.recommendedFields
+                .takeIf { it.isNotEmpty() }
+                ?.let { fields ->
+                    val labels = fields.joinToString("、") { it.label }
+                    add(
+                        "推荐配置：" + labels +
+                            if (preview.configurationSummary.omittedRecommendedFieldCount > 0) {
+                                " 等 " + (fields.size + preview.configurationSummary.omittedRecommendedFieldCount) + " 项"
+                            } else {
+                                ""
+                            }
+                    )
+                }
+            preview.configurationSummary.recommendedAtLeastOneGroups.forEach { group ->
+                var labels = group.fields.joinToString("、") { it.label }
+                if (group.omittedFieldCount > 0) {
+                    labels += " 等 " + (group.fields.size + group.omittedFieldCount) + " 项"
+                }
+                add("推荐配置：至少填写一项：" + labels)
+            }
+            if (preview.configurationSummary.omittedRecommendedAtLeastOneGroupCount > 0) {
+                add("另有 " + preview.configurationSummary.omittedRecommendedAtLeastOneGroupCount + " 组推荐配置需至少填写一项")
             }
         }.takeIf { it.isNotEmpty() }?.joinToString("；"),
         hasInsecureNetworkPermissions = preview.networkPermissions.any {
@@ -182,7 +206,10 @@ internal fun extensionInstallOverlayPresentation(
             credentialRequests = diff?.addedCredentialRequests.orEmpty().map {
                 "${it.label} · ${extensionCredentialContractDescription(it)}"
             },
-            configurationFields = diff?.addedRequiredFields.orEmpty().map { it.label }
+            configurationFields = buildList {
+                diff?.addedRequiredFields.orEmpty().forEach { add("运行必须：${it.label}") }
+                diff?.addedRecommendedFields.orEmpty().forEach { add("推荐配置：${it.label}") }
+            }
         ),
         removed = ExtensionInstallChangeItems(
             capabilities = diff?.removedCapabilities.orEmpty()

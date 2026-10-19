@@ -20,16 +20,32 @@ data class ConfigurationChoice(
     val label: String
 )
 
+/** Provider-declared completion level for extension configuration fields and groups. */
+enum class ConfigurationRequirementLevel {
+    RuntimeRequired,
+    Recommended,
+    Optional
+}
+
 data class ConfigurationFieldDefinition(
     val id: String,
     val type: ConfigurationFieldType,
     val label: String,
     val description: String? = null,
+    /** Legacy source compatibility; new manifests should use [requirement]. */
     val required: Boolean = false,
     val defaultValue: ConfigurationValue? = null,
     val placeholder: String? = null,
-    val choices: List<ConfigurationChoice> = emptyList()
-)
+    val choices: List<ConfigurationChoice> = emptyList(),
+    val requirement: ConfigurationRequirementLevel? = null
+) {
+    val effectiveRequirement: ConfigurationRequirementLevel
+        get() = requirement ?: if (required) {
+            ConfigurationRequirementLevel.RuntimeRequired
+        } else {
+            ConfigurationRequirementLevel.Optional
+        }
+}
 
 data class ConfigurationActionDefinition(
     val id: String,
@@ -38,18 +54,29 @@ data class ConfigurationActionDefinition(
 )
 
 data class ConfigurationAtLeastOneGroup(
-    val fieldIds: List<String>
+    val fieldIds: List<String>,
+    val requirement: ConfigurationRequirementLevel = ConfigurationRequirementLevel.RuntimeRequired
 )
 
 data class ConfigurationSchema(
     val fields: List<ConfigurationFieldDefinition> = emptyList(),
     val actions: List<ConfigurationActionDefinition> = emptyList(),
-    /** Every group requires at least one valid, non-empty field value. */
+    /** Each group requires at least one valid, non-empty field value at its declared level. */
     val atLeastOneGroups: List<ConfigurationAtLeastOneGroup> = emptyList()
 ) {
     val hasSettings: Boolean get() = fields.isNotEmpty() || actions.isNotEmpty()
     val requiresConfiguration: Boolean
-        get() = fields.any(ConfigurationFieldDefinition::required) || atLeastOneGroups.isNotEmpty()
+        get() = fields.any {
+            it.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired
+        } || atLeastOneGroups.any {
+            it.requirement == ConfigurationRequirementLevel.RuntimeRequired
+        }
+    val hasRecommendedConfiguration: Boolean
+        get() = fields.any {
+            it.effectiveRequirement == ConfigurationRequirementLevel.Recommended
+        } || atLeastOneGroups.any {
+            it.requirement == ConfigurationRequirementLevel.Recommended
+        }
 }
 
 object ConfigurationSchemaLimits {
@@ -88,6 +115,13 @@ object ConfigurationSchemaValidator {
                 add(ConfigurationSchemaViolation("$path.id", "字段 ID 重复"))
             }
             validateLabel(field.label, "$path.label")
+            if (
+                field.required &&
+                field.requirement != null &&
+                field.requirement != ConfigurationRequirementLevel.RuntimeRequired
+            ) {
+                add(ConfigurationSchemaViolation("$path.requirement", "required=true 只能与运行必须要求同时使用"))
+            }
             validateOptionalText(
                 field.description,
                 ConfigurationSchemaLimits.MaxDescriptionLength,
@@ -135,6 +169,9 @@ object ConfigurationSchemaValidator {
         val groupKeys = mutableSetOf<Set<String>>()
         schema.atLeastOneGroups.forEachIndexed { index, group ->
             val path = "atLeastOne[$index]"
+            if (group.requirement == ConfigurationRequirementLevel.Optional) {
+                add(ConfigurationSchemaViolation("$path.requirement", "至少一项约束不能声明为可选配置"))
+            }
             if (group.fieldIds.size !in 2..ConfigurationSchemaLimits.MaxFields) {
                 add(ConfigurationSchemaViolation(path, "每组必须引用 2 到 " + ConfigurationSchemaLimits.MaxFields + " 个字段"))
             }
@@ -233,21 +270,34 @@ enum class ConfigurationState {
     Configured
 }
 
+data class ConfigurationRequirementProgress(
+    val runtimeRequirementsSatisfied: Boolean,
+    val recommendationsSatisfied: Boolean
+) {
+    val allRequiredAndRecommendedSatisfied: Boolean
+        get() = runtimeRequirementsSatisfied && recommendationsSatisfied
+}
+
 object ConfigurationStateResolver {
     fun resolve(
         schema: ConfigurationSchema,
         values: Map<String, ConfigurationValue>
     ): ConfigurationState {
         ConfigurationSchemaValidator.requireValid(schema)
-        val requiredFields = schema.fields.filter(ConfigurationFieldDefinition::required)
-        if (requiredFields.isEmpty() && schema.atLeastOneGroups.isEmpty()) {
+        val requiredFields = schema.fields.filter {
+            it.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired
+        }
+        val requiredGroups = schema.atLeastOneGroups.filter {
+            it.requirement == ConfigurationRequirementLevel.RuntimeRequired
+        }
+        if (requiredFields.isEmpty() && requiredGroups.isEmpty()) {
             return ConfigurationState.NotRequired
         }
 
         val fieldsById = schema.fields.associateBy(ConfigurationFieldDefinition::id)
         val requiredValueIds = buildSet {
             requiredFields.forEach { add(it.id) }
-            schema.atLeastOneGroups.forEach { group -> addAll(group.fieldIds) }
+            requiredGroups.forEach { addAll(it.fieldIds) }
         }
         if (requiredValueIds.all { fieldId ->
                 val field = fieldsById.getValue(fieldId)
@@ -263,7 +313,7 @@ object ConfigurationStateResolver {
                 values[field.id] ?: field.defaultValue
             )
         }
-        val groupsSatisfied = schema.atLeastOneGroups.all { group ->
+        val groupsSatisfied = requiredGroups.all { group ->
             group.fieldIds.any { fieldId ->
                 val field = fieldsById.getValue(fieldId)
                 ConfigurationSchemaValidator.hasValidValue(
@@ -277,6 +327,39 @@ object ConfigurationStateResolver {
         } else {
             ConfigurationState.Incomplete
         }
+    }
+
+    fun resolveRequirementProgress(
+        schema: ConfigurationSchema,
+        values: Map<String, ConfigurationValue>
+    ): ConfigurationRequirementProgress {
+        val runtimeState = resolve(schema, values)
+        val runtimeSatisfied = runtimeState == ConfigurationState.NotRequired ||
+            runtimeState == ConfigurationState.Configured
+        val fieldsById = schema.fields.associateBy(ConfigurationFieldDefinition::id)
+        val recommendedFieldsSatisfied = schema.fields
+            .filter { it.effectiveRequirement == ConfigurationRequirementLevel.Recommended }
+            .all { field ->
+                ConfigurationSchemaValidator.hasValidValue(
+                    field,
+                    values[field.id] ?: field.defaultValue
+                )
+            }
+        val recommendedGroupsSatisfied = schema.atLeastOneGroups
+            .filter { it.requirement == ConfigurationRequirementLevel.Recommended }
+            .all { group ->
+                group.fieldIds.any { fieldId ->
+                    val field = fieldsById.getValue(fieldId)
+                    ConfigurationSchemaValidator.hasValidValue(
+                        field,
+                        values[fieldId] ?: field.defaultValue
+                    )
+                }
+            }
+        return ConfigurationRequirementProgress(
+            runtimeRequirementsSatisfied = runtimeSatisfied,
+            recommendationsSatisfied = recommendedFieldsSatisfied && recommendedGroupsSatisfied
+        )
     }
 
     private fun isEmpty(value: ConfigurationValue?): Boolean = when (value) {

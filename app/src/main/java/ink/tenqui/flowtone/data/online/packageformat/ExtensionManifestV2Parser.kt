@@ -7,6 +7,7 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationAtLeastOneGrou
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationChoice
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchemaValidator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
@@ -76,10 +77,23 @@ internal object ExtensionManifestV2Parser {
         }.orEmpty()
         val atLeastOneGroups = json.optJSONArray("atLeastOne")?.let { groups ->
             List(groups.length()) { groupIndex ->
-                val group = groups.getJSONArray(groupIndex)
-                ConfigurationAtLeastOneGroup(
-                    fieldIds = List(group.length()) { fieldIndex -> group.getString(fieldIndex) }
-                )
+                when (val group = groups.get(groupIndex)) {
+                    is org.json.JSONArray -> ConfigurationAtLeastOneGroup(
+                        fieldIds = List(group.length()) { fieldIndex -> group.getString(fieldIndex) }
+                    )
+                    is JSONObject -> {
+                        val fields = group.optJSONArray("fields")
+                            ?: throw IllegalArgumentException("atLeastOne group 缺少 fields")
+                        ConfigurationAtLeastOneGroup(
+                            fieldIds = List(fields.length()) { fieldIndex -> fields.getString(fieldIndex) },
+                            requirement = group.optString("requirement")
+                                .takeIf(String::isNotBlank)
+                                ?.let(::parseConfigurationRequirement)
+                                ?: ConfigurationRequirementLevel.RuntimeRequired
+                        )
+                    }
+                    else -> throw IllegalArgumentException("atLeastOne group 格式无效")
+                }
             }
         }.orEmpty()
         return ConfigurationSchema(fields, actions, atLeastOneGroups)
@@ -101,17 +115,32 @@ internal object ExtensionManifestV2Parser {
                 ConfigurationChoice(item.getString("value"), item.getString("label"))
             }
         }.orEmpty()
+        val requirement = json.optionalText("requirement")
+            ?.let(::parseConfigurationRequirement)
+        val legacyRequired = json.optBoolean("required", false)
+        require(!legacyRequired || requirement == null ||
+            requirement == ConfigurationRequirementLevel.RuntimeRequired
+        ) { "required=true 只能与 runtime_required 同时使用" }
         return ConfigurationFieldDefinition(
             id = json.getString("id"),
             type = type,
             label = json.getString("label"),
             description = json.optionalText("description"),
-            required = json.optBoolean("required", false),
+            required = legacyRequired || requirement == ConfigurationRequirementLevel.RuntimeRequired,
             defaultValue = parseDefaultValue(json, type),
             placeholder = json.optionalText("placeholder"),
-            choices = choices
+            choices = choices,
+            requirement = requirement
         )
     }
+
+    private fun parseConfigurationRequirement(value: String): ConfigurationRequirementLevel =
+        when (value) {
+            "runtime_required" -> ConfigurationRequirementLevel.RuntimeRequired
+            "recommended" -> ConfigurationRequirementLevel.Recommended
+            "optional" -> ConfigurationRequirementLevel.Optional
+            else -> throw IllegalArgumentException("未知 configuration requirement")
+        }
 
     private fun parseDefaultValue(
         json: JSONObject,

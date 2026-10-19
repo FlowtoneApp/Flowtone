@@ -78,7 +78,7 @@ class ExtensionSettingsPresentationTest {
 
         val presentation = extensionSettingsPresentation(installed)
 
-        assertEquals("尚未配置", presentation.configurationStatus)
+        assertEquals("运行必须待完成", presentation.configurationStatus)
         assertEquals(listOf("WebDAV 凭证"), presentation.credentialLabels)
         assertFalse(presentation.configurationStatus == "已配置")
     }
