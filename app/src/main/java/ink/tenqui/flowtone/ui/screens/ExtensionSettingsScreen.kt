@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -271,6 +272,8 @@ internal fun ExtensionSettingsScreen(
             currentDiscardChangesConfirmationChange(null)
         }
     }
+
+    BackHandler(onBack = requestBack)
 
     Box(modifier = modifier.fillMaxSize()) {
         SettingsPageColumn(modifier = Modifier.imePadding()) {

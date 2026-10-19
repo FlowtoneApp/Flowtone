@@ -608,7 +608,9 @@ internal fun <T> PageTransitionHost(
             // Keep the page content in one Compose group while Current becomes Outgoing.
             // Only its visual modifier changes, preserving remember/LazyListState identity.
             Box(modifier = visualModifier) {
-                content(scope, snapshot.value)
+                PageBackHandlerScope(active = samePage(targetState, snapshot.value)) {
+                    content(scope, snapshot.value)
+                }
             }
         }
     }

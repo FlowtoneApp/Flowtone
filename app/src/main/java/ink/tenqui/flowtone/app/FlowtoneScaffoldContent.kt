@@ -217,8 +217,14 @@ internal fun FlowtoneScaffoldContent(
             )
         }
     }
+    val sharedCloudPaletteTransitionTarget = SharedCloudPaletteTransitionTarget(
+        palette = sharedCloudPaletteTarget,
+        extensionSettingsAccent = extensionSettingsCloudAccent.takeIf {
+            sharedCloudPaletteTarget == SharedCloudPaletteTarget.ExtensionSettings
+        }
+    )
     val sharedCloudPaletteTransition = updateTransition(
-        targetState = sharedCloudPaletteTarget,
+        targetState = sharedCloudPaletteTransitionTarget,
         label = "SharedCloudPaletteTransition"
     )
     val animatedPrimaryCloudColor by sharedCloudPaletteTransition.animateColor(
@@ -227,10 +233,11 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SharedCloudPrimaryColor"
     ) { target ->
-        when (target) {
+        when (target.palette) {
             SharedCloudPaletteTarget.Detail -> targetCloudPalette.primary
             SharedCloudPaletteTarget.Settings -> settingsCloudAccent
-            SharedCloudPaletteTarget.ExtensionSettings -> extensionSettingsCloudAccent
+            SharedCloudPaletteTarget.ExtensionSettings ->
+                target.extensionSettingsAccent ?: settingsCloudAccent
             SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
         }
     }
@@ -240,10 +247,11 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SharedCloudSecondaryColor"
     ) { target ->
-        when (target) {
+        when (target.palette) {
             SharedCloudPaletteTarget.Detail -> targetCloudPalette.secondary
             SharedCloudPaletteTarget.Settings -> settingsCloudAccent
-            SharedCloudPaletteTarget.ExtensionSettings -> extensionSettingsCloudAccent
+            SharedCloudPaletteTarget.ExtensionSettings ->
+                target.extensionSettingsAccent ?: settingsCloudAccent
             SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
         }
     }
@@ -253,10 +261,11 @@ internal fun FlowtoneScaffoldContent(
         },
         label = "SharedCloudTertiaryColor"
     ) { target ->
-        when (target) {
+        when (target.palette) {
             SharedCloudPaletteTarget.Detail -> targetCloudPalette.tertiary
             SharedCloudPaletteTarget.Settings -> settingsCloudAccent
-            SharedCloudPaletteTarget.ExtensionSettings -> extensionSettingsCloudAccent
+            SharedCloudPaletteTarget.ExtensionSettings ->
+                target.extensionSettingsAccent ?: settingsCloudAccent
             SharedCloudPaletteTarget.MainPages -> sharedCloudBaseAccent
         }
     }
@@ -267,8 +276,8 @@ internal fun FlowtoneScaffoldContent(
         label = "SettingsCloudPosition"
     ) { target ->
         if (
-            target == SharedCloudPaletteTarget.Settings ||
-                target == SharedCloudPaletteTarget.ExtensionSettings
+            target.palette == SharedCloudPaletteTarget.Settings ||
+                target.palette == SharedCloudPaletteTarget.ExtensionSettings
         ) 1f else 0f
     }
     val animatedCloudPlacement = cloudPlacement.copy(
@@ -276,8 +285,8 @@ internal fun FlowtoneScaffoldContent(
             SettingsCloudUpwardShiftFactor * settingsCloudPositionProgress
     )
     val animatedPaletteCloudPalette = if (
-        sharedCloudPaletteTransition.currentState != SharedCloudPaletteTarget.MainPages ||
-            sharedCloudPaletteTransition.targetState != SharedCloudPaletteTarget.MainPages
+        sharedCloudPaletteTransition.currentState.palette != SharedCloudPaletteTarget.MainPages ||
+            sharedCloudPaletteTransition.targetState.palette != SharedCloudPaletteTarget.MainPages
     ) {
         FlowtoneCloudPalette(
             primary = animatedPrimaryCloudColor,
@@ -854,6 +863,11 @@ private enum class SharedCloudPaletteTarget {
     Settings,
     ExtensionSettings
 }
+
+private data class SharedCloudPaletteTransitionTarget(
+    val palette: SharedCloudPaletteTarget,
+    val extensionSettingsAccent: Color?
+)
 
 private const val SettingsCloudBackgroundBlend = 0.22f
 private const val SettingsCloudUpwardShiftFactor = 0.08f

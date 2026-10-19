@@ -1,5 +1,8 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +34,27 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PageTransitionHostCompositionTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun systemBackReversesIncomingInsteadOfCallingTheRetainedOutgoingHandler() {
+        val scenario = install()
+        compose.runOnIdle { scenario.installOldPageBackHandler.value = true }
+        start(scenario, "B")
+        compose.mainClock.advanceTimeBy(160)
+        var remaining = 0
+        compose.runOnIdle {
+            assertEquals("A", scenario.slots.outgoing)
+            assertEquals("B", scenario.slots.incoming)
+            remaining = pageTransitionDurationMillis(scenario.slots.progress, 0f)
+            scenario.rootBackDispatcher.onBackPressed()
+            assertEquals("A", scenario.target.value)
+            assertEquals(0, scenario.oldPageBackCalls)
+        }
+        compose.mainClock.advanceTimeBy(remaining + FrameAllowanceMillis, ignoreFrameDuration = true)
+        compose.runOnIdle {
+            assertEquals("A", scenario.slots.current)
+            assertEquals(1, scenario.pageBirths["A"])
+        }
+    }
 
     @Test fun fullScreenRightSwipeCanReverseAnIncomingPage() {
         val scenario = install()
@@ -187,6 +211,9 @@ class PageTransitionHostCompositionTest {
     private class Scenario {
         val target = mutableStateOf("A")
         val showAChildren = mutableStateOf(true)
+        val installOldPageBackHandler = mutableStateOf(false)
+        var oldPageBackCalls = 0
+        lateinit var rootBackDispatcher: OnBackPressedDispatcher
         var slots = PageTransitionSlots(current = "A")
         val pageBirths = mutableMapOf<String, Int>()
         val pageDisposals = mutableMapOf<String, Int>()
@@ -197,6 +224,10 @@ class PageTransitionHostCompositionTest {
         val retainedProgress = mutableMapOf<String, Float>()
 
         @Composable fun Content() {
+            val parentDispatcher = checkNotNull(LocalOnBackPressedDispatcherOwner.current)
+                .onBackPressedDispatcher
+            SideEffect { rootBackDispatcher = parentDispatcher }
+            BackHandler { target.value = "A" }
             PageTransitionHost(
                 targetState = target.value,
                 modifier = Modifier.fillMaxSize().testTag("page-host")
@@ -204,6 +235,9 @@ class PageTransitionHostCompositionTest {
                 onSlotsChanged = { slots = it }
             ) { page ->
                 val pageScope = this
+                if (page == "A" && installOldPageBackHandler.value) {
+                    BackHandler { oldPageBackCalls += 1 }
+                }
                 DisposableEffect(Unit) {
                     pageBirths[page] = (pageBirths[page] ?: 0) + 1
                     onDispose {
