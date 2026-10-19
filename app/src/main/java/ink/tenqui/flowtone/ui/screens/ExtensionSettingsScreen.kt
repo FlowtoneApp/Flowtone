@@ -72,7 +72,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
 import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
 import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
-import ink.tenqui.flowtone.ui.components.SettingsOptionSurfaceColor
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -170,16 +170,12 @@ internal fun ExtensionSettingsScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
-    val extensionIconAccent = rememberInstalledExtensionIconAccent(installed, isDarkTheme)
-    val defaultOptionSurfaceColor = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-        SettingsOptionSurfaceColor
-    } else {
-        MaterialTheme.colorScheme.surfaceContainer
-    }
-    val extensionOptionSurfaceColor = extensionIconAccent?.let { iconAccent ->
-        lerp(defaultOptionSurfaceColor, iconAccent, ExtensionCardTintBlend)
-    }
+    val optionPalette = settingsOptionPalette()
+    val extensionIconAccent = rememberInstalledExtensionIconAccent(installed, optionPalette.isDarkTheme)
+    val extensionOptionSurfaceColor = optionPalette.surfaceColorWithAccent(
+        extensionIconAccent,
+        ExtensionCardTintBlend
+    )
     val extensionManager = remember(context) { ExtensionManager.get(context) }
     val configStore = remember(context) { ExtensionConfigStore.from(context) }
     val grantRepository = remember(context) { CredentialGrantRepository.from(context) }
@@ -279,7 +275,7 @@ internal fun ExtensionSettingsScreen(
                 ExtensionAttentionSection(
                     configurationReminder = configurationReminder,
                     messages = attentionMessages,
-                    normalSurfaceColor = extensionOptionSurfaceColor ?: defaultOptionSurfaceColor,
+                    normalSurfaceColor = extensionOptionSurfaceColor,
                     modifier = pageScope.elementModifier(1, 5)
                 )
             }
@@ -326,7 +322,7 @@ internal fun ExtensionSettingsScreen(
                         iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         onClick = { onOpenConfiguration(installed) },
                         modifier = Modifier.padding(top = 12.dp),
-                        surfaceColor = extensionOptionSurfaceColor ?: defaultOptionSurfaceColor,
+                        surfaceColor = extensionOptionSurfaceColor,
                         animateSubtitle = true
                     )
                 }
@@ -858,9 +854,8 @@ private fun ExtensionManagementSection(
     onOpenNetwork: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val categorySurfaceColor = iconAccent?.let { accent ->
-        lerp(SettingsOptionSurfaceColor, accent, ExtensionCardTintBlend)
-    } ?: SettingsOptionSurfaceColor
+    val categorySurfaceColor = settingsOptionPalette()
+        .surfaceColorWithAccent(iconAccent, ExtensionCardTintBlend)
     val credentialIconContainerColor = iconAccent?.let { accent ->
         lerp(MaterialTheme.colorScheme.primaryContainer, accent, ExtensionIconBackgroundTintBlend)
     } ?: MaterialTheme.colorScheme.primaryContainer

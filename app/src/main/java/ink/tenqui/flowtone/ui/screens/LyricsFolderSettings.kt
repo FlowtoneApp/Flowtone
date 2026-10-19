@@ -123,8 +123,6 @@ private fun LyricsFolderRow(
             Icon(
                 Icons.Rounded.Folder,
                 contentDescription = null,
-                tint = if (folder.isAccessible) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onErrorContainer
             )
         }
             Column(modifier = Modifier.weight(1f)) {

@@ -36,14 +36,16 @@ internal fun SettingsCategoryCard(
     iconContentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    surfaceColor: Color = SettingsOptionSurfaceColor,
+    surfaceColor: Color? = null,
     animateSubtitle: Boolean = false
 ) {
+    val palette = settingsOptionPalette()
+    val resolvedIconContentColor = palette.iconContentColor(iconContentColor)
     SettingsOptionSurface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         surfaceColor = surfaceColor,
-        contentColor = SettingsCategoryCardTitleColor
+        contentColor = palette.contentColor
     ) {
         Row(
             modifier = Modifier
@@ -57,13 +59,13 @@ internal fun SettingsCategoryCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(iconContainerColor),
+                    .background(palette.iconBackgroundColor(iconContainerColor)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = iconContentColor,
+                    tint = resolvedIconContentColor,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -72,7 +74,7 @@ internal fun SettingsCategoryCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = SettingsCategoryCardTitleColor
+                    color = palette.contentColor
                 )
                 if (animateSubtitle) {
                     Crossfade(
@@ -80,16 +82,16 @@ internal fun SettingsCategoryCard(
                         animationSpec = tween(durationMillis = 180),
                         label = "SettingsCategoryCardSubtitle"
                     ) { animatedSubtitle ->
-                        SettingsCategoryCardSubtitle(animatedSubtitle)
+                        SettingsCategoryCardSubtitle(animatedSubtitle, palette.secondaryContentColor)
                     }
                 } else {
-                    SettingsCategoryCardSubtitle(subtitle)
+                    SettingsCategoryCardSubtitle(subtitle, palette.secondaryContentColor)
                 }
             }
             Icon(
                 imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = null,
-                tint = SettingsCategoryCardSubtitleColor,
+                tint = palette.secondaryContentColor,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -97,14 +99,11 @@ internal fun SettingsCategoryCard(
 }
 
 @Composable
-private fun SettingsCategoryCardSubtitle(text: String) {
+private fun SettingsCategoryCardSubtitle(text: String, color: Color) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
-        color = SettingsCategoryCardSubtitleColor,
+        color = color,
         modifier = Modifier.padding(top = 4.dp)
     )
 }
-
-private val SettingsCategoryCardTitleColor = Color(0xFF1C1B1F)
-private val SettingsCategoryCardSubtitleColor = Color(0xFF49454F)

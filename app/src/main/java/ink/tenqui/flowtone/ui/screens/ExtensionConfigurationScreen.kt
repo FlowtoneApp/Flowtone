@@ -16,7 +16,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.ExtensionDiscardChangesConfirmation
@@ -28,7 +27,7 @@ import ink.tenqui.flowtone.data.online.configuration.extensionConfigurationDraft
 import ink.tenqui.flowtone.data.online.configuration.validateExtensionConfiguration
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.SettingsOptionSurfaceColor
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -49,16 +48,12 @@ internal fun ExtensionConfigurationScreen(
     val configStore = remember(context) { ExtensionConfigStore.from(context) }
     val extensionManager = remember(context) { ExtensionManager.get(context) }
     val scope = rememberCoroutineScope()
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
-    val iconAccent = rememberInstalledExtensionIconAccent(installed, isDarkTheme)
-    val defaultOptionSurfaceColor = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-        SettingsOptionSurfaceColor
-    } else {
-        MaterialTheme.colorScheme.surfaceContainer
-    }
-    val optionSurfaceColor = iconAccent?.let { accent ->
-        lerp(defaultOptionSurfaceColor, accent, ExtensionCardTintBlend)
-    }
+    val optionPalette = settingsOptionPalette()
+    val iconAccent = rememberInstalledExtensionIconAccent(installed, optionPalette.isDarkTheme)
+    val optionSurfaceColor = optionPalette.surfaceColorWithAccent(
+        iconAccent,
+        ExtensionCardTintBlend
+    )
 
     var savedValues by remember(extensionId) {
         mutableStateOf<Map<String, ConfigurationValue>>(emptyMap())
