@@ -1,5 +1,14 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.MonotonicFrameClock
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -307,6 +316,230 @@ class PageTransitionHostTest {
         assertEquals("A", replaced.slots(0f).outgoing)
         assertEquals("C", replaced.slots(0f).incoming)
         assertTrue(replaced.transitionId > pair.transitionId)
+    }
+
+    @Test fun actualAnimationReversesAtTenFiftyNinetyAndNinetyNinePercent() = runBlocking {
+        withTimeout(5_000) {
+            listOf(0.1f, 0.5f, 0.9f, 0.99f).forEach { sample ->
+                val clock = AnimationClock()
+                val progress = Animatable(0f)
+                val forward = launch(clock, start = CoroutineStart.UNDISPATCHED) {
+                    animatePageTransitionProgressTo(progress, 1f)
+                }
+                clock.frameAfter(0)
+                clock.frameAfter((PageMotion.DurationMillis * sample).toLong())
+                assertEquals(sample, progress.value, 0.0001f)
+                forward.cancelAndJoin()
+
+                val duration = pageTransitionDurationMillis(progress.value, 0f)
+                val reverse = launch(clock, start = CoroutineStart.UNDISPATCHED) {
+                    animatePageTransitionProgressTo(progress, 0f)
+                }
+                clock.frameAfter(0)
+                assertEquals(sample, progress.value, 0.0001f)
+                clock.frameAfter((duration - 1).toLong())
+                assertFalse(reverse.isCompleted)
+                assertTrue(progress.value > 0f)
+                clock.frameAfter(1)
+                reverse.join()
+
+                assertEquals(0f, progress.value, 0f)
+                assertEquals((PageMotion.DurationMillis * sample).toLong() + duration, clock.timeMillis)
+                assertTrue(duration <= PageMotion.DurationMillis)
+            }
+        }
+    }
+
+    @Test fun lateReverseUsesTheCanonicalVisualCurveRatherThanReplayingItsSlowTail() = runBlocking {
+        withTimeout(5_000) {
+            val initialProgress = 0.9f
+            val progress = Animatable(initialProgress)
+            val clock = AnimationClock()
+            val duration = pageTransitionDurationMillis(initialProgress, 0f)
+            val initialBlur = PageMotion.Easing.transform(initialProgress)
+            val animation = launch(clock, start = CoroutineStart.UNDISPATCHED) {
+                animatePageTransitionProgressTo(progress, 0f)
+            }
+            clock.frameAfter(0)
+            clock.frameAfter((duration / 4).toLong())
+            val currentBlur = PageMotion.Easing.transform(progress.value)
+            val recoveredFraction = (initialBlur - currentBlur) / initialBlur
+            assertEquals(
+                "The first quarter of a reverse must restore visibility and remove blur using the normal curve",
+                PageMotion.Easing.transform(0.25f),
+                recoveredFraction,
+                0.001f
+            )
+            clock.frameAfter((duration - duration / 4).toLong())
+            animation.join()
+            assertEquals(0f, progress.value, 0f)
+        }
+    }
+
+    @Test fun retainedContentHasRecoveredWhenTheReversedPairCommits() = runBlocking {
+        withTimeout(5_000) {
+            val pair = PageTransitionPairState.initial("A").begin("B")
+            val progress = Animatable(0.9f)
+            val clock = AnimationClock()
+            val reverse = launch(clock, start = CoroutineStart.UNDISPATCHED) {
+                animatePageTransitionProgressTo(progress, 0f)
+            }
+            clock.frameAfter(0)
+            val before = outgoingScope(progress.value).retainedContentProgress
+            clock.frameAfter(180)
+            val halfway = outgoingScope(progress.value).retainedContentProgress
+            assertTrue(halfway > before)
+            assertTrue(reverse.isActive)
+            clock.frameAfter(180)
+            reverse.join()
+
+            assertEquals(360L, clock.timeMillis)
+            assertEquals(1f, outgoingScope(progress.value).retainedContentProgress, 0f)
+            val committed = pair.commit(0f)
+            val current = PageTransitionScope(
+                phase = checkNotNull(committed.phaseFor(committed.currentSlot)),
+                progress = 1f,
+                offsetYPx = 24f,
+                transitionId = committed.transitionId
+            )
+            assertEquals("A", committed.slots(1f).current)
+            assertEquals(1f, current.retainedContentProgress, 0f)
+            // 提交前已完全恢复，Current 不再触发第二个 400ms 入场。
+            clock.frameAfter(PageMotion.DurationMillis.toLong())
+            assertEquals(1f, current.retainedContentProgress, 0f)
+        }
+    }
+
+    @Test fun repeatedCancellationKeepsTheSamePairAndUsesTheLatestRemainingDistance() = runBlocking {
+        withTimeout(5_000) {
+            val pair = PageTransitionPairState.initial("A").begin("B")
+            val outgoingIdentity = pair.firstPage?.identity
+            val incomingIdentity = pair.secondPage?.identity
+            val clock = AnimationClock()
+            val progress = Animatable(0.9f)
+            val reverse = launch(clock, start = CoroutineStart.UNDISPATCHED) {
+                animatePageTransitionProgressTo(progress, 0f)
+            }
+            clock.frameAfter(0)
+            clock.frameAfter(160)
+            val interruptedProgress = progress.value
+            assertTrue(interruptedProgress > 0f && interruptedProgress < 0.9f)
+            reverse.cancelAndJoin()
+            val remainingDuration = pageTransitionDurationMillis(interruptedProgress, 1f)
+
+            val forward = launch(clock, start = CoroutineStart.UNDISPATCHED) {
+                animatePageTransitionProgressTo(progress, 1f)
+            }
+            clock.frameAfter(0)
+            assertEquals(interruptedProgress, progress.value, 0f)
+            clock.frameAfter(remainingDuration.toLong())
+            forward.join()
+
+            assertEquals(160L + remainingDuration, clock.timeMillis)
+            assertTrue(remainingDuration <= PageMotion.DurationMillis)
+            assertEquals(outgoingIdentity, pair.firstPage?.identity)
+            assertEquals(incomingIdentity, pair.secondPage?.identity)
+            assertEquals("B", pair.commit(1f).slots(1f).current)
+        }
+    }
+
+    @Test fun aNormalCompletedNavigationDisposesAAndBackBeginsANewFullTransition() {
+        val pair = PageTransitionPairState.initial("A").begin("B")
+        val previousAIdentity = pair.firstPage?.identity
+        val settledB = pair.commit(1f)
+        assertNull(settledB.firstPage)
+
+        val back = settledB.begin("A")
+        assertEquals("B", back.slots(0f).outgoing)
+        assertEquals("A", back.slots(0f).incoming)
+        assertTrue(previousAIdentity != back.firstPage?.identity)
+        assertEquals(PageMotion.DurationMillis, pageTransitionDurationMillis(0f, 1f))
+    }
+
+    @Test fun anObsoleteCompletionCannotCommitEvenAfterTheTargetReturnsToTheSamePage() {
+        assertFalse(
+            pageTransitionCanCommitPair(
+                animationTransitionId = 1,
+                activeTransitionId = 1,
+                animationGeneration = Any(),
+                activeGeneration = Any(),
+                currentProgress = 1f,
+                targetProgress = 1f,
+                latestTarget = "B",
+                outgoing = "A",
+                incoming = "B",
+                samePage = String::equals
+            )
+        )
+    }
+
+    @Test fun nestedRetainedContentUsesTheParentProgressThroughoutReversal() {
+        val local = PageTransitionScope(PageTransitionPhase.Current, 1f, 24f, 0)
+        listOf(0.99f, 0.9f, 0.5f, 0.1f, 0f).forEach { progress ->
+            val parent = outgoingScope(progress)
+            val nested = parent.combineWith(local)
+            assertEquals(PageTransitionPhase.Outgoing, nested.phase)
+            assertEquals(progress, nested.progress, 0f)
+            assertEquals(parent.retainedContentProgress, nested.retainedContentProgress, 0f)
+        }
+    }
+
+    @Test fun fullForwardMainProgressIsStillLinear() {
+        val easing = PageMotion.progressAnimationEasing(0f, 1f)
+        (0..100).forEach { frame ->
+            val fraction = frame / 100f
+            assertEquals(fraction, easing.transform(fraction), 0f)
+        }
+    }
+
+    @Test fun bothRetargetDirectionsKeepEndpointsAndUseTheOriginalVisualCurve() {
+        listOf(0.1f, 0.5f, 0.9f, 0.99f).forEach { start ->
+            listOf(0f, 1f).forEach { target ->
+                val easing = PageMotion.progressAnimationEasing(start, target)
+                val initialVisual = PageMotion.Easing.transform(start)
+                val targetVisual = PageMotion.Easing.transform(target)
+                var previous = start
+                (0..100).forEach { frame ->
+                    val fraction = frame / 100f
+                    val mapped = start + (target - start) * easing.transform(fraction)
+                    val expectedVisual = initialVisual +
+                        (targetVisual - initialVisual) * PageMotion.Easing.transform(fraction)
+                    assertEquals(expectedVisual, PageMotion.Easing.transform(mapped), 0.0001f)
+                    assertTrue(mapped >= minOf(start, target) && mapped <= maxOf(start, target))
+                    if (target == 0f) assertTrue(mapped <= previous) else assertTrue(mapped >= previous)
+                    previous = mapped
+                }
+                assertEquals(0f, easing.transform(0f), 0f)
+                assertEquals(1f, easing.transform(1f), 0f)
+            }
+        }
+    }
+
+    @Test fun retainedContentKeepsTheExistingForwardPresentation() {
+        listOf(0f, 0.1f, 0.5f, 0.9f, 1f).forEach { progress ->
+            assertEquals(1f - progress, outgoingScope(progress).retainedContentProgress, 0f)
+            val incoming = PageTransitionScope(PageTransitionPhase.Incoming, progress, 24f, 1)
+            // 子内容原本不另播入场，由外层 elementModifier 负责原有错峰。
+            assertEquals(1f, incoming.retainedContentProgress, 0f)
+        }
+    }
+
+    private fun outgoingScope(progress: Float) =
+        PageTransitionScope(PageTransitionPhase.Outgoing, progress, 24f, 1)
+
+    private class AnimationClock : MonotonicFrameClock {
+        private val frames = BroadcastFrameClock()
+        var timeMillis = 0L
+            private set
+
+        override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R =
+            frames.withFrameNanos(onFrame)
+
+        suspend fun frameAfter(millis: Long) {
+            timeMillis += millis
+            frames.sendFrame(timeMillis * 1_000_000)
+            yield()
+        }
     }
 
     @Test fun outgoingElementProgressChangesContinuouslyAcrossTheMasterRange() {

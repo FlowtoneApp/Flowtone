@@ -42,6 +42,14 @@ internal class PageTransitionScope internal constructor(
     val transitionId: Int,
     internal val appliedContainerAlpha: Float = 1f
 ) {
+    /** 已显示的子内容随页面退出；反向时直接恢复，不在提交 Current 后再播一次入场。 */
+    val retainedContentProgress: Float
+        get() = if (phase == PageTransitionPhase.Outgoing) {
+            1f - progress.coerceIn(0f, 1f)
+        } else {
+            1f
+        }
+
     fun elementModifier(
         order: Int,
         orderCount: Int = PageMotion.DefaultOrderCount,
@@ -490,21 +498,6 @@ internal fun <T> PageTransitionHost(
         return firstKey == secondKey
     }
 
-    suspend fun animateProgressTo(targetValue: Float) {
-        val remainingFraction = pageTransitionRemainingFraction(progress.value, targetValue)
-        if (remainingFraction <= PageTransitionEndpointThreshold) {
-            progress.snapTo(targetValue)
-            return
-        }
-        progress.animateTo(
-            targetValue = targetValue,
-            animationSpec = tween(
-                durationMillis = pageTransitionDurationMillis(progress.value, targetValue),
-                easing = LinearEasing
-            )
-        )
-    }
-
     // A new request cancels animateTo, but not the retained pair. Reverse navigation therefore
     // drives the same Animatable from its current value toward the opposite endpoint.
     LaunchedEffect(targetGeneration) {
@@ -534,7 +527,7 @@ internal fun <T> PageTransitionHost(
             val animationTransitionId = pairState.transitionId
             val animationGeneration = targetGeneration
 
-            animateProgressTo(targetEndpoint)
+            animatePageTransitionProgressTo(progress, targetEndpoint)
 
             val activeRequest = latestTargetRequest.value
             val activePair = pairState
@@ -635,6 +628,24 @@ internal fun <T> PageTransitionHost(
 
 internal fun pageTransitionRemainingFraction(currentProgress: Float, targetProgress: Float): Float =
     abs(targetProgress - currentProgress)
+
+internal suspend fun animatePageTransitionProgressTo(
+    progress: Animatable<Float, AnimationVector1D>,
+    targetValue: Float
+) {
+    val remainingFraction = pageTransitionRemainingFraction(progress.value, targetValue)
+    if (remainingFraction <= PageTransitionEndpointThreshold) {
+        progress.snapTo(targetValue)
+        return
+    }
+    progress.animateTo(
+        targetValue = targetValue,
+        animationSpec = tween(
+            durationMillis = pageTransitionDurationMillis(progress.value, targetValue),
+            easing = PageMotion.progressAnimationEasing(progress.value, targetValue)
+        )
+    )
+}
 
 private const val PageTransitionEndpointThreshold = 0.0001f
 
