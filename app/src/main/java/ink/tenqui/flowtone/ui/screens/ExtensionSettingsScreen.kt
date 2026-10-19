@@ -399,7 +399,12 @@ private fun ExtensionIdentityHeader(
                 }
             }
             Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(manifest.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    text = manifest.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Text(
                     "版本 ${manifest.version}",
                     style = MaterialTheme.typography.bodySmall,
@@ -443,14 +448,15 @@ private fun ExtensionIdentityHeader(
                         onClick = { descriptionExpanded = !descriptionExpanded },
                         shape = RoundedCornerShape(percent = 50),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                         modifier = Modifier.align(Alignment.Start).padding(top = 4.dp)
                     ) {
                         Text(
                             if (descriptionExpanded) "收起简介" else "展开简介",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color.Black
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
                 }
@@ -485,14 +491,14 @@ private fun ExtensionAttentionSection(
         else -> MaterialTheme.colorScheme.onSurface
     }
     val iconContainerColor = when {
-        isRuntimeRequired -> MaterialTheme.colorScheme.error
+        isRuntimeRequired -> if (isDarkTheme) Color(0xFFF9DEDC) else MaterialTheme.colorScheme.error
         isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFFE0B340)
-        else -> normalSurfaceColor
+        else -> if (isDarkTheme) Color(0xFFE4E9F6) else normalSurfaceColor
     }
     val iconTint = when {
-        isRuntimeRequired -> MaterialTheme.colorScheme.onError
+        isRuntimeRequired -> if (isDarkTheme) Color(0xFF410E0B) else MaterialTheme.colorScheme.onError
         isRecommended -> Color(0xFF4D3B00)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> if (isDarkTheme) Color(0xFF354052) else MaterialTheme.colorScheme.onSurfaceVariant
     }
     val icon = if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
     val titleColor = if (configurationReminder != null) statusColor else MaterialTheme.colorScheme.onSurface
@@ -512,7 +518,8 @@ private fun ExtensionAttentionSection(
                 SettingsOptionIconTile(
                     modifier = Modifier.size(44.dp),
                     containerColor = iconContainerColor,
-                    contentColor = iconTint
+                    contentColor = iconTint,
+                    themeAwareColorAdjustment = false
                 ) {
                     Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))
                 }

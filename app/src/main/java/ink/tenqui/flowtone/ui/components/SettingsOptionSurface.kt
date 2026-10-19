@@ -164,17 +164,28 @@ internal fun SettingsOptionIconTile(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    themeAwareColorAdjustment: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val palette = settingsOptionPalette()
+    val resolvedContainerColor = if (themeAwareColorAdjustment) {
+        palette.iconBackgroundColor(containerColor)
+    } else {
+        containerColor
+    }
+    val resolvedContentColor = if (themeAwareColorAdjustment) {
+        palette.iconContentColor(contentColor)
+    } else {
+        contentColor
+    }
     Box(
         modifier = modifier
             .size(40.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(palette.iconBackgroundColor(containerColor)),
+            .background(resolvedContainerColor),
         contentAlignment = Alignment.Center
     ) {
-        CompositionLocalProvider(LocalContentColor provides palette.iconContentColor(contentColor)) {
+        CompositionLocalProvider(LocalContentColor provides resolvedContentColor) {
             content()
         }
     }
