@@ -540,6 +540,7 @@ private fun ExtensionConfigurationSection(
     cardSurfaceColor: Color? = null
 ) {
     val fields = schema.fields
+    if (fields.isEmpty()) return
     val fieldsById = fields.associateBy { it.id }
     val requiredFields = fields.filter(ConfigurationFieldDefinition::required)
     val groupedFieldIds = schema.atLeastOneGroups.flatMapTo(linkedSetOf()) { it.fieldIds }
@@ -548,13 +549,6 @@ private fun ExtensionConfigurationSection(
 
     Column(modifier = modifier.fillMaxWidth()) {
         OnlineSectionHeading(title = "扩展配置", subtitle = stateLabel)
-        if (fields.isEmpty()) {
-            Text(
-                "此扩展无需额外配置",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-        }
         if (requiredFields.isNotEmpty() || schema.atLeastOneGroups.isNotEmpty()) {
             Text(
                 "需要配置",
