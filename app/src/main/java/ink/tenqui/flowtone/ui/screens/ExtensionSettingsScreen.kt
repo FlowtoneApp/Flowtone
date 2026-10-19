@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -311,7 +312,7 @@ internal fun ExtensionSettingsScreen(
                 ExtensionAttentionSection(
                     configurationReminder = configurationReminder,
                     messages = attentionMessages,
-                    normalSurfaceColor = defaultOptionSurfaceColor,
+                    normalSurfaceColor = extensionOptionSurfaceColor ?: defaultOptionSurfaceColor,
                     modifier = pageScope.elementModifier(1, 5)
                 )
             }
@@ -545,67 +546,73 @@ private fun ExtensionAttentionSection(
     normalSurfaceColor: Color,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp)) {
-        OnlineSectionHeading("状态提醒")
-        configurationReminder?.let { reminder ->
-            val isRuntimeRequired = reminder == ExtensionConfigurationReminder.RuntimeRequired
-            val cardColor = if (isRuntimeRequired) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                normalSurfaceColor
-            }
-            val iconContainerColor = if (isRuntimeRequired) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.primaryContainer
-            }
-            val iconTint = if (isRuntimeRequired) {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            } else {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            }
-            val message = if (isRuntimeRequired) {
-                "扩展运行必须配置尚未完成。"
-            } else {
-                "扩展推荐配置尚未完成。"
-            }
-            val icon = if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val isRuntimeRequired = configurationReminder == ExtensionConfigurationReminder.RuntimeRequired
+    val isRecommended = configurationReminder == ExtensionConfigurationReminder.Recommended
+    val title = when (configurationReminder) {
+        ExtensionConfigurationReminder.RuntimeRequired -> "运行必须配置尚未完成"
+        ExtensionConfigurationReminder.Recommended -> "推荐配置尚未完成"
+        null -> when {
+            messages.any { it.startsWith("扩展配置读取失败") } -> "扩展配置暂不可用"
+            messages.any { it.contains("凭据") } -> "凭据授权需要处理"
+            else -> "扩展状态需要检查"
+        }
+    }
+    val cardColor = normalSurfaceColor
+    val statusColor = when {
+        isRuntimeRequired -> MaterialTheme.colorScheme.onErrorContainer
+        isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFF765900)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val iconContainerColor = when {
+        isRuntimeRequired -> MaterialTheme.colorScheme.error
+        isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFFE0B340)
+        else -> normalSurfaceColor
+    }
+    val iconTint = when {
+        isRuntimeRequired -> MaterialTheme.colorScheme.onError
+        isRecommended -> Color(0xFF4D3B00)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val icon = if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
+    val titleColor = if (configurationReminder != null) statusColor else MaterialTheme.colorScheme.onSurface
+    val detailColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-            SettingsOptionSurface(
-                modifier = Modifier.padding(top = 8.dp),
-                surfaceColor = cardColor,
-                contentColor = MaterialTheme.colorScheme.onSurface
+    Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp)) {
+        SettingsOptionSurface(
+            surfaceColor = cardColor,
+            contentColor = titleColor
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(min = 84.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                SettingsOptionIconTile(
+                    modifier = Modifier.size(44.dp),
+                    containerColor = iconContainerColor,
+                    contentColor = iconTint
                 ) {
-                    SettingsOptionIconTile(
-                        containerColor = iconContainerColor,
-                        contentColor = iconTint
-                    ) {
-                        Icon(imageVector = icon, contentDescription = null)
-                    }
+                    Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                }
+                Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isRuntimeRequired) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        modifier = Modifier.padding(start = 12.dp)
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = titleColor
                     )
+                    messages.forEach { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = detailColor,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
-        }
-        messages.forEach { message ->
-            Text(
-                message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp)
-            )
         }
     }
 }
