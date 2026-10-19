@@ -50,7 +50,7 @@ internal fun SecondaryNavigationState.retainsSettingsPathSegments(): Boolean =
 
 internal fun navigateFlowtoneAppBack(appState: FlowtoneAppState) {
     if (appState.secondaryPage == SecondaryPage.Settings ||
-        appState.secondaryPage == SecondaryPage.ExtensionSettings
+        appState.secondaryPage == SecondaryPage.ExtensionConfiguration
     ) {
         val nestedBackAction = appState.settingsBackAction
         if (nestedBackAction != null) {

@@ -94,7 +94,7 @@ class ExtensionSettingsPresentationTest {
             extensionConfigurationDisplayStatus("尚未配置", dirty = true, saving = true, loading = false)
         )
         assertEquals(
-            "正在读取配置…",
+            "正在读取扩展配置",
             extensionConfigurationDisplayStatus("尚未配置", dirty = false, saving = false, loading = true)
         )
     }

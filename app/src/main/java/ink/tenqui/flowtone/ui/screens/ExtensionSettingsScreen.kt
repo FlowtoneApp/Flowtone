@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
@@ -36,7 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +51,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import ink.tenqui.flowtone.app.ExtensionDiscardChangesConfirmation
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
@@ -63,8 +62,6 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationStateResolver
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
 import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
-import ink.tenqui.flowtone.data.online.configuration.extensionConfigurationDraft
-import ink.tenqui.flowtone.data.online.configuration.validateExtensionConfiguration
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantEvaluation
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantRepository
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
@@ -82,7 +79,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val ExtensionCardTintBlend = 0.08f
+internal const val ExtensionCardTintBlend = 0.08f
 private const val ExtensionIconBackgroundTintBlend = 0.28f
 
 private enum class ExtensionConfigurationReminder {
@@ -154,7 +151,7 @@ internal fun extensionConfigurationDisplayStatus(
     saving: Boolean,
     loading: Boolean
 ): String = when {
-    loading -> "正在读取配置…"
+    loading -> "正在读取扩展配置"
     saving -> "正在保存…"
     dirty -> "有未保存的更改"
     else -> savedStatus
@@ -166,10 +163,9 @@ internal fun ExtensionSettingsScreen(
     pageScope: PageTransitionScope,
     onOpenNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
     onOpenCredentialGrants: (InstalledExtension) -> Unit,
+    onOpenConfiguration: (InstalledExtension) -> Unit,
     onUninstalled: () -> Unit,
     onBack: () -> Unit,
-    onBackActionChange: ((() -> Unit)?) -> Unit,
-    onDiscardChangesConfirmationChange: (ExtensionDiscardChangesConfirmation?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -190,14 +186,8 @@ internal fun ExtensionSettingsScreen(
     val scope = rememberCoroutineScope()
     val extensionId = installed.manifest.id
     var savedValues by remember(extensionId) { mutableStateOf<Map<String, ConfigurationValue>>(emptyMap()) }
-    var baseline by remember(extensionId) { mutableStateOf<Map<String, ConfigurationValue>>(emptyMap()) }
-    var draft by remember(extensionId) { mutableStateOf<Map<String, ConfigurationValue>>(emptyMap()) }
-    var errors by remember(extensionId) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var configLoading by remember(extensionId) { mutableStateOf(true) }
     var configError by remember(extensionId) { mutableStateOf<String?>(null) }
-    var saveFeedback by remember(extensionId) { mutableStateOf<String?>(null) }
-    var saving by remember(extensionId) { mutableStateOf(false) }
-    var selectedChoice by remember(extensionId) { mutableStateOf<ConfigurationFieldDefinition?>(null) }
     var grantSummary by remember(extensionId) { mutableStateOf<ExtensionGrantSummary?>(null) }
     var grantError by remember(extensionId) { mutableStateOf(false) }
     var grantRefreshing by remember(extensionId) { mutableStateOf(false) }
@@ -229,20 +219,20 @@ internal fun ExtensionSettingsScreen(
         }
     }
 
-    LaunchedEffect(extensionId, installed.descriptor.configurationSchema) {
-        configLoading = true
-        runCatching { withContext(Dispatchers.IO) { configStore.load(extensionId) } }
-            .onSuccess { loaded ->
-                savedValues = loaded
-                baseline = extensionConfigurationDraft(installed.descriptor.configurationSchema, loaded)
-                draft = baseline
-                configError = null
-            }
-            .onFailure {
-                if (it is CancellationException) throw it
-                configError = "配置读取失败，请重新进入页面。"
-            }
-        configLoading = false
+    LaunchedEffect(extensionId, installed.descriptor.configurationSchema, pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            configLoading = true
+            runCatching { withContext(Dispatchers.IO) { configStore.load(extensionId) } }
+                .onSuccess { loaded ->
+                    savedValues = loaded
+                    configError = null
+                }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    configError = "配置读取失败，请重新进入页面。"
+                }
+            configLoading = false
+        }
     }
     LaunchedEffect(extensionId) { refreshGrants() }
     DisposableEffect(lifecycleOwner, extensionId) {
@@ -276,30 +266,7 @@ internal fun ExtensionSettingsScreen(
             if (summary.readyCount < summary.authorizedCount) add("部分已授权凭据当前不可用。")
         }
     }
-    val currentOnBack by rememberUpdatedState(onBack)
-    val currentDiscardChangesConfirmationChange by rememberUpdatedState(onDiscardChangesConfirmationChange)
-    val requestBack = remember(draft, baseline, saving, uninstalling) {
-        {
-            if (!saving && !uninstalling) {
-                when (extensionSettingsBackResult(draft, baseline)) {
-                    ExtensionSettingsBackResult.PerformBack -> currentOnBack()
-                    ExtensionSettingsBackResult.ConfirmDiscard -> currentDiscardChangesConfirmationChange(
-                        ExtensionDiscardChangesConfirmation(onKeepEditing = {}, onDiscard = currentOnBack)
-                    )
-                }
-            }
-        }
-    }
-    val currentBackActionChange by rememberUpdatedState(onBackActionChange)
-    DisposableEffect(requestBack) {
-        currentBackActionChange(requestBack)
-        onDispose {
-            currentBackActionChange(null)
-            currentDiscardChangesConfirmationChange(null)
-        }
-    }
-
-    BackHandler(onBack = requestBack)
+    BackHandler(onBack = onBack)
 
     Box(modifier = modifier.fillMaxSize()) {
         SettingsPageColumn(modifier = Modifier.imePadding()) {
@@ -329,66 +296,41 @@ internal fun ExtensionSettingsScreen(
                 onOpenNetwork = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
                 modifier = pageScope.elementModifier(2, 5).padding(top = 26.dp)
             )
-            ExtensionConfigurationSection(
-                schema = installed.descriptor.configurationSchema,
-                cardSurfaceColor = extensionOptionSurfaceColor,
-                stateLabel = extensionConfigurationDisplayStatus(
-                    presentation.configurationStatus, draft != baseline, saving, configLoading
-                ),
-                draft = draft,
-                errors = errors,
-                feedback = configError ?: saveFeedback,
-                feedbackIsError = configError != null || saveFeedback?.startsWith("保存失败") == true,
-                busy = saving || configLoading || configError != null,
-                saveEnabled = draft != baseline && !saving && !configLoading && configError == null,
-                onValueChange = { id, value ->
-                    if (!saving) {
-                        draft = draft.toMutableMap().apply { if (value == null) remove(id) else put(id, value) }
-                        val relatedFieldIds = installed.descriptor.configurationSchema.atLeastOneGroups
-                            .filter { id in it.fieldIds }
-                            .flatMap { it.fieldIds }
-                        errors = errors - relatedFieldIds - id
-                        saveFeedback = null
-                    }
-                },
-                onChoiceClick = { if (!saving) selectedChoice = it },
-                onSave = {
-                    if (!saving && !configLoading && configError == null) {
-                        val validation = validateExtensionConfiguration(installed.descriptor.configurationSchema, draft)
-                        errors = validation.errors
-                        if (validation.errors.isEmpty()) {
-                            val submitted = draft
-                            saving = true
-                            saveFeedback = null
-                            scope.launch {
-                                runCatching {
-                                    withContext(Dispatchers.IO) {
-                                        configStore.save(extensionId, installed.descriptor.configurationSchema, submitted)
-                                    }
-                                }.onSuccess { persisted ->
-                                    savedValues = persisted
-                                    baseline = extensionConfigurationDraft(installed.descriptor.configurationSchema, persisted)
-                                    draft = baseline
-                                    val runtimeRefreshed = runCatching {
-                                        withContext(Dispatchers.IO) {
-                                            extensionManager.refreshRuntimeConfiguration(extensionId)
-                                        }
-                                    }.getOrElse {
-                                        if (it is CancellationException) throw it
-                                        false
-                                    }
-                                    saveFeedback = if (runtimeRefreshed) "配置已保存" else "配置已保存，但新配置尚未生效"
-                                }.onFailure {
-                                    if (it is CancellationException) throw it
-                                    saveFeedback = "保存失败，请重试。"
-                                }
-                                saving = false
-                            }
-                        }
-                    }
-                },
-                modifier = pageScope.elementModifier(3, 5).padding(top = 26.dp)
-            )
+            if (installed.descriptor.configurationSchema.fields.isNotEmpty()) {
+                Column(
+                    modifier = pageScope.elementModifier(3, 5)
+                        .padding(top = 26.dp)
+                        .fillMaxWidth()
+                ) {
+                    OnlineSectionHeading("扩展配置")
+                    SettingsCategoryCard(
+                        title = "编辑配置",
+                        subtitle = if (configError != null) {
+                            "配置读取失败"
+                        } else {
+                            extensionConfigurationDisplayStatus(
+                                savedStatus = presentation.configurationStatus,
+                                dirty = false,
+                                saving = false,
+                                loading = configLoading
+                            )
+                        },
+                        icon = Icons.Rounded.Tune,
+                        iconContainerColor = extensionIconAccent?.let { accent ->
+                            lerp(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                accent,
+                                ExtensionIconBackgroundTintBlend
+                            )
+                        } ?: MaterialTheme.colorScheme.primaryContainer,
+                        iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        onClick = { onOpenConfiguration(installed) },
+                        modifier = Modifier.padding(top = 12.dp),
+                        surfaceColor = extensionOptionSurfaceColor ?: defaultOptionSurfaceColor,
+                        animateSubtitle = true
+                    )
+                }
+            }
             Column(
                 modifier = pageScope.elementModifier(4, 5).padding(top = 30.dp).fillMaxWidth()
             ) {
@@ -400,7 +342,7 @@ internal fun ExtensionSettingsScreen(
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         TextButton(
                             onClick = { if (!uninstalling) confirmUninstall = true },
-                            enabled = !uninstalling && !saving,
+                            enabled = !uninstalling,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(if (uninstalling) "正在卸载…" else "卸载扩展", color = MaterialTheme.colorScheme.error)
@@ -413,24 +355,6 @@ internal fun ExtensionSettingsScreen(
             }
         }
 
-        selectedChoice?.let { field ->
-            ExtensionChoiceOverlay(
-                field = field,
-                selected = (draft[field.id] as? ConfigurationValue.StringValue)?.value,
-                onSelect = { value ->
-                    if (!saving) {
-                        draft = draft.toMutableMap().apply { put(field.id, ConfigurationValue.StringValue(value)) }
-                        val relatedFieldIds = installed.descriptor.configurationSchema.atLeastOneGroups
-                            .filter { field.id in it.fieldIds }
-                            .flatMap { it.fieldIds }
-                        errors = errors - relatedFieldIds - field.id
-                        saveFeedback = null
-                    }
-                    selectedChoice = null
-                },
-                onDismiss = { selectedChoice = null }
-            )
-        }
         if (confirmUninstall) {
             ExtensionUninstallConfirmation(
                 name = installed.manifest.name,
@@ -618,7 +542,7 @@ private fun ExtensionAttentionSection(
 }
 
 @Composable
-private fun ExtensionConfigurationSection(
+internal fun ExtensionConfigurationSection(
     schema: ConfigurationSchema,
     stateLabel: String,
     draft: Map<String, ConfigurationValue>,
@@ -655,7 +579,11 @@ private fun ExtensionConfigurationSection(
     val renderedGroupFieldIds = mutableSetOf<String>()
 
     Column(modifier = modifier.fillMaxWidth()) {
-        OnlineSectionHeading(title = "扩展配置", subtitle = stateLabel)
+        OnlineSectionHeading(
+            title = "扩展配置",
+            subtitle = stateLabel,
+            animateSubtitle = true
+        )
         if (runtimeFields.isNotEmpty() || runtimeGroups.isNotEmpty()) {
             Text(
                 "运行必须",
@@ -967,7 +895,7 @@ private fun ExtensionManagementSection(
     }
 }
 @Composable
-private fun ExtensionChoiceOverlay(
+internal fun ExtensionChoiceOverlay(
     field: ConfigurationFieldDefinition,
     selected: String?,
     onSelect: (String) -> Unit,

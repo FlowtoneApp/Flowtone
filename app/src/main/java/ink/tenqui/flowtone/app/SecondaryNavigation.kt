@@ -178,6 +178,18 @@ internal sealed interface SecondaryDestination {
         override fun hashCode(): Int = extensionId.hashCode()
     }
 
+    class ExtensionConfiguration(
+        val installed: InstalledExtension
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionConfiguration
+        val extensionId: String get() = installed.manifest.id
+
+        override fun equals(other: Any?): Boolean =
+            other is ExtensionConfiguration && extensionId == other.extensionId
+
+        override fun hashCode(): Int = extensionId.hashCode()
+    }
+
     data class ExtensionNetworkAccess(
         val permissions: Set<NetworkOriginPermission>
     ) : SecondaryDestination {
@@ -387,6 +399,8 @@ internal fun secondaryDestinationBreadcrumbs(
             if (current.sourceId == null) "添加凭据" else "编辑凭据"
         )
         is SecondaryDestination.ExtensionSettings -> listOf(current.installed.manifest.name)
+        is SecondaryDestination.ExtensionConfiguration ->
+            listOf(current.installed.manifest.name, SecondaryPage.ExtensionConfiguration.title)
         is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
         is SecondaryDestination.ExtensionCredentialGrants -> listOf(current.installed.manifest.name, "凭据授权")
         is SecondaryDestination.ExtensionCredentialSourcePicker -> listOf(current.installed.manifest.name, "选择凭据")
@@ -414,6 +428,8 @@ internal fun secondaryStackBreadcrumbs(
                 if (destination.sourceId == null) "添加凭据" else "编辑凭据"
             )
             is SecondaryDestination.ExtensionSettings -> listOf(destination.installed.manifest.name)
+            is SecondaryDestination.ExtensionConfiguration ->
+                listOf(SecondaryPage.ExtensionConfiguration.title)
             is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
             is SecondaryDestination.ExtensionCredentialGrants -> listOf("凭据授权")
             is SecondaryDestination.ExtensionCredentialSourcePicker -> listOf("选择凭据")
@@ -436,6 +452,7 @@ internal fun List<SecondaryStackEntry>.usesOnlineSettingsBreadcrumbs(): Boolean 
             (hasSettingsEntry || hasExtensionSettings) &&
                 any { it.destination == SecondaryDestination.CredentialSources }
         is SecondaryDestination.ExtensionSettings,
+        is SecondaryDestination.ExtensionConfiguration,
         is SecondaryDestination.ExtensionNetworkAccess,
         is SecondaryDestination.ExtensionCredentialGrants,
         is SecondaryDestination.ExtensionCredentialSourcePicker -> hasExtensionSettings

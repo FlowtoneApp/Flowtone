@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.ui.screens
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -167,15 +169,35 @@ internal fun OnlineManagementEntry(
 internal fun OnlineSectionHeading(
     title: String,
     subtitle: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    animateSubtitle: Boolean = false
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-        subtitle?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 3.dp))
+        subtitle?.let { text ->
+            if (animateSubtitle) {
+                Crossfade(
+                    targetState = text,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "OnlineSectionHeadingSubtitle"
+                ) { animatedSubtitle ->
+                    OnlineSectionHeadingSubtitle(animatedSubtitle)
+                }
+            } else {
+                OnlineSectionHeadingSubtitle(text)
+            }
         }
     }
+}
+
+@Composable
+private fun OnlineSectionHeadingSubtitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 3.dp)
+    )
 }
 
 @Composable

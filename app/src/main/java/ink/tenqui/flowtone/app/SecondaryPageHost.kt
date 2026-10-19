@@ -55,6 +55,7 @@ import ink.tenqui.flowtone.ui.screens.SettingsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionSettingsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionConfigurationScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionCredentialGrantsScreen
 import ink.tenqui.flowtone.ui.screens.ExtensionCredentialSourcePickerScreen
 import ink.tenqui.flowtone.ui.screens.CredentialSourcesScreen
@@ -186,6 +187,7 @@ internal fun SecondaryPageHost(
     pendingExtensionPreview: ExtensionInstallPreview?,
     onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenExtensionConfiguration: (InstalledExtension) -> Unit,
     onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
     onOpenExtensionCredentialGrants: (InstalledExtension) -> Unit,
     onOpenExtensionCredentialSourcePicker: (InstalledExtension, String) -> Unit,
@@ -332,21 +334,34 @@ internal fun SecondaryPageHost(
                     pageScope = pageScope,
                     onOpenNetworkAccess = { permissions -> onOpenExtensionNetworkAccess(permissions) },
                     onOpenCredentialGrants = onOpenExtensionCredentialGrants,
+                    onOpenConfiguration = onOpenExtensionConfiguration,
                     onUninstalled = onCloseSecondaryPage,
                     onBack = onCloseSecondaryPage,
-                    onBackActionChange = { requestBack ->
-                        extensionSettingsRequestBack = requestBack
-                        onSettingsBackActionChange(requestBack)
-                    },
-                    onDiscardChangesConfirmationChange =
-                        onExtensionDiscardChangesConfirmationChange,
                     modifier = Modifier
                         .fillMaxSize()
-                        .rightSwipeBackGesture {
-                            extensionSettingsRequestBack?.invoke() ?: onCloseSecondaryPage()
-                        }
+                        .rightSwipeBackGesture(onCloseSecondaryPage)
                 )
             }
+
+            SecondaryPage.ExtensionConfiguration ->
+                (destination as? SecondaryDestination.ExtensionConfiguration)?.let { configuration ->
+                    ExtensionConfigurationScreen(
+                        installed = configuration.installed,
+                        pageScope = pageScope,
+                        onBack = onCloseSecondaryPage,
+                        onBackActionChange = { requestBack ->
+                            extensionSettingsRequestBack = requestBack
+                            onSettingsBackActionChange(requestBack)
+                        },
+                        onDiscardChangesConfirmationChange =
+                            onExtensionDiscardChangesConfirmationChange,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .rightSwipeBackGesture {
+                                extensionSettingsRequestBack?.invoke() ?: onCloseSecondaryPage()
+                            }
+                    )
+                }
 
             SecondaryPage.ExtensionNetworkAccess -> (destination as? SecondaryDestination.ExtensionNetworkAccess)?.let { network ->
                 ExtensionNetworkAccessScreen(

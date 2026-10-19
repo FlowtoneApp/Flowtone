@@ -52,6 +52,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenCredentialSourceEdit: (String?) -> Unit,
     val onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
     val onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    val onOpenExtensionConfiguration: (InstalledExtension) -> Unit,
     val onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
     val onOpenExtensionCredentialGrants: (InstalledExtension) -> Unit,
     val onOpenExtensionCredentialSourcePicker: (InstalledExtension, String) -> Unit,
@@ -284,6 +285,11 @@ internal fun flowtoneAppCallbacks(
         onOpenExtensionSettings = { installed ->
             appState.secondaryNavigation = appState.secondaryNavigation.push(
                 SecondaryDestination.ExtensionSettings(installed)
+            )
+        },
+        onOpenExtensionConfiguration = { installed ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionConfiguration(installed)
             )
         },
         onOpenExtensionNetworkAccess = { permissions ->

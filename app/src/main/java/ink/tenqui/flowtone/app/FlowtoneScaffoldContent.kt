@@ -396,6 +396,7 @@ internal fun FlowtoneScaffoldContent(
                         SecondaryPage.CredentialSources,
                         SecondaryPage.CredentialSourceEdit,
                         SecondaryPage.ExtensionSettings,
+                        SecondaryPage.ExtensionConfiguration,
                         SecondaryPage.ExtensionNetworkAccess,
                         SecondaryPage.ExtensionCredentialGrants,
                         SecondaryPage.ExtensionCredentialSourcePicker -> true
@@ -708,6 +709,7 @@ internal fun FlowtoneScaffoldContent(
                     pendingExtensionPreview = state.pendingExtensionPreview,
                     onOpenExtensionInstall = callbacks.onOpenExtensionInstall,
                     onOpenExtensionSettings = callbacks.onOpenExtensionSettings,
+                    onOpenExtensionConfiguration = callbacks.onOpenExtensionConfiguration,
                     onOpenExtensionNetworkAccess = callbacks.onOpenExtensionNetworkAccess,
                     onOpenExtensionCredentialGrants = callbacks.onOpenExtensionCredentialGrants,
                     onOpenExtensionCredentialSourcePicker = callbacks.onOpenExtensionCredentialSourcePicker,

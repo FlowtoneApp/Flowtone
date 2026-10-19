@@ -1,5 +1,7 @@
 package ink.tenqui.flowtone.ui.components
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -34,7 +36,8 @@ internal fun SettingsCategoryCard(
     iconContentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    surfaceColor: Color = SettingsOptionSurfaceColor
+    surfaceColor: Color = SettingsOptionSurfaceColor,
+    animateSubtitle: Boolean = false
 ) {
     SettingsOptionSurface(
         modifier = modifier.fillMaxWidth(),
@@ -71,12 +74,17 @@ internal fun SettingsCategoryCard(
                     style = MaterialTheme.typography.titleMedium,
                     color = SettingsCategoryCardTitleColor
                 )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SettingsCategoryCardSubtitleColor,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                if (animateSubtitle) {
+                    Crossfade(
+                        targetState = subtitle,
+                        animationSpec = tween(durationMillis = 180),
+                        label = "SettingsCategoryCardSubtitle"
+                    ) { animatedSubtitle ->
+                        SettingsCategoryCardSubtitle(animatedSubtitle)
+                    }
+                } else {
+                    SettingsCategoryCardSubtitle(subtitle)
+                }
             }
             Icon(
                 imageVector = Icons.Rounded.ChevronRight,
@@ -86,6 +94,16 @@ internal fun SettingsCategoryCard(
             )
         }
     }
+}
+
+@Composable
+private fun SettingsCategoryCardSubtitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = SettingsCategoryCardSubtitleColor,
+        modifier = Modifier.padding(top = 4.dp)
+    )
 }
 
 private val SettingsCategoryCardTitleColor = Color(0xFF1C1B1F)

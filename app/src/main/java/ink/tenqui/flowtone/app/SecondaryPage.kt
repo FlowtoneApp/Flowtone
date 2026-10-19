@@ -11,6 +11,7 @@ internal enum class SecondaryPage(val title: String) {
     CredentialSources("凭据"),
     CredentialSourceEdit("编辑凭据"),
     ExtensionSettings("扩展"),
+    ExtensionConfiguration("扩展配置"),
     ExtensionInstall("安装扩展"),
     ExtensionNetworkAccess("网络访问"),
     ExtensionCredentialGrants("凭据授权"),
