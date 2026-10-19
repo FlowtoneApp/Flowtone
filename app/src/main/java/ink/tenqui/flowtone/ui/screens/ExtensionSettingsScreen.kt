@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -69,6 +72,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
 import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
+import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurfaceColor
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
@@ -79,6 +83,11 @@ import kotlinx.coroutines.withContext
 
 private const val ExtensionCardTintBlend = 0.08f
 private const val ExtensionIconBackgroundTintBlend = 0.28f
+
+private enum class ExtensionConfigurationReminder {
+    RuntimeRequired,
+    Recommended
+}
 
 internal data class ExtensionSettingsPresentation(
     val capabilities: List<SummaryCapability>,
@@ -250,19 +259,16 @@ internal fun ExtensionSettingsScreen(
     }
 
     val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
+    val configurationReminder = when {
+        configLoading || configError != null -> null
+        !presentation.configurationRequirements.runtimeRequirementsSatisfied ->
+            ExtensionConfigurationReminder.RuntimeRequired
+        !presentation.configurationRequirements.recommendationsSatisfied ->
+            ExtensionConfigurationReminder.Recommended
+        else -> null
+    }
     val attentionMessages = buildList {
         if (configError != null) add("扩展配置读取失败，请重新进入页面。")
-        if (
-            !configLoading &&
-            configError == null &&
-            !presentation.configurationRequirements.allRequiredAndRecommendedSatisfied
-        ) {
-            if (!presentation.configurationRequirements.runtimeRequirementsSatisfied) {
-                add("扩展运行必须配置尚未完成。")
-            } else {
-                add("扩展推荐配置尚未完成。")
-            }
-        }
         if (grantError) add("凭据授权状态读取失败，请进入授权页检查。")
         grantSummary?.let { summary ->
             if (summary.authorizedCount < summary.requestCount) add("部分凭据请求尚未授权。")
@@ -301,8 +307,13 @@ internal fun ExtensionSettingsScreen(
                 iconAccent = extensionIconAccent,
                 modifier = pageScope.elementModifier(0, 5)
             )
-            if (attentionMessages.isNotEmpty()) {
-                ExtensionAttentionSection(attentionMessages, pageScope.elementModifier(1, 5))
+            if (configurationReminder != null || attentionMessages.isNotEmpty()) {
+                ExtensionAttentionSection(
+                    configurationReminder = configurationReminder,
+                    messages = attentionMessages,
+                    normalSurfaceColor = defaultOptionSurfaceColor,
+                    modifier = pageScope.elementModifier(1, 5)
+                )
             }
             ExtensionManagementSection(
                 credentialCount = installed.descriptor.credentialRequests.size,
@@ -528,9 +539,66 @@ private fun ExtensionIdentityHeader(
 }
 
 @Composable
-private fun ExtensionAttentionSection(messages: List<String>, modifier: Modifier = Modifier) {
+private fun ExtensionAttentionSection(
+    configurationReminder: ExtensionConfigurationReminder?,
+    messages: List<String>,
+    normalSurfaceColor: Color,
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp)) {
         OnlineSectionHeading("状态提醒")
+        configurationReminder?.let { reminder ->
+            val isRuntimeRequired = reminder == ExtensionConfigurationReminder.RuntimeRequired
+            val cardColor = if (isRuntimeRequired) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                normalSurfaceColor
+            }
+            val iconContainerColor = if (isRuntimeRequired) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.primaryContainer
+            }
+            val iconTint = if (isRuntimeRequired) {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            }
+            val message = if (isRuntimeRequired) {
+                "扩展运行必须配置尚未完成。"
+            } else {
+                "扩展推荐配置尚未完成。"
+            }
+            val icon = if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
+
+            SettingsOptionSurface(
+                modifier = Modifier.padding(top = 8.dp),
+                surfaceColor = cardColor,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SettingsOptionIconTile(
+                        containerColor = iconContainerColor,
+                        contentColor = iconTint
+                    ) {
+                        Icon(imageVector = icon, contentDescription = null)
+                    }
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isRuntimeRequired) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+            }
+        }
         messages.forEach { message ->
             Text(
                 message,
