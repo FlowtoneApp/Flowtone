@@ -99,34 +99,16 @@ internal fun validateExtensionConfiguration(
     ConfigurationSchemaValidator.requireValid(schema)
     val errors = linkedMapOf<String, String>()
     val persisted = linkedMapOf<String, ConfigurationValue>()
+    // 运行必须和至少一项约束影响运行状态，不阻止保存或删除不完整配置。
     schema.fields.forEach { field ->
         if (field.type == ConfigurationFieldType.Secret) return@forEach
         val value = values[field.id]
         val empty = value is ConfigurationValue.StringValue && value.value.isBlank()
-        if (
-            field.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired &&
-            (value == null || empty)
-        ) {
-            errors[field.id] = "此项为必填项"
-        } else if (value != null && !empty && !ConfigurationSchemaValidator.isValidValue(field, value)) {
+        if (value != null && !empty && !ConfigurationSchemaValidator.isValidValue(field, value)) {
             errors[field.id] = if (field.type == ConfigurationFieldType.Url) "请输入有效的 HTTP 或 HTTPS 地址" else "配置值无效"
         } else if (value != null && !empty) {
             persisted[field.id] = value
         }
     }
-    val fieldsById = schema.fields.associateBy(ConfigurationFieldDefinition::id)
-    schema.atLeastOneGroups
-        .filter { it.requirement == ConfigurationRequirementLevel.RuntimeRequired }
-        .forEach { group ->
-            val groupSatisfied = group.fieldIds.any { fieldId ->
-                val field = fieldsById.getValue(fieldId)
-                ConfigurationSchemaValidator.hasValidValue(field, values[fieldId])
-            }
-            if (!groupSatisfied) {
-                group.fieldIds.forEach { fieldId ->
-                    errors.putIfAbsent(fieldId, "至少填写此组中的一项")
-                }
-            }
-        }
     return ExtensionConfigurationValidation(persisted, errors)
 }

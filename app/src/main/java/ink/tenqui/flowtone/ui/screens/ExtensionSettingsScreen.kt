@@ -74,6 +74,7 @@ import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
+import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
 import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
@@ -680,38 +681,36 @@ internal fun ExtensionConfigurationSection(
             animateSubtitle = true
         )
         if (runtimeFields.isNotEmpty() || runtimeGroups.isNotEmpty()) {
-            Text(
-                "运行必须",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 14.dp)
-            )
-            runtimeFields.forEach { field ->
-                ExtensionConfigurationOption(
-                    modifier = Modifier.padding(top = 8.dp),
-                    surfaceColor = cardSurfaceColor
-                ) {
-                    ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
-                }
-            }
-            runtimeGroups.forEach { group ->
-                val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
-                if (labels.isNotEmpty()) {
-                    Text(
-                        "至少填写一项：" + labels.joinToString("、"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 10.dp)
+            OptionGroup(
+                title = "运行必须",
+                modifier = Modifier.padding(top = 14.dp),
+                surfaceColor = cardSurfaceColor
+            ) {
+                runtimeFields.forEachIndexed { index, field ->
+                    ExtensionConfigurationField(
+                        field,
+                        draft,
+                        errors,
+                        busy,
+                        onValueChange,
+                        onChoiceClick,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp)
                     )
-                    group.fieldIds.forEach { fieldId ->
-                        fieldsById[fieldId]?.let { field ->
-                            if (
-                                field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
-                                renderedGroupFieldIds.add(field.id)
-                            ) {
-                                ExtensionConfigurationOption(
-                                    modifier = Modifier.padding(top = 8.dp),
-                                    surfaceColor = cardSurfaceColor
+                }
+                runtimeGroups.forEach { group ->
+                    val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
+                    if (labels.isNotEmpty()) {
+                        Text(
+                            "至少填写一项：" + labels.joinToString("、"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                        group.fieldIds.forEach { fieldId ->
+                            fieldsById[fieldId]?.let { field ->
+                                if (
+                                    field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
+                                    renderedGroupFieldIds.add(field.id)
                                 ) {
                                     ExtensionConfigurationField(
                                         field,
@@ -720,7 +719,8 @@ internal fun ExtensionConfigurationSection(
                                         busy,
                                         onValueChange,
                                         onChoiceClick,
-                                        requirementOverride = group.requirement
+                                        requirementOverride = group.requirement,
+                                        modifier = Modifier.padding(top = 8.dp)
                                     )
                                 }
                             }
@@ -730,38 +730,36 @@ internal fun ExtensionConfigurationSection(
             }
         }
         if (recommendedFields.isNotEmpty() || recommendedGroups.isNotEmpty()) {
-            Text(
-                "推荐配置",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 14.dp)
-            )
-            recommendedFields.forEach { field ->
-                ExtensionConfigurationOption(
-                    modifier = Modifier.padding(top = 8.dp),
-                    surfaceColor = cardSurfaceColor
-                ) {
-                    ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
-                }
-            }
-            recommendedGroups.forEach { group ->
-                val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
-                if (labels.isNotEmpty()) {
-                    Text(
-                        "至少填写一项：" + labels.joinToString("、"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 10.dp)
+            OptionGroup(
+                title = "推荐配置",
+                modifier = Modifier.padding(top = 14.dp),
+                surfaceColor = cardSurfaceColor
+            ) {
+                recommendedFields.forEachIndexed { index, field ->
+                    ExtensionConfigurationField(
+                        field,
+                        draft,
+                        errors,
+                        busy,
+                        onValueChange,
+                        onChoiceClick,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp)
                     )
-                    group.fieldIds.forEach { fieldId ->
-                        fieldsById[fieldId]?.let { field ->
-                            if (
-                                field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
-                                renderedGroupFieldIds.add(field.id)
-                            ) {
-                                ExtensionConfigurationOption(
-                                    modifier = Modifier.padding(top = 8.dp),
-                                    surfaceColor = cardSurfaceColor
+                }
+                recommendedGroups.forEach { group ->
+                    val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
+                    if (labels.isNotEmpty()) {
+                        Text(
+                            "至少填写一项：" + labels.joinToString("、"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                        group.fieldIds.forEach { fieldId ->
+                            fieldsById[fieldId]?.let { field ->
+                                if (
+                                    field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
+                                    renderedGroupFieldIds.add(field.id)
                                 ) {
                                     ExtensionConfigurationField(
                                         field,
@@ -770,7 +768,8 @@ internal fun ExtensionConfigurationSection(
                                         busy,
                                         onValueChange,
                                         onChoiceClick,
-                                        requirementOverride = group.requirement
+                                        requirementOverride = group.requirement,
+                                        modifier = Modifier.padding(top = 8.dp)
                                     )
                                 }
                             }
@@ -780,18 +779,21 @@ internal fun ExtensionConfigurationSection(
             }
         }
         if (optionalFields.isNotEmpty()) {
-            Text(
-                "可选配置",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 14.dp)
-            )
-            optionalFields.forEach { field ->
-                ExtensionConfigurationOption(
-                    modifier = Modifier.padding(top = 8.dp),
-                    surfaceColor = cardSurfaceColor
-                ) {
-                    ExtensionConfigurationField(field, draft, errors, busy, onValueChange, onChoiceClick)
+            OptionGroup(
+                title = "可选配置",
+                modifier = Modifier.padding(top = 14.dp),
+                surfaceColor = cardSurfaceColor
+            ) {
+                optionalFields.forEachIndexed { index, field ->
+                    ExtensionConfigurationField(
+                        field,
+                        draft,
+                        errors,
+                        busy,
+                        onValueChange,
+                        onChoiceClick,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp)
+                    )
                 }
             }
         }
@@ -814,21 +816,6 @@ internal fun ExtensionConfigurationSection(
 }
 
 @Composable
-private fun ExtensionConfigurationOption(
-    modifier: Modifier = Modifier,
-    surfaceColor: Color? = null,
-    content: @Composable () -> Unit
-) {
-    SettingsOptionSurface(modifier = modifier, surfaceColor = surfaceColor) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            content()
-        }
-    }
-}
-
-@Composable
 private fun ExtensionConfigurationField(
     field: ConfigurationFieldDefinition,
     draft: Map<String, ConfigurationValue>,
@@ -836,6 +823,7 @@ private fun ExtensionConfigurationField(
     busy: Boolean,
     onValueChange: (String, ConfigurationValue?) -> Unit,
     onChoiceClick: (ConfigurationFieldDefinition) -> Unit,
+    modifier: Modifier = Modifier,
     requirementOverride: ConfigurationRequirementLevel? = null
 ) {
     val fieldRequirement = requirementOverride ?: field.effectiveRequirement
@@ -846,25 +834,38 @@ private fun ExtensionConfigurationField(
     }
     when (field.type) {
         ConfigurationFieldType.Text, ConfigurationFieldType.Url -> {
-            val value = (draft[field.id] as? ConfigurationValue.StringValue)?.value.orEmpty()
+            val value = (draft[field.id] as? ConfigurationValue.StringValue)?.value
+                ?: (field.defaultValue as? ConfigurationValue.StringValue)?.value.orEmpty()
             OutlinedTextField(
                 value = value,
                 onValueChange = { onValueChange(field.id, ConfigurationValue.StringValue(it)) },
                 label = { Text("${field.label}（$requirementLabel）") },
                 placeholder = field.placeholder?.let { { Text(it) } },
                 supportingText = { Text(errors[field.id] ?: field.description.orEmpty()) },
+                trailingIcon = if (field.id in draft) {
+                    {
+                        TextButton(
+                            onClick = { onValueChange(field.id, null) },
+                            enabled = !busy
+                        ) { Text(if (field.defaultValue != null) "恢复默认" else "清除") }
+                    }
+                } else {
+                    null
+                },
                 isError = field.id in errors,
                 enabled = !busy,
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = modifier.fillMaxWidth()
             )
         }
         ConfigurationFieldType.Toggle -> {
-            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+            Column(modifier = modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ConfigurationFieldTitle(field, Modifier.weight(1f), requirementOverride)
                     FlowtoneSwitch(
-                        checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value ?: false,
+                        checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value
+                            ?: (field.defaultValue as? ConfigurationValue.BooleanValue)?.value
+                            ?: false,
                         onCheckedChange = { onValueChange(field.id, ConfigurationValue.BooleanValue(it)) },
                         enabled = !busy
                     )
@@ -875,12 +876,20 @@ private fun ExtensionConfigurationField(
                 errors[field.id]?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
+                if (field.id in draft) {
+                    TextButton(
+                        onClick = { onValueChange(field.id, null) },
+                        enabled = !busy,
+                        modifier = Modifier.align(Alignment.End)
+                    ) { Text(if (field.defaultValue != null) "恢复默认" else "清除") }
+                }
             }
         }
         ConfigurationFieldType.Choice -> {
             val selected = (draft[field.id] as? ConfigurationValue.StringValue)?.value
+                ?: (field.defaultValue as? ConfigurationValue.StringValue)?.value
             val choiceLabel = field.choices.firstOrNull { it.value == selected }?.label ?: "请选择"
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) { onChoiceClick(field) }
                         .padding(vertical = 14.dp),
@@ -901,10 +910,17 @@ private fun ExtensionConfigurationField(
                 errors[field.id]?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
+                if (field.id in draft) {
+                    TextButton(
+                        onClick = { onValueChange(field.id, null) },
+                        enabled = !busy,
+                        modifier = Modifier.align(Alignment.End)
+                    ) { Text(if (field.defaultValue != null) "恢复默认" else "清除") }
+                }
             }
         }
         ConfigurationFieldType.Secret -> {
-            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+            Column(modifier = modifier.fillMaxWidth()) {
                 ConfigurationFieldTitle(field, requirementOverride = requirementOverride)
                 Text(
                     field.description ?: "此配置需要安全存储支持，当前版本暂不可配置。",

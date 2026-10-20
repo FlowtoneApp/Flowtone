@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 fun OptionGroup(
     title: String,
     modifier: Modifier = Modifier,
+    surfaceColor: Color? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val palette = settingsOptionPalette()
@@ -46,7 +48,7 @@ fun OptionGroup(
         SettingsOptionSurface(
             modifier = Modifier.padding(outlineWidth),
             shape = RoundedCornerShape(groupCornerRadius - outlineWidth),
-            surfaceColor = palette.groupSurfaceColor
+            surfaceColor = surfaceColor ?: palette.groupSurfaceColor
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
