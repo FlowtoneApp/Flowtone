@@ -30,6 +30,8 @@ internal val SettingsOptionCornerRadius = 20.dp
 internal val SettingsOptionShadowExtent = 16.dp
 internal val SettingsOptionSurfaceColor = Color(0xFFF5F8FF)
 internal val SettingsGroupSurfaceColor = Color(0xFFE4E9F6)
+private val DarkSettingsOptionSurfaceColor = Color(0xFF282C37)
+private val DarkSettingsGroupSurfaceColor = Color(0xFF1C1F27)
 private const val DarkIconBackgroundMaxLuminance = 0.18f
 private const val DarkIconContentMinLuminance = 0.72f
 
@@ -92,8 +94,8 @@ internal fun settingsOptionPalette(): SettingsOptionPalette {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = colorScheme.surface.luminance() <= 0.5f
     return SettingsOptionPalette(
-        surfaceColor = if (isDarkTheme) colorScheme.surfaceContainer else SettingsOptionSurfaceColor,
-        groupSurfaceColor = if (isDarkTheme) colorScheme.surfaceContainer else SettingsGroupSurfaceColor,
+        surfaceColor = if (isDarkTheme) DarkSettingsOptionSurfaceColor else SettingsOptionSurfaceColor,
+        groupSurfaceColor = if (isDarkTheme) DarkSettingsGroupSurfaceColor else SettingsGroupSurfaceColor,
         contentColor = colorScheme.onSurface,
         secondaryContentColor = colorScheme.onSurfaceVariant,
         outlineColor = if (isDarkTheme) {
