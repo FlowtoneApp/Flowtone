@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
+import ink.tenqui.flowtone.ui.components.flowtoneModalContainerColor
 
 @Composable
 internal fun CreatePlaylistPanel(
@@ -28,30 +29,17 @@ internal fun CreatePlaylistPanel(
     dialogLocked: Boolean,
     mode: PlaylistDialogMode,
     visualStyle: PlaylistDialogVisualStyle,
-    addToPlaylistDialogBackgroundColor: Color,
     onPlaylistNameChange: (String) -> Unit,
     onCancel: () -> Unit,
     onCreate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val addToPlaylistStyle = visualStyle == PlaylistDialogVisualStyle.AddToPlaylist
-    val containerColor = if (addToPlaylistStyle) {
-        addToPlaylistDialogBackgroundColor.copy(alpha = 1f)
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-    val contentColor = if (addToPlaylistStyle) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val secondaryContentColor = if (addToPlaylistStyle) {
-        Color.White.copy(alpha = 0.72f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val containerColor = flowtoneModalContainerColor()
+    val contentColor = MaterialTheme.colorScheme.onSurface
+    val secondaryContentColor = MaterialTheme.colorScheme.onSurfaceVariant
     val panelBorder = if (addToPlaylistStyle) {
-        BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     } else {
         null
     }

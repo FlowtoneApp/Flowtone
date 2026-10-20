@@ -1,8 +1,5 @@
 package ink.tenqui.flowtone.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -30,9 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.SongRecordThresholdDialogState
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelExitScale
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelStartScale
+import ink.tenqui.flowtone.ui.components.flowtoneModalContainerColor
 import ink.tenqui.flowtone.ui.library.CreatePlaylistScrimMaxAlpha
 import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
 import kotlin.math.roundToInt
@@ -52,38 +47,11 @@ internal fun SongRecordThresholdOverlay(
     var pendingConfirmSeconds by remember {
         mutableStateOf<Int?>(null)
     }
-    val panelProgress = remember {
-        Animatable(0f)
-    }
     val currentOnConfirm by rememberUpdatedState(onConfirm)
     val currentOnDismissAnimationFinished by rememberUpdatedState(onDismissAnimationFinished)
     val cardInteractionSource = remember {
         MutableInteractionSource()
     }
-    val overlayVisible = dialogState == SongRecordThresholdDialogState.Editing ||
-        dialogState == SongRecordThresholdDialogState.Closing
-    val scrimAlpha by animateFloatAsState(
-        targetValue = if (dialogState == SongRecordThresholdDialogState.Editing) {
-            CreatePlaylistScrimMaxAlpha
-        } else {
-            0f
-        },
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "SongRecordThresholdScrim"
-    )
-    val panelMinScale = if (dialogState == SongRecordThresholdDialogState.Closing) {
-        CreatePlaylistPanelExitScale
-    } else {
-        CreatePlaylistPanelStartScale
-    }
-    val panelScale = lerpSettingsDialogFloat(
-        start = panelMinScale,
-        stop = 1f,
-        fraction = panelProgress.value.coerceIn(0f, 1f)
-    )
 
     fun closeWithoutConfirm() {
         pendingConfirmSeconds = null
@@ -101,45 +69,17 @@ internal fun SongRecordThresholdOverlay(
         }
     }
 
-    LaunchedEffect(dialogState) {
-        when (dialogState) {
-            SongRecordThresholdDialogState.Editing -> {
-                panelProgress.snapTo(0f)
-                panelProgress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(
-                        durationMillis = FlowtoneMotion.DurationMillis,
-                        easing = FlowtoneMotion.Easing
-                    )
-                )
-            }
-
-            SongRecordThresholdDialogState.Closing -> {
-                panelProgress.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(
-                        durationMillis = FlowtoneMotion.DurationMillis / 2,
-                        easing = FlowtoneMotion.Easing
-                    )
-                )
-                pendingConfirmSeconds?.let { confirmedSeconds ->
-                    currentOnConfirm(confirmedSeconds)
-                    pendingConfirmSeconds = null
-                }
-                currentOnDismissAnimationFinished()
-                panelProgress.snapTo(0f)
-            }
-
-            SongRecordThresholdDialogState.Idle -> Unit
-        }
-    }
-
     FlowtoneModalOverlayShell(
-        visible = overlayVisible,
-        scrimAlpha = scrimAlpha,
-        panelProgress = panelProgress.value,
-        panelScale = panelScale,
+        visible = dialogState == SongRecordThresholdDialogState.Editing,
+        scrimMaxAlpha = CreatePlaylistScrimMaxAlpha,
         shadowSafePadding = CreatePlaylistShadowSafePadding,
+        onExitAnimationFinished = {
+            pendingConfirmSeconds?.let { confirmedSeconds ->
+                currentOnConfirm(confirmedSeconds)
+                pendingConfirmSeconds = null
+            }
+            currentOnDismissAnimationFinished()
+        },
         onDismissRequest = ::closeWithoutConfirm,
         modifier = modifier.fillMaxSize()
     ) {
@@ -154,7 +94,7 @@ internal fun SongRecordThresholdOverlay(
                     onClick = {}
                 ),
             shape = RoundedCornerShape(SettingsDialogCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = flowtoneModalContainerColor(),
             tonalElevation = SettingsDialogElevation,
             shadowElevation = SettingsDialogElevation
         ) {
@@ -225,8 +165,4 @@ internal fun SongRecordThresholdOverlay(
             }
         }
     }
-}
-
-private fun lerpSettingsDialogFloat(start: Float, stop: Float, fraction: Float): Float {
-    return start + (stop - start) * fraction
 }

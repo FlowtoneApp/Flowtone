@@ -3,8 +3,6 @@ package ink.tenqui.flowtone.ui.library
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -68,8 +66,7 @@ internal enum class PlaylistDialogVisualStyle {
 
 internal class LibraryPlaylistController internal constructor(
     private val playlistStore: LibraryPlaylistCardStore,
-    val listState: LazyListState,
-    val panelProgress: Animatable<Float, AnimationVector1D>
+    val listState: LazyListState
 ) {
     private val editablePlaylistBounds = mutableMapOf<String, Rect>()
 
@@ -397,15 +394,11 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
         LibraryPlaylistCardStore(context.applicationContext)
     }
     val listState = rememberLazyListState()
-    val panelProgress = remember {
-        Animatable(0f)
-    }
 
-    return remember(playlistStore, listState, panelProgress) {
+    return remember(playlistStore, listState) {
         LibraryPlaylistController(
             playlistStore = playlistStore,
-            listState = listState,
-            panelProgress = panelProgress
+            listState = listState
         )
     }
 }

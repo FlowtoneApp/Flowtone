@@ -16,17 +16,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Flowtone 应用内 modal 共用的标准窗口视觉；Overlay Shell 只负责遮罩和动画。 */
+/** Flowtone 应用内 modal 共用的标准窗口视觉与云层浅色面板。 */
 @Composable
 internal fun FlowtoneModalPanel(
     modifier: Modifier = Modifier,
     maxWidth: Dp? = 360.dp,
     horizontalPadding: Dp = 28.dp,
     fillContentHeight: Boolean = false,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    containerColor: Color = flowtoneModalContainerColor(),
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     border: BorderStroke? = null,
     tonalElevation: Dp = 0.dp,
@@ -63,3 +64,13 @@ internal fun FlowtoneModalPanel(
         Column(modifier = contentModifier, content = content)
     }
 }
+
+@Composable
+internal fun flowtoneModalContainerColor(
+    baseColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh
+): Color {
+    val cloudAccent = LocalFlowtoneModalCloudAccent.current ?: return baseColor
+    return lerp(cloudAccent, baseColor, FlowtoneModalSurfaceNeutralBlend)
+}
+
+private const val FlowtoneModalSurfaceNeutralBlend = 0.78f

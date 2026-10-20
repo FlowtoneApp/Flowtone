@@ -1,8 +1,5 @@
 package ink.tenqui.flowtone.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -37,11 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.FlowCloudSpeedDialogState
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.SettingsOptionIcon
+import ink.tenqui.flowtone.ui.components.flowtoneModalContainerColor
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelExitScale
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelStartScale
 import ink.tenqui.flowtone.ui.library.CreatePlaylistScrimMaxAlpha
 import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
 import ink.tenqui.flowtone.ui.player.coerceFlowCloudSpeed
@@ -102,38 +97,11 @@ internal fun FlowCloudSpeedOverlay(
     var draftSpeed by rememberSaveable {
         mutableStateOf(selectedSpeed.coerceFlowCloudSpeed())
     }
-    val panelProgress = remember {
-        Animatable(0f)
-    }
     val currentOnConfirm by rememberUpdatedState(onConfirm)
     val currentOnDismissAnimationFinished by rememberUpdatedState(onDismissAnimationFinished)
     val cardInteractionSource = remember {
         MutableInteractionSource()
     }
-    val overlayVisible = dialogState == FlowCloudSpeedDialogState.Editing ||
-        dialogState == FlowCloudSpeedDialogState.Closing
-    val scrimAlpha by animateFloatAsState(
-        targetValue = if (dialogState == FlowCloudSpeedDialogState.Editing) {
-            CreatePlaylistScrimMaxAlpha
-        } else {
-            0f
-        },
-        animationSpec = tween(
-            durationMillis = FlowtoneMotion.DurationMillis,
-            easing = FlowtoneMotion.Easing
-        ),
-        label = "FlowCloudSpeedScrim"
-    )
-    val panelMinScale = if (dialogState == FlowCloudSpeedDialogState.Closing) {
-        CreatePlaylistPanelExitScale
-    } else {
-        CreatePlaylistPanelStartScale
-    }
-    val panelScale = lerpFlowCloudSpeedDialogFloat(
-        start = panelMinScale,
-        stop = 1f,
-        fraction = panelProgress.value.coerceIn(0f, 1f)
-    )
 
     fun closeWithoutConfirm() {
         onDismissRequest()
@@ -150,41 +118,11 @@ internal fun FlowCloudSpeedOverlay(
         }
     }
 
-    LaunchedEffect(dialogState) {
-        when (dialogState) {
-            FlowCloudSpeedDialogState.Editing -> {
-                panelProgress.snapTo(0f)
-                panelProgress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(
-                        durationMillis = FlowtoneMotion.DurationMillis,
-                        easing = FlowtoneMotion.Easing
-                    )
-                )
-            }
-
-            FlowCloudSpeedDialogState.Closing -> {
-                panelProgress.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(
-                        durationMillis = FlowtoneMotion.DurationMillis / 2,
-                        easing = FlowtoneMotion.Easing
-                    )
-                )
-                currentOnDismissAnimationFinished()
-                panelProgress.snapTo(0f)
-            }
-
-            FlowCloudSpeedDialogState.Idle -> Unit
-        }
-    }
-
     FlowtoneModalOverlayShell(
-        visible = overlayVisible,
-        scrimAlpha = scrimAlpha,
-        panelProgress = panelProgress.value,
-        panelScale = panelScale,
+        visible = dialogState == FlowCloudSpeedDialogState.Editing,
+        scrimMaxAlpha = CreatePlaylistScrimMaxAlpha,
         shadowSafePadding = CreatePlaylistShadowSafePadding,
+        onExitAnimationFinished = currentOnDismissAnimationFinished,
         onDismissRequest = ::closeWithoutConfirm,
         modifier = modifier.fillMaxSize()
     ) {
@@ -199,7 +137,7 @@ internal fun FlowCloudSpeedOverlay(
                     onClick = {}
                 ),
             shape = RoundedCornerShape(SettingsDialogCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = flowtoneModalContainerColor(),
             tonalElevation = SettingsDialogElevation,
             shadowElevation = SettingsDialogElevation
         ) {
@@ -256,8 +194,4 @@ internal fun FlowCloudSpeedOverlay(
             }
         }
     }
-}
-
-private fun lerpFlowCloudSpeedDialogFloat(start: Float, stop: Float, fraction: Float): Float {
-    return start + (stop - start) * fraction
 }

@@ -45,7 +45,10 @@ import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayHost
+import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayHostState
 import ink.tenqui.flowtone.ui.components.FullTitleOverlay
+import ink.tenqui.flowtone.ui.components.LocalFlowtoneModalOverlayHost
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
@@ -113,9 +116,6 @@ internal fun FlowtoneScaffold(
     }
     val playlistRepository = remember(context) {
         PlaylistRepository(PlaylistStorage(context.applicationContext))
-    }
-    var addToPlaylistDialogBackgroundColor by remember {
-        mutableStateOf(Color(0xFF1B1B20))
     }
     val playlistSongEntries by playlistRepository.playlistSongEntries.collectAsState()
     val likedSongCount = state.uiState.likedTracks.size
@@ -309,8 +309,10 @@ internal fun FlowtoneScaffold(
         }
     )
 
+    val modalOverlayHostState = remember { FlowtoneModalOverlayHostState() }
     CompositionLocalProvider(
-        LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled
+        LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled,
+        LocalFlowtoneModalOverlayHost provides modalOverlayHostState
     ) {
         BoxWithConstraints(
             modifier = modifier
@@ -461,12 +463,8 @@ internal fun FlowtoneScaffold(
             coroutineScope = coroutineScope,
             displayedLibraryPlaylists = displayedLibraryPlaylists,
             playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
-            addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
             playlistEditingProgress = playlistEditingProgress,
             playlistEditingBlurRadius = playlistEditingBlurRadius,
-            onAddToPlaylistDialogBackgroundColorChange = { color ->
-                addToPlaylistDialogBackgroundColor = color
-            },
             onRefreshLibraryPlaylistsFromRepository = { createdPlaylistId ->
                 refreshLibraryPlaylistsFromRepository(createdPlaylistId)
             }
@@ -496,6 +494,10 @@ internal fun FlowtoneScaffold(
                 modifier = Modifier.fillMaxSize()
             )
         }
+        FlowtoneModalOverlayHost(
+            state = modalOverlayHostState,
+            modifier = Modifier.fillMaxSize()
+        )
         }
     }
 }

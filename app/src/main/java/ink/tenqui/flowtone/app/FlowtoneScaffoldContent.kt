@@ -40,6 +40,7 @@ import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.LocalFlowtoneModalOverlayHost
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
@@ -318,6 +319,10 @@ internal fun FlowtoneScaffoldContent(
         albumDetailCloudPalette(animatedAlbumCloudColor)
     } else {
         animatedPaletteCloudPalette
+    }
+    val modalOverlayHost = LocalFlowtoneModalOverlayHost.current
+    SideEffect {
+        modalOverlayHost?.updateCloudAccent(animatedCloudPalette.primary)
     }
     val playlistDetailDestination = selectedPlaylistDestination
         ?.takeIf { it.providerPlaylist == null }

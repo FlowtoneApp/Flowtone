@@ -53,7 +53,6 @@ internal class MiniPlayerState internal constructor(
     val fallbackSeedColors: List<Int>,
     val fallbackCloudColors: List<Color>,
     val fallbackBackdrop: PlayerBackdropState,
-    val addToPlaylistDialogBackgroundColor: Color,
     val artistPlaceholderLocalSongs: List<Song>
 ) {
     var fullscreenContentMode by fullscreenContentModeState
@@ -189,9 +188,6 @@ internal fun rememberMiniPlayerState(
     val noRippleInteractionSource = remember { MutableInteractionSource() }
     val addToPlaylistListState = rememberLazyListState()
     val queueSheetBackgroundBlurProgress = remember { Animatable(0f) }
-    val addToPlaylistDialogBackgroundColor = remember(lastStableBackdropState.value.colors) {
-        coverTintDialogBackgroundColor(lastStableBackdropState.value.colors)
-    }
     val artistPlaceholderLocalSongs = remember(artistPlaceholderArtistsState.value, allSongs) {
         if (artistPlaceholderArtistsState.value.size == 1) {
             localSongsForArtist(allSongs, artistPlaceholderArtistsState.value.first())
@@ -230,7 +226,6 @@ internal fun rememberMiniPlayerState(
         fallbackSeedColors = fallbackSeedColors,
         fallbackCloudColors = fallbackCloudColors,
         fallbackBackdrop = fallbackBackdrop,
-        addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
         artistPlaceholderLocalSongs = artistPlaceholderLocalSongs
     )
 }

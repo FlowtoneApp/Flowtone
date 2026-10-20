@@ -1,7 +1,5 @@
 package ink.tenqui.flowtone.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,10 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -37,9 +32,6 @@ import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelExitScale
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelStartScale
 import ink.tenqui.flowtone.ui.library.CreatePlaylistScrimMaxAlpha
 import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
 
@@ -54,40 +46,13 @@ internal fun ExtensionInstallOverlay(
     modifier: Modifier = Modifier
 ) {
     val presentation = remember(preview) { extensionInstallOverlayPresentation(preview) }
-    val panelProgress = remember(preview.snapshotHandle) { Animatable(0f) }
-    val currentDismissFinished by rememberUpdatedState(onDismissAnimationFinished)
-    val scrimAlpha = CreatePlaylistScrimMaxAlpha * panelProgress.value.coerceIn(0f, 1f)
-
-    LaunchedEffect(preview.snapshotHandle, closing) {
-        if (closing) {
-            panelProgress.animateTo(
-                0f,
-                tween(FlowtoneMotion.DurationMillis / 2, easing = FlowtoneMotion.Easing)
-            )
-            currentDismissFinished()
-        } else {
-            panelProgress.snapTo(0f)
-            panelProgress.animateTo(
-                1f,
-                tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-            )
-        }
-    }
-
-    val panelMinScale = if (closing) {
-        CreatePlaylistPanelExitScale
-    } else {
-        CreatePlaylistPanelStartScale
-    }
-    val panelScale = panelMinScale +
-        (1f - panelMinScale) * panelProgress.value.coerceIn(0f, 1f)
 
     FlowtoneModalOverlayShell(
-        visible = true,
-        scrimAlpha = scrimAlpha,
-        panelProgress = panelProgress.value,
-        panelScale = panelScale,
+        visible = !closing,
+        scrimMaxAlpha = CreatePlaylistScrimMaxAlpha,
         shadowSafePadding = CreatePlaylistShadowSafePadding,
+        onExitAnimationFinished = onDismissAnimationFinished,
+        transitionKey = preview.snapshotHandle,
         onDismissRequest = {
             if (!installing && !closing) onDismissRequest()
         },

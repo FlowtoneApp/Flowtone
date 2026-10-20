@@ -720,9 +720,6 @@ private fun GrantConsentOverlay(
 ) {
     FlowtoneModalOverlayShell(
         visible = true,
-        scrimAlpha = .42f,
-        panelProgress = 1f,
-        panelScale = 1f,
         shadowSafePadding = 12.dp,
         onDismissRequest = onDismiss
     ) {
@@ -789,9 +786,6 @@ private fun GrantConfirmationOverlay(
 ) {
     FlowtoneModalOverlayShell(
         visible = true,
-        scrimAlpha = .42f,
-        panelProgress = 1f,
-        panelScale = 1f,
         shadowSafePadding = 12.dp,
         onDismissRequest = onDismiss
     ) {

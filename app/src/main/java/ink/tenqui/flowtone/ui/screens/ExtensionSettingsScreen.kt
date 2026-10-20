@@ -80,6 +80,8 @@ import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
 import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
 import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.library.CreatePlaylistScrimMaxAlpha
+import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -1013,10 +1015,8 @@ internal fun ExtensionChoiceOverlay(
 ) {
     FlowtoneModalOverlayShell(
         visible = true,
-        scrimAlpha = .42f,
-        panelProgress = 1f,
-        panelScale = 1f,
-        shadowSafePadding = 12.dp,
+        scrimMaxAlpha = CreatePlaylistScrimMaxAlpha,
+        shadowSafePadding = CreatePlaylistShadowSafePadding,
         onDismissRequest = onDismiss
     ) {
         FlowtoneModalPanel {
@@ -1038,9 +1038,6 @@ internal fun ExtensionChoiceOverlay(
 private fun ExtensionUninstallConfirmation(name: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     FlowtoneModalOverlayShell(
         visible = true,
-        scrimAlpha = .42f,
-        panelProgress = 1f,
-        panelScale = 1f,
         shadowSafePadding = 12.dp,
         onDismissRequest = onDismiss
     ) {

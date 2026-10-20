@@ -19,6 +19,4 @@ internal val CreatePlaylistPanelCornerRadius = 28.dp
 internal val CreatePlaylistShadowSafePadding = 48.dp
 internal val LibraryPlaylistEditingBlurRadius = 12.dp
 internal const val CreatePlaylistScrimMaxAlpha = 0.18f
-internal const val CreatePlaylistPanelStartScale = 0.96f
-internal const val CreatePlaylistPanelExitScale = 0.98f
 internal const val LibraryItemSlideOffsetDivisor = 6f

@@ -1,7 +1,5 @@
 package ink.tenqui.flowtone.app
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,23 +14,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelExitScale
 import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelHeight
 import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelMaxWidth
 import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelMinWidth
-import ink.tenqui.flowtone.ui.library.CreatePlaylistPanelStartScale
 import ink.tenqui.flowtone.ui.library.CreatePlaylistScrimMaxAlpha
 import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
 
@@ -47,39 +37,11 @@ internal fun ExtensionDiscardChangesOverlay(
     onDiscard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val panelProgress = remember { Animatable(0f) }
-    var closing by remember { mutableStateOf(false) }
-    var completion by remember { mutableStateOf<(() -> Unit)?>(null) }
-    LaunchedEffect(closing) {
-        if (closing) {
-            panelProgress.animateTo(
-                0f,
-                tween(FlowtoneMotion.DurationMillis / 2, easing = FlowtoneMotion.Easing)
-            )
-            completion?.invoke()
-        } else {
-            panelProgress.snapTo(0f)
-            panelProgress.animateTo(
-                1f,
-                tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)
-            )
-        }
-    }
-    fun closeAfterAnimation(action: () -> Unit) {
-        if (!closing) {
-            completion = action
-            closing = true
-        }
-    }
-    val panelMinScale = if (closing) CreatePlaylistPanelExitScale else CreatePlaylistPanelStartScale
-    val panelScale = panelMinScale + (1f - panelMinScale) * panelProgress.value.coerceIn(0f, 1f)
     FlowtoneModalOverlayShell(
         visible = true,
-        scrimAlpha = CreatePlaylistScrimMaxAlpha * panelProgress.value.coerceIn(0f, 1f),
-        panelProgress = panelProgress.value,
-        panelScale = panelScale,
+        scrimMaxAlpha = CreatePlaylistScrimMaxAlpha,
         shadowSafePadding = CreatePlaylistShadowSafePadding,
-        onDismissRequest = { closeAfterAnimation(onKeepEditing) },
+        onDismissRequest = onKeepEditing,
         modifier = modifier
     ) {
         val availableWidth = maxWidth - CreatePlaylistShadowSafePadding - CreatePlaylistShadowSafePadding
@@ -106,9 +68,9 @@ internal fun ExtensionDiscardChangesOverlay(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { closeAfterAnimation(onKeepEditing) }) { Text(keepLabel) }
+                TextButton(onClick = onKeepEditing) { Text(keepLabel) }
                 Button(
-                    onClick = { closeAfterAnimation(onDiscard) },
+                    onClick = onDiscard,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.padding(start = 8.dp)
                 ) { Text(discardLabel) }
