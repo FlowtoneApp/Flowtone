@@ -645,6 +645,7 @@ internal fun FlowtoneScaffoldContent(
                         artistTopBarStateOwner = artistTopBarStateOwner,
                         artistTopBarOcclusionProgress = artistTopBarOcclusionProgress,
                         pageScope = pageScope,
+                        extensionCardAccent = extensionIconAccent,
                         appPreferences = state.appPreferences,
                     themeMode = state.themeMode,
                     onThemeModeChange = callbacks.onThemeModeChange,

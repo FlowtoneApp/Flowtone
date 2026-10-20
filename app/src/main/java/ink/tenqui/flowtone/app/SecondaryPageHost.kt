@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
@@ -124,6 +125,7 @@ internal fun SecondaryPageHost(
     artistTopBarStateOwner: ArtistTopBarStateOwner? = null,
     artistTopBarOcclusionProgress: Float = 0f,
     pageScope: PageTransitionScope,
+    extensionCardAccent: Color?,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
@@ -366,6 +368,7 @@ internal fun SecondaryPageHost(
             SecondaryPage.ExtensionNetworkAccess -> (destination as? SecondaryDestination.ExtensionNetworkAccess)?.let { network ->
                 ExtensionNetworkAccessScreen(
                     permissions = network.permissions,
+                    iconAccent = extensionCardAccent,
                     pageScope = pageScope,
                     modifier = Modifier
                         .fillMaxSize()

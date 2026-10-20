@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material3.Icon
@@ -19,32 +18,44 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.online.permission.NetworkHostScope
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
+import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 
 @Composable
 internal fun ExtensionNetworkAccessScreen(
     permissions: Set<NetworkOriginPermission>,
+    iconAccent: Color?,
     pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
     val presentation = remember(permissions) { extensionNetworkAccessPresentation(permissions) }
+    val optionPalette = settingsOptionPalette()
+    val extensionCardSurfaceColor = optionPalette.surfaceColorWithAccent(
+        iconAccent,
+        ExtensionCardTintBlend
+    )
     val httpsRules = remember(presentation.httpsOrigins) {
         presentation.httpsOrigins.map(::extensionNetworkRulePresentation)
     }
     val httpRules = remember(presentation.httpOrigins) {
         presentation.httpOrigins.map(::extensionNetworkRulePresentation)
     }
-    val orderCount = 1 + httpsRules.size + httpRules.size +
-        (if (httpsRules.isNotEmpty()) 1 else 0) + (if (httpRules.isNotEmpty()) 1 else 0)
-    val httpHeaderOrder = 1 + (if (httpsRules.isNotEmpty()) 1 + httpsRules.size else 0)
+    val orderCount = 1 +
+        (if (httpsRules.isNotEmpty()) 1 else 0) +
+        (if (httpRules.isNotEmpty()) 1 else 0)
+    val httpSectionOrder = 1 + (if (httpsRules.isNotEmpty()) 1 else 0)
+    val hasRules = httpsRules.isNotEmpty() || httpRules.isNotEmpty()
     val context = LocalContext.current
 
     LazyColumn(
@@ -54,53 +65,64 @@ internal fun ExtensionNetworkAccessScreen(
         )
     ) {
         item(key = "network-summary") {
-            OnlineSectionHeading(
+            OptionGroup(
                 title = "网络访问范围",
-                subtitle = "${httpsRules.size} 条 HTTPS · ${httpRules.size} 条 HTTP。以下均为扩展声明的完整目标。",
-                modifier = pageScope.elementModifier(0, orderCount).padding(bottom = 24.dp)
-            )
-        }
-        if (httpsRules.isNotEmpty()) {
-            item(key = "https-heading") {
-                NetworkRuleHeading(
-                    title = "HTTPS · 可按规则请求",
-                    description = "请求仍须通过运行时权限校验。",
-                    modifier = pageScope.elementModifier(1, orderCount)
+                surfaceColor = extensionCardSurfaceColor,
+                modifier = pageScope.elementModifier(0, orderCount).padding(bottom = 16.dp)
+            ) {
+                Text(
+                    text = if (hasRules) {
+                        "HTTPS 请求 ${httpsRules.size} 项 · HTTP 请求 ${httpRules.size} 项"
+                    } else {
+                        "此扩展没有声明网络访问规则。"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            itemsIndexed(httpsRules, key = { _, rule -> "https:${rule.origin}" }) { index, rule ->
-                NetworkRuleRow(
-                    rule = rule,
-                    onCopy = { copyNetworkRule(context, rule.origin) },
-                    modifier = pageScope.elementModifier(index + 2, orderCount)
-                )
+        }
+        if (httpsRules.isNotEmpty()) {
+            item(key = "https-requests") {
+                OptionGroup(
+                    title = "HTTPS 请求",
+                    surfaceColor = extensionCardSurfaceColor,
+                    modifier = pageScope.elementModifier(1, orderCount).padding(bottom = 16.dp)
+                ) {
+                    httpsRules.forEachIndexed { index, rule ->
+                        key(rule.origin) {
+                            NetworkRuleRow(
+                                rule = rule,
+                                onCopy = { copyNetworkRule(context, rule.origin) },
+                                showDivider = index < httpsRules.lastIndex
+                            )
+                        }
+                    }
+                }
             }
         }
         if (httpRules.isNotEmpty()) {
-            item(key = "http-heading") {
-                NetworkRuleHeading(
-                    title = "HTTP · 当前不可用",
-                    description = "这些地址虽被声明，Flowtone 当前运行时不允许扩展通过 HTTP 访问。",
-                    modifier = pageScope.elementModifier(httpHeaderOrder, orderCount)
-                        .padding(top = if (httpsRules.isEmpty()) 0.dp else 28.dp)
-                )
-            }
-            itemsIndexed(httpRules, key = { _, rule -> "http:${rule.origin}" }) { index, rule ->
-                NetworkRuleRow(
-                    rule = rule,
-                    onCopy = { copyNetworkRule(context, rule.origin) },
-                    modifier = pageScope.elementModifier(httpHeaderOrder + index + 1, orderCount)
-                )
-            }
-        }
-        if (httpsRules.isEmpty() && httpRules.isEmpty()) {
-            item(key = "network-empty") {
-                Text(
-                    "此扩展没有声明网络访问规则。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = pageScope.elementModifier(1, orderCount + 1)
-                )
+            item(key = "http-requests") {
+                OptionGroup(
+                    title = "HTTP 请求",
+                    surfaceColor = extensionCardSurfaceColor,
+                    modifier = pageScope.elementModifier(httpSectionOrder, orderCount)
+                ) {
+                    Text(
+                        text = "当前运行时不支持 HTTP 请求。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    httpRules.forEachIndexed { index, rule ->
+                        key(rule.origin) {
+                            NetworkRuleRow(
+                                rule = rule,
+                                onCopy = { copyNetworkRule(context, rule.origin) },
+                                showDivider = index < httpRules.lastIndex
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -146,19 +168,17 @@ internal fun extensionNetworkRulePresentation(
 }
 
 @Composable
-private fun NetworkRuleHeading(title: String, description: String, modifier: Modifier = Modifier) {
-    OnlineSectionHeading(title, description, modifier)
-}
-
-@Composable
 private fun NetworkRuleRow(
     rule: ExtensionNetworkRulePresentation,
     onCopy: () -> Unit,
-    modifier: Modifier = Modifier
+    showDivider: Boolean
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(start = 4.dp, top = 15.dp, end = 2.dp, bottom = 15.dp), verticalAlignment = Alignment.Top) {
-            Column(modifier = Modifier.weight(1f).padding(top = 2.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp, end = 2.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(vertical = 2.dp)) {
                 Text(
                     rule.origin,
                     style = MaterialTheme.typography.bodyMedium,
@@ -171,18 +191,14 @@ private fun NetworkRuleRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp)
                 )
-                Text(
-                    rule.runtimeStatus,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (rule.runtimeSchemeSupported) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 7.dp)
-                )
             }
             IconButton(onClick = onCopy) {
                 Icon(Icons.Rounded.ContentCopy, contentDescription = "复制完整网络规则")
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+        if (showDivider) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+        }
     }
 }
 
