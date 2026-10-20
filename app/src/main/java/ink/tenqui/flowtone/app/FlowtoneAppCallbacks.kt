@@ -15,6 +15,9 @@ import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 
 internal data class FlowtoneAppCallbacks(
     val onThemeModeChange: (AppThemeMode) -> Unit,
@@ -45,6 +48,16 @@ internal data class FlowtoneAppCallbacks(
     val onOpenSourcePathSegmentsChange: (List<String>) -> Unit,
     val onNavigateBack: () -> Unit,
     val onCloseSecondaryPage: () -> Unit,
+    val onOpenCredentialSources: () -> Unit,
+    val onOpenCredentialSourceEdit: (String?) -> Unit,
+    val onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    val onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    val onOpenExtensionConfiguration: (InstalledExtension) -> Unit,
+    val onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
+    val onOpenExtensionCredentialGrants: (InstalledExtension) -> Unit,
+    val onOpenExtensionCredentialSourcePicker: (InstalledExtension, String) -> Unit,
+    val onCloseExtensionInstall: () -> Unit,
+    val onConfirmExtensionInstall: () -> Unit,
     val onOpenSettings: () -> Unit,
     val onOpenAbout: () -> Unit,
     val onOpenLocalLibrary: () -> Unit,
@@ -99,6 +112,8 @@ internal data class FlowtoneAppCallbacks(
 internal fun flowtoneAppCallbacks(
     appState: FlowtoneAppState,
     appPreferences: AppPreferences,
+    discardExtensionPreview: (ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageSnapshotHandle) -> Unit,
+    onConfirmExtensionInstall: () -> Unit,
     onThemeModeChange: (AppThemeMode) -> Unit,
     onNavigateBack: () -> Unit,
     onOpenArtist: (String) -> Unit,
@@ -251,6 +266,57 @@ internal fun flowtoneAppCallbacks(
         },
         onNavigateBack = onNavigateBack,
         onCloseSecondaryPage = { closeFlowtoneSecondaryPage(appState) },
+        onOpenCredentialSources = {
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.CredentialSources
+            )
+        },
+        onOpenCredentialSourceEdit = { sourceId ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.CredentialSourceEdit(sourceId)
+            )
+        },
+        onOpenExtensionInstall = { preview ->
+            appState.pendingExtensionPreview = preview
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionInstall
+            )
+        },
+        onOpenExtensionSettings = { installed ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionSettings(installed)
+            )
+        },
+        onOpenExtensionConfiguration = { installed ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionConfiguration(installed)
+            )
+        },
+        onOpenExtensionNetworkAccess = { permissions ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionNetworkAccess(permissions)
+            )
+        },
+        onOpenExtensionCredentialGrants = { installed ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionCredentialGrants(installed)
+            )
+        },
+        onOpenExtensionCredentialSourcePicker = { installed, requestId ->
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.ExtensionCredentialSourcePicker(installed, requestId)
+            )
+        },
+        onCloseExtensionInstall = {
+            if (!appState.extensionInstallBusy) {
+                appState.pendingExtensionPreview?.snapshotHandle?.let { handle ->
+                    discardExtensionPreview(handle)
+                }
+                appState.pendingExtensionPreview = null
+                closeFlowtoneSecondaryPage(appState)
+            }
+        },
+        onConfirmExtensionInstall = onConfirmExtensionInstall,
         onOpenSettings = {
             appState.secondaryPathSegments = emptyList()
             appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(

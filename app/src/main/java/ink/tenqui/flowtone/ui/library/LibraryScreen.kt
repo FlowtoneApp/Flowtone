@@ -3,11 +3,7 @@ package ink.tenqui.flowtone.ui.library
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,7 +40,6 @@ import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
-import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.SongListItem
@@ -71,8 +66,7 @@ internal enum class PlaylistDialogVisualStyle {
 
 internal class LibraryPlaylistController internal constructor(
     private val playlistStore: LibraryPlaylistCardStore,
-    val listState: LazyListState,
-    val panelProgress: Animatable<Float, AnimationVector1D>
+    val listState: LazyListState
 ) {
     private val editablePlaylistBounds = mutableMapOf<String, Rect>()
 
@@ -400,15 +394,11 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
         LibraryPlaylistCardStore(context.applicationContext)
     }
     val listState = rememberLazyListState()
-    val panelProgress = remember {
-        Animatable(0f)
-    }
 
-    return remember(playlistStore, listState, panelProgress) {
+    return remember(playlistStore, listState) {
         LibraryPlaylistController(
             playlistStore = playlistStore,
-            listState = listState,
-            panelProgress = panelProgress
+            listState = listState
         )
     }
 }
@@ -434,21 +424,12 @@ internal fun LibraryScreen(
         playlistItemHeight.toPx() / LibraryItemSlideOffsetDivisor
     }
     val pageVisible = pageScope.phase != PageTransitionPhase.Outgoing
-    val libraryCardsProgress = remember {
-        Animatable(if (pageVisible) 1f else 0f)
-    }
+    val libraryCardsProgress = pageScope.retainedContentProgress
 
     LaunchedEffect(pageVisible) {
         if (!pageVisible) {
             playlistController.clearPlaylistEditing()
         }
-        libraryCardsProgress.animateTo(
-            targetValue = if (pageVisible) 1f else 0f,
-            animationSpec = tween(
-                durationMillis = FlowtoneMotion.DurationMillis,
-                easing = LinearEasing
-            )
-        )
     }
 
     LibraryHomeContent(
@@ -457,7 +438,7 @@ internal fun LibraryScreen(
         likedPlaylist = likedPlaylist,
         playlists = playlistController.displayedPlaylists,
         playlistItemHeight = playlistItemHeight,
-        libraryCardsProgress = libraryCardsProgress.value,
+        libraryCardsProgress = libraryCardsProgress,
         playlistItemOffsetYPx = playlistItemOffsetYPx,
         flowCloudSpeed = flowCloudSpeed,
         isFlowCloudPlaying = isFlowCloudPlaying,

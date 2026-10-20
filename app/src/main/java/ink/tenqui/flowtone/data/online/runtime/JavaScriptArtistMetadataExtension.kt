@@ -7,7 +7,7 @@ import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import androidx.javascriptengine.JavaScriptIsolate
 import org.json.JSONObject
 
-/** Lightweight JS proxy for the optional artist_metadata capability. */
+/** Lightweight JS proxy for the artist.metadata.lookup capability. */
 class JavaScriptArtistMetadataExtension private constructor(
     private val runtime: JavaScriptExtensionRuntime,
     private val ownsRuntime: Boolean

@@ -64,10 +64,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.app.FlowtonePageEasing
 import ink.tenqui.flowtone.app.TopLevelPage
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreviewUnavailableException
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.PageTransitionHost
@@ -121,38 +124,22 @@ internal fun SettingsScreen(
     onDarkFlowCloudOverlayChange: (Boolean) -> Unit,
     lyricsBackgroundStyle: LyricsBackgroundStyle,
     onLyricsBackgroundStyleChange: (LyricsBackgroundStyle) -> Unit,
+    onOpenCredentialSources: () -> Unit,
+    onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    restoredPathSegments: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    var selectedSection by rememberSaveable {
-        mutableStateOf<SettingsSection?>(null)
+    val restoredSection = remember(restoredPathSegments) {
+        settingsSectionForPathSegments(restoredPathSegments)
     }
-    var showingOnlineSettings by rememberSaveable { mutableStateOf(false) }
+    val selectedSectionState = remember(restoredSection) {
+        mutableStateOf(restoredSection)
+    }
+    var selectedSection by selectedSectionState
     var showingLyricsSettings by rememberSaveable { mutableStateOf(false) }
     var managingLyricsFolders by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
-    val extensionManager = remember(context) { ExtensionManager.get(context) }
-    val extensionScope = rememberCoroutineScope()
-    var installedExtensions by remember { mutableStateOf<List<InstalledExtension>>(emptyList()) }
-    fun refreshExtensions() {
-        installedExtensions = extensionManager.installedExtensions()
-    }
-    val extensionPackageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        extensionScope.launch {
-            val result = runCatching { extensionManager.install(uri) }
-            refreshExtensions()
-            Toast.makeText(
-                context,
-                result.fold(
-                    onSuccess = { "扩展 ${it.manifest.name} 已安装" },
-                    onFailure = { it.message ?: "扩展安装失败" }
-                ),
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
     val musicViewModel: MusicViewModel = viewModel()
     val lyricsFolders by musicViewModel.lyricsFolders.collectAsState()
     val lyricsFolderLauncher = rememberLauncherForActivityResult(
@@ -181,26 +168,20 @@ internal fun SettingsScreen(
     LaunchedEffect(managingLyricsFolders) {
         if (managingLyricsFolders) musicViewModel.refreshLyricsFolders()
     }
-    LaunchedEffect(showingOnlineSettings) {
-        if (showingOnlineSettings) refreshExtensions()
-    }
     val handleBack = remember(
-        selectedSection,
-        showingOnlineSettings,
+        selectedSectionState,
         showingLyricsSettings,
-        managingLyricsFolders
+        managingLyricsFolders,
     ) {
         {
             if (managingLyricsFolders) {
                 managingLyricsFolders = false
             } else if (showingLyricsSettings) {
                 showingLyricsSettings = false
-            } else if (showingOnlineSettings) {
-                showingOnlineSettings = false
-            } else if (selectedSection == null) {
+            } else if (selectedSectionState.value == null) {
                 currentOnBack()
             } else {
-                selectedSection = null
+                selectedSectionState.value = null
             }
         }
     }
@@ -214,9 +195,6 @@ internal fun SettingsScreen(
             selectedSection?.let { section ->
                 buildList {
                     add(section.title)
-                    if (section == SettingsSection.General && showingOnlineSettings) {
-                        add("在线")
-                    }
                     if (
                         section == SettingsSection.General &&
                         (showingLyricsSettings || managingLyricsFolders)
@@ -235,26 +213,26 @@ internal fun SettingsScreen(
     }
     BackHandler(onBack = handleBack)
 
+    val settingsPageState = SettingsPageState(
+        section = selectedSection,
+        showingLyricsSettings = showingLyricsSettings,
+        managingLyricsFolders = managingLyricsFolders
+    )
+    Box(modifier = modifier.fillMaxSize()) {
     PageTransitionHost(
-        targetState = SettingsPageState(
-            section = selectedSection,
-            showingOnlineSettings = showingOnlineSettings,
-            showingLyricsSettings = showingLyricsSettings,
-            managingLyricsFolders = managingLyricsFolders
-        ),
+        targetState = settingsPageState,
         parentScope = pageScope,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .rightSwipeBackGesture(handleBack)
     ) { state ->
         val localScope = this
         val elementCount = when {
-            state.section == null -> 5
+            state.section == null -> 6
             state.section == SettingsSection.Appearance -> 3
+            state.section == SettingsSection.Online -> 1
             state.section == SettingsSection.General && state.managingLyricsFolders -> 1
             state.section == SettingsSection.General && state.showingLyricsSettings -> 1
-            state.section == SettingsSection.General && state.showingOnlineSettings ->
-                (installedExtensions.size + 1).coerceAtLeast(1)
             state.section == SettingsSection.General -> 3
             else -> 1
         }
@@ -266,11 +244,20 @@ internal fun SettingsScreen(
             null -> SettingsSectionList(
                 onSectionClick = { sectionToOpen ->
                     selectedSection = sectionToOpen
-                    showingOnlineSettings = false
                     showingLyricsSettings = false
                     managingLyricsFolders = false
                 },
                 elementModifier = ::viewElementModifier
+            )
+
+            SettingsSection.Online -> OnlineExtensionsScreen(
+                pageScope = localScope,
+                onOpenExtensionInstall = onOpenExtensionInstall,
+                onOpenExtensionSettings = onOpenExtensionSettings,
+                onOpenCredentialSources = {
+                    currentOnPathSegmentsChange(listOf(SettingsSection.Online.title))
+                    onOpenCredentialSources()
+                }
             )
 
             SettingsSection.Appearance -> AppearanceSettingsPage(
@@ -331,29 +318,6 @@ internal fun SettingsScreen(
                 elementModifier = ::viewElementModifier
                 )
 
-                state.showingOnlineSettings -> OnlineSettingsPage(
-                    installedExtensions = installedExtensions,
-                    onInstall = {
-                        extensionPackageLauncher.launch(FlowtoneExtensionMimeTypes)
-                    },
-                    onUninstall = { id ->
-                        extensionScope.launch {
-                            val result = runCatching {
-                                check(extensionManager.uninstall(id)) { "扩展删除失败" }
-                            }
-                            refreshExtensions()
-                            Toast.makeText(
-                                context,
-                                result.fold(
-                                    onSuccess = { "扩展已删除" },
-                                    onFailure = { it.message ?: "扩展删除失败" }
-                                ),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    },
-                    elementModifier = ::viewElementModifier
-                )
                 else -> GeneralSettingsPage(
                 selectedStartPage = selectedStartPage,
                 onStartPageSelected = { page ->
@@ -364,18 +328,89 @@ internal fun SettingsScreen(
                 onHideSecondaryBackButtonChange = onHideSecondaryBackButtonChange,
                 skipExpandedMiniPlayer = skipExpandedMiniPlayer,
                 onSkipExpandedMiniPlayerChange = onSkipExpandedMiniPlayerChange,
-                onOpenOnlineSettings = { showingOnlineSettings = true },
                 onOpenLyricsSettings = { showingLyricsSettings = true },
                 elementModifier = ::viewElementModifier
                 )
+            }
+
         }
+
+    /*
+    pendingExtensionPreview?.let { preview ->
+        ExtensionInstallOverlay(
+            preview = preview,
+            closing = extensionOverlayClosing,
+            installing = extensionInstallBusy,
+            onDismissRequest = {
+                if (!extensionInstallBusy && !extensionOverlayClosing) {
+                    extensionOverlayClosing = true
+                }
+            },
+            onDismissAnimationFinished = {
+                if (!pendingSnapshotConsumed) {
+                    discardExtensionPreview(
+                        preview = pendingExtensionPreview,
+                        discard = extensionManager::discardInstallPreview
+                    )
+                }
+                pendingExtensionPreview = null
+                extensionOverlayClosing = false
+                extensionInstallBusy = false
+                pendingSnapshotConsumed = false
+            },
+            onConfirm = {
+                if (!extensionInstallBusy && !extensionOverlayClosing) {
+                    extensionInstallBusy = true
+                    pendingSnapshotConsumed = true
+                    extensionScope.launch {
+                        val result = confirmExtensionPreview(
+                            preview = preview,
+                            install = extensionManager::install
+                        )
+                        refreshExtensions()
+                        Toast.makeText(
+                            context,
+                            result.fold(
+                                onSuccess = { installed ->
+                                    if (preview.isUpdate) {
+                                        "扩展 ${installed.manifest.name} 已更新"
+                                    } else {
+                                        "扩展 ${installed.manifest.name} 已安装"
+                                    }
+                                },
+                                onFailure = { error ->
+                                    if (error is ExtensionInstallPreviewUnavailableException) {
+                                        "安装预览已失效，请重新选择扩展包。"
+                                    } else {
+                                        error.message ?: "扩展安装失败"
+                                    }
+                                }
+                            ),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        extensionOverlayClosing = true
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(50f)
+        )
     }
+    }
+    */
 }
+
 }
+
+}
+
+internal fun settingsSectionForPathSegments(pathSegments: List<String>): SettingsSection? =
+    SettingsSection.entries.firstOrNull { section -> section.title == pathSegments.firstOrNull() }
 
 // Android DocumentsProvider 往往把自定义 .flowtone 包标成 ZIP 或通用二进制流，
 // 因而不能只请求自定义 MIME；实际后缀与包内容仍由 Host 安装器校验。
-private val FlowtoneExtensionMimeTypes = arrayOf(
+internal val FlowtoneExtensionMimeTypes = arrayOf(
     "application/x-flowtone",
     "application/zip",
     "application/octet-stream"
@@ -383,7 +418,6 @@ private val FlowtoneExtensionMimeTypes = arrayOf(
 
 private data class SettingsPageState(
     val section: SettingsSection?,
-    val showingOnlineSettings: Boolean,
     val showingLyricsSettings: Boolean,
     val managingLyricsFolders: Boolean
 )

@@ -7,6 +7,7 @@ import ink.tenqui.flowtone.app.providerArtistDestination
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.data.online.ProviderSearchPage
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.ui.search.providerSearchResultItemKey
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -17,18 +18,21 @@ import org.junit.Test
 class ProviderUiRegressionFixtureTest {
     @Test
     fun manifestDeclaresCurrentProviderCollectionContract() {
-        val manifest = ExtensionManifestParser.parse(fixtureFile("manifest.json").readText())
+        val descriptor = ExtensionManifestParser.parseNormalized(fixtureFile("manifest.json").readText())
+        val manifest = descriptor.manifest
 
         assertEquals("debug.provider.ui-regression-fixture", manifest.id)
         assertEquals("Flowtone UI Test", manifest.name)
-        assertTrue(manifest.supportsMusicProvider)
-        assertTrue(manifest.supportsArtistMetadata)
         assertEquals(
             setOf(
-                ink.tenqui.flowtone.data.online.ProviderEntityCapability.Song,
-                ink.tenqui.flowtone.data.online.ProviderEntityCapability.Album
+                AtomicCapabilityId.SearchSongPage,
+                AtomicCapabilityId.SearchArtistPage,
+                AtomicCapabilityId.CatalogSongsList,
+                AtomicCapabilityId.CatalogAlbumsList,
+                AtomicCapabilityId.PlaybackResourceResolve,
+                AtomicCapabilityId.ArtistMetadataLookup
             ),
-            manifest.providerEntityCapabilities
+            descriptor.canonicalCapabilities.values
         )
     }
 

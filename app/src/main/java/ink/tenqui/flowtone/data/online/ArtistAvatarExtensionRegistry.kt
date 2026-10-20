@@ -64,12 +64,12 @@ class ArtistAvatarExtensionRegistry(
             }
             logger.log("extension.artist_avatar.cache.miss", "extension=${extension.id}")
             val startedAt = System.nanoTime()
-            logger.log("extension.invoke.started", "extension=${extension.id} capability=artist_avatar")
+            logger.log("extension.invoke.started", "extension=${extension.id} capability=artist.avatar.lookup")
             try {
                 val avatar = findInFlight(extension, title, artist)
                 logger.log(
                     "extension.invoke.completed",
-                    "extension=${extension.id} capability=artist_avatar result=${if (avatar == null) "not_found" else "found"} " +
+                    "extension=${extension.id} capability=artist.avatar.lookup result=${if (avatar == null) "not_found" else "found"} " +
                         "durationMs=${(System.nanoTime() - startedAt) / 1_000_000}"
                 )
                 if (avatar != null) {
@@ -92,7 +92,7 @@ class ArtistAvatarExtensionRegistry(
             } catch (error: Exception) {
                 logger.log(
                     "extension.invoke.failed",
-                    "extension=${extension.id} capability=artist_avatar exception=${error.javaClass.simpleName}"
+                    "extension=${extension.id} capability=artist.avatar.lookup exception=${error.javaClass.simpleName}"
                 )
             }
         }

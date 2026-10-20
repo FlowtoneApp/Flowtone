@@ -1,93 +1,184 @@
 package ink.tenqui.flowtone.ui.screens
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ink.tenqui.flowtone.data.online.ProviderEntityCapability
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
-import ink.tenqui.flowtone.R
+import ink.tenqui.flowtone.ui.components.OptionGroup
+
+internal enum class OnlineInstalledListState { Loading, Empty, Content, Error }
+
+internal fun onlineInstalledListState(count: Int, loading: Boolean, error: String?): OnlineInstalledListState = when {
+    count > 0 -> OnlineInstalledListState.Content
+    loading -> OnlineInstalledListState.Loading
+    error != null -> OnlineInstalledListState.Error
+    else -> OnlineInstalledListState.Empty
+}
 
 @Composable
 internal fun OnlineSettingsPage(
     installedExtensions: List<InstalledExtension>,
+    loading: Boolean,
+    loadError: String?,
+    inspecting: Boolean,
+    inspectError: String?,
+    onRetry: () -> Unit,
     onInstall: () -> Unit,
-    onUninstall: (String) -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenCredentialSources: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
 ) {
-    SettingsPageColumn(modifier = modifier) {
-        Surface(
-            modifier = elementModifier(0)
-                .fillMaxWidth()
-                .height(88.dp)
-                .clickable(onClick = onInstall),
-            shape = RoundedCornerShape(SettingsRowCornerRadius),
-            color = MaterialTheme.colorScheme.surfaceContainer
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+    val listState = onlineInstalledListState(installedExtensions.size, loading, loadError)
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 32.dp)
+    ) {
+        item(key = "extensions-group") {
+            OptionGroup(
+                title = "扩展",
+                modifier = elementModifier(0)
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_deployed_code_update),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(30.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "安装新扩展",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
+                    text = "安装和管理在线服务扩展",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
-            }
-        }
-        installedExtensions.forEachIndexed { index, installed ->
-            val manifest = installed.manifest
-            Surface(
-                modifier = elementModifier(index + 1)
-                    .fillMaxWidth()
-                    .padding(top = if (index == 0) 16.dp else 0.dp),
-                shape = RoundedCornerShape(SettingsRowCornerRadius),
-                color = MaterialTheme.colorScheme.surfaceContainer
-            ) {
-                Column(Modifier.padding(SettingsRowHorizontalPadding, SettingsRowVerticalPadding)) {
-                    Text(manifest.name, style = MaterialTheme.typography.titleMedium)
-                    Text("${manifest.version} · ${manifest.author}")
-                    val capabilities = listOfNotNull(
-                        "歌手头像".takeIf { manifest.supportsArtistAvatar },
-                        "歌手信息".takeIf { manifest.supportsArtistMetadata },
-                        "音乐服务".takeIf { manifest.supportsMusicProvider },
-                        "歌曲实体".takeIf {
-                            ProviderEntityCapability.Song in manifest.providerEntityCapabilities
-                        },
-                        "专辑实体".takeIf {
-                            ProviderEntityCapability.Album in manifest.providerEntityCapabilities
-                        }
-                    ).joinToString(" · ").ifBlank { "当前版本不支持" }
-                    Text("能力：$capabilities")
-                    Text("状态：${if (installed.runtimeAvailable) "已安装" else "运行环境不可用"}")
-                    TextButton(onClick = { onUninstall(manifest.id) }) { Text("删除扩展") }
+                OnlinePrimaryAction(
+                    title = if (inspecting) "正在检查扩展包…" else "安装扩展",
+                    subtitle = "选择设备中的 .flowtone 扩展包",
+                    icon = Icons.Rounded.Add,
+                    onClick = onInstall,
+                    enabled = !inspecting
+                )
+                inspectError?.let { message ->
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                OnlineSectionHeading(
+                    title = "已安装扩展",
+                    subtitle = if (loading && installedExtensions.isEmpty()) "正在读取…" else "${installedExtensions.size} 个扩展",
+                    modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                )
+                if (loadError != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            loadError,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        TextButton(onClick = onRetry) { Text("重试") }
+                    }
+                }
+                if (listState == OnlineInstalledListState.Loading) {
+                    OnlineListMessage("正在读取已安装扩展…")
+                } else if (listState == OnlineInstalledListState.Empty) {
+                    OnlineListMessage("还没有扩展。选择上方的扩展包即可开始。")
+                }
+                installedExtensions.forEachIndexed { index, installed ->
+                    key(installed.manifest.id) {
+                        InstalledExtensionLine(
+                            installed = installed,
+                            onClick = { onOpenExtensionSettings(installed) }
+                        )
+                    }
+                    if (index != installedExtensions.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+                    }
                 }
             }
         }
+        item(key = "credentials-heading") {
+            OnlineSectionHeading(
+                title = "凭据",
+                subtitle = "管理在线服务使用的账户凭据",
+                modifier = elementModifier(1).padding(top = 24.dp, bottom = 8.dp)
+            )
+        }
+        item(key = "credentials") {
+            OnlineManagementEntry(
+                title = "你的凭据",
+                subtitle = "创建和管理在线服务账户凭据",
+                onClick = onOpenCredentialSources,
+                modifier = elementModifier(2)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Key,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun InstalledExtensionLine(
+    installed: InstalledExtension,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val manifest = installed.manifest
+    Row(
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(shape = RoundedCornerShape(15.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.size(48.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                ExtensionInstalledIcon(installed, Modifier.size(29.dp))
+            }
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
+            Text(manifest.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("版本 ${manifest.version}" +
+                if (!installed.runtimeAvailable) " · 运行环境不可用" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (installed.runtimeAvailable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp))
+        }
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun OnlineListMessage(message: String) {
+    Text(message, style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp))
 }

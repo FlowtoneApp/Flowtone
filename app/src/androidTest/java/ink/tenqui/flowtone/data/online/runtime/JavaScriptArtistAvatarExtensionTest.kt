@@ -10,8 +10,9 @@ import ink.tenqui.flowtone.data.online.network.ExtensionNetworkGateway
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpTransport
 import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
 import ink.tenqui.flowtone.data.online.network.AdmissionAwareExtensionNetworkClient
-import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifest
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifestParser
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import java.nio.file.Files
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
@@ -125,7 +126,11 @@ class JavaScriptArtistAvatarExtensionTest {
             limiter = limiter,
             transport = ExtensionHttpTransport { _, _ -> error("transport must not run") }
         )
-        val network = gateway.createClientFor("example.avatar", "artist_avatar", listOf("example.com"))
+        val network = gateway.createClientFor(
+            "example.avatar",
+            "host_api",
+            setOf(NetworkOriginPermissionParser.parse("https://example.com"))
+        )
         val held = requireNotNull((network as AdmissionAwareExtensionNetworkClient).tryAcquireAdmission())
         val extension = extension(
             """
@@ -212,12 +217,15 @@ class JavaScriptArtistAvatarExtensionTest {
     private suspend fun extension(script: String, network: ExtensionNetworkClient): JavaScriptArtistAvatarExtension {
         val directory = Files.createTempDirectory(context.cacheDir.toPath(), "js-extension").toFile()
         directory.resolve("main.js").writeText(script)
-        val manifest = ExtensionManifest(
-            1, "example.avatar", "Example", "1", "Test", "", "main.js",
-            listOf("artist_avatar"), listOf("example.com")
+        val descriptor = ExtensionManifestParser.parseNormalized(
+            """
+                {"formatVersion":2,"id":"example.avatar","name":"Example","version":"1","author":"Test",
+                "entry":"main.js","capabilities":["artist.avatar.lookup"],
+                "permissions":{"network":{"origins":["https://example.com"]}}}
+            """.trimIndent()
         )
         return JavaScriptArtistAvatarExtension(
-            InstalledExtension(manifest, directory, true),
+            InstalledExtension(descriptor, directory, true),
             requireNotNull(host.createIsolate()),
             network,
             ExtensionPrivateCache(privateCacheRoot)

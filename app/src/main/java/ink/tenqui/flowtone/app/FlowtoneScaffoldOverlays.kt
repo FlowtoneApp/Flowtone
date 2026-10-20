@@ -49,10 +49,8 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
     coroutineScope: CoroutineScope,
     displayedLibraryPlaylists: List<LibraryPlaylistCard>,
     playlistIdsContainingCurrentSong: Set<String>,
-    addToPlaylistDialogBackgroundColor: Color,
     playlistEditingProgress: Float,
     playlistEditingBlurRadius: Dp,
-    onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit,
     onRefreshLibraryPlaylistsFromRepository: (String?) -> Unit
 ) {
     val context = LocalContext.current
@@ -98,9 +96,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         newlyCreatedPlaylistId = libraryPlaylistController.newlyCreatedPlaylistId,
         onNewPlaylistCreateAnimationFinished = {
             libraryPlaylistController.consumeNewlyCreatedPlaylistAnimation(it)
-        },
-        onAddToPlaylistDialogBackgroundColorChange = { color ->
-            onAddToPlaylistDialogBackgroundColorChange(color)
         },
         onCreatePlaylistClick = {
             libraryPlaylistController.startEditing(
@@ -281,7 +276,6 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                 }
             }
         },
-        addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
         modifier = Modifier.fillMaxSize()
             .zIndex(50f)
     )

@@ -12,7 +12,6 @@ import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.ProviderAlbumRef
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderArtistRef
-import ink.tenqui.flowtone.data.online.ProviderEntityCapability
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchItem
@@ -25,6 +24,9 @@ import ink.tenqui.flowtone.data.online.sanitizedFor
 import ink.tenqui.flowtone.data.online.providerSearchCategoryFromWire
 import ink.tenqui.flowtone.data.online.toWireValue
 import ink.tenqui.flowtone.data.online.ProviderSearchLanding
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
+import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
+import ink.tenqui.flowtone.data.online.capability.ExtensionRuntimeCapabilityPolicy
 import ink.tenqui.flowtone.data.online.SearchLandingAction
 import ink.tenqui.flowtone.data.online.SearchLandingBlock
 import ink.tenqui.flowtone.data.online.SearchLandingItem
@@ -33,16 +35,19 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
-/** music_provider capability 的最小 JS bridge，不包含任何 Provider 专用协议。 */
+/** Canonical MusicProvider capabilities 的最小 JS bridge，不包含任何 Provider 专用协议。 */
 class JavaScriptMusicProvider internal constructor(
     private val runtime: JavaScriptExtensionRuntime,
     override val musicSources: Set<String> = emptySet(),
-    override val entityCapabilities: Set<ProviderEntityCapability> = emptySet()
+    override val capabilities: CanonicalAtomicCapabilitySet
 ) : MusicProvider {
     private val songEntities = ConcurrentHashMap<String, ProviderSong>()
     private val albumEntities = ConcurrentHashMap<String, ProviderAlbum>()
 
     override suspend fun searchPage(request: ProviderSearchRequest): ProviderSearchPage {
+        if (!ExtensionRuntimeCapabilityPolicy.supportsSearch(capabilities, request.category)) {
+            return ProviderSearchPage(emptyList())
+        }
         require(request.keyword.isNotBlank()) { "keyword must not be blank" }
         val raw = runtime.invokeJson(
             "searchPage",
@@ -80,13 +85,14 @@ class JavaScriptMusicProvider internal constructor(
     }
 
     override suspend fun getSearchLanding(): ProviderSearchLanding? {
+        if (AtomicCapabilityId.SearchLandingGet !in capabilities) return null
         val raw = runCatching { runtime.invokeJson("getSearchLanding", JSONObject()) }.getOrNull()
             ?: return null
         return parseSearchLanding(raw)
     }
 
     override suspend fun getSongs(): List<ProviderSong>? {
-        if (ProviderEntityCapability.Song !in entityCapabilities) return null
+        if (AtomicCapabilityId.CatalogSongsList !in capabilities) return null
         val values = JSONArray(runtime.invokeJson("getSongs"))
         return buildList {
             repeat(values.length()) { index ->
@@ -96,7 +102,7 @@ class JavaScriptMusicProvider internal constructor(
     }
 
     override suspend fun getAlbums(): List<ProviderAlbum>? {
-        if (ProviderEntityCapability.Album !in entityCapabilities) return null
+        if (AtomicCapabilityId.CatalogAlbumsList !in capabilities) return null
         val values = JSONArray(runtime.invokeJson("getAlbums"))
         return buildList {
             repeat(values.length()) { index ->
@@ -106,6 +112,7 @@ class JavaScriptMusicProvider internal constructor(
     }
 
     override suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? {
+        if (AtomicCapabilityId.PlaylistSongsRead !in capabilities) return null
         val normalizedId = playlistId.trim().takeIf(String::isNotEmpty) ?: return null
         val values = JSONArray(
             runtime.invokeJson("getPlaylistSongs", JSONObject().put("id", normalizedId))
@@ -118,6 +125,7 @@ class JavaScriptMusicProvider internal constructor(
     }
 
     override suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource? {
+        if (AtomicCapabilityId.PlaybackResourceResolve !in capabilities) return null
         if (song.trackRef.extensionId != runtime.extensionId) return null
         val result = runtime.invokeObject("getPlaybackResource", JSONObject().put("id", song.trackRef.opaqueId))
         val type = when (result.optString("type").lowercase()) {
@@ -139,6 +147,7 @@ class JavaScriptMusicProvider internal constructor(
     }
 
     override suspend fun resolvePersistentSong(persistentId: String): ProviderSong? {
+        if (AtomicCapabilityId.SongPersistentResolve !in capabilities) return null
         val normalizedId = persistentId.trim()
         if (normalizedId.isEmpty()) return null
         val result = runtime.invokeObject(

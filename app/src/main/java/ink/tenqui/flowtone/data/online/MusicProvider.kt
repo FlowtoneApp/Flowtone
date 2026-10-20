@@ -1,14 +1,14 @@
 package ink.tenqui.flowtone.data.online
 
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 
 interface MusicProvider {
     /** manifest 声明的服务身份，独立于网络访问白名单。 */
     val musicSources: Set<String>
 
-    /** Provider 可提供的结构化 entity collection；不代表播放或详情 endpoint 能力。 */
-    val entityCapabilities: Set<ProviderEntityCapability>
-        get() = emptySet()
+    /** 此 Provider runtime 被允许执行的唯一能力真相源。 */
+    val capabilities: CanonicalAtomicCapabilitySet
 
     /**
      * 搜索一个明确分类的一页结果。cursor 由 Provider 定义，Host 不会解析或修改它。
@@ -24,7 +24,7 @@ interface MusicProvider {
     /** 无参数全量专辑 collection；null 表示 capability unavailable。 */
     suspend fun getAlbums(): List<ProviderAlbum>? = null
 
-    /** 可选的只读歌单曲目接口；旧 Provider 未实现时保持 null。 */
+    /** 可选的只读歌单曲目接口；未声明 capability 时保持 null。 */
     suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? = null
 
     suspend fun resolvePersistentSong(persistentId: String): ProviderSong?

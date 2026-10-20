@@ -1,0 +1,1073 @@
+package ink.tenqui.flowtone.ui.screens
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
+import ink.tenqui.flowtone.data.online.capability.SummaryCapability
+import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementProgress
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationStateResolver
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
+import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
+import ink.tenqui.flowtone.data.online.credential.CredentialAtLeastOneGroup
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantEvaluation
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantRepository
+import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
+import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
+import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
+import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
+import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
+import ink.tenqui.flowtone.ui.components.SettingsOptionIconTile
+import ink.tenqui.flowtone.ui.components.SettingsOptionSurface
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
+import ink.tenqui.flowtone.ui.components.PageTransitionScope
+import ink.tenqui.flowtone.ui.library.CreatePlaylistScrimMaxAlpha
+import ink.tenqui.flowtone.ui.library.CreatePlaylistShadowSafePadding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+internal const val ExtensionCardTintBlend = 0.08f
+private const val ExtensionIconBackgroundTintBlend = 0.28f
+
+private enum class ExtensionConfigurationReminder {
+    RuntimeRequired,
+    Recommended
+}
+
+internal data class ExtensionSettingsPresentation(
+    val capabilities: List<SummaryCapability>,
+    val configurationStatus: String,
+    val configurationRequirements: ConfigurationRequirementProgress,
+    val credentialLabels: List<String>
+)
+
+internal data class ExtensionGrantSummary(
+    val requestCount: Int,
+    val authorizedCount: Int,
+    val readyCount: Int,
+    val missingRuntimeRequiredCount: Int = 0,
+    val missingRecommendedCount: Int = 0,
+    val missingRuntimeAtLeastOneGroupCount: Int = 0,
+    val missingRecommendedAtLeastOneGroupCount: Int = 0
+) {
+    val runtimeRequirementsSatisfied: Boolean
+        get() = missingRuntimeRequiredCount == 0 && missingRuntimeAtLeastOneGroupCount == 0
+    val recommendationsSatisfied: Boolean
+        get() = missingRecommendedCount == 0 && missingRecommendedAtLeastOneGroupCount == 0
+    val label: String get() = "$authorizedCount 项已授权 · ${requestCount - authorizedCount} 项未授权" +
+        if (authorizedCount > readyCount) " · ${authorizedCount - readyCount} 项凭据未就绪" else ""
+}
+
+internal fun extensionGrantSummary(evaluations: List<CredentialGrantEvaluation>): ExtensionGrantSummary =
+    ExtensionGrantSummary(
+        requestCount = evaluations.size,
+        authorizedCount = evaluations.count { it.authorizationValid },
+        readyCount = evaluations.count { it.usable }
+    )
+
+internal fun extensionGrantSummary(
+    requests: List<CredentialRequestDefinition>,
+    atLeastOneGroups: List<CredentialAtLeastOneGroup>,
+    evaluations: List<CredentialGrantEvaluation>
+): ExtensionGrantSummary {
+    val evaluationsByRequestId = buildMap {
+        requests.forEachIndexed { index, request ->
+            evaluations.getOrNull(index)?.let { put(request.id, it) }
+        }
+    }
+    fun isUsable(requestId: String): Boolean = evaluationsByRequestId[requestId]?.usable == true
+
+    return ExtensionGrantSummary(
+        requestCount = evaluations.size,
+        authorizedCount = evaluations.count { it.authorizationValid },
+        readyCount = evaluations.count { it.usable },
+        missingRuntimeRequiredCount = requests.count {
+            it.effectiveRequirement == ExtensionRequirementLevel.RuntimeRequired && !isUsable(it.id)
+        },
+        missingRecommendedCount = requests.count {
+            it.effectiveRequirement == ExtensionRequirementLevel.Recommended && !isUsable(it.id)
+        },
+        missingRuntimeAtLeastOneGroupCount = atLeastOneGroups.count { group ->
+            group.requirement == ExtensionRequirementLevel.RuntimeRequired &&
+                group.requestIds.none(::isUsable)
+        },
+        missingRecommendedAtLeastOneGroupCount = atLeastOneGroups.count { group ->
+            group.requirement == ExtensionRequirementLevel.Recommended &&
+                group.requestIds.none(::isUsable)
+        }
+    )
+}
+
+internal enum class ExtensionSettingsBackResult { PerformBack, ConfirmDiscard }
+
+internal fun extensionSettingsBackResult(
+    draft: Map<String, ConfigurationValue>,
+    baseline: Map<String, ConfigurationValue>
+): ExtensionSettingsBackResult = if (draft == baseline) {
+    ExtensionSettingsBackResult.PerformBack
+} else {
+    ExtensionSettingsBackResult.ConfirmDiscard
+}
+
+internal fun extensionSettingsPresentation(
+    installed: InstalledExtension,
+    savedValues: Map<String, ConfigurationValue> = emptyMap()
+): ExtensionSettingsPresentation {
+    val schema = installed.descriptor.configurationSchema
+    val configurationRequirements = ConfigurationStateResolver.resolveRequirementProgress(schema, savedValues)
+    val configurationStatus = when {
+        !configurationRequirements.runtimeRequirementsSatisfied -> "运行必须待完成"
+        !configurationRequirements.recommendationsSatisfied -> "推荐配置待完善"
+        schema.hasRecommendedConfiguration -> "推荐配置已完成"
+        schema.requiresConfiguration -> "运行必须已完成"
+        schema.fields.any {
+            it.effectiveRequirement == ConfigurationRequirementLevel.Optional
+        } || schema.actions.isNotEmpty() -> "可选配置"
+        else -> "此扩展无需配置"
+    }
+    return ExtensionSettingsPresentation(
+        capabilities = SummaryCapabilityAggregator.aggregate(installed.descriptor.canonicalCapabilities),
+        configurationStatus = configurationStatus,
+        configurationRequirements = configurationRequirements,
+        credentialLabels = installed.descriptor.credentialRequests.map { it.label }
+    )
+}
+
+internal fun extensionConfigurationDisplayStatus(
+    savedStatus: String,
+    dirty: Boolean,
+    saving: Boolean,
+    loading: Boolean
+): String = when {
+    loading -> "正在读取扩展配置"
+    saving -> "正在保存…"
+    dirty -> "有未保存的更改"
+    else -> savedStatus
+}
+
+@Composable
+internal fun ExtensionSettingsScreen(
+    installed: InstalledExtension,
+    pageScope: PageTransitionScope,
+    onOpenNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
+    onOpenCredentialGrants: (InstalledExtension) -> Unit,
+    onOpenConfiguration: (InstalledExtension) -> Unit,
+    onUninstalled: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val optionPalette = settingsOptionPalette()
+    val extensionIconAccent = rememberInstalledExtensionIconAccent(installed, optionPalette.isDarkTheme)
+    val extensionOptionSurfaceColor = optionPalette.surfaceColorWithAccent(
+        extensionIconAccent,
+        ExtensionCardTintBlend
+    )
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
+    val configStore = remember(context) { ExtensionConfigStore.from(context) }
+    val grantRepository = remember(context) { CredentialGrantRepository.from(context) }
+    val scope = rememberCoroutineScope()
+    val extensionId = installed.manifest.id
+    var savedValues by remember(extensionId) { mutableStateOf<Map<String, ConfigurationValue>>(emptyMap()) }
+    var configLoading by remember(extensionId) { mutableStateOf(true) }
+    var configError by remember(extensionId) { mutableStateOf<String?>(null) }
+    var grantSummary by remember(extensionId) { mutableStateOf<ExtensionGrantSummary?>(null) }
+    var grantError by remember(extensionId) { mutableStateOf(false) }
+    var grantRefreshing by remember(extensionId) { mutableStateOf(false) }
+    var hasBeenCurrent by remember(extensionId) { mutableStateOf(false) }
+    var confirmUninstall by remember(extensionId) { mutableStateOf(false) }
+    var uninstalling by remember(extensionId) { mutableStateOf(false) }
+    var uninstallError by remember(extensionId) { mutableStateOf<String?>(null) }
+
+    fun refreshGrants() {
+        if (grantRefreshing || installed.descriptor.credentialRequests.isEmpty()) return
+        grantRefreshing = true
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val current = extensionManager.installedExtensions()
+                        .firstOrNull { it.manifest.id == extensionId }
+                    installed.descriptor.credentialRequests.map { request ->
+                        grantRepository.evaluate(current, request.id)
+                    }
+                }
+            }.onSuccess { evaluations ->
+                grantSummary = extensionGrantSummary(
+                    requests = installed.descriptor.credentialRequests,
+                    atLeastOneGroups = installed.descriptor.credentialAtLeastOneGroups,
+                    evaluations = evaluations
+                )
+                grantError = false
+            }.onFailure {
+                if (it is CancellationException) throw it
+                grantError = true
+            }
+            grantRefreshing = false
+        }
+    }
+
+    LaunchedEffect(extensionId, installed.descriptor.configurationSchema, pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            configLoading = true
+            runCatching { withContext(Dispatchers.IO) { configStore.load(extensionId) } }
+                .onSuccess { loaded ->
+                    savedValues = loaded
+                    configError = null
+                }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    configError = "配置读取失败，请重新进入页面。"
+                }
+            configLoading = false
+        }
+    }
+    LaunchedEffect(extensionId) { refreshGrants() }
+    DisposableEffect(lifecycleOwner, extensionId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshGrants()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(pageScope.phase) {
+        if (pageScope.phase == ink.tenqui.flowtone.ui.components.PageTransitionPhase.Current) {
+            if (hasBeenCurrent) refreshGrants()
+            hasBeenCurrent = true
+        }
+    }
+
+    val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
+    val configurationReminder = when {
+        !grantError && grantSummary?.runtimeRequirementsSatisfied == false ->
+            ExtensionConfigurationReminder.RuntimeRequired
+        !configLoading && configError == null &&
+            !presentation.configurationRequirements.runtimeRequirementsSatisfied ->
+            ExtensionConfigurationReminder.RuntimeRequired
+        !grantError && grantSummary?.recommendationsSatisfied == false ->
+            ExtensionConfigurationReminder.Recommended
+        !configLoading && configError == null &&
+            !presentation.configurationRequirements.recommendationsSatisfied ->
+            ExtensionConfigurationReminder.Recommended
+        else -> null
+    }
+    val attentionMessages = buildList {
+        if (configError != null) add("扩展配置读取失败，请重新进入页面。")
+        if (grantError) add("凭据授权状态读取失败，请进入授权页检查。")
+        grantSummary?.takeUnless { grantError }?.let { summary ->
+            if (summary.missingRuntimeRequiredCount > 0) {
+                add("有 ${summary.missingRuntimeRequiredCount} 项运行必须凭据尚未授权或不可用。")
+            }
+            if (summary.missingRuntimeAtLeastOneGroupCount > 0) {
+                add("有 ${summary.missingRuntimeAtLeastOneGroupCount} 组运行必须凭据需要至少授权一项。")
+            }
+            if (summary.missingRecommendedCount > 0) {
+                add("有 ${summary.missingRecommendedCount} 项推荐凭据尚未授权或不可用。")
+            }
+            if (summary.missingRecommendedAtLeastOneGroupCount > 0) {
+                add("有 ${summary.missingRecommendedAtLeastOneGroupCount} 组推荐凭据建议至少授权一项。")
+            }
+        }
+    }
+    BackHandler(onBack = onBack)
+
+    Box(modifier = modifier.fillMaxSize()) {
+        SettingsPageColumn(modifier = Modifier.imePadding()) {
+            ExtensionIdentityHeader(
+                installed = installed,
+                iconAccent = extensionIconAccent,
+                modifier = pageScope.elementModifier(0, 5)
+            )
+            if (configurationReminder != null || attentionMessages.isNotEmpty()) {
+                ExtensionAttentionSection(
+                    configurationReminder = configurationReminder,
+                    messages = attentionMessages,
+                    normalSurfaceColor = extensionOptionSurfaceColor,
+                    modifier = pageScope.elementModifier(1, 5)
+                )
+            }
+            ExtensionManagementSection(
+                credentialCount = installed.descriptor.credentialRequests.size,
+                grantSummary = when {
+                    grantError -> "授权状态读取失败"
+                    grantSummary == null -> "正在读取授权状态…"
+                    else -> grantSummary!!.label
+                },
+                networkCount = installed.descriptor.networkPermissions.size,
+                iconAccent = extensionIconAccent,
+                onOpenGrants = { onOpenCredentialGrants(installed) },
+                onOpenNetwork = { onOpenNetworkAccess(installed.descriptor.networkPermissions) },
+                modifier = pageScope.elementModifier(2, 5).padding(top = 26.dp)
+            )
+            if (installed.descriptor.configurationSchema.fields.isNotEmpty()) {
+                Column(
+                    modifier = pageScope.elementModifier(3, 5)
+                        .padding(top = 26.dp)
+                        .fillMaxWidth()
+                ) {
+                    OnlineSectionHeading("扩展配置")
+                    SettingsCategoryCard(
+                        title = "编辑配置",
+                        subtitle = if (configError != null) {
+                            "配置读取失败"
+                        } else {
+                            extensionConfigurationDisplayStatus(
+                                savedStatus = presentation.configurationStatus,
+                                dirty = false,
+                                saving = false,
+                                loading = configLoading
+                            )
+                        },
+                        icon = Icons.Rounded.Tune,
+                        iconContainerColor = extensionIconAccent?.let { accent ->
+                            lerp(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                accent,
+                                ExtensionIconBackgroundTintBlend
+                            )
+                        } ?: MaterialTheme.colorScheme.primaryContainer,
+                        iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        onClick = { onOpenConfiguration(installed) },
+                        modifier = Modifier.padding(top = 12.dp),
+                        surfaceColor = extensionOptionSurfaceColor,
+                        animateSubtitle = true
+                    )
+                }
+            }
+            Column(
+                modifier = pageScope.elementModifier(4, 5).padding(top = 30.dp).fillMaxWidth()
+            ) {
+                OnlineSectionHeading("移除扩展")
+                SettingsOptionSurface(
+                    modifier = Modifier.padding(top = 12.dp),
+                    surfaceColor = extensionOptionSurfaceColor
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !uninstalling) { confirmUninstall = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (uninstalling) "正在卸载…" else "卸载扩展",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        uninstallError?.let { message ->
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (confirmUninstall) {
+            ExtensionUninstallConfirmation(
+                name = installed.manifest.name,
+                onDismiss = { confirmUninstall = false },
+                onConfirm = {
+                    if (!uninstalling) {
+                        confirmUninstall = false
+                        uninstalling = true
+                        uninstallError = null
+                        scope.launch {
+                            val result = uninstallInstalledExtension(extensionManager, extensionId)
+                            if (result.isSuccess) {
+                                onUninstalled()
+                            } else {
+                                uninstallError = "卸载失败，请重试。"
+                            }
+                            uninstalling = false
+                        }
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExtensionIdentityHeader(
+    installed: InstalledExtension,
+    iconAccent: Color?,
+    modifier: Modifier = Modifier
+) {
+    val manifest = installed.manifest
+    val context = LocalContext.current
+    val iconBackgroundColor = iconAccent?.let { accent ->
+        lerp(MaterialTheme.colorScheme.surfaceContainer, accent, ExtensionIconBackgroundTintBlend)
+    } ?: MaterialTheme.colorScheme.surfaceContainer
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Top) {
+            Surface(
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = iconBackgroundColor
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    ExtensionInstalledIcon(installed, Modifier.size(36.dp))
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(
+                    text = manifest.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "版本 ${manifest.version}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                val authorUrl = manifest.authorUrl
+                Text(
+                    text = "@${manifest.author.removePrefix("@")}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        textDecoration = if (authorUrl == null) TextDecoration.None else TextDecoration.Underline
+                    ),
+                    color = if (authorUrl == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .clickable(enabled = authorUrl != null) {
+                            authorUrl?.let { context.openExternalUrl(it) }
+                        }
+                )
+            }
+        }
+        if (manifest.description.isNotBlank()) {
+            var descriptionExpanded by remember(manifest.description) { mutableStateOf(false) }
+            var descriptionOverflows by remember(manifest.description) { mutableStateOf(false) }
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Text(
+                    manifest.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (descriptionExpanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    onTextLayout = { result ->
+                        if (!descriptionExpanded && descriptionOverflows != result.didOverflowHeight) {
+                            descriptionOverflows = result.didOverflowHeight
+                        }
+                    }
+                )
+                if (descriptionExpanded || descriptionOverflows) {
+                    OutlinedButton(
+                        onClick = { descriptionExpanded = !descriptionExpanded },
+                        shape = RoundedCornerShape(percent = 50),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                        modifier = Modifier.align(Alignment.Start).padding(top = 4.dp)
+                    ) {
+                        Text(
+                            if (descriptionExpanded) "收起简介" else "展开简介",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionAttentionSection(
+    configurationReminder: ExtensionConfigurationReminder?,
+    messages: List<String>,
+    normalSurfaceColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
+    val title = when (configurationReminder) {
+        ExtensionConfigurationReminder.RuntimeRequired -> "运行必须配置尚未完成"
+        ExtensionConfigurationReminder.Recommended -> "推荐配置尚未完成"
+        null -> when {
+            messages.any { it.startsWith("扩展配置读取失败") } -> "扩展配置暂不可用"
+            messages.any { it.contains("凭据") } -> "凭据授权需要处理"
+            else -> "扩展状态需要检查"
+        }
+    }
+    val detailColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp)) {
+        SettingsOptionSurface(
+            surfaceColor = normalSurfaceColor,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(min = 84.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Crossfade(
+                    targetState = configurationReminder to title,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "ExtensionAttentionStatus"
+                ) { (animatedReminder, animatedTitle) ->
+                    val isRuntimeRequired =
+                        animatedReminder == ExtensionConfigurationReminder.RuntimeRequired
+                    val isRecommended =
+                        animatedReminder == ExtensionConfigurationReminder.Recommended
+                    val statusColor = when {
+                        isRuntimeRequired -> MaterialTheme.colorScheme.onErrorContainer
+                        isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFF765900)
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                    val iconContainerColor = when {
+                        isRuntimeRequired ->
+                            if (isDarkTheme) Color(0xFFF9DEDC) else MaterialTheme.colorScheme.error
+                        isRecommended ->
+                            if (isDarkTheme) Color(0xFFFFD166) else Color(0xFFE0B340)
+                        else -> if (isDarkTheme) Color(0xFFE4E9F6) else normalSurfaceColor
+                    }
+                    val iconTint = when {
+                        isRuntimeRequired ->
+                            if (isDarkTheme) Color(0xFF410E0B) else MaterialTheme.colorScheme.onError
+                        isRecommended -> Color(0xFF4D3B00)
+                        else -> if (isDarkTheme) Color(0xFF354052) else MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    val icon =
+                        if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
+                    val titleColor = if (animatedReminder != null) {
+                        statusColor
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SettingsOptionIconTile(
+                            modifier = Modifier.size(44.dp),
+                            containerColor = iconContainerColor,
+                            contentColor = iconTint,
+                            themeAwareColorAdjustment = false
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f).padding(start = 12.dp)
+                        ) {
+                            Text(
+                                text = animatedTitle,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = titleColor
+                            )
+                            messages.forEach { message ->
+                                Text(
+                                    text = message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = detailColor,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ExtensionConfigurationSection(
+    schema: ConfigurationSchema,
+    stateLabel: String,
+    draft: Map<String, ConfigurationValue>,
+    errors: Map<String, String>,
+    feedback: String?,
+    feedbackIsError: Boolean,
+    busy: Boolean,
+    saveEnabled: Boolean,
+    onValueChange: (String, ConfigurationValue?) -> Unit,
+    onChoiceClick: (ConfigurationFieldDefinition) -> Unit,
+    onSave: () -> Unit,
+    modifier: Modifier = Modifier,
+    cardSurfaceColor: Color? = null
+) {
+    val fields = schema.fields
+    if (fields.isEmpty()) return
+    val fieldsById = fields.associateBy { it.id }
+    val runtimeFields = fields.filter {
+        it.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired
+    }
+    val recommendedFields = fields.filter {
+        it.effectiveRequirement == ConfigurationRequirementLevel.Recommended
+    }
+    val runtimeGroups = schema.atLeastOneGroups.filter {
+        it.requirement == ConfigurationRequirementLevel.RuntimeRequired
+    }
+    val recommendedGroups = schema.atLeastOneGroups.filter {
+        it.requirement == ConfigurationRequirementLevel.Recommended
+    }
+    val groupedFieldIds = schema.atLeastOneGroups.flatMapTo(linkedSetOf()) { it.fieldIds }
+    val optionalFields = fields.filter {
+        it.effectiveRequirement == ConfigurationRequirementLevel.Optional && it.id !in groupedFieldIds
+    }
+    val renderedGroupFieldIds = mutableSetOf<String>()
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        OnlineSectionHeading(
+            title = "扩展配置",
+            subtitle = stateLabel,
+            animateSubtitle = true
+        )
+        if (runtimeFields.isNotEmpty() || runtimeGroups.isNotEmpty()) {
+            OptionGroup(
+                title = "运行必须",
+                modifier = Modifier.padding(top = 14.dp),
+                surfaceColor = cardSurfaceColor
+            ) {
+                runtimeFields.forEachIndexed { index, field ->
+                    ExtensionConfigurationField(
+                        field,
+                        draft,
+                        errors,
+                        busy,
+                        onValueChange,
+                        onChoiceClick,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp)
+                    )
+                }
+                runtimeGroups.forEach { group ->
+                    val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
+                    if (labels.isNotEmpty()) {
+                        Text(
+                            "至少填写一项：" + labels.joinToString("、"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                        group.fieldIds.forEach { fieldId ->
+                            fieldsById[fieldId]?.let { field ->
+                                if (
+                                    field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
+                                    renderedGroupFieldIds.add(field.id)
+                                ) {
+                                    ExtensionConfigurationField(
+                                        field,
+                                        draft,
+                                        errors,
+                                        busy,
+                                        onValueChange,
+                                        onChoiceClick,
+                                        requirementOverride = group.requirement,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (recommendedFields.isNotEmpty() || recommendedGroups.isNotEmpty()) {
+            OptionGroup(
+                title = "推荐配置",
+                modifier = Modifier.padding(top = 14.dp),
+                surfaceColor = cardSurfaceColor
+            ) {
+                recommendedFields.forEachIndexed { index, field ->
+                    ExtensionConfigurationField(
+                        field,
+                        draft,
+                        errors,
+                        busy,
+                        onValueChange,
+                        onChoiceClick,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp)
+                    )
+                }
+                recommendedGroups.forEach { group ->
+                    val labels = group.fieldIds.mapNotNull { fieldsById[it]?.label }
+                    if (labels.isNotEmpty()) {
+                        Text(
+                            "至少填写一项：" + labels.joinToString("、"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                        group.fieldIds.forEach { fieldId ->
+                            fieldsById[fieldId]?.let { field ->
+                                if (
+                                    field.effectiveRequirement == ConfigurationRequirementLevel.Optional &&
+                                    renderedGroupFieldIds.add(field.id)
+                                ) {
+                                    ExtensionConfigurationField(
+                                        field,
+                                        draft,
+                                        errors,
+                                        busy,
+                                        onValueChange,
+                                        onChoiceClick,
+                                        requirementOverride = group.requirement,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (optionalFields.isNotEmpty()) {
+            OptionGroup(
+                title = "可选配置",
+                modifier = Modifier.padding(top = 14.dp),
+                surfaceColor = cardSurfaceColor
+            ) {
+                optionalFields.forEachIndexed { index, field ->
+                    ExtensionConfigurationField(
+                        field,
+                        draft,
+                        errors,
+                        busy,
+                        onValueChange,
+                        onChoiceClick,
+                        modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp)
+                    )
+                }
+            }
+        }
+        feedback?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (feedbackIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+        if (fields.isNotEmpty()) {
+            Button(
+                onClick = onSave,
+                enabled = saveEnabled,
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)
+            ) { Text(if (busy && stateLabel == "正在保存…") "正在保存…" else "保存配置") }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionConfigurationField(
+    field: ConfigurationFieldDefinition,
+    draft: Map<String, ConfigurationValue>,
+    errors: Map<String, String>,
+    busy: Boolean,
+    onValueChange: (String, ConfigurationValue?) -> Unit,
+    onChoiceClick: (ConfigurationFieldDefinition) -> Unit,
+    modifier: Modifier = Modifier,
+    requirementOverride: ConfigurationRequirementLevel? = null
+) {
+    val fieldRequirement = requirementOverride ?: field.effectiveRequirement
+    val requirementLabel = when (fieldRequirement) {
+        ConfigurationRequirementLevel.RuntimeRequired -> "运行必须"
+        ConfigurationRequirementLevel.Recommended -> "推荐配置"
+        ConfigurationRequirementLevel.Optional -> "可选配置"
+    }
+    when (field.type) {
+        ConfigurationFieldType.Text, ConfigurationFieldType.Url -> {
+            val value = (draft[field.id] as? ConfigurationValue.StringValue)?.value
+                ?: (field.defaultValue as? ConfigurationValue.StringValue)?.value.orEmpty()
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onValueChange(field.id, ConfigurationValue.StringValue(it)) },
+                label = { Text("${field.label}（$requirementLabel）") },
+                placeholder = field.placeholder?.let { { Text(it) } },
+                supportingText = { Text(errors[field.id] ?: field.description.orEmpty()) },
+                trailingIcon = if (field.id in draft) {
+                    {
+                        TextButton(
+                            onClick = { onValueChange(field.id, null) },
+                            enabled = !busy
+                        ) { Text(if (field.defaultValue != null) "恢复默认" else "清除") }
+                    }
+                } else {
+                    null
+                },
+                isError = field.id in errors,
+                enabled = !busy,
+                singleLine = true,
+                modifier = modifier.fillMaxWidth()
+            )
+        }
+        ConfigurationFieldType.Toggle -> {
+            Column(modifier = modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ConfigurationFieldTitle(field, Modifier.weight(1f), requirementOverride)
+                    FlowtoneSwitch(
+                        checked = (draft[field.id] as? ConfigurationValue.BooleanValue)?.value
+                            ?: (field.defaultValue as? ConfigurationValue.BooleanValue)?.value
+                            ?: false,
+                        onCheckedChange = { onValueChange(field.id, ConfigurationValue.BooleanValue(it)) },
+                        enabled = !busy
+                    )
+                }
+                field.description?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                errors[field.id]?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                if (field.id in draft) {
+                    TextButton(
+                        onClick = { onValueChange(field.id, null) },
+                        enabled = !busy,
+                        modifier = Modifier.align(Alignment.End)
+                    ) { Text(if (field.defaultValue != null) "恢复默认" else "清除") }
+                }
+            }
+        }
+        ConfigurationFieldType.Choice -> {
+            val selected = (draft[field.id] as? ConfigurationValue.StringValue)?.value
+                ?: (field.defaultValue as? ConfigurationValue.StringValue)?.value
+            val choiceLabel = field.choices.firstOrNull { it.value == selected }?.label ?: "请选择"
+            Column(modifier = modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) { onChoiceClick(field) }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ConfigurationFieldTitle(field, Modifier.weight(1f), requirementOverride)
+                    Text(
+                        choiceLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+                field.description?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                errors[field.id]?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                if (field.id in draft) {
+                    TextButton(
+                        onClick = { onValueChange(field.id, null) },
+                        enabled = !busy,
+                        modifier = Modifier.align(Alignment.End)
+                    ) { Text(if (field.defaultValue != null) "恢复默认" else "清除") }
+                }
+            }
+        }
+        ConfigurationFieldType.Secret -> {
+            Column(modifier = modifier.fillMaxWidth()) {
+                ConfigurationFieldTitle(field, requirementOverride = requirementOverride)
+                Text(
+                    field.description ?: "此配置需要安全存储支持，当前版本暂不可配置。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfigurationFieldTitle(
+    field: ConfigurationFieldDefinition,
+    modifier: Modifier = Modifier,
+    requirementOverride: ConfigurationRequirementLevel? = null
+) {
+    val requirement = requirementOverride ?: field.effectiveRequirement
+    val label = when (requirement) {
+        ConfigurationRequirementLevel.RuntimeRequired -> "运行必须"
+        ConfigurationRequirementLevel.Recommended -> "推荐配置"
+        ConfigurationRequirementLevel.Optional -> "可选配置"
+    }
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(field.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (requirement == ConfigurationRequirementLevel.RuntimeRequired) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun ExtensionManagementSection(
+    credentialCount: Int,
+    grantSummary: String,
+    networkCount: Int,
+    iconAccent: Color?,
+    onOpenGrants: () -> Unit,
+    onOpenNetwork: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val categorySurfaceColor = settingsOptionPalette()
+        .surfaceColorWithAccent(iconAccent, ExtensionCardTintBlend)
+    val credentialIconContainerColor = iconAccent?.let { accent ->
+        lerp(MaterialTheme.colorScheme.primaryContainer, accent, ExtensionIconBackgroundTintBlend)
+    } ?: MaterialTheme.colorScheme.primaryContainer
+    val networkIconContainerColor = iconAccent?.let { accent ->
+        lerp(MaterialTheme.colorScheme.secondaryContainer, accent, ExtensionIconBackgroundTintBlend)
+    } ?: MaterialTheme.colorScheme.secondaryContainer
+    Column(modifier = modifier.fillMaxWidth()) {
+        OnlineSectionHeading("访问与授权")
+        if (credentialCount > 0) {
+            SettingsCategoryCard(
+                title = "凭据授权",
+                subtitle = grantSummary,
+                icon = Icons.Rounded.Key,
+                iconContainerColor = credentialIconContainerColor,
+                iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onOpenGrants,
+                modifier = Modifier.padding(top = 12.dp),
+                surfaceColor = categorySurfaceColor
+            )
+        }
+        SettingsCategoryCard(
+            title = "网络访问",
+            subtitle = if (networkCount == 0) "未申请网络访问"
+                else "$networkCount 条访问规则 · 查看完整目标",
+            icon = Icons.Rounded.Language,
+            iconContainerColor = networkIconContainerColor,
+            iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = onOpenNetwork,
+            modifier = Modifier.padding(top = 12.dp),
+            surfaceColor = categorySurfaceColor
+        )
+    }
+}
+@Composable
+internal fun ExtensionChoiceOverlay(
+    field: ConfigurationFieldDefinition,
+    selected: String?,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    FlowtoneModalOverlayShell(
+        visible = true,
+        scrimMaxAlpha = CreatePlaylistScrimMaxAlpha,
+        shadowSafePadding = CreatePlaylistShadowSafePadding,
+        onDismissRequest = onDismiss
+    ) {
+        FlowtoneModalPanel {
+            Text(field.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            field.choices.forEach { choice ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { onSelect(choice.value) }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(choice.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    if (choice.value == selected) Text("已选择", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtensionUninstallConfirmation(name: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    FlowtoneModalOverlayShell(
+        visible = true,
+        shadowSafePadding = 12.dp,
+        onDismissRequest = onDismiss
+    ) {
+        FlowtoneModalPanel {
+            Text("卸载扩展？", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                "确定卸载“$name”？此扩展的配置和凭据授权也会被移除。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onConfirm) { Text("卸载", color = MaterialTheme.colorScheme.error) }
+            }
+        }
+    }
+}

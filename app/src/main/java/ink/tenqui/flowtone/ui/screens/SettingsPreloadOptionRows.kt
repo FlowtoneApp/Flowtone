@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -16,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.app.FlowtonePageEasing
 import kotlin.math.roundToInt
@@ -29,6 +35,7 @@ internal fun PreloadStrengthRow(
     title = "预载歌曲元信息强度",
     description = "按上一曲方向 20%、下一曲方向 80% 提前准备封面；歌曲文本元信息会随曲库或在线来源解析一并准备。",
     animationLabel = "PreloadStrengthExpandIconRotation",
+    icon = Icons.Rounded.Settings,
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,
     options = listOf(1, 3, 5, 7, 10),
@@ -45,6 +52,7 @@ internal fun LyricsPreloadStrengthRow(
     title = "预载歌词强度",
     description = "按上一曲方向 20%、下一曲方向 80% 提前读取并解析本地歌词，减少前后切歌后的等待。",
     animationLabel = "LyricsPreloadStrengthExpandIconRotation",
+    icon = Icons.Rounded.Lyrics,
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,
     options = listOf(1, 3, 5, 7, 10),
@@ -61,6 +69,7 @@ internal fun OnlinePlaybackPreloadCountRow(
     title = "在线播放预载曲数",
     description = "提前解析播放队列中后续在线歌曲的播放信息。",
     animationLabel = "OnlinePlaybackPreloadCountExpandIconRotation",
+    icon = Icons.Rounded.PlayCircle,
     selectedCount = selectedCount,
     onSelectedCountChange = onSelectedCountChange,
     options = listOf(1, 2, 3, 5),
@@ -77,6 +86,7 @@ internal fun OnlinePlaybackPreloadPercentageRow(
     title = "在线播放内容预载比例",
     description = "按资源字节比例预载支持分段请求的普通在线音频开头；流媒体与未知长度资源仅预解析。",
     animationLabel = "OnlinePlaybackPreloadPercentageExpandIconRotation",
+    icon = Icons.Rounded.Tune,
     selectedCount = selectedPercentage,
     onSelectedCountChange = onSelectedPercentageChange,
     options = listOf(0, 10, 20, 30, 50),
@@ -89,6 +99,7 @@ private fun PreloadCountRow(
     title: String,
     description: String,
     animationLabel: String,
+    icon: ImageVector,
     selectedCount: Int,
     onSelectedCountChange: (Int) -> Unit,
     options: List<Int>,
@@ -113,6 +124,7 @@ private fun PreloadCountRow(
         onExpandedChange = { nextExpanded ->
             expanded = nextExpanded
         },
+        icon = icon,
         modifier = modifier
     ) {
         Column(

@@ -97,17 +97,33 @@ internal fun FlowtoneScaffoldTopLayer(
 
     if (artistRoute == null) {
         val titleVisible = state.secondaryPage != null
-        val standardPathSegments = secondaryDestinationBreadcrumbs(
-            current = state.secondaryDestination,
-            previous = state.previousSecondaryDestination,
-            nestedSegments = state.secondaryPathSegments
-        )
+        val standardPathSegments = if (state.secondaryEntries.usesOnlineSettingsBreadcrumbs()) {
+            secondaryStackBreadcrumbs(
+                entries = state.secondaryEntries,
+                settingsPathSegments = state.secondaryPathSegments
+            )
+        } else {
+            secondaryDestinationBreadcrumbs(
+                current = state.secondaryDestination,
+                previous = state.previousSecondaryDestination,
+                nestedSegments = state.secondaryPathSegments
+            )
+        }
+        val extensionWorkflowTitle = state.pendingExtensionPreview?.let { preview ->
+            if (preview.isUpdate) "更新扩展" else "安装扩展"
+        }
+        val pathRootTitle = when (state.secondaryDestination) {
+            SecondaryDestination.ExtensionInstall,
+            is SecondaryDestination.ExtensionNetworkAccess -> extensionWorkflowTitle
+            else -> null
+        }
 
         FlowtoneTopBar(
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,
             additionalPathSegments = standardPathSegments,
+            pathRootTitle = pathRootTitle,
             titleVisible = titleVisible,
             songSelectionState = songSelectionState,
             hideBackButton = state.hideSecondaryBackButton,
@@ -195,6 +211,11 @@ internal fun FlowtoneScaffoldTopLayer(
         }
     }
 }
+
+internal data class SecondaryTopBarPresentation(
+    val overline: String?,
+    val title: String
+)
 
 internal data class ArtistTopBarRetainedPresentation(
     val route: ArtistTopBarRoute,

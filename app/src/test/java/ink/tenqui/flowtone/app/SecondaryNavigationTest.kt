@@ -18,6 +18,26 @@ import ink.tenqui.flowtone.ui.components.fullTitleOverlayBackResult
 import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
 
 class SecondaryNavigationTest {
+
+    @Test
+    fun onlineExtensionsPopRetainsTheSettingsSubsectionContext() {
+        val remaining = SecondaryNavigationState()
+            .push(SecondaryDestination.Standard(SecondaryPage.Settings))
+            .push(SecondaryDestination.Standard(SecondaryPage.OnlineExtensions))
+            .pop()
+
+        assertTrue(remaining.retainsSettingsPathSegments())
+    }
+
+    @Test
+    fun leavingSettingsClearsTheSettingsSubsectionContext() {
+        val remaining = SecondaryNavigationState()
+            .push(SecondaryDestination.Standard(SecondaryPage.Settings))
+            .pop()
+
+        assertFalse(remaining.retainsSettingsPathSegments())
+    }
+
     @Test
     fun localAlbumDestinationKeepsLongIdentity() {
         val destination = SecondaryDestination.Album(42L, "Local")
@@ -66,6 +86,34 @@ class SecondaryNavigationTest {
             .pop()
 
         assertEquals(null, state.current)
+    }
+
+    @Test
+    fun extensionNetworkAccessPopsBackToInstallWithoutReplacingTheInstallEntry() {
+        val installState = SecondaryNavigationState()
+            .push(SecondaryDestination.Standard(SecondaryPage.OnlineExtensions))
+            .push(SecondaryDestination.ExtensionInstall)
+        val installEntry = installState.currentEntry
+
+        val result = installState
+            .push(SecondaryDestination.ExtensionNetworkAccess(emptySet()))
+            .pop()
+
+        assertEquals(SecondaryDestination.ExtensionInstall, result.current)
+        assertEquals(installEntry, result.currentEntry)
+        assertEquals(2, result.entries.size)
+    }
+
+    @Test
+    fun extensionNetworkAccessUsesInstallAndDetailBreadcrumbs() {
+        assertEquals(
+            listOf("网络详情"),
+            secondaryDestinationBreadcrumbs(
+                current = SecondaryDestination.ExtensionNetworkAccess(emptySet()),
+                previous = SecondaryDestination.ExtensionInstall,
+                nestedSegments = emptyList()
+            )
+        )
     }
 
     @Test

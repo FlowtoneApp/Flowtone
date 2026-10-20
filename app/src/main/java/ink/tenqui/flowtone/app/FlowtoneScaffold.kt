@@ -45,7 +45,10 @@ import ink.tenqui.flowtone.data.local.PlaylistStorage
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayHost
+import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayHostState
 import ink.tenqui.flowtone.ui.components.FullTitleOverlay
+import ink.tenqui.flowtone.ui.components.LocalFlowtoneModalOverlayHost
 import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
@@ -114,9 +117,6 @@ internal fun FlowtoneScaffold(
     val playlistRepository = remember(context) {
         PlaylistRepository(PlaylistStorage(context.applicationContext))
     }
-    var addToPlaylistDialogBackgroundColor by remember {
-        mutableStateOf(Color(0xFF1B1B20))
-    }
     val playlistSongEntries by playlistRepository.playlistSongEntries.collectAsState()
     val likedSongCount = state.uiState.likedTracks.size
     val displayedLibraryPlaylists = remember(libraryPlaylistController.playlists, likedSongCount) {
@@ -169,6 +169,9 @@ internal fun FlowtoneScaffold(
     )
     var fullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
     var retainedFullTitleOverlayTitle by remember { mutableStateOf<String?>(null) }
+    var extensionDiscardChangesConfirmation by remember {
+        mutableStateOf<ExtensionDiscardChangesConfirmation?>(null)
+    }
     val fullTitleOverlayProgress by animateFloatAsState(
         targetValue = if (fullTitleOverlayTitle != null) 1f else 0f,
         animationSpec = tween(
@@ -306,8 +309,10 @@ internal fun FlowtoneScaffold(
         }
     )
 
+    val modalOverlayHostState = remember { FlowtoneModalOverlayHostState() }
     CompositionLocalProvider(
-        LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled
+        LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled,
+        LocalFlowtoneModalOverlayHost provides modalOverlayHostState
     ) {
         BoxWithConstraints(
             modifier = modifier
@@ -377,6 +382,9 @@ internal fun FlowtoneScaffold(
                 playlistSortPanelOpen = playlistSortPanelOpen,
                 onClosePlaylistSortPanel = { playlistSortPanelOpen = false },
                 onFullTitleRequest = showFullTitle,
+                onExtensionDiscardChangesConfirmationChange = { confirmation ->
+                    extensionDiscardChangesConfirmation = confirmation
+                },
                 innerPadding = contentInnerPadding,
                 topBarBackgroundHeight = topBarBackgroundHeight,
                 artistHeroStateStore = artistHeroStateStore,
@@ -455,16 +463,29 @@ internal fun FlowtoneScaffold(
             coroutineScope = coroutineScope,
             displayedLibraryPlaylists = displayedLibraryPlaylists,
             playlistIdsContainingCurrentSong = playlistIdsContainingCurrentSong,
-            addToPlaylistDialogBackgroundColor = addToPlaylistDialogBackgroundColor,
             playlistEditingProgress = playlistEditingProgress,
             playlistEditingBlurRadius = playlistEditingBlurRadius,
-            onAddToPlaylistDialogBackgroundColorChange = { color ->
-                addToPlaylistDialogBackgroundColor = color
-            },
             onRefreshLibraryPlaylistsFromRepository = { createdPlaylistId ->
                 refreshLibraryPlaylistsFromRepository(createdPlaylistId)
             }
         )
+        extensionDiscardChangesConfirmation?.let { confirmation ->
+            ExtensionDiscardChangesOverlay(
+                title = confirmation.title,
+                message = confirmation.message,
+                keepLabel = confirmation.keepLabel,
+                discardLabel = confirmation.discardLabel,
+                onKeepEditing = {
+                    extensionDiscardChangesConfirmation = null
+                    confirmation.onKeepEditing()
+                },
+                onDiscard = {
+                    extensionDiscardChangesConfirmation = null
+                    confirmation.onDiscard()
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         retainedFullTitleOverlayTitle?.let { title ->
             FullTitleOverlay(
                 title = title,
@@ -473,6 +494,10 @@ internal fun FlowtoneScaffold(
                 modifier = Modifier.fillMaxSize()
             )
         }
+        FlowtoneModalOverlayHost(
+            state = modalOverlayHostState,
+            modifier = Modifier.fillMaxSize()
+        )
         }
     }
 }

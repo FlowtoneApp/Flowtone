@@ -82,5 +82,6 @@ internal enum class SettingsSection(val title: String) {
     Playback("播放"),
     Record("记录"),
     Advanced("高级"),
-    General("通用")
+    General("通用"),
+    Online("在线")
 }

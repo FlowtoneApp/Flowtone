@@ -12,6 +12,9 @@ import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkResourceExhaustedException
 import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
+import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
+import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
+import ink.tenqui.flowtone.data.online.configuration.extensionRuntimeConfigurationSnapshot
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import java.net.SocketTimeoutException
 import java.util.concurrent.Executors
@@ -31,7 +34,8 @@ class JavaScriptExtensionRuntime(
     val installed: InstalledExtension,
     private val isolate: JavaScriptIsolate,
     private val network: ExtensionNetworkClient,
-    private val privateCache: ExtensionPrivateCache
+    private val privateCache: ExtensionPrivateCache,
+    private val configStore: ExtensionConfigStore? = null
 ) : AutoCloseable {
     val extensionId: String = installed.manifest.id
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,6 +61,20 @@ class JavaScriptExtensionRuntime(
     internal suspend fun invokeJson(method: String): String {
         require(MethodName.matches(method)) { "非法扩展方法" }
         return evaluateExpression("JSON.stringify(await globalThis.flowtoneExtension.$method())")
+    }
+
+    /** Pushes a new ordinary-configuration snapshot without recreating the isolate. */
+    internal suspend fun refreshConfiguration(): Boolean {
+        if (closed.get()) return false
+        return runCatching {
+            evaluateStatements("__flowtoneSetConfig(${configurationPayload()});")
+            true
+        }.onFailure { error ->
+            Log.w(
+                LogTag,
+                "extension.config.refresh.failed extension=$extensionId type=${error.javaClass.simpleName}"
+            )
+        }.getOrDefault(false)
     }
 
     private fun onMessage(message: Message) {
@@ -152,8 +170,47 @@ class JavaScriptExtensionRuntime(
           const pending = __pending.get(message.id); if (!pending) return; __pending.delete(message.id);
           message.ok ? pending.resolve(message.result) : pending.reject(new Error(message.error?.type || 'HOST_ERROR')); };
         function __rpc(type, payload) { const id = 'req-' + (++__sequence) + '-' + Date.now(); return new Promise((resolve, reject) => { __pending.set(id, {resolve, reject}); __port.postMessage(JSON.stringify({id, type, payload})); }); }
-        globalThis.flowtone = Object.freeze({http:Object.freeze({request:request=>__rpc('http.request',request)}),cache:Object.freeze({get:async key=>(await __rpc('cache.get',{key})).value,set:(key,value)=>__rpc('cache.set',{key,value}),remove:key=>__rpc('cache.remove',{key}),clear:()=>__rpc('cache.clear',{})}),log:Object.freeze({debug:message=>__rpc('log',{level:'debug',message:String(message)}),info:message=>__rpc('log',{level:'info',message:String(message)}),warn:message=>__rpc('log',{level:'warn',message:String(message)}),error:message=>__rpc('log',{level:'error',message:String(message)})})});
+        let __flowtoneConfigSchemaValid = false;
+        let __flowtoneConfigFields = Object.freeze({});
+        let __flowtoneConfigValues = Object.freeze({});
+        function __flowtoneSetConfig(snapshot) {
+          __flowtoneConfigSchemaValid = snapshot.schemaValid === true;
+          __flowtoneConfigFields = Object.freeze(snapshot.fields || {});
+          __flowtoneConfigValues = Object.freeze(snapshot.values || {});
+        }
+        __flowtoneSetConfig(${configurationPayload()});
+        const __flowtoneConfigGet = (...args) => {
+          if (args.length !== 1 || typeof args[0] !== 'string') throw new Error('INVALID_CONFIG_REQUEST');
+          if (!__flowtoneConfigSchemaValid) throw new Error('CONFIG_SCHEMA_INVALID');
+          const fieldType = __flowtoneConfigFields[args[0]];
+          if (fieldType === undefined) throw new Error('CONFIG_FIELD_NOT_DECLARED');
+          if (fieldType === 'Secret') throw new Error('SECRET_CONFIGURATION_UNAVAILABLE');
+          return Object.prototype.hasOwnProperty.call(__flowtoneConfigValues, args[0])
+            ? __flowtoneConfigValues[args[0]] : null;
+        };
+        globalThis.flowtone = Object.freeze({http:Object.freeze({request:request=>__rpc('http.request',request)}),cache:Object.freeze({get:async key=>(await __rpc('cache.get',{key})).value,set:(key,value)=>__rpc('cache.set',{key,value}),remove:key=>__rpc('cache.remove',{key}),clear:()=>__rpc('cache.clear',{})}),config:Object.freeze({get:__flowtoneConfigGet}),log:Object.freeze({debug:message=>__rpc('log',{level:'debug',message:String(message)}),info:message=>__rpc('log',{level:'info',message:String(message)}),warn:message=>__rpc('log',{level:'warn',message:String(message)}),error:message=>__rpc('log',{level:'error',message:String(message)})})});
     """.trimIndent()
+
+    private fun configurationPayload(): String {
+        val snapshot = extensionRuntimeConfigurationSnapshot(
+            schema = installed.descriptor.configurationSchema,
+            savedValues = configStore?.load(extensionId).orEmpty()
+        )
+        return JSONObject().apply {
+            put("schemaValid", snapshot.schemaValid)
+            put("fields", JSONObject().apply {
+                snapshot.fields.forEach { (id, type) -> put(id, type.name) }
+            })
+            put("values", JSONObject().apply {
+                snapshot.values.forEach { (id, value) ->
+                    put(id, when (value) {
+                        is ConfigurationValue.StringValue -> value.value
+                        is ConfigurationValue.BooleanValue -> value.value
+                    })
+                }
+            })
+        }.toString()
+    }
 
     private fun success(id: String, value: Any?) = JSONObject().put("id", id).put("ok", true).put("result", value)
     private fun failure(id: String, type: String, message: String) = JSONObject().put("id", id).put("ok", false).put("error", JSONObject().put("type", type).put("message", message))

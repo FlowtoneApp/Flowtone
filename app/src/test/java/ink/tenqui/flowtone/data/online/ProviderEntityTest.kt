@@ -4,6 +4,8 @@ import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
+import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -12,34 +14,34 @@ import org.junit.Test
 
 class ProviderEntityTest {
     @Test
-    fun oldProviderWithoutCollectionsRemainsCompatible() = kotlinx.coroutines.runBlocking {
+    fun providerWithoutCatalogCapabilitiesHasNoCollections() = kotlinx.coroutines.runBlocking {
         val provider = TestProvider()
 
-        assertTrue(provider.entityCapabilities.isEmpty())
+        assertTrue(provider.capabilities.values.isEmpty())
         assertNull(provider.getSongs())
         assertNull(provider.getAlbums())
     }
 
     @Test
-    fun songsOnlyProviderDeclaresOnlySongCapability() = kotlinx.coroutines.runBlocking {
+    fun songsOnlyProviderDeclaresCanonicalSongsCapability() = kotlinx.coroutines.runBlocking {
         val provider = TestProvider(
-            entityCapabilities = setOf(ProviderEntityCapability.Song),
+            capabilities = CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.CatalogSongsList),
             songs = listOf(song("a", "1"))
         )
 
-        assertEquals(setOf(ProviderEntityCapability.Song), provider.entityCapabilities)
+        assertEquals(setOf(AtomicCapabilityId.CatalogSongsList), provider.capabilities.values)
         assertEquals(listOf("1"), provider.getSongs()?.map(ProviderSong::id))
         assertNull(provider.getAlbums())
     }
 
     @Test
-    fun albumsOnlyProviderDeclaresOnlyAlbumCapability() = kotlinx.coroutines.runBlocking {
+    fun albumsOnlyProviderDeclaresCanonicalAlbumsCapability() = kotlinx.coroutines.runBlocking {
         val provider = TestProvider(
-            entityCapabilities = setOf(ProviderEntityCapability.Album),
+            capabilities = CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.CatalogAlbumsList),
             albums = listOf(album("a", "1"))
         )
 
-        assertEquals(setOf(ProviderEntityCapability.Album), provider.entityCapabilities)
+        assertEquals(setOf(AtomicCapabilityId.CatalogAlbumsList), provider.capabilities.values)
         assertEquals(listOf("1"), provider.getAlbums()?.map(ProviderAlbum::id))
         assertNull(provider.getSongs())
     }
@@ -47,7 +49,10 @@ class ProviderEntityTest {
     @Test
     fun providerCanExposeBothCollections() = kotlinx.coroutines.runBlocking {
         val provider = TestProvider(
-            entityCapabilities = ProviderEntityCapability.entries.toSet(),
+            capabilities = CanonicalAtomicCapabilitySet.of(
+                AtomicCapabilityId.CatalogSongsList,
+                AtomicCapabilityId.CatalogAlbumsList
+            ),
             songs = listOf(song("a", "song")),
             albums = listOf(album("a", "album"))
         )
@@ -343,7 +348,7 @@ class ProviderEntityTest {
     )
 
     private class TestProvider(
-        override val entityCapabilities: Set<ProviderEntityCapability> = emptySet(),
+        override val capabilities: CanonicalAtomicCapabilitySet = CanonicalAtomicCapabilitySet.Empty,
         private val songs: List<ProviderSong>? = null,
         private val albums: List<ProviderAlbum>? = null
     ) : MusicProvider {

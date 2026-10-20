@@ -82,7 +82,6 @@ fun MiniPlayer(
     playlistIdsContainingCurrentSong: Set<String> = emptySet(),
     newlyCreatedPlaylistId: String? = null,
     onNewPlaylistCreateAnimationFinished: (String) -> Unit = {},
-    onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit = {},
     onCreatePlaylistClick: () -> Unit = {},
     onAddSongToPlaylist: (LibraryPlaylistCard, () -> Unit) -> Unit = { _, onAdded ->
         onAdded()
@@ -488,11 +487,6 @@ fun MiniPlayer(
         onUsingFallbackCloudColorsChange = {
             state.usingFallbackCloudColors = it
         }
-    )
-    MiniPlayerAddToPlaylistDialogEffects(
-        addToPlaylistDialogBackgroundColor =
-            state.addToPlaylistDialogBackgroundColor,
-        onAddToPlaylistDialogBackgroundColorChange = onAddToPlaylistDialogBackgroundColorChange
     )
     val titleColor = Color.White
     val artistColor = Color.White

@@ -6,6 +6,8 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.displayTitleOrNull
 import ink.tenqui.flowtone.data.online.preferredProfileArtwork
@@ -148,6 +150,69 @@ internal sealed interface SecondaryDestination {
         val parentArtist: ArtistDestinationIdentity
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Artist
+    }
+
+    data object ExtensionInstall : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionInstall
+    }
+
+    data object CredentialSources : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.CredentialSources
+    }
+
+    data class CredentialSourceEdit(
+        val sourceId: String?
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.CredentialSourceEdit
+    }
+
+    class ExtensionSettings(
+        val installed: InstalledExtension
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionSettings
+        val extensionId: String get() = installed.manifest.id
+
+        override fun equals(other: Any?): Boolean =
+            other is ExtensionSettings && extensionId == other.extensionId
+
+        override fun hashCode(): Int = extensionId.hashCode()
+    }
+
+    class ExtensionConfiguration(
+        val installed: InstalledExtension
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionConfiguration
+        val extensionId: String get() = installed.manifest.id
+
+        override fun equals(other: Any?): Boolean =
+            other is ExtensionConfiguration && extensionId == other.extensionId
+
+        override fun hashCode(): Int = extensionId.hashCode()
+    }
+
+    data class ExtensionNetworkAccess(
+        val permissions: Set<NetworkOriginPermission>
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionNetworkAccess
+    }
+
+    class ExtensionCredentialGrants(val installed: InstalledExtension) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionCredentialGrants
+        val extensionId: String get() = installed.manifest.id
+        override fun equals(other: Any?): Boolean =
+            other is ExtensionCredentialGrants && extensionId == other.extensionId
+        override fun hashCode(): Int = extensionId.hashCode()
+    }
+
+    class ExtensionCredentialSourcePicker(
+        val installed: InstalledExtension,
+        val requestId: String
+    ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.ExtensionCredentialSourcePicker
+        val extensionId: String get() = installed.manifest.id
+        override fun equals(other: Any?): Boolean = other is ExtensionCredentialSourcePicker &&
+            extensionId == other.extensionId && requestId == other.requestId
+        override fun hashCode(): Int = 31 * extensionId.hashCode() + requestId.hashCode()
     }
 }
 
@@ -328,9 +393,69 @@ internal fun secondaryDestinationBreadcrumbs(
         )
         is SecondaryDestination.Playlist -> listOf(current.title)
         is SecondaryDestination.Standard -> nestedSegments
+        SecondaryDestination.ExtensionInstall -> emptyList()
+        SecondaryDestination.CredentialSources -> listOf("凭据")
+        is SecondaryDestination.CredentialSourceEdit -> listOf(
+            if (current.sourceId == null) "添加凭据" else "编辑凭据"
+        )
+        is SecondaryDestination.ExtensionSettings -> listOf(current.installed.manifest.name)
+        is SecondaryDestination.ExtensionConfiguration ->
+            listOf(current.installed.manifest.name, SecondaryPage.ExtensionConfiguration.title)
+        is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
+        is SecondaryDestination.ExtensionCredentialGrants -> listOf(current.installed.manifest.name, "凭据授权")
+        is SecondaryDestination.ExtensionCredentialSourcePicker -> listOf(current.installed.manifest.name, "选择凭据")
         is SecondaryDestination.ArtistSongs,
         is SecondaryDestination.ArtistAlbums -> emptyList()
         is SecondaryDestination.Artist,
         null -> emptyList()
+    }
+}
+
+/** Standard secondary paths retain the actual navigation lineage rather than a special title mode. */
+internal fun secondaryStackBreadcrumbs(
+    entries: List<SecondaryStackEntry>,
+    settingsPathSegments: List<String>
+): List<String> =
+    entries.flatMap { entry ->
+        when (val destination = entry.destination) {
+            is SecondaryDestination.Standard -> when (destination.page) {
+                SecondaryPage.Settings -> listOf(destination.page.title) + settingsPathSegments
+                SecondaryPage.CredentialSources -> listOf(destination.page.title)
+                else -> emptyList()
+            }
+            is SecondaryDestination.CredentialSources -> listOf(destination.page.title)
+            is SecondaryDestination.CredentialSourceEdit -> listOf(
+                if (destination.sourceId == null) "添加凭据" else "编辑凭据"
+            )
+            is SecondaryDestination.ExtensionSettings -> listOf(destination.installed.manifest.name)
+            is SecondaryDestination.ExtensionConfiguration ->
+                listOf(SecondaryPage.ExtensionConfiguration.title)
+            is SecondaryDestination.ExtensionNetworkAccess -> listOf("网络详情")
+            is SecondaryDestination.ExtensionCredentialGrants -> listOf("凭据授权")
+            is SecondaryDestination.ExtensionCredentialSourcePicker -> listOf("选择凭据")
+            else -> emptyList()
+        }
+    }
+
+/** Online settings and their detail pages keep their full secondary-stack ancestry. */
+internal fun List<SecondaryStackEntry>.usesOnlineSettingsBreadcrumbs(): Boolean {
+    val current = lastOrNull()?.destination ?: return false
+    val hasSettingsEntry = any { entry ->
+        (entry.destination as? SecondaryDestination.Standard)?.page == SecondaryPage.Settings
+    }
+    val hasExtensionSettings = any { entry ->
+        entry.destination is SecondaryDestination.ExtensionSettings
+    }
+    return when (current) {
+        SecondaryDestination.CredentialSources -> hasSettingsEntry || hasExtensionSettings
+        is SecondaryDestination.CredentialSourceEdit ->
+            (hasSettingsEntry || hasExtensionSettings) &&
+                any { it.destination == SecondaryDestination.CredentialSources }
+        is SecondaryDestination.ExtensionSettings,
+        is SecondaryDestination.ExtensionConfiguration,
+        is SecondaryDestination.ExtensionNetworkAccess,
+        is SecondaryDestination.ExtensionCredentialGrants,
+        is SecondaryDestination.ExtensionCredentialSourcePicker -> hasExtensionSettings
+        else -> false
     }
 }

@@ -23,6 +23,7 @@ import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamTransport
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -281,7 +282,13 @@ class ExtensionMediaDataSourceHostRoutingTest {
             streamTransport = transport,
             logger = ExtensionCoreLogger { _, _ -> },
             limiter = limiter
-        ).createStreamClientFor("test.extension", "media_stream", allowedHosts)
+        ).createStreamClientFor(
+            "test.extension",
+            "media_stream",
+            allowedHosts.mapTo(linkedSetOf()) { host ->
+                NetworkOriginPermissionParser.parse("https://$host")
+            }
+        )
 
         override fun clientFor(extensionId: String) = client.also { extensionIds += extensionId }
     }

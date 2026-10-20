@@ -32,10 +32,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -114,6 +115,7 @@ internal fun AppearanceSettingsPage(
                 subtitle = "打开后，暂停时封面仅缩小，不再倾斜",
                 checked = disablePausedArtworkTilt,
                 onCheckedChange = onDisablePausedArtworkTiltChange,
+                icon = Icons.Rounded.Album,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
@@ -130,6 +132,7 @@ internal fun AppearanceSettingsPage(
                 subtitle = "\u5728\u6697\u8272\u6a21\u5f0f\u4e0b\u4e3a\u5e38\u89c4\u6d41\u4e91\u6dfb\u52a0\u6697\u8272\u906e\u7f69",
                 checked = darkFlowCloudOverlayEnabled,
                 onCheckedChange = onDarkFlowCloudOverlayChange,
+                icon = Icons.Rounded.DarkMode,
                 modifier = Modifier.padding(top = 12.dp)
             )
             SettingSwitchRow(
@@ -137,6 +140,7 @@ internal fun AppearanceSettingsPage(
                 subtitle = "\u5f00\u542f\u540e\uff0c\u64ad\u653e\u65f6\u95f4\u5c06\u7cbe\u786e\u663e\u793a\u62d6\u52a8\u6216\u8df3\u8f6c\u4f4d\u7f6e",
                 checked = strictProgressBar,
                 onCheckedChange = onStrictProgressBarChange,
+                icon = Icons.Rounded.Tune,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
@@ -168,7 +172,8 @@ internal fun PlaybackSettingsPage(
                 title = "来电后恢复播放",
                 subtitle = "仅在来电前正在播放且音频焦点短暂丢失时恢复",
                 checked = resumePlaybackAfterCall,
-                onCheckedChange = onResumePlaybackAfterCallChange
+                onCheckedChange = onResumePlaybackAfterCallChange,
+                icon = Icons.Rounded.PlayCircle
             )
         }
     }
@@ -254,6 +259,7 @@ internal fun LyricsSettingsPage(
                 subtitle = "开启后，歌词页遵循系统的屏幕超时设置",
                 checked = allowScreenOffOnLyricsPage,
                 onCheckedChange = onAllowScreenOffOnLyricsPageChange,
+                icon = Icons.Rounded.Lyrics,
                 modifier = Modifier.padding(top = 12.dp)
             )
             LyricsFoldersSettingRow(
@@ -273,7 +279,6 @@ internal fun GeneralSettingsPage(
     onHideSecondaryBackButtonChange: (Boolean) -> Unit,
     skipExpandedMiniPlayer: Boolean,
     onSkipExpandedMiniPlayerChange: (Boolean) -> Unit,
-    onOpenOnlineSettings: () -> Unit,
     onOpenLyricsSettings: () -> Unit,
     elementModifier: (Int) -> Modifier,
     modifier: Modifier = Modifier
@@ -286,13 +291,6 @@ internal fun GeneralSettingsPage(
             DefaultStartPageRow(
                 selectedPage = selectedStartPage,
                 onPageSelected = onStartPageSelected
-            )
-            SettingsSectionRow(
-                title = "在线",
-                subtitle = "扩展管理",
-                icon = Icons.Rounded.Language,
-                onClick = onOpenOnlineSettings,
-                modifier = Modifier.padding(top = 12.dp)
             )
             SettingsSectionRow(
                 title = "歌词",
@@ -311,6 +309,7 @@ internal fun GeneralSettingsPage(
                 subtitle = "右滑屏幕即可返回上一级",
                 checked = hideSecondaryBackButton,
                 onCheckedChange = onHideSecondaryBackButtonChange,
+                icon = Icons.Rounded.ChevronRight,
             )
         }
         OptionGroup(
@@ -322,6 +321,7 @@ internal fun GeneralSettingsPage(
                 subtitle = "开启后 MiniPlayer 仅在收起态和全屏态之间切换",
                 checked = skipExpandedMiniPlayer,
                 onCheckedChange = onSkipExpandedMiniPlayerChange,
+                icon = Icons.Rounded.PlayCircle,
             )
         }
     }

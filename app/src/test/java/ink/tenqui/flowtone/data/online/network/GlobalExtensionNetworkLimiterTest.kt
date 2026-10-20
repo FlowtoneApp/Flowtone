@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.network
 
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
@@ -39,8 +40,8 @@ class GlobalExtensionNetworkLimiterTest {
             },
             logger = silentLogger()
         )
-        val a = gateway.createClientFor("test.extension.a", "artist_avatar", listOf("example.invalid"))
-        val b = gateway.createClientFor("test.extension.b", "artist_avatar", listOf("example.invalid"))
+        val a = gateway.createClientFor("test.extension.a", "host_api", permissions())
+        val b = gateway.createClientFor("test.extension.b", "host_api", permissions())
 
         val jobs = List(8) { async(Dispatchers.Default, start = CoroutineStart.DEFAULT) { a.execute(request()) } } +
             List(8) { async(Dispatchers.Default, start = CoroutineStart.DEFAULT) { b.execute(request()) } }
@@ -72,7 +73,7 @@ class GlobalExtensionNetworkLimiterTest {
             },
             logger = silentLogger()
         )
-        val client = gateway.createClientFor("test.extension.a", "artist_avatar", listOf("example.invalid"))
+        val client = gateway.createClientFor("test.extension.a", "host_api", permissions())
         val admissionClient = client as AdmissionAwareExtensionNetworkClient
         val held = List(128) { requireNotNull(admissionClient.tryAcquireAdmission()) }
 
@@ -106,7 +107,7 @@ class GlobalExtensionNetworkLimiterTest {
             },
             logger = silentLogger()
         )
-        val client = gateway.createClientFor("test.extension.a", "artist_avatar", listOf("example.invalid"))
+        val client = gateway.createClientFor("test.extension.a", "host_api", permissions())
 
         client.execute(request())
         assertEquals(0, limiter.snapshot().inFlight)
@@ -124,6 +125,10 @@ class GlobalExtensionNetworkLimiterTest {
     }
 
     private fun request() = ExtensionHttpRequest(ExtensionHttpMethod.Get, "https://example.invalid/resource")
+
+    private fun permissions() = setOf(
+        NetworkOriginPermissionParser.parse("https://example.invalid")
+    )
 
     private fun silentLogger() = ExtensionCoreLogger { _, _ -> }
 }

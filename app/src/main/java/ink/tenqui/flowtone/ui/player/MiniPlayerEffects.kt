@@ -173,16 +173,6 @@ internal fun MiniPlayerBackdropEffects(
 }
 
 @Composable
-internal fun MiniPlayerAddToPlaylistDialogEffects(
-    addToPlaylistDialogBackgroundColor: Color,
-    onAddToPlaylistDialogBackgroundColorChange: (Color) -> Unit
-) {
-    LaunchedEffect(addToPlaylistDialogBackgroundColor) {
-        onAddToPlaylistDialogBackgroundColorChange(addToPlaylistDialogBackgroundColor)
-    }
-}
-
-@Composable
 internal fun MiniPlayerFullscreenContentEffects(
     fullscreen: Boolean,
     expanded: Boolean,

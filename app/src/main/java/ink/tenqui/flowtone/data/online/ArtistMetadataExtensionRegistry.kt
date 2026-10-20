@@ -6,7 +6,7 @@ import ink.tenqui.flowtone.data.online.network.ExtensionCoreLogger
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 
-/** Ordered registry for the optional artist_metadata extension capability. */
+/** Ordered registry for the artist.metadata.lookup extension capability. */
 class ArtistMetadataExtensionRegistry(
     private val logger: ExtensionCoreLogger = ExtensionCoreLogger { event, details ->
         android.util.Log.d("FlowtoneExtension", "$event $details")
@@ -68,7 +68,7 @@ class ArtistMetadataExtensionRegistry(
                 } catch (error: Exception) {
                     logger.log(
                         "extension.invoke.failed",
-                        "extension=${extension.id} capability=artist_metadata exception=${error.javaClass.simpleName}"
+                    "extension=${extension.id} capability=artist.metadata.lookup exception=${error.javaClass.simpleName}"
                     )
                     null
                 }

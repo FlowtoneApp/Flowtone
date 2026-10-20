@@ -8,17 +8,6 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.local.localArtistStableId
 import ink.tenqui.flowtone.data.local.parseLocalArtistCandidates
 
-enum class ProviderEntityCapability(val wireValue: String) {
-    Song("song"),
-    Album("album");
-
-    companion object {
-        fun fromWireValue(value: String): ProviderEntityCapability? = entries.firstOrNull {
-            it.wireValue == value.trim().lowercase()
-        }
-    }
-}
-
 data class ProviderEntityIdentity(
     val providerId: String,
     val remoteId: String

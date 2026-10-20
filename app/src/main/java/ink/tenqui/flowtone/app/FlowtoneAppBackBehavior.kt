@@ -35,12 +35,23 @@ internal fun FlowtoneAppBackHandlers(
 }
 
 internal fun closeFlowtoneSecondaryPage(appState: FlowtoneAppState) {
-    appState.secondaryNavigation = appState.secondaryNavigation.pop()
-    appState.secondaryPathSegments = emptyList()
+    val remainingNavigation = appState.secondaryNavigation.pop()
+    appState.secondaryNavigation = remainingNavigation
+    if (!remainingNavigation.retainsSettingsPathSegments()) {
+        appState.secondaryPathSegments = emptyList()
+    }
 }
 
+/** The settings subsection is shared by Online settings and their descendants. */
+internal fun SecondaryNavigationState.retainsSettingsPathSegments(): Boolean =
+    entries.any { entry ->
+        (entry.destination as? SecondaryDestination.Standard)?.page == SecondaryPage.Settings
+    }
+
 internal fun navigateFlowtoneAppBack(appState: FlowtoneAppState) {
-    if (appState.secondaryPage == SecondaryPage.Settings) {
+    if (appState.secondaryPage == SecondaryPage.Settings ||
+        appState.secondaryPage == SecondaryPage.ExtensionConfiguration
+    ) {
         val nestedBackAction = appState.settingsBackAction
         if (nestedBackAction != null) {
             nestedBackAction()

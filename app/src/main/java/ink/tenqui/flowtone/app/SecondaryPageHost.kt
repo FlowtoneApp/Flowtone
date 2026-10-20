@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
@@ -52,6 +53,17 @@ import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
 import ink.tenqui.flowtone.ui.screens.SettingsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionInstallScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionNetworkAccessScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionSettingsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionConfigurationScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionCredentialGrantsScreen
+import ink.tenqui.flowtone.ui.screens.ExtensionCredentialSourcePickerScreen
+import ink.tenqui.flowtone.ui.screens.CredentialSourcesScreen
+import ink.tenqui.flowtone.ui.screens.CredentialSourceEditScreen
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
@@ -113,6 +125,7 @@ internal fun SecondaryPageHost(
     artistTopBarStateOwner: ArtistTopBarStateOwner? = null,
     artistTopBarOcclusionProgress: Float = 0f,
     pageScope: PageTransitionScope,
+    extensionCardAccent: Color?,
     appPreferences: AppPreferences,
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
@@ -171,8 +184,22 @@ internal fun SecondaryPageHost(
     onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onFullTitleRequest: (String) -> Unit = {},
     onCloseSecondaryPage: () -> Unit,
+    onOpenCredentialSources: () -> Unit,
+    onOpenCredentialSourceEdit: (String?) -> Unit,
+    pendingExtensionPreview: ExtensionInstallPreview?,
+    onOpenExtensionInstall: (ExtensionInstallPreview) -> Unit,
+    onOpenExtensionSettings: (InstalledExtension) -> Unit,
+    onOpenExtensionConfiguration: (InstalledExtension) -> Unit,
+    onOpenExtensionNetworkAccess: (Set<NetworkOriginPermission>) -> Unit,
+    onOpenExtensionCredentialGrants: (InstalledExtension) -> Unit,
+    onOpenExtensionCredentialSourcePicker: (InstalledExtension, String) -> Unit,
+    onCloseExtensionInstall: () -> Unit,
+    extensionInstallBusy: Boolean,
+    onConfirmExtensionInstall: () -> Unit,
     onSettingsBackActionChange: ((() -> Unit)?) -> Unit,
+    onExtensionDiscardChangesConfirmationChange: (ExtensionDiscardChangesConfirmation?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
+    settingsPathSegments: List<String>,
     onOpenSource: () -> Unit,
     onOpenSourceBack: () -> Unit,
     onOpenSourceBackActionChange: ((() -> Unit)?) -> Unit,
@@ -180,6 +207,8 @@ internal fun SecondaryPageHost(
     modifier: Modifier = Modifier
 ) {
     var songSelectionActive by remember { mutableStateOf(false) }
+    var extensionSettingsRequestBack by remember(destination) { mutableStateOf<(() -> Unit)?>(null) }
+    var credentialSourceEditRequestBack by remember(destination) { mutableStateOf<(() -> Unit)?>(null) }
     val activeBatchActions = playlistBatchActions.copy(
         onSelectionModeChange = { active ->
             songSelectionActive = active
@@ -260,8 +289,113 @@ internal fun SecondaryPageHost(
                 onDarkFlowCloudOverlayChange = onDarkFlowCloudOverlayChange,
                 lyricsBackgroundStyle = lyricsBackgroundStyle,
                 onLyricsBackgroundStyleChange = onLyricsBackgroundStyleChange,
+                onOpenCredentialSources = onOpenCredentialSources,
+                onOpenExtensionInstall = onOpenExtensionInstall,
+                onOpenExtensionSettings = onOpenExtensionSettings,
+                restoredPathSegments = settingsPathSegments,
                 modifier = Modifier.fillMaxSize()
             )
+            SecondaryPage.CredentialSources -> CredentialSourcesScreen(
+                pageScope = pageScope,
+                onOpenSource = onOpenCredentialSourceEdit,
+                modifier = Modifier.fillMaxSize().rightSwipeBackGesture(onCloseSecondaryPage)
+            )
+
+            SecondaryPage.CredentialSourceEdit -> (destination as? SecondaryDestination.CredentialSourceEdit)?.let {
+                CredentialSourceEditScreen(
+                    sourceId = it.sourceId,
+                    pageScope = pageScope,
+                    onBack = onCloseSecondaryPage,
+                    onBackActionChange = { requestBack ->
+                        credentialSourceEditRequestBack = requestBack
+                        onSettingsBackActionChange(requestBack)
+                    },
+                    onDiscardChangesConfirmationChange = onExtensionDiscardChangesConfirmationChange,
+                    modifier = Modifier.fillMaxSize().rightSwipeBackGesture {
+                        credentialSourceEditRequestBack?.invoke() ?: onCloseSecondaryPage()
+                    }
+                )
+            }
+
+            SecondaryPage.ExtensionInstall -> pendingExtensionPreview?.let { preview ->
+                ExtensionInstallScreen(
+                    preview = preview,
+                    installing = extensionInstallBusy,
+                    onConfirm = onConfirmExtensionInstall,
+                    onOpenNetworkAccess = { onOpenExtensionNetworkAccess(preview.networkPermissions) },
+                    pageScope = pageScope,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(onCloseExtensionInstall)
+                )
+            }
+
+            SecondaryPage.ExtensionSettings -> (destination as? SecondaryDestination.ExtensionSettings)?.let {
+                ExtensionSettingsScreen(
+                    installed = it.installed,
+                    pageScope = pageScope,
+                    onOpenNetworkAccess = { permissions -> onOpenExtensionNetworkAccess(permissions) },
+                    onOpenCredentialGrants = onOpenExtensionCredentialGrants,
+                    onOpenConfiguration = onOpenExtensionConfiguration,
+                    onUninstalled = onCloseSecondaryPage,
+                    onBack = onCloseSecondaryPage,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(onCloseSecondaryPage)
+                )
+            }
+
+            SecondaryPage.ExtensionConfiguration ->
+                (destination as? SecondaryDestination.ExtensionConfiguration)?.let { configuration ->
+                    ExtensionConfigurationScreen(
+                        installed = configuration.installed,
+                        pageScope = pageScope,
+                        onBack = onCloseSecondaryPage,
+                        onBackActionChange = { requestBack ->
+                            extensionSettingsRequestBack = requestBack
+                            onSettingsBackActionChange(requestBack)
+                        },
+                        onDiscardChangesConfirmationChange =
+                            onExtensionDiscardChangesConfirmationChange,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .rightSwipeBackGesture {
+                                extensionSettingsRequestBack?.invoke() ?: onCloseSecondaryPage()
+                            }
+                    )
+                }
+
+            SecondaryPage.ExtensionNetworkAccess -> (destination as? SecondaryDestination.ExtensionNetworkAccess)?.let { network ->
+                ExtensionNetworkAccessScreen(
+                    permissions = network.permissions,
+                    iconAccent = extensionCardAccent,
+                    pageScope = pageScope,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .rightSwipeBackGesture(onCloseSecondaryPage)
+                )
+            }
+
+            SecondaryPage.ExtensionCredentialGrants -> (destination as? SecondaryDestination.ExtensionCredentialGrants)?.let { grants ->
+                ExtensionCredentialGrantsScreen(
+                    installed = grants.installed,
+                    pageScope = pageScope,
+                    onChooseSource = onOpenExtensionCredentialSourcePicker,
+                    onBack = onCloseSecondaryPage,
+                    modifier = Modifier.fillMaxSize().rightSwipeBackGesture(onCloseSecondaryPage)
+                )
+            }
+
+            SecondaryPage.ExtensionCredentialSourcePicker -> (destination as? SecondaryDestination.ExtensionCredentialSourcePicker)?.let { picker ->
+                ExtensionCredentialSourcePickerScreen(
+                    installed = picker.installed,
+                    requestId = picker.requestId,
+                    pageScope = pageScope,
+                    onOpenCredentialSources = onOpenCredentialSources,
+                    onBack = onCloseSecondaryPage,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
             SecondaryPage.About -> AboutScreen(
                 onOpenSource = onOpenSource,

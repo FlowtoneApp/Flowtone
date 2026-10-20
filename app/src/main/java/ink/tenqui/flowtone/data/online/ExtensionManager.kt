@@ -19,10 +19,19 @@ import ink.tenqui.flowtone.data.online.image.ExtensionImageFetcher
 import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
 import ink.tenqui.flowtone.data.online.image.ExtensionImageNetworkHost
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageInstaller
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageInspector
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageSnapshotHandle
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionProviderVisualResolver
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
+import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
+import ink.tenqui.flowtone.data.online.capability.ExtensionRuntimeCapabilityPolicy
 import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
+import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantStore
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantLifecycleLocks
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistMetadataExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptExtensionRuntime
@@ -71,6 +80,9 @@ data class ExtensionRuntimeState(
 class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val appContext = context.applicationContext
     private val installer = ExtensionPackageInstaller(appContext.filesDir.resolve("extensions"))
+    private val inspector = ExtensionPackageInspector(
+        appContext.cacheDir.resolve("extension-install-previews")
+    )
     private val sandboxHost = JavaScriptSandboxHost(appContext)
     private val gateway = ExtensionNetworkGateway()
     private val avatarResultCache = ExtensionResultCache()
@@ -79,6 +91,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         appContext.filesDir.resolve("extension-data")
     )
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
+    private val configStore = ExtensionConfigStore.from(appContext)
+    private val credentialGrantStore = CredentialGrantStore.from(appContext)
     private val mutex = Mutex()
     private val runtimeLifecycle = ExtensionRuntimeLifecycle { requestGeneration, currentGeneration ->
         Log.d(
@@ -142,6 +156,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 requireNotNull(appContext.contentResolver.openInputStream(uri)) { "无法读取扩展包" }
                     .use { input -> installer.install(name, input) }
             }
+            withContext(Dispatchers.IO) {
+                CredentialGrantLifecycleLocks.withExtension(installed.manifest.id) {
+                    credentialGrantStore.reconcileExtension(
+                        installed.manifest.id,
+                        installed.installationInstanceId ?: "",
+                        installed.descriptor.credentialRequests
+                    )
+                }
+            }
             val reason = if (installed.manifest.id in installedIdsBefore) {
                 ExtensionRuntimeReloadReason.Update
             } else {
@@ -152,13 +175,61 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         }
     }
 
+    suspend fun inspect(uri: Uri): ExtensionInstallPreview = mutex.withLock {
+        val name = requireNotNull(displayName(uri)) { "无法确认扩展包文件名" }
+        require(name.endsWith(".flowtone", ignoreCase = true)) { "请选择 .flowtone 扩展包" }
+        withContext(Dispatchers.IO) {
+            val installed = installer.scan().map { it.descriptor }
+            requireNotNull(appContext.contentResolver.openInputStream(uri)) { "无法读取扩展包" }
+                .use { input -> inspector.inspect(name, input, installed) }
+        }
+    }
+
+    /** 安装 inspect 时生成的同一份不可变快照，不再访问原始 DocumentsProvider URI。 */
+    suspend fun install(handle: ExtensionPackageSnapshotHandle): InstalledExtension = mutex.withLock {
+        withContext(NonCancellable) {
+            val installedIdsBefore = installer.scan().mapTo(mutableSetOf()) { it.manifest.id }
+            val installed = withContext(Dispatchers.IO) {
+                inspector.consumeSnapshot(handle) { fileName, input ->
+                    installer.install(fileName, input)
+                }
+            }
+            withContext(Dispatchers.IO) {
+                CredentialGrantLifecycleLocks.withExtension(installed.manifest.id) {
+                    credentialGrantStore.reconcileExtension(
+                        installed.manifest.id,
+                        installed.installationInstanceId ?: "",
+                        installed.descriptor.credentialRequests
+                    )
+                }
+            }
+            val reason = if (installed.manifest.id in installedIdsBefore) {
+                ExtensionRuntimeReloadReason.Update
+            } else {
+                ExtensionRuntimeReloadReason.Install
+            }
+            check(reloadRuntimeLocked(reason)) { "扩展已写入，但运行环境重载失败" }
+            installed.copy(runtimeAvailable = runtimes.containsKey(installed.manifest.id))
+        }
+    }
+
+    fun discardInstallPreview(handle: ExtensionPackageSnapshotHandle) {
+        inspector.discard(handle)
+    }
+
     fun installedExtensions(): List<InstalledExtension> = installer.scan().map {
         it.copy(runtimeAvailable = runtimes.containsKey(it.manifest.id))
     }
 
     suspend fun uninstall(extensionId: String): Boolean = mutex.withLock {
         withContext(NonCancellable) {
-            val removed = withContext(Dispatchers.IO) { installer.uninstall(extensionId) }
+            // Serialize grant creation against the last cleanup and remove the install identity.
+            val removed = withContext(Dispatchers.IO) {
+                CredentialGrantLifecycleLocks.withExtension(extensionId) {
+                    credentialGrantStore.deleteForExtension(extensionId)
+                    installer.uninstall(extensionId)
+                }
+            }
             if (!removed) return@withContext false
             check(
                 reloadRuntimeLocked(
@@ -166,6 +237,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     clearExtensionDataFor = setOf(extensionId)
                 )
             ) { "扩展已删除，但运行环境重载失败" }
+            withContext(Dispatchers.IO) { configStore.delete(extensionId) }
             true
         }
     }
@@ -173,6 +245,12 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     suspend fun reloadRuntime(
         reason: ExtensionRuntimeReloadReason = ExtensionRuntimeReloadReason.Manual
     ): Boolean = mutex.withLock { reloadRuntimeLocked(reason) }
+
+    /** Refreshes one running isolate's Host-owned ordinary configuration snapshot. */
+    internal suspend fun refreshRuntimeConfiguration(extensionId: String): Boolean = mutex.withLock {
+        val runtime = runtimes[extensionId] ?: return@withLock false
+        runtimeLifecycle.execute { runtime.refreshConfiguration() }
+    }
 
     /** 由 Flowtone Host 调用；JS 只提供资源字段，扩展身份不从 JS 参数读取。 */
     internal fun createPlaybackMediaItem(
@@ -219,6 +297,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     ): ExtensionPlaybackResource? =
         runtimeLifecycle.execute {
             val provider = musicProviders[song.trackRef.extensionId] ?: return@execute null
+            if (AtomicCapabilityId.PlaybackResourceResolve !in provider.capabilities) {
+                return@execute null
+            }
             providerCall { provider.getPlaybackResource(song) }
                 .onFailure { error ->
                     Log.w(LogTag, "extension.playback.resolve.failed extension=${song.trackRef.extensionId} type=${error.javaClass.simpleName}")
@@ -267,9 +348,16 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     /** All 仅合并每个 Provider 的第一页；跨 Provider cursor 留待后续设计。 */
     internal suspend fun searchMusicProviders(request: ProviderSearchRequest): ProviderSearchCallResult =
         runtimeLifecycle.execute {
-            val calls = musicProviders.toMap().map { (extensionId, provider) ->
-                extensionId to providerCall { provider.searchPage(request) }
-            }
+            val calls = musicProviders.toMap()
+                .filterValues { provider ->
+                    ExtensionRuntimeCapabilityPolicy.supportsSearch(
+                        provider.capabilities,
+                        request.category
+                    )
+                }
+                .map { (extensionId, provider) ->
+                    extensionId to providerCall { provider.searchPage(request) }
+                }
             val pages = calls.mapNotNull { (extensionId, result) ->
                 result.onFailure { error ->
                     Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
@@ -298,6 +386,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     ): ProviderSearchCallResult = runtimeLifecycle.execute {
         val provider = musicProviders[extensionId]
             ?: return@execute ProviderSearchCallResult.Failure(NoSuchElementException("Provider not found"))
+        if (!ExtensionRuntimeCapabilityPolicy.supportsSearch(provider.capabilities, request.category)) {
+            return@execute ProviderSearchCallResult.Success(ProviderSearchPage(emptyList()))
+        }
         providerCall { provider.searchPage(request) }
             .fold(
                 onSuccess = { page ->
@@ -317,11 +408,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             )
     }
 
-    /** 当前已运行且具有 music_provider 能力的 Provider，显示名来自 manifest。 */
+    /** 当前已运行且声明至少一项 MusicProvider Atomic capability 的 Provider。 */
     internal fun availableMusicProviderOptions(): List<SearchProviderOption> =
         installedExtensions()
             .asSequence()
-            .filter { it.runtimeAvailable && it.manifest.supportsMusicProvider && musicProviders.containsKey(it.manifest.id) }
+            .filter { installed ->
+                val provider = musicProviders[installed.manifest.id]
+                installed.runtimeAvailable && provider != null &&
+                    ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(provider.capabilities)
+            }
             .map {
                 SearchProviderOption(
                     extensionId = it.manifest.id,
@@ -337,17 +432,18 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         runtimeLifecycle.execute {
             searchLandingCache[extensionId]?.let { return@execute it }
             val provider = musicProviders[extensionId] ?: return@execute null
+            if (AtomicCapabilityId.SearchLandingGet !in provider.capabilities) return@execute null
             provider.getSearchLanding()?.also { searchLandingCache[extensionId] = it }
         }
 
-    internal fun providerEntityCapabilities(extensionId: String): Set<ProviderEntityCapability> =
-        if (_runtimeState.value.isReloading) emptySet()
-        else musicProviders[extensionId]?.entityCapabilities.orEmpty()
+    internal fun providerCapabilities(extensionId: String): CanonicalAtomicCapabilitySet =
+        if (_runtimeState.value.isReloading) CanonicalAtomicCapabilitySet.Empty
+        else musicProviders[extensionId]?.capabilities ?: CanonicalAtomicCapabilitySet.Empty
 
     internal suspend fun getProviderSongs(extensionId: String): List<ProviderSong>? =
         runtimeLifecycle.execute {
             val provider = musicProviders[extensionId] ?: return@execute null
-            if (ProviderEntityCapability.Song !in provider.entityCapabilities) return@execute null
+            if (AtomicCapabilityId.CatalogSongsList !in provider.capabilities) return@execute null
             try {
                 songCollectionCache.getOrLoad(extensionId) {
                     provider.getSongs()?.let(::dedupeProviderSongs)
@@ -363,7 +459,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     internal suspend fun getProviderAlbums(extensionId: String): List<ProviderAlbum>? =
         runtimeLifecycle.execute {
             val provider = musicProviders[extensionId] ?: return@execute null
-            if (ProviderEntityCapability.Album !in provider.entityCapabilities) return@execute null
+            if (AtomicCapabilityId.CatalogAlbumsList !in provider.capabilities) return@execute null
             try {
                 albumCollectionCache.getOrLoad(extensionId) {
                     provider.getAlbums()?.let(::dedupeProviderAlbums)
@@ -381,6 +477,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         playlistId: String
     ): List<ProviderSong>? = runtimeLifecycle.execute {
         val provider = musicProviders[extensionId] ?: return@execute null
+        if (AtomicCapabilityId.PlaylistSongsRead !in provider.capabilities) return@execute null
         try {
             provider.getPlaylistSongs(playlistId)?.let(::dedupeProviderSongs)
         } catch (error: CancellationException) {
@@ -497,43 +594,43 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     }
 
     private suspend fun load(installed: InstalledExtension): Boolean {
-        if (
-            !installed.manifest.supportsArtistAvatar &&
-            !installed.manifest.supportsArtistMetadata &&
-            !installed.manifest.supportsMusicProvider
-        ) return false
+        val capabilities = installed.descriptor.canonicalCapabilities
+        val requirements = ExtensionRuntimeCapabilityPolicy.registrationRequirements(capabilities)
+        if (!requirements.requiresRuntime) return false
         val isolate = sandboxHost.createIsolate() ?: return false
         val networkClient = gateway.createClientFor(
             extensionId = installed.manifest.id,
-            capability = when {
-                installed.manifest.supportsMusicProvider -> "music_provider"
-                installed.manifest.supportsArtistMetadata -> "artist_metadata"
-                else -> "artist_avatar"
-            },
-            allowedHosts = installed.manifest.networkHosts
+            capability = "host_api",
+            allowedPermissions = installed.descriptor.networkPermissions
         )
         val streamClient = gateway.createStreamClientFor(
             extensionId = installed.manifest.id,
             capability = "media_stream",
-            allowedHosts = installed.manifest.networkHosts
+            allowedPermissions = installed.descriptor.networkPermissions
         )
-        val runtime = JavaScriptExtensionRuntime(installed, isolate, networkClient, privateCache)
+        val runtime = JavaScriptExtensionRuntime(
+            installed = installed,
+            isolate = isolate,
+            network = networkClient,
+            privateCache = privateCache,
+            configStore = configStore
+        )
         return runCatching { runtime.start() }
             .onSuccess {
                 runtimes[installed.manifest.id] = runtime
                 networkClients[installed.manifest.id] = networkClient
                 streamClients[installed.manifest.id] = streamClient
-                if (installed.manifest.supportsArtistAvatar) {
+                if (requirements.artistAvatar) {
                     artistAvatarRegistry.install(JavaScriptArtistAvatarExtension(runtime))
                 }
-                if (installed.manifest.supportsArtistMetadata) {
+                if (requirements.artistMetadata) {
                     artistMetadataRegistry.install(JavaScriptArtistMetadataExtension(runtime))
                 }
-                if (installed.manifest.supportsMusicProvider) {
+                if (requirements.musicProvider) {
                     musicProviders[installed.manifest.id] = JavaScriptMusicProvider(
                         runtime = runtime,
                         musicSources = installed.manifest.musicSources.toSet(),
-                        entityCapabilities = installed.manifest.providerEntityCapabilities
+                        capabilities = capabilities
                     )
                 }
             }
@@ -595,6 +692,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     ): ProviderSong? = runtimeLifecycle.execute {
         val provider = selectMusicProviderForSource(musicProviders.toMap(), sourceHost)
             ?: return@execute null
+        if (AtomicCapabilityId.SongPersistentResolve !in provider.capabilities) {
+            return@execute null
+        }
         providerCall { provider.resolvePersistentSong(persistentId) }
             .onFailure { error ->
                 Log.w(LogTag, "extension.music.persistent.resolve.failed type=${error.javaClass.simpleName}")
@@ -679,7 +779,8 @@ internal fun selectMusicProviderForSource(
     return providers.entries
         .sortedBy(Map.Entry<String, MusicProvider>::key)
         .firstOrNull { (_, provider) ->
-            normalizedSource in provider.musicSources.map(::normalizeMusicSourceHost)
+            AtomicCapabilityId.SongPersistentResolve in provider.capabilities &&
+                normalizedSource in provider.musicSources.map(::normalizeMusicSourceHost)
         }
         ?.value
 }

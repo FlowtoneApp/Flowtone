@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Settings
@@ -68,6 +69,7 @@ import ink.tenqui.flowtone.app.AppPreferences
 import ink.tenqui.flowtone.app.FlowtonePageEasing
 import ink.tenqui.flowtone.app.TopLevelPage
 import ink.tenqui.flowtone.ui.components.OptionGroup
+import ink.tenqui.flowtone.ui.components.SettingsCategoryCard
 import ink.tenqui.flowtone.ui.components.ThemeModeSelector
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -89,40 +91,59 @@ internal fun SettingsSectionList(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        SettingsSectionRow(
+        SettingsCategoryCard(
             title = "通用",
             subtitle = "启动与界面行为",
             icon = Icons.Rounded.Settings,
+            iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             onClick = { onSectionClick(SettingsSection.General) },
             modifier = elementModifier(0)
         )
-        SettingsSectionRow(
+        SettingsCategoryCard(
+            title = "在线",
+            subtitle = "扩展与凭据",
+            icon = Icons.Rounded.Language,
+            iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = { onSectionClick(SettingsSection.Online) },
+            modifier = elementModifier(1).padding(top = 12.dp)
+        )
+        SettingsCategoryCard(
             title = "主题",
             subtitle = "主题模式与播放器外观",
             icon = Icons.Rounded.Palette,
+            iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
             onClick = { onSectionClick(SettingsSection.Appearance) },
-            modifier = elementModifier(1).padding(top = 12.dp)
+            modifier = elementModifier(2).padding(top = 12.dp)
         )
-        SettingsSectionRow(
+        SettingsCategoryCard(
             title = "播放",
             subtitle = "播放恢复行为",
             icon = Icons.Rounded.PlayCircle,
+            iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             onClick = { onSectionClick(SettingsSection.Playback) },
-            modifier = elementModifier(2).padding(top = 12.dp)
+            modifier = elementModifier(3).padding(top = 12.dp)
         )
-        SettingsSectionRow(
+        SettingsCategoryCard(
             title = "记录",
             subtitle = "听歌记录规则",
             icon = Icons.Rounded.History,
+            iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             onClick = { onSectionClick(SettingsSection.Record) },
-            modifier = elementModifier(3).padding(top = 12.dp)
+            modifier = elementModifier(4).padding(top = 12.dp)
         )
-        SettingsSectionRow(
+        SettingsCategoryCard(
             title = "高级",
             subtitle = "预载与性能",
             icon = Icons.Rounded.Tune,
+            iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
             onClick = { onSectionClick(SettingsSection.Advanced) },
-            modifier = elementModifier(4).padding(top = 12.dp)
+            modifier = elementModifier(5).padding(top = 12.dp)
         )
     }
 }

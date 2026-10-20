@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersionName = "0.14.5"
+val appVersionName = "0.15.0"
 
 fun versionCodeFromName(versionName: String): Int {
     val parts = versionName.split(".")
@@ -246,6 +246,7 @@ tasks.register("verifyUiTestFixtureVariantBoundaries") {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui)
