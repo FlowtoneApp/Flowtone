@@ -557,7 +557,7 @@ private fun ExtensionAttentionSection(
             Column(
                 modifier = Modifier.fillMaxWidth()
                     .heightIn(min = 84.dp)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.Center
             ) {
                 Crossfade(
@@ -595,7 +595,10 @@ private fun ExtensionAttentionSection(
                         MaterialTheme.colorScheme.onSurface
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         SettingsOptionIconTile(
                             modifier = Modifier.size(44.dp),
                             containerColor = iconContainerColor,
@@ -608,22 +611,25 @@ private fun ExtensionAttentionSection(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                        Text(
-                            text = animatedTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = titleColor,
+                        Column(
                             modifier = Modifier.weight(1f).padding(start = 12.dp)
-                        )
+                        ) {
+                            Text(
+                                text = animatedTitle,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = titleColor
+                            )
+                            messages.forEach { message ->
+                                Text(
+                                    text = message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = detailColor,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
                     }
-                }
-                messages.forEach { message ->
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = detailColor,
-                        modifier = Modifier.padding(start = 56.dp, top = 4.dp)
-                    )
                 }
             }
         }
