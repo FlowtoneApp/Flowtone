@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.credential
 
+import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
 import java.util.Locale
 
 enum class CredentialType(val value: String, val label: String) {
@@ -185,12 +186,21 @@ data class CredentialRequestDefinition(
     val id: String,
     val credentialType: CredentialType,
     val label: String,
+    /** Legacy spelling; true maps to RuntimeRequired. */
     val required: Boolean = false,
     val description: String? = null,
     val identifiers: List<CredentialIdentifierType> = emptyList(),
     val realm: String? = null,
-    val genericFieldIds: List<CredentialFieldId> = emptyList()
+    val genericFieldIds: List<CredentialFieldId> = emptyList(),
+    val requirement: ExtensionRequirementLevel? = null
 ) {
+    val effectiveRequirement: ExtensionRequirementLevel
+        get() = requirement ?: if (required) {
+            ExtensionRequirementLevel.RuntimeRequired
+        } else {
+            ExtensionRequirementLevel.Optional
+        }
+
     val contract: CredentialRequestContract
         get() = CredentialRequestContract(
             credentialType = credentialType,
@@ -208,8 +218,14 @@ data class CredentialRequestIdentity(
 val CredentialRequestDefinition.identity: CredentialRequestIdentity
     get() = CredentialRequestIdentity(id, credentialType)
 
+data class CredentialAtLeastOneGroup(
+    val requestIds: List<String>,
+    val requirement: ExtensionRequirementLevel = ExtensionRequirementLevel.RuntimeRequired
+)
+
 object CredentialRequestLimits {
     const val MaxRequests = 16
+    const val MaxAtLeastOneGroups = 16
     const val MaxIdLength = 64
     const val MaxLabelLength = 80
     const val MaxDescriptionLength = 300
@@ -228,7 +244,10 @@ object CredentialRequestValidator {
         CredentialFieldId.Cookie
     )
 
-    fun validate(requests: List<CredentialRequestDefinition>): List<CredentialRequestViolation> = buildList {
+    fun validate(
+        requests: List<CredentialRequestDefinition>,
+        atLeastOneGroups: List<CredentialAtLeastOneGroup> = emptyList()
+    ): List<CredentialRequestViolation> = buildList {
         if (requests.size > CredentialRequestLimits.MaxRequests) {
             add(CredentialRequestViolation("credentialRequests", "凭证请求数量超过上限"))
         }
@@ -240,6 +259,11 @@ object CredentialRequestValidator {
             }
             if (!ids.add(request.id)) {
                 add(CredentialRequestViolation("$path.id", "凭证请求 ID 重复"))
+            }
+            if (request.required && request.requirement != null &&
+                request.requirement != ExtensionRequirementLevel.RuntimeRequired
+            ) {
+                add(CredentialRequestViolation("$path.requirement", "required=true 只能与运行必须要求同时使用"))
             }
             if (request.label.isBlank() || request.label.length > CredentialRequestLimits.MaxLabelLength) {
                 add(CredentialRequestViolation("$path.label", "label 为空或过长"))
@@ -296,10 +320,42 @@ object CredentialRequestValidator {
                 }
             }
         }
+
+        if (atLeastOneGroups.size > CredentialRequestLimits.MaxAtLeastOneGroups) {
+            add(CredentialRequestViolation("credentialAtLeastOne", "至少一项凭据约束数量超过上限"))
+        }
+        val requestIds = requests.mapTo(mutableSetOf()) { it.id }
+        val groupKeys = mutableSetOf<Set<String>>()
+        atLeastOneGroups.forEachIndexed { index, group ->
+            val path = "credentialAtLeastOne[$index]"
+            if (group.requirement == ExtensionRequirementLevel.Optional) {
+                add(CredentialRequestViolation("$path.requirement", "至少一项约束不能声明为可选配置"))
+            }
+            if (group.requestIds.size !in 2..CredentialRequestLimits.MaxRequests) {
+                add(CredentialRequestViolation(
+                    path,
+                    "每组必须引用 2 到 ${CredentialRequestLimits.MaxRequests} 个凭据请求"
+                ))
+            }
+            if (group.requestIds.distinct().size != group.requestIds.size) {
+                add(CredentialRequestViolation("$path.requests", "同一组内凭据请求不能重复"))
+            }
+            if (!groupKeys.add(group.requestIds.toSet())) {
+                add(CredentialRequestViolation(path, "至少一项凭据约束重复"))
+            }
+            group.requestIds.forEachIndexed { requestIndex, requestId ->
+                if (requestId !in requestIds) {
+                    add(CredentialRequestViolation("$path.requests[$requestIndex]", "引用了未声明的凭据请求"))
+                }
+            }
+        }
     }
 
-    fun requireValid(requests: List<CredentialRequestDefinition>) {
-        val violations = validate(requests)
+    fun requireValid(
+        requests: List<CredentialRequestDefinition>,
+        atLeastOneGroups: List<CredentialAtLeastOneGroup> = emptyList()
+    ) {
+        val violations = validate(requests, atLeastOneGroups)
         require(violations.isEmpty()) {
             violations.joinToString(separator = "; ") { "${it.path}: ${it.reason}" }
         }

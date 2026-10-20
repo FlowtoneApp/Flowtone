@@ -105,6 +105,12 @@ internal fun ExtensionInstallScreen(
             if (hasCredentials) {
                 ExtensionPreviewCredentialsSection(
                     requests = credentialViews,
+                    requirementGroups = remember(preview) {
+                        extensionCredentialAtLeastOneGroupLabels(
+                            preview.incoming.credentialAtLeastOneGroups,
+                            preview.credentialRequests
+                        )
+                    },
                     modifier = pageScope.elementModifier(order++, orderCount).padding(top = 26.dp)
                 )
             }
@@ -361,32 +367,41 @@ private fun ExtensionPreviewNetworkSection(
 @Composable
 private fun ExtensionPreviewCredentialsSection(
     requests: List<ExtensionCredentialRequestPresentation>,
+    requirementGroups: List<String>,
     modifier: Modifier = Modifier
 ) {
     OptionGroup(title = "凭据请求 · ${requests.size} 项", modifier = modifier) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                requests.forEachIndexed { index, request ->
-                    Column {
-                        Text(request.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(
-                            request.typeLabel + if (request.required) " · 使用相关功能时需要" else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                        request.realm?.let { realm ->
-                            Text("服务：$realm", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        Text("请求字段：${request.fields.joinToString("、")}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-                        request.identityConstraint?.let { constraint ->
-                            Text(constraint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        request.description?.takeIf(String::isNotBlank)?.let { description ->
-                            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
-                        }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            requests.forEachIndexed { index, request ->
+                Column {
+                    Text(request.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        "${request.typeLabel} · ${extensionRequirementLabel(request.requirement)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    request.realm?.let { realm ->
+                        Text("服务：$realm", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
                     }
-                    if (index != requests.lastIndex) HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                    Text("请求字段：${request.fields.joinToString("、")}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                    request.identityConstraint?.let { constraint ->
+                        Text(constraint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    request.description?.takeIf(String::isNotBlank)?.let { description ->
+                        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 5.dp))
+                    }
                 }
+                if (index != requests.lastIndex) HorizontalDivider(Modifier.padding(vertical = 12.dp))
+            }
+            requirementGroups.forEach { group ->
+                Text(
+                    group,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
         Text(
             "安装扩展不等于授权使用账户凭据。安装后仍需在凭据授权页面由你明确选择并确认。",

@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
+import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationActionDefinition
@@ -11,6 +12,7 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLev
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchemaValidator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
+import ink.tenqui.flowtone.data.online.credential.CredentialAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.credential.CredentialFieldId
 import ink.tenqui.flowtone.data.online.credential.CredentialIdentifierType
 import ink.tenqui.flowtone.data.online.credential.CredentialRealm
@@ -45,6 +47,8 @@ internal object ExtensionManifestV2Parser {
         val unknownCapabilities = capabilityIds.filter { AtomicCapabilityId.fromValue(it) == null }.distinct()
         val configuration = parseConfiguration(json.optJSONObject("configuration"))
         val credentialRequests = parseCredentialRequests(json)
+        val credentialAtLeastOneGroups = parseCredentialAtLeastOneGroups(json)
+        CredentialRequestValidator.requireValid(credentialRequests, credentialAtLeastOneGroups)
         val networkPermissions = parseNetworkPermissions(json)
         val manifest = ExtensionManifestJson.commonManifest(
             json = json,
@@ -56,7 +60,8 @@ internal object ExtensionManifestV2Parser {
             unknownAtomicCapabilityIds = unknownCapabilities,
             configurationSchema = configuration,
             credentialRequests = credentialRequests,
-            networkPermissions = networkPermissions
+            networkPermissions = networkPermissions,
+            credentialAtLeastOneGroups = credentialAtLeastOneGroups
         )
     }
 
@@ -88,7 +93,7 @@ internal object ExtensionManifestV2Parser {
                             fieldIds = List(fields.length()) { fieldIndex -> fields.getString(fieldIndex) },
                             requirement = group.optString("requirement")
                                 .takeIf(String::isNotBlank)
-                                ?.let(::parseConfigurationRequirement)
+                                ?.let(::parseRequirement)
                                 ?: ConfigurationRequirementLevel.RuntimeRequired
                         )
                     }
@@ -116,7 +121,7 @@ internal object ExtensionManifestV2Parser {
             }
         }.orEmpty()
         val requirement = json.optionalText("requirement")
-            ?.let(::parseConfigurationRequirement)
+            ?.let(::parseRequirement)
         val legacyRequired = json.optBoolean("required", false)
         require(!legacyRequired || requirement == null ||
             requirement == ConfigurationRequirementLevel.RuntimeRequired
@@ -134,12 +139,12 @@ internal object ExtensionManifestV2Parser {
         )
     }
 
-    private fun parseConfigurationRequirement(value: String): ConfigurationRequirementLevel =
+    private fun parseRequirement(value: String): ExtensionRequirementLevel =
         when (value) {
-            "runtime_required" -> ConfigurationRequirementLevel.RuntimeRequired
-            "recommended" -> ConfigurationRequirementLevel.Recommended
-            "optional" -> ConfigurationRequirementLevel.Optional
-            else -> throw IllegalArgumentException("未知 configuration requirement")
+            "runtime_required" -> ExtensionRequirementLevel.RuntimeRequired
+            "recommended" -> ExtensionRequirementLevel.Recommended
+            "optional" -> ExtensionRequirementLevel.Optional
+            else -> throw IllegalArgumentException("未知 requirement")
         }
 
     private fun parseDefaultValue(
@@ -214,24 +219,51 @@ internal object ExtensionManifestV2Parser {
                         )
                     }
                 }
+                val requirement = item.optionalText("requirement")?.let(::parseRequirement)
+                val legacyRequired = item.optBoolean("required", false)
+                require(!legacyRequired || requirement == null ||
+                    requirement == ExtensionRequirementLevel.RuntimeRequired
+                ) { "required=true 只能与 runtime_required 同时使用" }
                 CredentialRequestDefinition(
                     id = item.getString("id"),
                     credentialType = type,
                     label = item.getString("label"),
-                    required = item.optBoolean("required", false),
+                    required = legacyRequired || requirement == ExtensionRequirementLevel.RuntimeRequired,
                     description = item.optionalText("description"),
                     identifiers = contract.identifiers,
                     realm = contract.realm,
-                    genericFieldIds = contract.genericFieldIds
+                    genericFieldIds = contract.genericFieldIds,
+                    requirement = requirement
                 )
             }
         }.orEmpty()
-        CredentialRequestValidator.requireValid(requests)
         return requests.map { request ->
             if (request.credentialType == CredentialType.GenericAccount) {
                 request.copy(genericFieldIds = request.contract.fields.map { it.id })
             } else {
                 request
+            }
+        }
+    }
+
+    private fun parseCredentialAtLeastOneGroups(json: JSONObject): List<CredentialAtLeastOneGroup> {
+        val groups = json.optJSONArray("credentialAtLeastOne") ?: return emptyList()
+        return List(groups.length()) { groupIndex ->
+            when (val group = groups.get(groupIndex)) {
+                is org.json.JSONArray -> CredentialAtLeastOneGroup(
+                    requestIds = List(group.length()) { requestIndex -> group.getString(requestIndex) }
+                )
+                is JSONObject -> {
+                    val requests = group.optJSONArray("requests")
+                        ?: throw IllegalArgumentException("credentialAtLeastOne group 缺少 requests")
+                    CredentialAtLeastOneGroup(
+                        requestIds = List(requests.length()) { requestIndex -> requests.getString(requestIndex) },
+                        requirement = group.optionalText("requirement")
+                            ?.let(::parseRequirement)
+                            ?: ExtensionRequirementLevel.RuntimeRequired
+                    )
+                }
+                else -> throw IllegalArgumentException("credentialAtLeastOne group 格式无效")
             }
         }
     }

@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
 import ink.tenqui.flowtone.data.online.capability.SummaryCapability
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityAggregator
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinition
@@ -62,8 +65,10 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationStateResolver
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
 import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
+import ink.tenqui.flowtone.data.online.credential.CredentialAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantEvaluation
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantRepository
+import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.ui.components.FlowtoneSwitch
@@ -97,8 +102,16 @@ internal data class ExtensionSettingsPresentation(
 internal data class ExtensionGrantSummary(
     val requestCount: Int,
     val authorizedCount: Int,
-    val readyCount: Int
+    val readyCount: Int,
+    val missingRuntimeRequiredCount: Int = 0,
+    val missingRecommendedCount: Int = 0,
+    val missingRuntimeAtLeastOneGroupCount: Int = 0,
+    val missingRecommendedAtLeastOneGroupCount: Int = 0
 ) {
+    val runtimeRequirementsSatisfied: Boolean
+        get() = missingRuntimeRequiredCount == 0 && missingRuntimeAtLeastOneGroupCount == 0
+    val recommendationsSatisfied: Boolean
+        get() = missingRecommendedCount == 0 && missingRecommendedAtLeastOneGroupCount == 0
     val label: String get() = "$authorizedCount 项已授权 · ${requestCount - authorizedCount} 项未授权" +
         if (authorizedCount > readyCount) " · ${authorizedCount - readyCount} 项凭据未就绪" else ""
 }
@@ -109,6 +122,39 @@ internal fun extensionGrantSummary(evaluations: List<CredentialGrantEvaluation>)
         authorizedCount = evaluations.count { it.authorizationValid },
         readyCount = evaluations.count { it.usable }
     )
+
+internal fun extensionGrantSummary(
+    requests: List<CredentialRequestDefinition>,
+    atLeastOneGroups: List<CredentialAtLeastOneGroup>,
+    evaluations: List<CredentialGrantEvaluation>
+): ExtensionGrantSummary {
+    val evaluationsByRequestId = buildMap {
+        requests.forEachIndexed { index, request ->
+            evaluations.getOrNull(index)?.let { put(request.id, it) }
+        }
+    }
+    fun isUsable(requestId: String): Boolean = evaluationsByRequestId[requestId]?.usable == true
+
+    return ExtensionGrantSummary(
+        requestCount = evaluations.size,
+        authorizedCount = evaluations.count { it.authorizationValid },
+        readyCount = evaluations.count { it.usable },
+        missingRuntimeRequiredCount = requests.count {
+            it.effectiveRequirement == ExtensionRequirementLevel.RuntimeRequired && !isUsable(it.id)
+        },
+        missingRecommendedCount = requests.count {
+            it.effectiveRequirement == ExtensionRequirementLevel.Recommended && !isUsable(it.id)
+        },
+        missingRuntimeAtLeastOneGroupCount = atLeastOneGroups.count { group ->
+            group.requirement == ExtensionRequirementLevel.RuntimeRequired &&
+                group.requestIds.none(::isUsable)
+        },
+        missingRecommendedAtLeastOneGroupCount = atLeastOneGroups.count { group ->
+            group.requirement == ExtensionRequirementLevel.Recommended &&
+                group.requestIds.none(::isUsable)
+        }
+    )
+}
 
 internal enum class ExtensionSettingsBackResult { PerformBack, ConfirmDiscard }
 
@@ -205,7 +251,11 @@ internal fun ExtensionSettingsScreen(
                     }
                 }
             }.onSuccess { evaluations ->
-                grantSummary = extensionGrantSummary(evaluations)
+                grantSummary = extensionGrantSummary(
+                    requests = installed.descriptor.credentialRequests,
+                    atLeastOneGroups = installed.descriptor.credentialAtLeastOneGroups,
+                    evaluations = evaluations
+                )
                 grantError = false
             }.onFailure {
                 if (it is CancellationException) throw it
@@ -247,19 +297,34 @@ internal fun ExtensionSettingsScreen(
 
     val presentation = remember(installed, savedValues) { extensionSettingsPresentation(installed, savedValues) }
     val configurationReminder = when {
-        configLoading || configError != null -> null
-        !presentation.configurationRequirements.runtimeRequirementsSatisfied ->
+        !grantError && grantSummary?.runtimeRequirementsSatisfied == false ->
             ExtensionConfigurationReminder.RuntimeRequired
-        !presentation.configurationRequirements.recommendationsSatisfied ->
+        !configLoading && configError == null &&
+            !presentation.configurationRequirements.runtimeRequirementsSatisfied ->
+            ExtensionConfigurationReminder.RuntimeRequired
+        !grantError && grantSummary?.recommendationsSatisfied == false ->
+            ExtensionConfigurationReminder.Recommended
+        !configLoading && configError == null &&
+            !presentation.configurationRequirements.recommendationsSatisfied ->
             ExtensionConfigurationReminder.Recommended
         else -> null
     }
     val attentionMessages = buildList {
         if (configError != null) add("扩展配置读取失败，请重新进入页面。")
         if (grantError) add("凭据授权状态读取失败，请进入授权页检查。")
-        grantSummary?.let { summary ->
-            if (summary.authorizedCount < summary.requestCount) add("部分凭据请求尚未授权。")
-            if (summary.readyCount < summary.authorizedCount) add("部分已授权凭据当前不可用。")
+        grantSummary?.takeUnless { grantError }?.let { summary ->
+            if (summary.missingRuntimeRequiredCount > 0) {
+                add("有 ${summary.missingRuntimeRequiredCount} 项运行必须凭据尚未授权或不可用。")
+            }
+            if (summary.missingRuntimeAtLeastOneGroupCount > 0) {
+                add("有 ${summary.missingRuntimeAtLeastOneGroupCount} 组运行必须凭据需要至少授权一项。")
+            }
+            if (summary.missingRecommendedCount > 0) {
+                add("有 ${summary.missingRecommendedCount} 项推荐凭据尚未授权或不可用。")
+            }
+            if (summary.missingRecommendedAtLeastOneGroupCount > 0) {
+                add("有 ${summary.missingRecommendedAtLeastOneGroupCount} 组推荐凭据建议至少授权一项。")
+            }
         }
     }
     BackHandler(onBack = onBack)
@@ -473,8 +538,6 @@ private fun ExtensionAttentionSection(
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
-    val isRuntimeRequired = configurationReminder == ExtensionConfigurationReminder.RuntimeRequired
-    val isRecommended = configurationReminder == ExtensionConfigurationReminder.Recommended
     val title = when (configurationReminder) {
         ExtensionConfigurationReminder.RuntimeRequired -> "运行必须配置尚未完成"
         ExtensionConfigurationReminder.Recommended -> "推荐配置尚未完成"
@@ -484,60 +547,83 @@ private fun ExtensionAttentionSection(
             else -> "扩展状态需要检查"
         }
     }
-    val cardColor = normalSurfaceColor
-    val statusColor = when {
-        isRuntimeRequired -> MaterialTheme.colorScheme.onErrorContainer
-        isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFF765900)
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    val iconContainerColor = when {
-        isRuntimeRequired -> if (isDarkTheme) Color(0xFFF9DEDC) else MaterialTheme.colorScheme.error
-        isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFFE0B340)
-        else -> if (isDarkTheme) Color(0xFFE4E9F6) else normalSurfaceColor
-    }
-    val iconTint = when {
-        isRuntimeRequired -> if (isDarkTheme) Color(0xFF410E0B) else MaterialTheme.colorScheme.onError
-        isRecommended -> Color(0xFF4D3B00)
-        else -> if (isDarkTheme) Color(0xFF354052) else MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val icon = if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
-    val titleColor = if (configurationReminder != null) statusColor else MaterialTheme.colorScheme.onSurface
     val detailColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(modifier = modifier.fillMaxWidth().padding(top = 20.dp)) {
         SettingsOptionSurface(
-            surfaceColor = cardColor,
-            contentColor = titleColor
+            surfaceColor = normalSurfaceColor,
+            contentColor = MaterialTheme.colorScheme.onSurface
         ) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth()
                     .heightIn(min = 84.dp)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.Center
             ) {
-                SettingsOptionIconTile(
-                    modifier = Modifier.size(44.dp),
-                    containerColor = iconContainerColor,
-                    contentColor = iconTint,
-                    themeAwareColorAdjustment = false
-                ) {
-                    Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))
-                }
-                Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = titleColor
-                    )
-                    messages.forEach { message ->
+                Crossfade(
+                    targetState = configurationReminder to title,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "ExtensionAttentionStatus"
+                ) { (animatedReminder, animatedTitle) ->
+                    val isRuntimeRequired =
+                        animatedReminder == ExtensionConfigurationReminder.RuntimeRequired
+                    val isRecommended =
+                        animatedReminder == ExtensionConfigurationReminder.Recommended
+                    val statusColor = when {
+                        isRuntimeRequired -> MaterialTheme.colorScheme.onErrorContainer
+                        isRecommended -> if (isDarkTheme) Color(0xFFFFD166) else Color(0xFF765900)
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                    val iconContainerColor = when {
+                        isRuntimeRequired ->
+                            if (isDarkTheme) Color(0xFFF9DEDC) else MaterialTheme.colorScheme.error
+                        isRecommended ->
+                            if (isDarkTheme) Color(0xFFFFD166) else Color(0xFFE0B340)
+                        else -> if (isDarkTheme) Color(0xFFE4E9F6) else normalSurfaceColor
+                    }
+                    val iconTint = when {
+                        isRuntimeRequired ->
+                            if (isDarkTheme) Color(0xFF410E0B) else MaterialTheme.colorScheme.onError
+                        isRecommended -> Color(0xFF4D3B00)
+                        else -> if (isDarkTheme) Color(0xFF354052) else MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    val icon =
+                        if (isRuntimeRequired) Icons.Rounded.Warning else Icons.Outlined.Info
+                    val titleColor = if (animatedReminder != null) {
+                        statusColor
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SettingsOptionIconTile(
+                            modifier = Modifier.size(44.dp),
+                            containerColor = iconContainerColor,
+                            contentColor = iconTint,
+                            themeAwareColorAdjustment = false
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = detailColor,
-                            modifier = Modifier.padding(top = 4.dp)
+                            text = animatedTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleColor,
+                            modifier = Modifier.weight(1f).padding(start = 12.dp)
                         )
                     }
+                }
+                messages.forEach { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = detailColor,
+                        modifier = Modifier.padding(start = 56.dp, top = 4.dp)
+                    )
                 }
             }
         }

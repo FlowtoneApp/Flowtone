@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.data.online.configuration
 
+import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
 import java.net.URI
 
 enum class ConfigurationFieldType {
@@ -20,12 +21,8 @@ data class ConfigurationChoice(
     val label: String
 )
 
-/** Provider-declared completion level for extension configuration fields and groups. */
-enum class ConfigurationRequirementLevel {
-    RuntimeRequired,
-    Recommended,
-    Optional
-}
+/** Compatibility name for the shared requirement level. */
+typealias ConfigurationRequirementLevel = ExtensionRequirementLevel
 
 data class ConfigurationFieldDefinition(
     val id: String,

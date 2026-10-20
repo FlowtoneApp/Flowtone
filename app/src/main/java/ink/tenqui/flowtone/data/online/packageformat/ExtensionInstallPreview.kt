@@ -8,6 +8,7 @@ import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldDefinitio
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchemaValidator
+import ink.tenqui.flowtone.data.online.credential.CredentialAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestIdentity
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestValidator
@@ -67,6 +68,11 @@ data class CredentialRequestChange(
     val incoming: CredentialRequestDefinition
 )
 
+data class CredentialAtLeastOneGroupChange(
+    val previous: CredentialAtLeastOneGroup?,
+    val incoming: CredentialAtLeastOneGroup?
+)
+
 data class ExtensionUpdateDiff(
     val addedCapabilities: Set<AtomicCapabilityId>,
     val removedCapabilities: Set<AtomicCapabilityId>,
@@ -78,7 +84,8 @@ data class ExtensionUpdateDiff(
     val changedCredentialRequests: List<CredentialRequestChange>,
     val addedRequiredFields: List<ConfigurationFieldDefinition>,
     val removedFields: List<ConfigurationFieldDefinition>,
-    val addedRecommendedFields: List<ConfigurationFieldDefinition> = emptyList()
+    val addedRecommendedFields: List<ConfigurationFieldDefinition> = emptyList(),
+    val changedCredentialAtLeastOneGroups: List<CredentialAtLeastOneGroupChange> = emptyList()
 ) {
     val hasPermissionChanges: Boolean
         get() = addedNetworkPermissions.isNotEmpty() || removedNetworkPermissions.isNotEmpty()
@@ -106,6 +113,19 @@ data class ExtensionUpdateDiff(
 
             val previousCredentials = previous.credentialRequests.associateBy { it.identity }
             val incomingCredentials = incoming.credentialRequests.associateBy { it.identity }
+            val previousCredentialGroups = previous.credentialAtLeastOneGroups
+                .associateBy { it.requestIds.toSet() }
+            val incomingCredentialGroups = incoming.credentialAtLeastOneGroups
+                .associateBy { it.requestIds.toSet() }
+            val credentialGroupChanges = (previousCredentialGroups.keys + incomingCredentialGroups.keys)
+                .distinct()
+                .mapNotNull { requestIds ->
+                    val oldGroup = previousCredentialGroups[requestIds]
+                    val newGroup = incomingCredentialGroups[requestIds]
+                    val unchanged = oldGroup?.requirement == newGroup?.requirement &&
+                        oldGroup?.requestIds?.toSet() == newGroup?.requestIds?.toSet()
+                    if (unchanged) null else CredentialAtLeastOneGroupChange(oldGroup, newGroup)
+                }
             val previousFields = previous.configurationSchema.fields.associateBy { it.id }
             val incomingFields = incoming.configurationSchema.fields.associateBy { it.id }
 
@@ -127,9 +147,13 @@ data class ExtensionUpdateDiff(
                     .toList(),
                 changedCredentialRequests = incomingCredentials.mapNotNull { (identity, incomingRequest) ->
                     previousCredentials[identity]
-                        ?.takeIf { it.contract != incomingRequest.contract }
+                        ?.takeIf {
+                            it.contract != incomingRequest.contract ||
+                                it.effectiveRequirement != incomingRequest.effectiveRequirement
+                        }
                         ?.let { previousRequest -> CredentialRequestChange(previousRequest, incomingRequest) }
                 },
+                changedCredentialAtLeastOneGroups = credentialGroupChanges,
                 addedRequiredFields = incomingFields.values.filter { incomingField ->
                     incomingField.effectiveRequirement == ConfigurationRequirementLevel.RuntimeRequired &&
                         previousFields[incomingField.id]?.effectiveRequirement !=
@@ -162,7 +186,10 @@ object ExtensionInstallPreviewBuilder {
             "更新预览只能比较相同 extension ID"
         }
         ConfigurationSchemaValidator.requireValid(incoming.configurationSchema)
-        CredentialRequestValidator.requireValid(incoming.credentialRequests)
+        CredentialRequestValidator.requireValid(
+            incoming.credentialRequests,
+            incoming.credentialAtLeastOneGroups
+        )
         val fieldsById = incoming.configurationSchema.fields.associateBy(ConfigurationFieldDefinition::id)
         val requiredFields = incoming.configurationSchema.fields
             .filter {

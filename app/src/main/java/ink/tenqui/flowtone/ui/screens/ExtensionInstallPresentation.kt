@@ -1,9 +1,11 @@
 package ink.tenqui.flowtone.ui.screens
 
+import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityDefinitions
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionInstallPreview
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageSnapshotHandle
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import ink.tenqui.flowtone.data.online.credential.CredentialAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationRequirementLevel
@@ -31,7 +33,7 @@ internal data class ExtensionCredentialRequestPresentation(
     val realm: String?,
     val fields: List<String>,
     val identityConstraint: String?,
-    val required: Boolean,
+    val requirement: ExtensionRequirementLevel,
     val description: String?
 )
 
@@ -91,9 +93,26 @@ internal fun extensionCredentialRequestPresentation(
             ?.map { it.field.label }
             ?.sorted()
             ?.joinToString("、", prefix = "身份标识至少填写一项："),
-        required = request.required,
+        requirement = request.effectiveRequirement,
         description = request.description
     )
+}
+
+internal fun extensionRequirementLabel(requirement: ExtensionRequirementLevel): String = when (requirement) {
+    ExtensionRequirementLevel.RuntimeRequired -> "运行必须"
+    ExtensionRequirementLevel.Recommended -> "推荐配置"
+    ExtensionRequirementLevel.Optional -> "可选配置"
+}
+
+internal fun extensionCredentialAtLeastOneGroupLabels(
+    groups: List<CredentialAtLeastOneGroup>,
+    requests: List<CredentialRequestDefinition>
+): List<String> {
+    val labelsById = requests.associate { it.id to it.label }
+    return groups.map { group ->
+        val labels = group.requestIds.mapNotNull(labelsById::get)
+        "${extensionRequirementLabel(group.requirement)}：至少授权一项：${labels.joinToString("、")}"
+    }
 }
 
 internal fun extensionInstallConfigurationFields(
@@ -224,12 +243,32 @@ internal fun extensionInstallOverlayPresentation(
             },
             configurationFields = diff?.removedFields.orEmpty().map { it.label }
         ),
-        changedCredentialRequests = diff?.changedCredentialRequests.orEmpty().map { change ->
-            ExtensionCredentialContractChangePresentation(
-                label = change.incoming.label,
-                previous = extensionCredentialContractDescription(change.previous),
-                incoming = extensionCredentialContractDescription(change.incoming)
-            )
+        changedCredentialRequests = buildList {
+            diff?.changedCredentialRequests.orEmpty().forEach { change ->
+                add(
+                    ExtensionCredentialContractChangePresentation(
+                        label = change.incoming.label,
+                        previous = "${extensionCredentialContractDescription(change.previous)} · ${extensionRequirementLabel(change.previous.effectiveRequirement)}",
+                        incoming = "${extensionCredentialContractDescription(change.incoming)} · ${extensionRequirementLabel(change.incoming.effectiveRequirement)}"
+                    )
+                )
+            }
+            val previousRequests = preview.existingInstallation?.credentialRequests.orEmpty()
+                .associateBy { it.id }
+            val incomingRequests = preview.credentialRequests.associateBy { it.id }
+            diff?.changedCredentialAtLeastOneGroups.orEmpty().forEach { change ->
+                add(
+                    ExtensionCredentialContractChangePresentation(
+                        label = "凭据约束",
+                        previous = change.previous?.let {
+                            extensionCredentialAtLeastOneGroupLabels(listOf(it), previousRequests.values.toList()).single()
+                        } ?: "未声明",
+                        incoming = change.incoming?.let {
+                            extensionCredentialAtLeastOneGroupLabels(listOf(it), incomingRequests.values.toList()).single()
+                        } ?: "未声明"
+                    )
+                )
+            }
         },
         securityDowngrades = diff?.securityDowngrades.orEmpty().map {
             ExtensionSecurityDowngradePresentation(

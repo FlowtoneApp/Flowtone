@@ -303,14 +303,23 @@ internal fun CredentialRequestSection(preview: ExtensionInstallPreview) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 3.dp)
             )
-            if (request.required) {
-                Text(
-                    text = "使用相关功能时可能需要提供 ${request.credentialType.label}。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 3.dp)
-                )
-            }
+            Text(
+                text = "配置级别：${extensionRequirementLabel(request.effectiveRequirement)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+        extensionCredentialAtLeastOneGroupLabels(
+            preview.incoming.credentialAtLeastOneGroups,
+            preview.credentialRequests
+        ).forEach { group ->
+            Text(
+                text = group,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
         }
     }
 }

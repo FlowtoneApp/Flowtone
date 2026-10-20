@@ -75,7 +75,8 @@ import kotlinx.coroutines.withContext
 
 private data class CredentialGrantRow(
     val request: CredentialRequestDefinition,
-    val evaluation: CredentialGrantEvaluation
+    val evaluation: CredentialGrantEvaluation,
+    val requirementGroups: List<String> = emptyList()
 )
 
 internal fun credentialGrantStatus(evaluation: CredentialGrantEvaluation): String = when {
@@ -120,8 +121,19 @@ internal fun ExtensionCredentialGrantsScreen(
                 withContext(Dispatchers.IO) {
                     val current = extensionManager.installedExtensions()
                         .firstOrNull { it.manifest.id == installed.manifest.id }
-                    val results = current?.descriptor?.credentialRequests.orEmpty().map { request ->
-                        CredentialGrantRow(request, repository.evaluate(current, request.id))
+                    val descriptor = current?.descriptor
+                    val requests = descriptor?.credentialRequests.orEmpty()
+                    val results = requests.map { request ->
+                        val requirementGroups = descriptor?.credentialAtLeastOneGroups.orEmpty()
+                            .filter { request.id in it.requestIds }
+                        CredentialGrantRow(
+                            request = request,
+                            evaluation = repository.evaluate(current, request.id),
+                            requirementGroups = extensionCredentialAtLeastOneGroupLabels(
+                                requirementGroups,
+                                requests
+                            )
+                        )
                     }
                     current to results
                 }
@@ -243,6 +255,20 @@ private fun CredentialGrantRequestCard(
                 evaluation.grant != null && !evaluation.authorizationValid -> MaterialTheme.colorScheme.error
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             }, modifier = Modifier.padding(top = 3.dp))
+        Text(
+            "要求级别：${extensionRequirementLabel(request.effectiveRequirement)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        row.requirementGroups.forEach { group ->
+            Text(
+                group,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
         Text(request.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         request.realm?.let {
             Text("服务：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
@@ -711,6 +737,27 @@ private fun GrantConsentOverlay(
                     modifier = Modifier.padding(top = 4.dp))
                 HorizontalDivider(Modifier.padding(vertical = 16.dp))
                 Text(request?.label ?: "请求不可用", style = MaterialTheme.typography.titleSmall)
+                request?.let { currentRequest ->
+                    Text(
+                        "要求级别：${extensionRequirementLabel(currentRequest.effectiveRequirement)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 5.dp)
+                    )
+                    val relatedGroups = installed.descriptor.credentialAtLeastOneGroups
+                        .filter { currentRequest.id in it.requestIds }
+                    extensionCredentialAtLeastOneGroupLabels(
+                        relatedGroups,
+                        installed.descriptor.credentialRequests
+                    ).forEach { group ->
+                        Text(
+                            group,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
                 request?.realm?.let { Text("服务范围：$it", style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 5.dp)) }
                 Text("请求字段：${request?.contract?.fields?.joinToString("、") { it.label }.orEmpty()}",
