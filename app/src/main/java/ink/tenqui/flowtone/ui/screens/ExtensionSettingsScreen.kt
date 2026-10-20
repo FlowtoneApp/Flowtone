@@ -403,16 +403,28 @@ internal fun ExtensionSettingsScreen(
                     modifier = Modifier.padding(top = 12.dp),
                     surfaceColor = extensionOptionSurfaceColor
                 ) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        TextButton(
-                            onClick = { if (!uninstalling) confirmUninstall = true },
-                            enabled = !uninstalling,
-                            modifier = Modifier.fillMaxWidth()
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !uninstalling) { confirmUninstall = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(if (uninstalling) "正在卸载…" else "卸载扩展", color = MaterialTheme.colorScheme.error)
+                            Text(
+                                text = if (uninstalling) "正在卸载…" else "卸载扩展",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                         uninstallError?.let { message ->
-                            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 }
