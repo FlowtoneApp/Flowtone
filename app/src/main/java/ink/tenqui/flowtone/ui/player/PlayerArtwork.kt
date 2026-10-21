@@ -139,6 +139,7 @@ internal fun MorphArtworkLayer(
     artworkPainter: Painter?,
     previousArtworkPainter: Painter? = null,
     artworkCrossfadeProgress: Float = 1f,
+    showMissingArtworkPlaceholder: Boolean,
     largeArtworkPainter: Painter? = null,
     progress: Float,
     scaleProgress: Float,
@@ -261,20 +262,17 @@ internal fun MorphArtworkLayer(
                     .then(blurModifier),
                 contentAlignment = Alignment.Center
             ) {
-                MissingArtworkPlaceholder(
-                    modifier = Modifier.matchParentSize(),
-                    iconModifier = Modifier.size(
-                        maxOf(
-                            artworkSize * MissingArtworkIconSizeFraction,
-                            MissingArtworkCompactIconSize
+                if (showMissingArtworkPlaceholder) {
+                    MissingArtworkPlaceholder(
+                        modifier = Modifier.matchParentSize(),
+                        iconModifier = Modifier.size(
+                            maxOf(
+                                artworkSize * MissingArtworkIconSizeFraction,
+                                MissingArtworkCompactIconSize
+                            )
                         )
                     )
-                )
-                val artworkFadeProgress by animateFloatAsState(
-                    targetValue = if (artworkPainter != null) 1f else 0f,
-                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                    label = "MiniPlayerArtworkLoadFade"
-                )
+                }
                 val largeArtworkFadeProgress by animateFloatAsState(
                     targetValue = if (largeArtworkPainter != null) 1f else 0f,
                     animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
@@ -300,8 +298,7 @@ internal fun MorphArtworkLayer(
                         modifier = Modifier
                             .matchParentSize()
                             .graphicsLayer {
-                                alpha = artworkFadeProgress *
-                                    artworkCrossfadeProgress.coerceIn(0f, 1f)
+                                alpha = artworkCrossfadeProgress.coerceIn(0f, 1f)
                             }
                     )
                 }

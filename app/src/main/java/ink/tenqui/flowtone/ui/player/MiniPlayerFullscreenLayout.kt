@@ -180,7 +180,12 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 songInfoEnteredFromLyrics ||
                 artistEnteredFromLyrics
         val songPresentationTransition = rememberPlayerSongPresentationTransition(
-            songKey = playerUiState.currentSong?.id,
+            songKey = playerUiState.currentTrack?.identityKey
+                ?: playerUiState.currentSong?.let { song ->
+                    "${song.sourceType}:${song.uri}"
+                }
+                ?: playerUiState.currentQueueId,
+            lyricsSongId = playerUiState.currentSong?.id,
             title = title,
             artist = artist,
             imageRequest = imageRequest,
@@ -204,6 +209,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     artworkPainter = presentation.artworkPainter,
                     previousArtworkPainter = presentation.previousArtworkPainter,
                     artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
+                    showMissingArtworkPlaceholder = shouldShowMissingArtworkPlaceholder(presentation),
                     largeArtworkPainter = presentation.largeArtworkPainter,
                     progress = artworkAnimationProgress,
                     scaleProgress = artworkScaleProgress,
@@ -222,7 +228,11 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
                     playbackScale = artworkPlaybackScale,
                     playbackRotationDegrees = artworkPlaybackRotationDegrees,
-                    layerAlpha = playbackArtworkAlpha * switchAlpha,
+                    layerAlpha = playbackArtworkAlpha * playerArtworkSwitchAlpha(
+                        transition = songPresentationTransition,
+                        presentation = presentation,
+                        switchAlpha = switchAlpha
+                    ),
                     layerTranslationY =
                         16.dp *
                             (1f - minimizedProgress) *
@@ -326,18 +336,15 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     .fillMaxSize()
                     .zIndex(5f)
             ) { presentation, trackSwitchAlpha ->
-                // 切歌时封面与文字共用同一位移和透明度，作为一个整体切换。
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = trackSwitchAlpha }
-                ) {
+                // 目标封面未就绪时，保留图层不透明；文字仍按切歌进度交接。
+                Box(modifier = Modifier.fillMaxSize()) {
                     if (lyricsHeaderArtworkAlpha > 0.001f) {
                         MorphArtworkLayer(
                             imageRequest = presentation.imageRequest,
                             artworkPainter = presentation.artworkPainter,
                             previousArtworkPainter = presentation.previousArtworkPainter,
                             artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
+                            showMissingArtworkPlaceholder = shouldShowMissingArtworkPlaceholder(presentation),
                             largeArtworkPainter = presentation.largeArtworkPainter,
                             progress = 1f,
                             scaleProgress = 1f,
@@ -356,7 +363,11 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                             addToPlaylistArtworkTop = lyricsHeaderArtworkTop,
                             playbackScale = 1f,
                             playbackRotationDegrees = 0f,
-                            layerAlpha = lyricsHeaderArtworkAlpha,
+                            layerAlpha = lyricsHeaderArtworkAlpha * playerArtworkSwitchAlpha(
+                                transition = songPresentationTransition,
+                                presentation = presentation,
+                                switchAlpha = trackSwitchAlpha
+                            ),
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .graphicsLayer {
@@ -380,7 +391,9 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                             trackSwitchAlpha > 0.99f &&
                             isSelectableArtist(presentation.artist),
                         onArtistClick = { onArtistClick(presentation.artist) },
-                        modifier = Modifier.align(Alignment.TopStart)
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .graphicsLayer { alpha = trackSwitchAlpha }
                     )
                 }
             }
@@ -499,7 +512,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             MiniPlayerLyricsHost(
                 currentSong = playerUiState.currentSong,
                 currentQueueId = playerUiState.currentQueueId,
-                presentedSongId = songPresentationTransition.current.key,
+                presentedSongId = songPresentationTransition.current.lyricsSongId,
                 songLyricsState = songLyricsState,
                 switchDirection = collapsedMetadataSwitchDirection,
                 confirmedPlaybackPosition = confirmedPlaybackPosition,
