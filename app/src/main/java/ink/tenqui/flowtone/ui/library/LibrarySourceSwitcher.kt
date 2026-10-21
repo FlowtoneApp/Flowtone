@@ -49,7 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -60,6 +60,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -82,6 +83,7 @@ import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.ProviderExtensionIcon
 import ink.tenqui.flowtone.ui.components.extensionManifestColor
+import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -143,6 +145,11 @@ internal sealed interface LibrarySourceSwitcherState {
     data object Collapsed : LibrarySourceSwitcherState
     data object Expanded : LibrarySourceSwitcherState
     data class Switching(val targetKey: String) : LibrarySourceSwitcherState
+}
+
+internal enum class LibrarySourceCardRenderOwner {
+    Static,
+    Overlay
 }
 
 internal data class LibrarySourceContentState(
@@ -377,14 +384,14 @@ internal fun LibraryProviderHeader(
                 contentDescription = "曲库来源：${source.name}，${source.typeLabel}，点击展开或纵向滑动切换"
             },
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = librarySourceCardContainerColor(),
         tonalElevation = 1.dp
     ) {
         AnimatedContent(
             targetState = source,
             transitionSpec = {
                 if (swipeDirection == 0) {
-                    EnterTransition.None togetherWith ExitTransition.None
+                    EnterTransition.None togetherWith ExitTransition.None using null
                 } else {
                     slideInVertically(
                         animationSpec = tween(
@@ -399,7 +406,7 @@ internal fun LibraryProviderHeader(
                                 easing = FlowtoneMotion.Easing
                             )
                         ) { height -> swipeDirection * height } +
-                        fadeOut(tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
+                        fadeOut(tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing)) using null
                 }
             },
             contentKey = { it.identity.key },
@@ -429,6 +436,8 @@ internal fun LibrarySourceSwitcherOverlay(
     pageViewportBoundsInRoot: Rect?,
     overlayOriginInRoot: Offset?,
     pageActive: Boolean,
+    sourceCardRenderOwner: LibrarySourceCardRenderOwner,
+    onSourceCardRenderOwnerChange: (LibrarySourceCardRenderOwner) -> Unit,
     sourceIconPainters: Map<String, Painter>,
     onSourceIconPainterLoaded: (String, Painter) -> Unit,
     progress: Animatable<Float, AnimationVector1D>,
@@ -436,6 +445,7 @@ internal fun LibrarySourceSwitcherOverlay(
     onSourceSelected: (LibrarySourceItem) -> Unit
 ) {
     val latestSourceItems by rememberUpdatedState(sourceItems)
+    val latestSelectedIdentity by rememberUpdatedState(selectedIdentity)
     var layoutSnapshot by remember { mutableStateOf<LibrarySourceSwitcherSnapshot?>(null) }
     var movingIdentity by remember { mutableStateOf<LibrarySourceIdentity?>(null) }
 
@@ -500,25 +510,35 @@ internal fun LibrarySourceSwitcherOverlay(
         val snapshotForRender = layoutSnapshot ?: openingCandidate
         val transitionProgress = progress.value
         val overlayActive = pageActive && (
-            state != LibrarySourceSwitcherState.Collapsed ||
+            sourceCardRenderOwner == LibrarySourceCardRenderOwner.Overlay ||
+                state != LibrarySourceSwitcherState.Collapsed ||
                 snapshotForRender != null ||
                 transitionProgress > 0.001f
             )
 
+        fun handoffToStatic(collapseSwitcher: Boolean = false) {
+            Snapshot.withMutableSnapshot {
+                if (collapseSwitcher) {
+                    onStateChange(LibrarySourceSwitcherState.Collapsed)
+                }
+                onSourceCardRenderOwnerChange(LibrarySourceCardRenderOwner.Static)
+                layoutSnapshot = null
+                movingIdentity = null
+            }
+        }
+
         LaunchedEffect(pageActive, state) {
             if (!pageActive) {
                 progress.snapTo(0f)
-                layoutSnapshot = null
-                movingIdentity = null
-                if (state != LibrarySourceSwitcherState.Collapsed) {
-                    onStateChange(LibrarySourceSwitcherState.Collapsed)
-                }
+                handoffToStatic(collapseSwitcher = state != LibrarySourceSwitcherState.Collapsed)
                 return@LaunchedEffect
             }
 
             when (state) {
                 LibrarySourceSwitcherState.Collapsed -> {
-                    if (layoutSnapshot != null || progress.value > 0.001f) {
+                    if (layoutSnapshot != null || progress.value > 0.001f ||
+                        sourceCardRenderOwner == LibrarySourceCardRenderOwner.Overlay
+                    ) {
                         progress.animateTo(
                             targetValue = 0f,
                             animationSpec = tween(
@@ -527,18 +547,17 @@ internal fun LibrarySourceSwitcherOverlay(
                             )
                         )
                         val settledItem = latestSourceItems.firstOrNull {
-                            it.identity == selectedIdentity
+                            it.identity == latestSelectedIdentity
                         } ?: latestSourceItems.firstOrNull {
                             it.identity == LibrarySourceIdentity.Local
                         }
-                        if (settledItem != null) {
-                            movingIdentity = settledItem.identity
-                            if (settledItem.identity != selectedIdentity) {
+                        Snapshot.withMutableSnapshot {
+                            if (settledItem != null &&
+                                settledItem.identity != latestSelectedIdentity
+                            ) {
                                 onSourceSelected(settledItem)
                             }
-                        }
-                        withFrameNanos { }
-                        if (state == LibrarySourceSwitcherState.Collapsed) {
+                            onSourceCardRenderOwnerChange(LibrarySourceCardRenderOwner.Static)
                             layoutSnapshot = null
                             movingIdentity = null
                         }
@@ -548,11 +567,14 @@ internal fun LibrarySourceSwitcherOverlay(
                 LibrarySourceSwitcherState.Expanded -> {
                     val snapshot = layoutSnapshot ?: openingCandidate
                     if (snapshot == null) {
-                        onStateChange(LibrarySourceSwitcherState.Collapsed)
+                        handoffToStatic(collapseSwitcher = true)
                         return@LaunchedEffect
                     }
-                    if (layoutSnapshot == null) layoutSnapshot = snapshot
-                    movingIdentity = snapshot.initialSelectedIdentity
+                    Snapshot.withMutableSnapshot {
+                        if (layoutSnapshot == null) layoutSnapshot = snapshot
+                        movingIdentity = snapshot.initialSelectedIdentity
+                        onSourceCardRenderOwnerChange(LibrarySourceCardRenderOwner.Overlay)
+                    }
                     progress.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(
@@ -567,14 +589,34 @@ internal fun LibrarySourceSwitcherOverlay(
                     val target = snapshot?.sourceItems?.firstOrNull {
                         it.identity.key == state.targetKey
                     }
-                    if (snapshot == null || target == null ||
-                        latestSourceItems.none { it.identity == target.identity }
-                    ) {
-                        onStateChange(LibrarySourceSwitcherState.Collapsed)
+                    val currentTarget = target?.let { targetItem ->
+                        latestSourceItems.firstOrNull { it.identity == targetItem.identity }
+                    }
+
+                    if (snapshot == null || target == null || currentTarget == null) {
+                        val fallback = latestSourceItems.firstOrNull {
+                            it.identity == latestSelectedIdentity
+                        } ?: latestSourceItems.firstOrNull {
+                            it.identity == LibrarySourceIdentity.Local
+                        }
+                        if (fallback != null) onSourceSelected(fallback)
+                        if (progress.value > 0.001f) {
+                            progress.animateTo(
+                                targetValue = 0f,
+                                animationSpec = tween(
+                                    FlowtoneMotion.DurationMillis,
+                                    easing = FlowtoneMotion.Easing
+                                )
+                            )
+                        }
+                        handoffToStatic(collapseSwitcher = true)
                         return@LaunchedEffect
                     }
+
                     if (layoutSnapshot == null) layoutSnapshot = snapshot
                     movingIdentity = target.identity
+                    // 静态卡片在 Overlay 期间先切到最终数据，且 swipeDirection=0 不启动第二套切换动画。
+                    onSourceSelected(currentTarget)
                     progress.animateTo(
                         targetValue = 0f,
                         animationSpec = tween(
@@ -582,25 +624,7 @@ internal fun LibrarySourceSwitcherOverlay(
                             easing = FlowtoneMotion.Easing
                         )
                     )
-                    val currentTarget = latestSourceItems.firstOrNull {
-                        it.identity == target.identity
-                    }
-                    if (currentTarget != null) {
-                        onSourceSelected(currentTarget)
-                    } else {
-                        val fallback = latestSourceItems.firstOrNull {
-                            it.identity == selectedIdentity
-                        } ?: latestSourceItems.firstOrNull {
-                            it.identity == LibrarySourceIdentity.Local
-                        }
-                        if (fallback != null) {
-                            movingIdentity = fallback.identity
-                            if (fallback.identity != selectedIdentity) {
-                                onSourceSelected(fallback)
-                            }
-                        }
-                    }
-                    onStateChange(LibrarySourceSwitcherState.Collapsed)
+                    handoffToStatic(collapseSwitcher = true)
                 }
             }
         }
@@ -622,7 +646,10 @@ internal fun LibrarySourceSwitcherOverlay(
             )
         }
 
-        if (snapshotForRender != null && localAnchorBounds != null) {
+        if (sourceCardRenderOwner == LibrarySourceCardRenderOwner.Overlay &&
+            snapshotForRender != null &&
+            localAnchorBounds != null
+        ) {
             val snapshot = snapshotForRender
             val geometry = snapshot.geometry
             val items = snapshot.sourceItems
@@ -668,7 +695,7 @@ internal fun LibrarySourceSwitcherOverlay(
                     .zIndex(1f)
                     .shadow(elevation = 8.dp * transitionProgress, shape = shape),
                 shape = shape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = librarySourceCardContainerColor(),
                 tonalElevation = 1.dp
             ) {
                 Box(
@@ -902,6 +929,15 @@ private fun LibrarySourceRowContent(
         }
     }
 }
+
+@Composable
+private fun librarySourceCardContainerColor(): Color = lerp(
+    MaterialTheme.colorScheme.background,
+    LocalMainPagesCloudPalette.current.libraryAccent,
+    LibrarySourceCardAccentBlend
+)
+
+private const val LibrarySourceCardAccentBlend = 0.08f
 
 private val LibrarySourceCardHeight: Dp = 76.dp
 private val LibrarySourceRowHeight: Dp = 76.dp

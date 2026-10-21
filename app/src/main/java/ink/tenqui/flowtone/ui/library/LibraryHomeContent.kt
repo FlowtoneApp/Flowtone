@@ -112,33 +112,43 @@ internal fun LibraryHomeContent(
                 }
             }
         }
-        if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) {
-            item(key = "library-collection-menu") {
-                PageTransitionElement(
-                    scope = pageScope,
-                    order = 1,
-                    orderCount = 2,
-                    modifier = Modifier.fillMaxWidth()
+        item(key = "library-source-header") {
+            PageTransitionElement(
+                scope = pageScope,
+                order = 1,
+                orderCount = 2,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(
+                        if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) {
+                            32.dp
+                        } else {
+                            24.dp
+                        }
+                    )
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
-                        LibraryProviderHeader(
-                            source = sourceContent.selectedSource,
-                            sourceIndex = 0,
-                            sourceCount = sourceContent.sourceItems.size,
-                            canExpand = true,
-                            swipeEnabled = sourceContent.swipeEnabled,
-                            expanded = sourceContent.switcherState !is LibrarySourceSwitcherState.Collapsed,
-                            swipeDirection = sourceContent.swipeDirection,
-                            expandProgress = sourceExpandProgress,
-                            contentVisible = sourceCardContentVisible,
-                            sourceIconPainters = sourceIconPainters,
-                            onSourceIconPainterLoaded = onSourceIconPainterLoaded,
-                            onClick = onSourceHeaderClick,
-                            onSwipeToIndex = onSourceSwipeToIndex,
-                            onBoundsChanged = onSourceCardBoundsChanged,
-                            onContentBoundsChanged = onSourceCardContentBoundsChanged,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    LibraryProviderHeader(
+                        source = sourceContent.selectedSource,
+                        sourceIndex = sourceContent.sourceItems.indexOfFirst {
+                            it.identity == sourceContent.selectedSource.identity
+                        }.coerceAtLeast(0),
+                        sourceCount = sourceContent.sourceItems.size,
+                        canExpand = true,
+                        swipeEnabled = sourceContent.swipeEnabled,
+                        expanded = sourceContent.switcherState !is LibrarySourceSwitcherState.Collapsed,
+                        swipeDirection = sourceContent.swipeDirection,
+                        expandProgress = sourceExpandProgress,
+                        contentVisible = sourceCardContentVisible,
+                        sourceIconPainters = sourceIconPainters,
+                        onSourceIconPainterLoaded = onSourceIconPainterLoaded,
+                        onClick = onSourceHeaderClick,
+                        onSwipeToIndex = onSourceSwipeToIndex,
+                        onBoundsChanged = onSourceCardBoundsChanged,
+                        onContentBoundsChanged = onSourceCardContentBoundsChanged,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) {
                         LibraryCollectionMenu(
                             songCount = songCount,
                             likedPlaylist = likedPlaylist,
@@ -164,39 +174,9 @@ internal fun LibraryHomeContent(
                     }
                 }
             }
-        } else {
-            item(key = "library-provider-header") {
-                PageTransitionElement(
-                    scope = pageScope,
-                    order = 1,
-                    orderCount = 2,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                        LibraryProviderHeader(
-                            source = sourceContent.selectedSource,
-                            sourceIndex = sourceContent.sourceItems.indexOfFirst {
-                                it.identity == sourceContent.selectedSource.identity
-                            }.coerceAtLeast(0),
-                            sourceCount = sourceContent.sourceItems.size,
-                            canExpand = true,
-                            swipeEnabled = sourceContent.swipeEnabled,
-                            expanded = sourceContent.switcherState !is LibrarySourceSwitcherState.Collapsed,
-                            swipeDirection = sourceContent.swipeDirection,
-                            expandProgress = sourceExpandProgress,
-                            contentVisible = sourceCardContentVisible,
-                            sourceIconPainters = sourceIconPainters,
-                            onSourceIconPainterLoaded = onSourceIconPainterLoaded,
-                            onClick = onSourceHeaderClick,
-                            onSwipeToIndex = onSourceSwipeToIndex,
-                            onBoundsChanged = onSourceCardBoundsChanged,
-                            onContentBoundsChanged = onSourceCardContentBoundsChanged,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
+        }
 
+        if (sourceContent.selectedSource.identity != LibrarySourceIdentity.Local) {
             val provider = sourceContent.selectedSource
             val providerId = (provider.identity as? LibrarySourceIdentity.Extension)?.extensionId
             val providerSongs = sourceContent.providerSongs.orEmpty()

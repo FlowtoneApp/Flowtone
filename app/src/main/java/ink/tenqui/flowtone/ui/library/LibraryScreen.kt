@@ -420,6 +420,9 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
 internal fun LibraryScreen(
     songCount: Int,
     likedSongCount: Int,
+    selectedSourceKey: String,
+    onSelectedSourceKeyChange: (String) -> Unit,
+    libraryProviderSourcesResolved: Boolean,
     libraryProviderOptions: List<LibraryProviderOption>,
     providerSongs: Map<String, List<ProviderSong>>,
     providerAlbums: Map<String, List<ProviderAlbum>>,
@@ -452,11 +455,11 @@ internal fun LibraryScreen(
     val sourceItems = remember(libraryProviderOptions) {
         librarySourceItems(libraryProviderOptions)
     }
-    var selectedSourceIdentity by remember {
-        mutableStateOf<LibrarySourceIdentity>(LibrarySourceIdentity.Local)
-    }
     var sourceSwitcherState by remember {
         mutableStateOf<LibrarySourceSwitcherState>(LibrarySourceSwitcherState.Collapsed)
+    }
+    var sourceCardRenderOwner by remember {
+        mutableStateOf(LibrarySourceCardRenderOwner.Static)
     }
     var sourceSwipeLocked by remember { mutableStateOf(false) }
     var sourceSwipeDirection by remember { mutableStateOf(0) }
@@ -476,7 +479,7 @@ internal fun LibraryScreen(
             }
         }
     val selectedSource = sourceItems.firstOrNull {
-        it.identity == selectedSourceIdentity
+        it.identity.key == selectedSourceKey
     } ?: sourceItems.first()
     val providerCatalogListState = rememberLazyListState()
     val contentListState = if (selectedSource.identity == LibrarySourceIdentity.Local) {
@@ -504,8 +507,7 @@ internal fun LibraryScreen(
         currentSong = currentSong
     )
     val sourceCardContentVisible = !libraryPageActive ||
-        (sourceSwitcherState is LibrarySourceSwitcherState.Collapsed &&
-            sourceSwitcherProgress.value <= 0.001f)
+        sourceCardRenderOwner == LibrarySourceCardRenderOwner.Static
 
     LaunchedEffect(pageVisible) {
         if (!pageVisible) playlistController.clearPlaylistEditing()
@@ -513,15 +515,20 @@ internal fun LibraryScreen(
     LaunchedEffect(libraryPageActive) {
         if (!libraryPageActive) {
             sourceSwitcherState = LibrarySourceSwitcherState.Collapsed
+            sourceCardRenderOwner = LibrarySourceCardRenderOwner.Static
             sourceSwipeLocked = false
             sourceSwipeDirection = 0
         }
     }
-    LaunchedEffect(sourceItems.map { it.identity.key }) {
+    LaunchedEffect(
+        sourceItems.map { it.identity.key },
+        libraryProviderSourcesResolved,
+        selectedSourceKey
+    ) {
         val availableSourceKeys = sourceItems.mapTo(mutableSetOf()) { it.identity.key }
         sourceIconPaintersByIdentity.keys.retainAll(availableSourceKeys)
-        if (sourceItems.none { it.identity == selectedSourceIdentity }) {
-            selectedSourceIdentity = LibrarySourceIdentity.Local
+        if (libraryProviderSourcesResolved && selectedSourceKey !in availableSourceKeys) {
+            onSelectedSourceKeyChange(LibrarySourceIdentity.Local.key)
             sourceSwitcherState = LibrarySourceSwitcherState.Collapsed
             sourceSwipeLocked = false
             sourceSwipeDirection = 0
@@ -552,7 +559,7 @@ internal fun LibraryScreen(
         }
         sourceSwipeDirection = if (index > selectedSourceIndex) -1 else 1
         sourceSwipeLocked = true
-        selectedSourceIdentity = sourceItems[index].identity
+        onSelectedSourceKeyChange(sourceItems[index].identity.key)
     }
 
     val latestOverlayContent = rememberUpdatedState<@Composable (Offset) -> Unit>(
@@ -561,6 +568,8 @@ internal fun LibraryScreen(
                 sourceItems = sourceItems,
                 selectedIdentity = selectedSource.identity,
                 state = sourceSwitcherState,
+                sourceCardRenderOwner = sourceCardRenderOwner,
+                onSourceCardRenderOwnerChange = { sourceCardRenderOwner = it },
                 anchorBoundsInRoot = sourceCardBoundsRoot,
                 anchorContentBoundsInRoot = sourceCardContentBoundsRoot,
                 pageViewportBoundsInRoot = pageViewportBoundsRoot,
@@ -572,7 +581,7 @@ internal fun LibraryScreen(
                 onStateChange = { sourceSwitcherState = it },
                 onSourceSelected = { source ->
                     if (sourceItems.any { it.identity == source.identity }) {
-                        selectedSourceIdentity = source.identity
+                        onSelectedSourceKeyChange(source.identity.key)
                         sourceSwipeDirection = 0
                     }
                 }

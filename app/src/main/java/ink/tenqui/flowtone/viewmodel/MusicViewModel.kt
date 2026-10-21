@@ -99,6 +99,7 @@ data class MusicUiState(
     val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
+    val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
     val providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap()
 )
@@ -245,6 +246,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 if (runtimeState.generation != observedExtensionRuntimeGeneration) {
                     observedExtensionRuntimeGeneration = runtimeState.generation
                     extensionRuntimeRefreshPending = true
+                    _uiState.update { state ->
+                        state.copy(libraryProviderSourcesResolved = false)
+                    }
                     invalidateExtensionRuntimeRequests()
                 }
                 if (!runtimeState.isReloading && extensionRuntimeRefreshPending) {
@@ -401,10 +405,23 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     fun refreshSearchSources() {
+        val runtimeStateBeforeRefresh = extensionManager.runtimeState.value
         val providers = extensionManager.availableMusicProviderOptions()
         val libraryProviders = extensionManager.availableLibraryProviderOptions()
+        val runtimeStateAfterRefresh = extensionManager.runtimeState.value
+        val libraryProviderSourcesResolved = runtimeStateBeforeRefresh == runtimeStateAfterRefresh &&
+            runtimeStateAfterRefresh.generation > 0L &&
+            !runtimeStateAfterRefresh.isReloading
         _uiState.update { state ->
-            state.copy(libraryProviderOptions = libraryProviders)
+            state.copy(
+                // 重载期间的空列表只是临时态，保留上次确认的来源直到新列表就绪。
+                libraryProviderOptions = if (libraryProviderSourcesResolved) {
+                    libraryProviders
+                } else {
+                    state.libraryProviderOptions
+                },
+                libraryProviderSourcesResolved = libraryProviderSourcesResolved
+            )
         }
         val preferredScope = searchScopeFromPreference(appPreferences.getSearchScopePreference())
         _searchUiState.update { current ->

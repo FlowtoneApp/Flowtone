@@ -37,12 +37,6 @@ class LibraryPlaylistCardStore(context: Context) {
                             subtitle = item.optString(SUBTITLE_KEY, DEFAULT_SUBTITLE)
                                 .ifBlank { DEFAULT_SUBTITLE },
                             order = item.optInt(ORDER_KEY, index),
-                            widthDp = item.optDouble(WIDTH_DP_KEY, DEFAULT_WIDTH_DP.toDouble())
-                                .toFloat(),
-                            heightDp = item.optDouble(
-                                HEIGHT_DP_KEY,
-                                DEFAULT_HEIGHT_DP.toDouble()
-                            ).toFloat(),
                             appearanceColorKey = PlaylistAppearanceColorKey.fromStorageValue(
                                 item.optString(APPEARANCE_COLOR_KEY)
                             ) ?: playlistAppearanceColorKeyForStableId(id),
@@ -73,8 +67,6 @@ class LibraryPlaylistCardStore(context: Context) {
                 card.copy(
                     title = card.title.trim(),
                     subtitle = card.subtitle.ifBlank { DEFAULT_SUBTITLE },
-                    widthDp = card.widthDp.takeIf { value -> value > 0f } ?: DEFAULT_WIDTH_DP,
-                    heightDp = card.heightDp.takeIf { value -> value > 0f } ?: DEFAULT_HEIGHT_DP,
                     order = index
                 )
             }
@@ -90,8 +82,6 @@ class LibraryPlaylistCardStore(context: Context) {
                     .put(ID_KEY, card.id)
                     .put(TITLE_KEY, card.title)
                     .put(SUBTITLE_KEY, card.subtitle)
-                    .put(WIDTH_DP_KEY, card.widthDp)
-                    .put(HEIGHT_DP_KEY, card.heightDp)
                     .put(
                         APPEARANCE_COLOR_KEY,
                         card.appearanceColorKey
@@ -133,16 +123,12 @@ class LibraryPlaylistCardStore(context: Context) {
         const val ID_KEY = "id"
         const val TITLE_KEY = "title"
         const val SUBTITLE_KEY = "subtitle"
-        const val WIDTH_DP_KEY = "widthDp"
-        const val HEIGHT_DP_KEY = "heightDp"
         const val APPEARANCE_COLOR_KEY = "appearanceColorKey"
         const val ORDER_KEY = "order"
         const val CUSTOM_ARTWORK_URI_KEY = "customArtworkUri"
         const val CREATOR_NAME_KEY = "creatorName"
         const val DESCRIPTION_KEY = "description"
         const val DEFAULT_SUBTITLE = "0 \u9996\u6b4c\u66f2"
-        const val DEFAULT_WIDTH_DP = 320f
-        const val DEFAULT_HEIGHT_DP = 236f
     }
 }
 

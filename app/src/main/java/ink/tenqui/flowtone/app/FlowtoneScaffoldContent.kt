@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -57,6 +58,7 @@ import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.artistTopBarContentOcclusionProgress
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
+import ink.tenqui.flowtone.ui.library.LibrarySourceIdentity
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
@@ -95,6 +97,9 @@ internal fun FlowtoneScaffoldContent(
     artistTopBarStateStore: ArtistTopBarStateStore,
     modifier: Modifier = Modifier
 ) {
+    var selectedLibrarySourceKey by rememberSaveable {
+        mutableStateOf(LibrarySourceIdentity.Local.key)
+    }
     val secondaryPageStateHolder = rememberSaveableStateHolder()
     val retainedSecondaryStateKeys = remember { mutableSetOf<String>() }
     val activeSecondaryStateKeys = remember(state.secondaryEntries) {
@@ -497,6 +502,10 @@ internal fun FlowtoneScaffoldContent(
                                         TopLevelPagerContent(
                                             pagerState = state.pagerState,
                                             uiState = state.uiState,
+                                            selectedLibrarySourceKey = selectedLibrarySourceKey,
+                                            onSelectedLibrarySourceKeyChange = {
+                                                selectedLibrarySourceKey = it
+                                            },
                                             homeScrollState = homeScrollState,
                                             libraryPlaylistController =
                                                 libraryPlaylistController,

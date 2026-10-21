@@ -37,6 +37,8 @@ import ink.tenqui.flowtone.viewmodel.MusicUiState
 internal fun TopLevelPagerContent(
     pagerState: PagerState,
     uiState: MusicUiState,
+    selectedLibrarySourceKey: String,
+    onSelectedLibrarySourceKeyChange: (String) -> Unit,
     homeScrollState: ScrollState,
     libraryPlaylistController: LibraryPlaylistController,
     playlistSongEntries: List<PlaylistSongEntry>,
@@ -93,6 +95,9 @@ internal fun TopLevelPagerContent(
                 )
 
                 TopLevelPage.Library -> LibraryScreen(
+                    selectedSourceKey = selectedLibrarySourceKey,
+                    onSelectedSourceKeyChange = onSelectedLibrarySourceKeyChange,
+                    libraryProviderSourcesResolved = uiState.libraryProviderSourcesResolved,
                     songCount = uiState.songs.size,
                     likedSongCount = likedSongCount,
                     libraryProviderOptions = uiState.libraryProviderOptions,
