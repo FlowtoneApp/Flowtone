@@ -508,6 +508,11 @@ internal fun FlowtoneScaffoldContent(
                                                 libraryPlaylistController.editingPlaylistId == null,
                                             onRequestPermission = callbacks.onRequestPermission,
                                             onSongClick = callbacks.onSongClick,
+                                            onLoadProviderEntityCollections =
+                                                callbacks.onLoadProviderEntityCollections,
+                                            onProviderSongQueueClick =
+                                                callbacks.onProviderSongQueueClick,
+                                            onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
                                             onOpenSettings = callbacks.onOpenSettings,
                                             onOpenAbout = callbacks.onOpenAbout,
                                             cloudAccent = animatedCloudPalette.primary,

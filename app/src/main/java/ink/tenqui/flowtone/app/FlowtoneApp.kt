@@ -586,6 +586,7 @@ fun FlowtoneApp(
                 musicViewModel.playSong(song, PlaybackSource.LocalLibrary)
             },
             onOnlineSongClick = musicViewModel::playProviderSong,
+            onLoadProviderEntityCollections = musicViewModel::loadProviderEntityCollections,
             onProviderSongQueueClick = musicViewModel::playProviderSongQueue,
             onPlaylistSongClick = { songs, startIndex, source ->
                 musicViewModel.playSongQueue(songs, startIndex, source)

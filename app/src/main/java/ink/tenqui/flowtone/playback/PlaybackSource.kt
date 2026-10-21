@@ -101,6 +101,16 @@ data class PlaybackSource(
             )
         }
 
+        fun providerCatalog(providerId: String, displayName: String): PlaybackSource {
+            val safeProviderId = providerId.trim().ifBlank { return Unknown }
+            return PlaybackSource(
+                type = PlaybackSourceType.Other,
+                key = "provider_catalog:$safeProviderId",
+                sourceId = safeProviderId,
+                displayName = displayName.trim().ifBlank { "扩展曲库" }
+            )
+        }
+
         fun providerAlbum(
             providerId: String,
             albumId: String,

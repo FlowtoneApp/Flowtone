@@ -408,6 +408,34 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             )
     }
 
+    /** 当前运行且声明至少一项曲库目录能力的扩展来源。 */
+    internal fun availableLibraryProviderOptions(): List<LibraryProviderOption> {
+        if (_runtimeState.value.isReloading) return emptyList()
+        return installedExtensions()
+            .asSequence()
+            .mapNotNull { installed ->
+                val provider = musicProviders[installed.manifest.id] ?: return@mapNotNull null
+                if (!installed.runtimeAvailable) return@mapNotNull null
+                val supportsSongs = AtomicCapabilityId.CatalogSongsList in provider.capabilities
+                val supportsAlbums = AtomicCapabilityId.CatalogAlbumsList in provider.capabilities
+                if (!supportsSongs && !supportsAlbums) return@mapNotNull null
+                LibraryProviderOption(
+                    extensionId = installed.manifest.id,
+                    name = installed.manifest.name,
+                    sourceTypeLabel = installed.manifest.sourceTypeLabel,
+                    color = installed.manifest.color,
+                    visual = ExtensionProviderVisualResolver.resolve(installed),
+                    supportsSongs = supportsSongs,
+                    supportsAlbums = supportsAlbums
+                )
+            }
+            .sortedWith(
+                compareBy<LibraryProviderOption, String>(String.CASE_INSENSITIVE_ORDER) { it.name }
+                    .thenBy(LibraryProviderOption::extensionId)
+            )
+            .toList()
+    }
+
     /** 当前已运行且声明至少一项 MusicProvider Atomic capability 的 Provider。 */
     internal fun availableMusicProviderOptions(): List<SearchProviderOption> =
         installedExtensions()

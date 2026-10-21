@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
@@ -43,6 +46,9 @@ internal fun TopLevelPagerContent(
     userScrollEnabled: Boolean,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
+    onLoadProviderEntityCollections: (String) -> Unit,
+    onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
+    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     cloudAccent: Color,
@@ -89,6 +95,16 @@ internal fun TopLevelPagerContent(
                 TopLevelPage.Library -> LibraryScreen(
                     songCount = uiState.songs.size,
                     likedSongCount = likedSongCount,
+                    libraryProviderOptions = uiState.libraryProviderOptions,
+                    providerSongs = uiState.providerSongs,
+                    providerAlbums = uiState.providerAlbums,
+                    providerSongCatalogLoadStates = uiState.providerSongCatalogLoadStates,
+                    providerAlbumCatalogLoadStates = uiState.providerAlbumCatalogLoadStates,
+                    currentSong = uiState.playbackQueue.getOrNull(uiState.currentQueueIndex),
+                    isPageActive = pagerState.currentPage == pageIndex,
+                    onLoadProviderEntityCollections = onLoadProviderEntityCollections,
+                    onProviderSongQueueClick = onProviderSongQueueClick,
+                    onOpenProviderAlbum = onOpenProviderAlbum,
                     onOpenLocalLibrary = onOpenLocalLibrary,
                     onOpenPlaylist = onOpenPlaylist,
                     pageScope = pageScope,

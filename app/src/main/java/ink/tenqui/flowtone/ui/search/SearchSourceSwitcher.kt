@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,9 +39,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -53,9 +49,9 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.data.search.SearchProviderOption
 import ink.tenqui.flowtone.data.search.SearchProviderVisual
 import ink.tenqui.flowtone.data.search.SearchScope
-import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
-import coil3.compose.AsyncImage
+import ink.tenqui.flowtone.ui.components.ProviderExtensionIcon
+import ink.tenqui.flowtone.ui.components.extensionManifestColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -308,39 +304,14 @@ private fun ProviderScopeIcon(
     fallbackColor: Color,
     iconSize: Dp
 ) {
-    val iconColor = visual?.iconColor?.let(::providerRowColor)
-    val fallbackIconColor = iconColor ?: fallbackColor
-    val iconFile = visual?.iconFile
-    if (iconFile == null) {
-        Icon(Icons.Rounded.Radio, null, tint = fallbackIconColor, modifier = Modifier.size(iconSize))
-        return
-    }
-
-    val context = LocalContext.current
-    val imageLoader = remember(context) { ExtensionManager.get(context).extensionImageLoader }
-    var imageLoaded by remember(iconFile) { mutableStateOf(false) }
-    Box(
-        modifier = Modifier.size(iconSize),
-        contentAlignment = Alignment.Center
-    ) {
-        if (!imageLoaded) {
-            Icon(Icons.Rounded.Radio, null, tint = fallbackIconColor, modifier = Modifier.size(iconSize))
-        }
-        AsyncImage(
-            model = iconFile,
-            imageLoader = imageLoader,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            colorFilter = iconColor?.let(ColorFilter::tint),
-            onSuccess = { imageLoaded = true },
-            onError = { imageLoaded = false },
-            modifier = Modifier.fillMaxSize()
-        )
-    }
+    ProviderExtensionIcon(
+        visual = visual,
+        fallbackColor = fallbackColor,
+        iconSize = iconSize
+    )
 }
 
-private fun providerRowColor(hex: String): Color =
-    Color((0xFF000000L or hex.removePrefix("#").toLong(16)).toInt())
+private fun providerRowColor(hex: String): Color = extensionManifestColor(hex)
 
 private val RowHeight: Dp = 40.dp
 private const val MaxVisibleRows = 5
