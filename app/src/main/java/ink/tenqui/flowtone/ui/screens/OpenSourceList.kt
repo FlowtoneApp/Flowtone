@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 
 @Composable
 internal fun ComponentList(
@@ -87,11 +88,12 @@ internal fun ComponentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val cardColor = settingsOptionPalette().surfaceColor
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(cardColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically

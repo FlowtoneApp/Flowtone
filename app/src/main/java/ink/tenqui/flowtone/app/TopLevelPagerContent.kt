@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
@@ -26,7 +27,6 @@ import ink.tenqui.flowtone.ui.library.LibraryScreen
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.screens.HomeScreen
-import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.MineScreen
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 
@@ -45,9 +45,9 @@ internal fun TopLevelPagerContent(
     onSongClick: (Song) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
+    cloudAccent: Color,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    onOpenListeningRecords: (ListeningRecordTab) -> Unit,
     likedSongCount: Int,
     flowCloudSpeed: Float,
     modifier: Modifier = Modifier
@@ -99,10 +99,9 @@ internal fun TopLevelPagerContent(
                 )
 
                 TopLevelPage.Mine -> MineScreen(
-                    listeningStats = uiState.listeningStats,
+                    cloudAccent = cloudAccent,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout,
-                    onOpenListeningRecords = onOpenListeningRecords,
                     pageScope = pageScope,
                     modifier = Modifier.fillMaxSize()
                 )

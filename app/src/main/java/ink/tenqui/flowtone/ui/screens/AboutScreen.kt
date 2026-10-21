@@ -37,6 +37,7 @@ import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.rememberFlowtoneVersionName
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 
 private const val GITHUB_URL = "https://github.com/FlowtoneApp/Flowtone"
 private const val GPL_URL = "https://opensource.org/license/gpl-3-0"
@@ -53,6 +54,7 @@ internal fun AboutScreen(
     }
     val context = LocalContext.current
     val versionName = rememberFlowtoneVersionName()
+    val smallCardColor = settingsOptionPalette().surfaceColor
 
     Column(
         modifier = modifier
@@ -98,7 +100,7 @@ internal fun AboutScreen(
                 modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .background(smallCardColor)
                 .clickable { context.openUrl(GPL_URL) }
                 .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -133,7 +135,7 @@ internal fun AboutScreen(
                 .fillMaxWidth()
                 .padding(top = 12.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .background(smallCardColor)
                 .clickable(onClick = onOpenSource)
                 .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically

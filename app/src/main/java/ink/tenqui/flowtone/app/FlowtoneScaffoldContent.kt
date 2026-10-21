@@ -510,10 +510,9 @@ internal fun FlowtoneScaffoldContent(
                                             onSongClick = callbacks.onSongClick,
                                             onOpenSettings = callbacks.onOpenSettings,
                                             onOpenAbout = callbacks.onOpenAbout,
+                                            cloudAccent = animatedCloudPalette.primary,
                                             onOpenLocalLibrary = callbacks.onOpenLocalLibrary,
                                             onOpenPlaylist = callbacks.onOpenPlaylist,
-                                            onOpenListeningRecords =
-                                                callbacks.onOpenListeningRecords,
                                             likedSongCount = likedSongCount,
                                             flowCloudSpeed = state.flowCloudSpeed,
                                             modifier = Modifier.fillMaxSize()

@@ -38,11 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.OptionGroup
 import ink.tenqui.flowtone.ui.components.rightSwipeBackGesture
+import ink.tenqui.flowtone.ui.components.settingsOptionPalette
 
 @Composable
 internal fun ComponentDetail(
@@ -51,6 +53,7 @@ internal fun ComponentDetail(
     elementModifier: (Int) -> Modifier
 ) {
     val context = LocalContext.current
+    val infoCardColor = settingsOptionPalette().surfaceColor
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,7 +65,7 @@ internal fun ComponentDetail(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .background(infoCardColor)
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -81,13 +84,15 @@ internal fun ComponentDetail(
                 icon = {
                     Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
                 },
-                onClick = { context.openExternalUrl(component.projectUrl) }
+                onClick = { context.openExternalUrl(component.projectUrl) },
+                surfaceColor = infoCardColor
             )
             ActionCard(
                 text = "查看许可证",
                 icon = { Icon(Icons.Rounded.Description, contentDescription = null) },
                 onClick = onShowLicense,
-                modifier = Modifier.padding(top = 10.dp)
+                modifier = Modifier.padding(top = 10.dp),
+                surfaceColor = infoCardColor
             )
         }
     }
@@ -114,13 +119,14 @@ internal fun ActionCard(
     text: String,
     icon: @Composable () -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    surfaceColor: Color = MaterialTheme.colorScheme.surfaceContainer
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(surfaceColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
