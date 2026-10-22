@@ -49,6 +49,7 @@ import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.screens.AboutScreen
+import ink.tenqui.flowtone.ui.screens.UpdatesScreen
 import ink.tenqui.flowtone.ui.screens.ListeningRecordTab
 import ink.tenqui.flowtone.ui.screens.ListeningRecordsScreen
 import ink.tenqui.flowtone.ui.screens.OpenSourceScreen
@@ -200,6 +201,7 @@ internal fun SecondaryPageHost(
     onExtensionDiscardChangesConfirmationChange: (ExtensionDiscardChangesConfirmation?) -> Unit,
     onSettingsPathSegmentsChange: (List<String>) -> Unit,
     settingsPathSegments: List<String>,
+    onCheckUpdates: () -> Unit,
     onOpenSource: () -> Unit,
     onOpenSourceBack: () -> Unit,
     onOpenSourceBackActionChange: ((() -> Unit)?) -> Unit,
@@ -398,7 +400,14 @@ internal fun SecondaryPageHost(
             }
 
             SecondaryPage.About -> AboutScreen(
+                onCheckUpdates = onCheckUpdates,
                 onOpenSource = onOpenSource,
+                onBack = onCloseSecondaryPage,
+                pageScope = pageScope,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            SecondaryPage.Updates -> UpdatesScreen(
                 onBack = onCloseSecondaryPage,
                 pageScope = pageScope,
                 modifier = Modifier.fillMaxSize()

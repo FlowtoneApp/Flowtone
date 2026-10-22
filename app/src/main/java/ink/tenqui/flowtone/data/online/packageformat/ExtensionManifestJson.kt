@@ -27,7 +27,8 @@ internal object ExtensionManifestJson {
             color = json.optionalString("color"),
             icon = json.optionalString("icon")?.takeIf(::isSafeIconPath),
             iconColor = json.optionalString("iconColor")?.takeIf { it.matches(HexColor) },
-            authorUrl = json.optionalString("authorUrl")?.takeIf(::isValidAuthorUrl)
+            authorUrl = json.optionalString("authorUrl")?.takeIf(::isValidAuthorUrl),
+            sourceTypeLabel = json.optionalSourceTypeLabel()
         )
         validateCommon(manifest)
         return manifest
@@ -42,6 +43,21 @@ internal object ExtensionManifestJson {
 
     private fun JSONObject.optionalString(name: String): String? =
         optString(name).trim().takeIf(String::isNotEmpty)
+
+    private fun JSONObject.optionalSourceTypeLabel(): String? {
+        if (!has("sourceTypeLabel") || isNull("sourceTypeLabel")) return null
+        val value = opt("sourceTypeLabel")
+        require(value is String) { "sourceTypeLabel 必须是字符串" }
+        val label = value.trim()
+        require(
+            label.isNotEmpty() &&
+                label.length <= MaxSourceTypeLabelLength &&
+                label.none(Char::isISOControl)
+        ) { "sourceTypeLabel 长度或字符无效" }
+        return label
+    }
+
+    private const val MaxSourceTypeLabelLength = 40
 
     private fun isValidAuthorUrl(value: String): Boolean = runCatching {
         val uri = URI(value)

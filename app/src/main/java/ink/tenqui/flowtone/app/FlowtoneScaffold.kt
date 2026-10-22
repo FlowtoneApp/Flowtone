@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import android.os.Build
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -53,6 +54,9 @@ import ink.tenqui.flowtone.ui.library.ArtistHeroStateStore
 import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistEditingBlurRadius
+import ink.tenqui.flowtone.ui.library.LibrarySourceSwitcherOverlayHost
+import ink.tenqui.flowtone.ui.library.LibrarySourceSwitcherOverlayHostState
+import ink.tenqui.flowtone.ui.library.LocalLibrarySourceSwitcherOverlayHost
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistSelectionTopBarState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
@@ -186,7 +190,24 @@ internal fun FlowtoneScaffold(
         label = "FullTitleOverlayProgress"
     )
     val fullTitleOverlayBlurRadius = 14.dp * fullTitleOverlayProgress
-    val scaffoldBlurRadius = maxOf(baseScaffoldBlurRadius, fullTitleOverlayBlurRadius)
+    val librarySourceSwitcherOverlayHost = remember {
+        LibrarySourceSwitcherOverlayHostState()
+    }
+    val librarySourceSwitcherBlurRadius = if (
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+        state.selectedTopLevelPage == TopLevelPage.Library &&
+        state.secondaryPage == null &&
+        !state.searchActive
+    ) {
+        14.dp * librarySourceSwitcherOverlayHost.progress.value
+    } else {
+        0.dp
+    }
+    val scaffoldBlurRadius = maxOf(
+        baseScaffoldBlurRadius,
+        fullTitleOverlayBlurRadius,
+        librarySourceSwitcherBlurRadius
+    )
     val showFullTitle: (String) -> Unit = { title ->
         retainedFullTitleOverlayTitle = title
         fullTitleOverlayTitle = title
@@ -312,7 +333,8 @@ internal fun FlowtoneScaffold(
     val modalOverlayHostState = remember { FlowtoneModalOverlayHostState() }
     CompositionLocalProvider(
         LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled,
-        LocalFlowtoneModalOverlayHost provides modalOverlayHostState
+        LocalFlowtoneModalOverlayHost provides modalOverlayHostState,
+        LocalLibrarySourceSwitcherOverlayHost provides librarySourceSwitcherOverlayHost
     ) {
         BoxWithConstraints(
             modifier = modifier
@@ -396,6 +418,10 @@ internal fun FlowtoneScaffold(
                 )
             )
         }
+        LibrarySourceSwitcherOverlayHost(
+            state = librarySourceSwitcherOverlayHost,
+            modifier = Modifier.fillMaxSize()
+        )
         val playlistSortAvailable = (
             state.secondaryPage == SecondaryPage.LocalLibrary ||
                 state.secondaryDestination is SecondaryDestination.Playlist ||

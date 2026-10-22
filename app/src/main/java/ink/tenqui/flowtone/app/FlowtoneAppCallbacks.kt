@@ -70,10 +70,12 @@ internal data class FlowtoneAppCallbacks(
     val onOpenArtist: (String) -> Unit,
     val onOpenProviderArtist: (ProviderArtist) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
+    val onCheckUpdates: () -> Unit,
     val onOpenSource: () -> Unit,
     val onOpenSourceBack: () -> Unit,
     val onRequestPermission: () -> Unit,
     val onSongClick: (Song) -> Unit,
+    val onLoadProviderEntityCollections: (String) -> Unit,
     val onOnlineSongClick: (ProviderSong) -> Unit,
     val onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     val onDismissExpandedPlayer: () -> Unit,
@@ -120,6 +122,7 @@ internal fun flowtoneAppCallbacks(
     onOpenProviderArtist: (ProviderArtist) -> Unit,
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
+    onLoadProviderEntityCollections: (String) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
@@ -354,6 +357,12 @@ internal fun flowtoneAppCallbacks(
                 SecondaryDestination.Standard(SecondaryPage.ListeningRecords)
             )
         },
+        onCheckUpdates = {
+            appState.secondaryPathSegments = emptyList()
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.Standard(SecondaryPage.Updates)
+            )
+        },
         onOpenSource = {
             appState.secondaryPathSegments = emptyList()
             appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
@@ -368,6 +377,7 @@ internal fun flowtoneAppCallbacks(
         },
         onRequestPermission = onRequestPermission,
         onSongClick = onSongClick,
+        onLoadProviderEntityCollections = onLoadProviderEntityCollections,
         onOnlineSongClick = onOnlineSongClick,
         onProviderSongQueueClick = onProviderSongQueueClick,
         onDismissExpandedPlayer = {

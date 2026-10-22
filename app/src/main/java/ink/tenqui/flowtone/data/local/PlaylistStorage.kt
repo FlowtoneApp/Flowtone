@@ -253,9 +253,6 @@ private fun JSONObject.optPlaylistCardStyle(): PlaylistCardStyle {
     return when {
         legacySize.equals("Large", ignoreCase = true) -> PlaylistCardStyle.LARGE
         legacySize.equals("Wide", ignoreCase = true) -> PlaylistCardStyle.WIDE
-        optDouble("widthDp", 0.0) >= 260.0 && optDouble("heightDp", 0.0) >= 180.0 ->
-            PlaylistCardStyle.LARGE
-        optDouble("widthDp", 0.0) >= 260.0 -> PlaylistCardStyle.WIDE
         else -> PlaylistCardStyle.SQUARE
     }
 }

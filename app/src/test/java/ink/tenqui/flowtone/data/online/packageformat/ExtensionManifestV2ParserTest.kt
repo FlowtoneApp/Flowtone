@@ -13,6 +13,7 @@ import ink.tenqui.flowtone.data.online.permission.NetworkSecurity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ExtensionManifestV2ParserTest {
@@ -51,6 +52,36 @@ class ExtensionManifestV2ParserTest {
         assertEquals(3, descriptor.networkPermissions.size)
         assertTrue(descriptor.networkPermissions.any { it.security == NetworkSecurity.Insecure })
         assertTrue(descriptor.networkPermissions.any { it.hostScope == NetworkHostScope.SubdomainsOnly })
+        assertNull(descriptor.manifest.sourceTypeLabel)
+    }
+
+    @Test
+    fun sourceTypeLabelIsOptionalTrimmedDisplayMetadata() {
+        val manifestWithoutLabel = ExtensionManifestParser.parseNormalized(v2Manifest()).manifest
+        val manifestWithLabel = ExtensionManifestParser.parseNormalized(
+            withSourceTypeLabel(v2Manifest(), "\" WebDAV \"")
+        ).manifest
+
+        assertNull(manifestWithoutLabel.sourceTypeLabel)
+        assertEquals("WebDAV", manifestWithLabel.sourceTypeLabel)
+        assertEquals(2, manifestWithLabel.formatVersion)
+    }
+
+    @Test
+    fun sourceTypeLabelRejectsInvalidStrings() {
+        val overlongLabel = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop"
+        listOf(
+            "\"\"",
+            "42",
+            "\"$overlongLabel\"",
+            "\"Web\\u0001DAV\""
+        ).forEach { labelJson ->
+            assertThrows(IllegalArgumentException::class.java) {
+                ExtensionManifestParser.parseNormalized(
+                    withSourceTypeLabel(v2Manifest(), labelJson)
+                )
+            }
+        }
     }
 
     @Test
@@ -283,6 +314,12 @@ class ExtensionManifestV2ParserTest {
         assertEquals(listOf("一", "二", "三"), summary.requiredFields.map { it.label })
         assertEquals(1, summary.omittedFieldCount)
     }
+
+    private fun withSourceTypeLabel(manifest: String, valueJson: String): String =
+        manifest.replace(
+            "\"iconColor\": \"#445566\"",
+            "\"sourceTypeLabel\": $valueJson,\n              \"iconColor\": \"#445566\""
+        )
 
     private fun v1Manifest() = """
         {

@@ -2,10 +2,10 @@ package ink.tenqui.flowtone.ui.library
 
 import android.net.Uri
 import android.util.Log
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,16 +16,22 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -37,14 +43,21 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.toPresentationSong
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
+import ink.tenqui.flowtone.data.online.LibraryProviderOption
+import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
+import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
+import ink.tenqui.flowtone.playback.PlaybackSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 internal sealed class CreatePlaylistState {
@@ -407,6 +420,19 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
 internal fun LibraryScreen(
     songCount: Int,
     likedSongCount: Int,
+    selectedSourceKey: String,
+    onSelectedSourceKeyChange: (String) -> Unit,
+    libraryProviderSourcesResolved: Boolean,
+    libraryProviderOptions: List<LibraryProviderOption>,
+    providerSongs: Map<String, List<ProviderSong>>,
+    providerAlbums: Map<String, List<ProviderAlbum>>,
+    providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState>,
+    providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState>,
+    currentSong: Song?,
+    isPageActive: Boolean,
+    onLoadProviderEntityCollections: (String) -> Unit,
+    onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
+    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     pageScope: PageTransitionScope,
@@ -424,52 +450,223 @@ internal fun LibraryScreen(
         playlistItemHeight.toPx() / LibraryItemSlideOffsetDivisor
     }
     val pageVisible = pageScope.phase != PageTransitionPhase.Outgoing
+    val libraryPageActive = isPageActive && pageVisible
     val libraryCardsProgress = pageScope.retainedContentProgress
+    val sourceItems = remember(libraryProviderOptions) {
+        librarySourceItems(libraryProviderOptions)
+    }
+    var sourceSwitcherState by remember {
+        mutableStateOf<LibrarySourceSwitcherState>(LibrarySourceSwitcherState.Collapsed)
+    }
+    var sourceCardRenderOwner by remember {
+        mutableStateOf(LibrarySourceCardRenderOwner.Static)
+    }
+    var sourceSwipeLocked by remember { mutableStateOf(false) }
+    var sourceSwipeDirection by remember { mutableStateOf(0) }
+    var sourceCardBoundsRoot by remember { mutableStateOf<Rect?>(null) }
+    var sourceCardContentBoundsRoot by remember { mutableStateOf<Rect?>(null) }
+    var pageViewportBoundsRoot by remember { mutableStateOf<Rect?>(null) }
+    val sourceSwitcherOverlayHost = LocalLibrarySourceSwitcherOverlayHost.current
+        ?: remember { LibrarySourceSwitcherOverlayHostState() }
+    val sourceSwitcherProgress = sourceSwitcherOverlayHost.progress
+    val sourceIconPaintersByIdentity = remember { mutableStateMapOf<String, Painter>() }
+    val onSourceIconPainterLoaded: (String, Painter) -> Unit =
+        remember(sourceIconPaintersByIdentity) {
+            { identity, painter ->
+                if (sourceIconPaintersByIdentity[identity] == null) {
+                    sourceIconPaintersByIdentity[identity] = painter
+                }
+            }
+        }
+    val selectedSource = sourceItems.firstOrNull {
+        it.identity.key == selectedSourceKey
+    } ?: sourceItems.first()
+    val providerCatalogListState = rememberLazyListState()
+    val contentListState = if (selectedSource.identity == LibrarySourceIdentity.Local) {
+        playlistController.listState
+    } else {
+        providerCatalogListState
+    }
+    val selectedSourceIndex = sourceItems.indexOfFirst {
+        it.identity == selectedSource.identity
+    }.coerceAtLeast(0)
+    val selectedProviderId =
+        (selectedSource.identity as? LibrarySourceIdentity.Extension)?.extensionId
+    val sourceContent = LibrarySourceContentState(
+        sourceItems = sourceItems,
+        selectedSource = selectedSource,
+        switcherState = sourceSwitcherState,
+        swipeEnabled = libraryPageActive &&
+            sourceSwitcherState is LibrarySourceSwitcherState.Collapsed &&
+            !sourceSwipeLocked,
+        swipeDirection = sourceSwipeDirection,
+        providerSongs = selectedProviderId?.let(providerSongs::get),
+        providerSongLoadState = selectedProviderId?.let(providerSongCatalogLoadStates::get),
+        providerAlbums = selectedProviderId?.let(providerAlbums::get),
+        providerAlbumLoadState = selectedProviderId?.let(providerAlbumCatalogLoadStates::get),
+        currentSong = currentSong
+    )
+    val sourceCardContentVisible = !libraryPageActive ||
+        sourceCardRenderOwner == LibrarySourceCardRenderOwner.Static
 
     LaunchedEffect(pageVisible) {
-        if (!pageVisible) {
-            playlistController.clearPlaylistEditing()
+        if (!pageVisible) playlistController.clearPlaylistEditing()
+    }
+    LaunchedEffect(libraryPageActive) {
+        if (!libraryPageActive) {
+            sourceSwitcherState = LibrarySourceSwitcherState.Collapsed
+            sourceCardRenderOwner = LibrarySourceCardRenderOwner.Static
+            sourceSwipeLocked = false
+            sourceSwipeDirection = 0
+        }
+    }
+    LaunchedEffect(
+        sourceItems.map { it.identity.key },
+        libraryProviderSourcesResolved,
+        selectedSourceKey
+    ) {
+        val availableSourceKeys = sourceItems.mapTo(mutableSetOf()) { it.identity.key }
+        sourceIconPaintersByIdentity.keys.retainAll(availableSourceKeys)
+        if (libraryProviderSourcesResolved && selectedSourceKey !in availableSourceKeys) {
+            onSelectedSourceKeyChange(LibrarySourceIdentity.Local.key)
+            sourceSwitcherState = LibrarySourceSwitcherState.Collapsed
+            sourceSwipeLocked = false
+            sourceSwipeDirection = 0
+        }
+    }
+    LaunchedEffect(selectedSource.identity) {
+        val extension = selectedSource.identity as? LibrarySourceIdentity.Extension
+        if (extension != null && (selectedSource.supportsSongs || selectedSource.supportsAlbums)) {
+            onLoadProviderEntityCollections(extension.extensionId)
+        }
+    }
+    LaunchedEffect(sourceSwipeLocked, selectedSource.identity) {
+        if (sourceSwipeLocked) {
+            delay((FlowtoneMotion.DurationMillis + 48).toLong())
+            sourceSwipeLocked = false
+            sourceSwipeDirection = 0
         }
     }
 
-    LibraryHomeContent(
-        songCount = songCount,
-        pageScope = pageScope,
-        likedPlaylist = likedPlaylist,
-        playlists = playlistController.displayedPlaylists,
-        playlistItemHeight = playlistItemHeight,
-        libraryCardsProgress = libraryCardsProgress,
-        playlistItemOffsetYPx = playlistItemOffsetYPx,
-        flowCloudSpeed = flowCloudSpeed,
-        isFlowCloudPlaying = isFlowCloudPlaying,
-        listState = playlistController.listState,
-        editingPlaylistId = playlistController.visualEditingPlaylistId,
-        newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,
-        exitingPlaylistId = playlistController.exitingPlaylistId,
-        onOpenLocalLibrary = {
-            playlistController.clearPlaylistEditing()
-            onOpenLocalLibrary()
-        },
-        onCreatePlaylist = {
-            playlistController.clearPlaylistEditing()
-            playlistController.startEditing()
-        },
-        onCreateAnimationFinished = { playlist ->
-            playlistController.consumeNewlyCreatedPlaylistAnimation(playlist.id)
-        },
-        onDeleteAnimationFinished = { playlist ->
-            playlistController.consumePlaylistDeleteAnimation(playlist.id)
-        },
-        onOpenPlaylist = { playlist ->
-            playlistController.clearPlaylistEditing()
-            onOpenPlaylist(playlist)
-        },
-        onStartPlaylistEditing = playlistController::startPlaylistEditing,
-        onEditingPlaylistBoundsChanged = playlistController::updateEditingPlaylistBounds,
-        onEditingPlaylistBoundsRemoved = playlistController::removePlaylistBounds,
-        onLibraryViewportBoundsChanged = playlistController::updateLibraryViewportBounds,
-        modifier = modifier
+    fun selectSourceAt(index: Int) {
+        if (!libraryPageActive ||
+            sourceSwitcherState !is LibrarySourceSwitcherState.Collapsed ||
+            sourceSwipeLocked ||
+            index !in sourceItems.indices ||
+            index == selectedSourceIndex
+        ) {
+            return
+        }
+        sourceSwipeDirection = if (index > selectedSourceIndex) -1 else 1
+        sourceSwipeLocked = true
+        onSelectedSourceKeyChange(sourceItems[index].identity.key)
+    }
+
+    val latestOverlayContent = rememberUpdatedState<@Composable (Offset) -> Unit>(
+        { overlayOriginInRoot ->
+            LibrarySourceSwitcherOverlay(
+                sourceItems = sourceItems,
+                selectedIdentity = selectedSource.identity,
+                state = sourceSwitcherState,
+                sourceCardRenderOwner = sourceCardRenderOwner,
+                onSourceCardRenderOwnerChange = { sourceCardRenderOwner = it },
+                anchorBoundsInRoot = sourceCardBoundsRoot,
+                anchorContentBoundsInRoot = sourceCardContentBoundsRoot,
+                pageViewportBoundsInRoot = pageViewportBoundsRoot,
+                overlayOriginInRoot = overlayOriginInRoot,
+                pageActive = libraryPageActive,
+                sourceIconPainters = sourceIconPaintersByIdentity,
+                onSourceIconPainterLoaded = onSourceIconPainterLoaded,
+                progress = sourceSwitcherProgress,
+                onStateChange = { sourceSwitcherState = it },
+                onSourceSelected = { source ->
+                    if (sourceItems.any { it.identity == source.identity }) {
+                        onSelectedSourceKeyChange(source.identity.key)
+                        sourceSwipeDirection = 0
+                    }
+                }
+            )
+        }
     )
+    val hostedOverlayContent: @Composable (Offset) -> Unit =
+        remember(sourceSwitcherOverlayHost) {
+            @Composable { overlayOriginInRoot ->
+                latestOverlayContent.value.invoke(overlayOriginInRoot)
+            }
+        }
+    SideEffect {
+        sourceSwitcherOverlayHost.updateOverlayContent(hostedOverlayContent)
+    }
+    DisposableEffect(sourceSwitcherOverlayHost) {
+        onDispose { sourceSwitcherOverlayHost.updateOverlayContent(null) }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coordinates ->
+                pageViewportBoundsRoot = coordinates.boundsInRoot()
+            }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            LibraryHomeContent(
+                songCount = songCount,
+                pageScope = pageScope,
+                likedPlaylist = likedPlaylist,
+                playlists = playlistController.displayedPlaylists,
+                playlistItemHeight = playlistItemHeight,
+                libraryCardsProgress = libraryCardsProgress,
+                playlistItemOffsetYPx = playlistItemOffsetYPx,
+                flowCloudSpeed = flowCloudSpeed,
+                isFlowCloudPlaying = isFlowCloudPlaying,
+                listState = contentListState,
+                editingPlaylistId = playlistController.visualEditingPlaylistId,
+                newlyCreatedPlaylistId = playlistController.newlyCreatedPlaylistId,
+                exitingPlaylistId = playlistController.exitingPlaylistId,
+                onOpenLocalLibrary = {
+                    playlistController.clearPlaylistEditing()
+                    onOpenLocalLibrary()
+                },
+                onCreatePlaylist = {
+                    playlistController.clearPlaylistEditing()
+                    playlistController.startEditing()
+                },
+                onCreateAnimationFinished = { playlist ->
+                    playlistController.consumeNewlyCreatedPlaylistAnimation(playlist.id)
+                },
+                onDeleteAnimationFinished = { playlist ->
+                    playlistController.consumePlaylistDeleteAnimation(playlist.id)
+                },
+                onOpenPlaylist = { playlist ->
+                    playlistController.clearPlaylistEditing()
+                    onOpenPlaylist(playlist)
+                },
+                onStartPlaylistEditing = playlistController::startPlaylistEditing,
+                onEditingPlaylistBoundsChanged = playlistController::updateEditingPlaylistBounds,
+                onEditingPlaylistBoundsRemoved = playlistController::removePlaylistBounds,
+                onLibraryViewportBoundsChanged = playlistController::updateLibraryViewportBounds,
+                sourceContent = sourceContent,
+                sourceExpandProgress = sourceSwitcherProgress.value,
+                sourceCardContentVisible = sourceCardContentVisible,
+                sourceIconPainters = sourceIconPaintersByIdentity,
+                onSourceIconPainterLoaded = onSourceIconPainterLoaded,
+                onSourceHeaderClick = {
+                    if (libraryPageActive && !sourceSwipeLocked) {
+                        sourceSwitcherState = LibrarySourceSwitcherState.Expanded
+                    }
+                },
+                onSourceSwipeToIndex = ::selectSourceAt,
+                onSourceCardBoundsChanged = { sourceCardBoundsRoot = it },
+                onSourceCardContentBoundsChanged = { sourceCardContentBoundsRoot = it },
+                onProviderSongClick = onProviderSongQueueClick,
+                onOpenProviderAlbum = onOpenProviderAlbum,
+                onRetryProviderSongs = {
+                    selectedProviderId?.let(onLoadProviderEntityCollections)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
 }
 
 private fun hasDuplicatePlaylistTitle(

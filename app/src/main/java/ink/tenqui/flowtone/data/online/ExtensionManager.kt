@@ -3,7 +3,6 @@ package ink.tenqui.flowtone.data.online
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import android.util.Log
 import androidx.media3.common.MediaItem
@@ -140,8 +139,21 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     suspend fun initialize() = mutex.withLock {
         if (initialized) return@withLock
-        installBundledUiTestExtensions()
-        check(reloadRuntimeLocked(ExtensionRuntimeReloadReason.Initialize)) {
+        // 旧调试包曾把内置扩展写入 filesDir；移除随包资源不会卸载这个副本。
+        val retiredExtensionId = "debug.provider.ui-regression-fixture"
+        withContext(Dispatchers.IO) {
+            CredentialGrantLifecycleLocks.withExtension(retiredExtensionId) {
+                credentialGrantStore.deleteForExtension(retiredExtensionId)
+                check(installer.uninstall(retiredExtensionId)) { "无法清理已停用的内置调试扩展" }
+            }
+            configStore.delete(retiredExtensionId)
+        }
+        check(
+            reloadRuntimeLocked(
+                ExtensionRuntimeReloadReason.Initialize,
+                clearExtensionDataFor = setOf(retiredExtensionId)
+            )
+        ) {
             "扩展运行环境初始化失败"
         }
         initialized = true
@@ -406,6 +418,34 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     ProviderSearchCallResult.Failure(error)
                 }
             )
+    }
+
+    /** 当前运行且声明至少一项曲库目录能力的扩展来源。 */
+    internal fun availableLibraryProviderOptions(): List<LibraryProviderOption> {
+        if (_runtimeState.value.isReloading) return emptyList()
+        return installedExtensions()
+            .asSequence()
+            .mapNotNull { installed ->
+                val provider = musicProviders[installed.manifest.id] ?: return@mapNotNull null
+                if (!installed.runtimeAvailable) return@mapNotNull null
+                val supportsSongs = AtomicCapabilityId.CatalogSongsList in provider.capabilities
+                val supportsAlbums = AtomicCapabilityId.CatalogAlbumsList in provider.capabilities
+                if (!supportsSongs && !supportsAlbums) return@mapNotNull null
+                LibraryProviderOption(
+                    extensionId = installed.manifest.id,
+                    name = installed.manifest.name,
+                    sourceTypeLabel = installed.manifest.sourceTypeLabel,
+                    color = installed.manifest.color,
+                    visual = ExtensionProviderVisualResolver.resolve(installed),
+                    supportsSongs = supportsSongs,
+                    supportsAlbums = supportsAlbums
+                )
+            }
+            .sortedWith(
+                compareBy<LibraryProviderOption, String>(String.CASE_INSENSITIVE_ORDER) { it.name }
+                    .thenBy(LibraryProviderOption::extensionId)
+            )
+            .toList()
     }
 
     /** 当前已运行且声明至少一项 MusicProvider Atomic capability 的 Provider。 */
@@ -736,21 +776,6 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
     }
 
-    /** Debug APK 将随包携带的 fixture 先走正常安装器安装，再由下方既有扫描流程加载。 */
-    private fun installBundledUiTestExtensions() {
-        if (!BuildConfig.UI_TEST_FIXTURE_ENABLED) return
-        runCatching {
-            appContext.assets.open(BundledArtistProfileFixturePackage).use { input ->
-                installer.install(BundledArtistProfileFixturePackage, input)
-            }
-        }.onFailure { error ->
-            Log.w(
-                LogTag,
-                "extension.ui_test_fixture.install.failed type=${error.javaClass.simpleName}"
-            )
-        }
-    }
-
     override fun close() {
         runtimeLifecycle.close()
         disposeRuntime(clearExtensionDataFor = emptySet(), clearPlaybackResources = true)
@@ -762,8 +787,6 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     companion object {
         private const val LogTag = "FlowtoneExtension"
-        private const val BundledArtistProfileFixturePackage =
-            "provider-artist-profile-fixture.flowtone"
         @Volatile private var instance: ExtensionManager? = null
         fun get(context: Context): ExtensionManager = instance ?: synchronized(this) {
             instance ?: ExtensionManager(context).also { instance = it }

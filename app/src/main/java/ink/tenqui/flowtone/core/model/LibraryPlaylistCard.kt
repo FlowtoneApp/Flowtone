@@ -7,8 +7,6 @@ data class LibraryPlaylistCard(
     val title: String,
     val subtitle: String = "0 \u9996\u6b4c\u66f2",
     val order: Int,
-    val widthDp: Float = 320f,
-    val heightDp: Float = 236f,
     val isSystem: Boolean = false,
     val appearanceColorKey: PlaylistAppearanceColorKey? = if (isSystem) {
         null

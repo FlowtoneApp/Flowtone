@@ -1,0 +1,59 @@
+name: Mirror GitHub to Gitee
+
+on:
+  push:
+  delete:
+  # 每天北京时间 04:30 自动做一次全量校对，用来补齐被跳过的 Push 事件。
+  schedule:
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '选择同步方式：全量校对，或单个分支/Tag 增量同步'
+        type: choice
+        options:
+          - full
+          - incremental
+        default: full
+      ref_name:
+        description: '仅增量模式需要；例如 refs/heads/main 或 refs/tags/v0.15.1'
+        type: string
+        required: false
+        default: refs/heads/main
+      dry_run:
+        description: '仅预览将进行的 Git 变更，不写入 Gitee'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# GitHub -> Gitee 串行执行。每次增量均取 GitHub 上该 ref 的最新状态。
+concurrency:
+  group: flowtone-gitee-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    # 只允许主仓库执行，防止 Fork 误操作同一个 Gitee 目标仓库。
+    # 首次启用时默认仅允许手动运行。设置仓库变量 GITEE_MIRROR_ENABLED=true 才开启自动同步。
+    if: github.repository == 'FlowtoneApp/Flowtone' && (github.event_name == 'workflow_dispatch' || vars.GITEE_MIRROR_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout workflow files
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Mirror to Gitee
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USERNAME: Tenqui
+          MIRROR_MODE: ${{ github.event_name == 'schedule' && 'full' || (github.event_name == 'workflow_dispatch' && inputs.mode || 'incremental') }}
+          MIRROR_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref_name || github.ref }}
+          MIRROR_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          SOURCE_URL: https://github.com/FlowtoneApp/Flowtone.git
+          DEST_URL: https://gitee.com/Tenqui/Flowtone-GiteeMirror.git
+        run: bash scripts/mirror-to-gitee.sh

@@ -23,6 +23,7 @@ import ink.tenqui.flowtone.data.listening.ListeningStatsRepositoryProvider
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.LibraryProviderOption
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
@@ -96,8 +97,18 @@ data class MusicUiState(
     /** 在线请求尚未被播放器确认；绝不能覆盖 confirmed PlaybackState。 */
     val providerSongs: Map<String, List<ProviderSong>> = emptyMap(),
     val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
-    val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap()
+    val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
+    val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
+    val libraryProviderSourcesResolved: Boolean = false,
+    val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
+    val providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap()
 )
+
+enum class ProviderCatalogLoadState {
+    Loading,
+    Loaded,
+    Failed
+}
 
 data class ProviderPlaylistDetailState(
     val songs: List<ProviderSong> = emptyList(),
@@ -235,6 +246,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 if (runtimeState.generation != observedExtensionRuntimeGeneration) {
                     observedExtensionRuntimeGeneration = runtimeState.generation
                     extensionRuntimeRefreshPending = true
+                    _uiState.update { state ->
+                        state.copy(libraryProviderSourcesResolved = false)
+                    }
                     invalidateExtensionRuntimeRequests()
                 }
                 if (!runtimeState.isReloading && extensionRuntimeRefreshPending) {
@@ -265,7 +279,9 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 currentQueueIndex = confirmedQueueIndex,
                 providerSongs = emptyMap(),
                 providerAlbums = emptyMap(),
-                providerPlaylistDetails = emptyMap()
+                providerPlaylistDetails = emptyMap(),
+                providerSongCatalogLoadStates = emptyMap(),
+            providerAlbumCatalogLoadStates = emptyMap()
             )
         }
         _searchUiState.update { state ->
@@ -389,7 +405,24 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     }
 
     fun refreshSearchSources() {
+        val runtimeStateBeforeRefresh = extensionManager.runtimeState.value
         val providers = extensionManager.availableMusicProviderOptions()
+        val libraryProviders = extensionManager.availableLibraryProviderOptions()
+        val runtimeStateAfterRefresh = extensionManager.runtimeState.value
+        val libraryProviderSourcesResolved = runtimeStateBeforeRefresh == runtimeStateAfterRefresh &&
+            runtimeStateAfterRefresh.generation > 0L &&
+            !runtimeStateAfterRefresh.isReloading
+        _uiState.update { state ->
+            state.copy(
+                // 重载期间的空列表只是临时态，保留上次确认的来源直到新列表就绪。
+                libraryProviderOptions = if (libraryProviderSourcesResolved) {
+                    libraryProviders
+                } else {
+                    state.libraryProviderOptions
+                },
+                libraryProviderSourcesResolved = libraryProviderSourcesResolved
+            )
+        }
         val preferredScope = searchScopeFromPreference(appPreferences.getSearchScopePreference())
         _searchUiState.update { current ->
             val selected = when (val existing = if (current.providerOptions.isEmpty()) preferredScope else current.scope) {
@@ -768,39 +801,114 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         requestedProviderCollectionIds += normalizedProviderId
         val capabilities = extensionManager.providerCapabilities(normalizedProviderId)
         val runtimeGeneration = extensionManager.runtimeState.value.generation
-        val songLoadKey = "$runtimeGeneration:song:$normalizedProviderId"
-        if (
-            AtomicCapabilityId.CatalogSongsList in capabilities &&
-            normalizedProviderId !in _uiState.value.providerSongs &&
-            providerCollectionLoads.add(songLoadKey)
-        ) {
-            viewModelScope.launch {
-                try {
-                    extensionManager.getProviderSongs(normalizedProviderId)?.let { songs ->
-                        _uiState.update { state ->
-                            state.copy(providerSongs = state.providerSongs + (normalizedProviderId to songs))
+
+        if (AtomicCapabilityId.CatalogSongsList in capabilities) {
+            val loadKey = "$runtimeGeneration:song:$normalizedProviderId"
+            if (normalizedProviderId in _uiState.value.providerSongs) {
+                _uiState.update { state ->
+                    state.copy(
+                        providerSongCatalogLoadStates = state.providerSongCatalogLoadStates +
+                            (normalizedProviderId to ProviderCatalogLoadState.Loaded)
+                    )
+                }
+            } else if (providerCollectionLoads.add(loadKey)) {
+                _uiState.update { state ->
+                    state.copy(
+                        providerSongCatalogLoadStates = state.providerSongCatalogLoadStates +
+                            (normalizedProviderId to ProviderCatalogLoadState.Loading)
+                    )
+                }
+                viewModelScope.launch {
+                    var songs: List<ProviderSong>? = null
+                    var cancelled = false
+                    try {
+                        songs = extensionManager.getProviderSongs(normalizedProviderId)
+                    } catch (error: CancellationException) {
+                        cancelled = true
+                        throw error
+                    } catch (_: Throwable) {
+                        // ExtensionManager handles provider errors; this also covers a runtime
+                        // shutdown while a catalog request is in flight.
+                    } finally {
+                        providerCollectionLoads.remove(loadKey)
+                        val runtimeState = extensionManager.runtimeState.value
+                        if (!cancelled && !runtimeState.isReloading &&
+                            runtimeState.generation == runtimeGeneration
+                        ) {
+                            _uiState.update { state ->
+                                if (songs == null) {
+                                    state.copy(
+                                        providerSongCatalogLoadStates =
+                                            state.providerSongCatalogLoadStates +
+                                                (normalizedProviderId to ProviderCatalogLoadState.Failed)
+                                    )
+                                } else {
+                                    state.copy(
+                                        providerSongs = state.providerSongs +
+                                            (normalizedProviderId to songs),
+                                        providerSongCatalogLoadStates =
+                                            state.providerSongCatalogLoadStates +
+                                                (normalizedProviderId to ProviderCatalogLoadState.Loaded)
+                                    )
+                                }
+                            }
                         }
                     }
-                } finally {
-                    providerCollectionLoads.remove(songLoadKey)
                 }
             }
         }
-        val albumLoadKey = "$runtimeGeneration:album:$normalizedProviderId"
-        if (
-            AtomicCapabilityId.CatalogAlbumsList in capabilities &&
-            normalizedProviderId !in _uiState.value.providerAlbums &&
-            providerCollectionLoads.add(albumLoadKey)
-        ) {
-            viewModelScope.launch {
-                try {
-                    extensionManager.getProviderAlbums(normalizedProviderId)?.let { albums ->
-                        _uiState.update { state ->
-                            state.copy(providerAlbums = state.providerAlbums + (normalizedProviderId to albums))
+
+        if (AtomicCapabilityId.CatalogAlbumsList in capabilities) {
+            val loadKey = "$runtimeGeneration:album:$normalizedProviderId"
+            if (normalizedProviderId in _uiState.value.providerAlbums) {
+                _uiState.update { state ->
+                    state.copy(
+                        providerAlbumCatalogLoadStates = state.providerAlbumCatalogLoadStates +
+                            (normalizedProviderId to ProviderCatalogLoadState.Loaded)
+                    )
+                }
+            } else if (providerCollectionLoads.add(loadKey)) {
+                _uiState.update { state ->
+                    state.copy(
+                        providerAlbumCatalogLoadStates = state.providerAlbumCatalogLoadStates +
+                            (normalizedProviderId to ProviderCatalogLoadState.Loading)
+                    )
+                }
+                viewModelScope.launch {
+                    var albums: List<ProviderAlbum>? = null
+                    var cancelled = false
+                    try {
+                        albums = extensionManager.getProviderAlbums(normalizedProviderId)
+                    } catch (error: CancellationException) {
+                        cancelled = true
+                        throw error
+                    } catch (_: Throwable) {
+                        // A stopped or unloaded runtime makes this catalog temporarily unavailable.
+                    } finally {
+                        providerCollectionLoads.remove(loadKey)
+                        val runtimeState = extensionManager.runtimeState.value
+                        if (!cancelled && !runtimeState.isReloading &&
+                            runtimeState.generation == runtimeGeneration
+                        ) {
+                            _uiState.update { state ->
+                                if (albums == null) {
+                                    state.copy(
+                                        providerAlbumCatalogLoadStates =
+                                            state.providerAlbumCatalogLoadStates +
+                                                (normalizedProviderId to ProviderCatalogLoadState.Failed)
+                                    )
+                                } else {
+                                    state.copy(
+                                        providerAlbums = state.providerAlbums +
+                                            (normalizedProviderId to albums),
+                                        providerAlbumCatalogLoadStates =
+                                            state.providerAlbumCatalogLoadStates +
+                                                (normalizedProviderId to ProviderCatalogLoadState.Loaded)
+                                    )
+                                }
+                            }
                         }
                     }
-                } finally {
-                    providerCollectionLoads.remove(albumLoadKey)
                 }
             }
         }

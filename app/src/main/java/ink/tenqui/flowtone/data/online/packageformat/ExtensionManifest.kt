@@ -24,7 +24,9 @@ data class ExtensionManifest(
     val icon: String? = null,
     val iconColor: String? = null,
     /** 可选的作者主页链接，仅接受有效的 HTTP(S) 地址。 */
-    val authorUrl: String? = null
+    val authorUrl: String? = null,
+    /** 可选来源类型展示文案，不参与 capability 或权限判断。 */
+    val sourceTypeLabel: String? = null
 )
 
 data class ExtensionIdentity(
