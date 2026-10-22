@@ -135,12 +135,7 @@ internal fun CrossfadeArtworkImage(
 
 @Composable
 internal fun MorphArtworkLayer(
-    imageRequest: ImageRequest?,
-    artworkPainter: Painter?,
-    previousArtworkPainter: Painter? = null,
-    artworkCrossfadeProgress: Float = 1f,
-    showMissingArtworkPlaceholder: Boolean,
-    largeArtworkPainter: Painter? = null,
+    artwork: PlayerArtworkPresentation,
     progress: Float,
     scaleProgress: Float,
     currentHeight: Dp,
@@ -188,11 +183,26 @@ internal fun MorphArtworkLayer(
     val artworkRotationDegrees = lerpFloat(playbackRotationDegrees, 0f, addProgress)
     val collapsedArtworkDimAlpha = lerpFloat(0.38f, 0f, progress)
     val coverShape = RoundedCornerShape(cornerRadius)
-    val coverBackgroundColor = if (imageRequest == null) {
+    val coverBackgroundColor = if (artwork.imageRequest == null) {
         missingArtworkBackgroundColor()
     } else {
         Color.Black.copy(alpha = 0.08f)
     }
+    val crossfadeProgress = artwork.progress.coerceIn(0f, 1f)
+    val placeholderAlpha = playerArtworkPlaceholderAlpha(artwork)
+    val largeArtworkPainter = artwork.largeArtworkPainter?.takeIf {
+        val expectedIdentity = if (artwork.targetPainter != null) {
+            artwork.targetIdentity
+        } else {
+            artwork.baseIdentity
+        }
+        artwork.largeArtworkRequestIdentity == expectedIdentity
+    }
+    val largeArtworkFadeProgress by animateFloatAsState(
+        targetValue = if (largeArtworkPainter != null) 1f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "MiniPlayerLargeArtworkFade"
+    )
     val blurModifier = if (blurRadius > 0.5.dp) {
         Modifier.blur(blurRadius)
     } else {
@@ -262,55 +272,86 @@ internal fun MorphArtworkLayer(
                     .then(blurModifier),
                 contentAlignment = Alignment.Center
             ) {
-                if (showMissingArtworkPlaceholder) {
-                    MissingArtworkPlaceholder(
-                        modifier = Modifier.matchParentSize(),
-                        iconModifier = Modifier.size(
-                            maxOf(
-                                artworkSize * MissingArtworkIconSizeFraction,
-                                MissingArtworkCompactIconSize
+                if (artwork.targetIsPlaceholder) {
+                    artwork.basePainter?.let { painter ->
+                        Image(
+                            painter = painter,
+                            contentDescription = "\u4e13\u8f91\u5c01\u9762",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+                    if (placeholderAlpha > 0.001f) {
+                        MissingArtworkPlaceholder(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .graphicsLayer { alpha = placeholderAlpha },
+                            iconModifier = Modifier.size(
+                                maxOf(
+                                    artworkSize * MissingArtworkIconSizeFraction,
+                                    MissingArtworkCompactIconSize
+                                )
                             )
                         )
-                    )
-                }
-                val largeArtworkFadeProgress by animateFloatAsState(
-                    targetValue = if (largeArtworkPainter != null) 1f else 0f,
-                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                    label = "MiniPlayerLargeArtworkFade"
-                )
-                previousArtworkPainter?.let { painter ->
-                    Image(
-                        painter = painter,
-                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer {
-                                alpha = 1f - artworkCrossfadeProgress.coerceIn(0f, 1f)
+                    }
+                } else {
+                    if (artwork.basePainter == null && placeholderAlpha > 0.001f) {
+                        MissingArtworkPlaceholder(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .graphicsLayer { alpha = placeholderAlpha },
+                            iconModifier = Modifier.size(
+                                maxOf(
+                                    artworkSize * MissingArtworkIconSizeFraction,
+                                    MissingArtworkCompactIconSize
+                                )
+                            )
+                        )
+                    }
+                    artwork.basePainter?.let { painter ->
+                        Image(
+                            painter = painter,
+                            contentDescription = "专辑封面",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+                    artwork.targetPainter?.let { painter ->
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .graphicsLayer { alpha = crossfadeProgress }
+                        ) {
+                            Image(
+                                painter = painter,
+                                contentDescription = "专辑封面",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize()
+                            )
+                            largeArtworkPainter?.let { largePainter ->
+                                Image(
+                                    painter = largePainter,
+                                    contentDescription = "专辑封面",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .graphicsLayer { alpha = largeArtworkFadeProgress }
+                                )
                             }
-                    )
+                        }
+                    }
                 }
-                artworkPainter?.let { painter ->
-                    Image(
-                        painter = painter,
-                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer {
-                                alpha = artworkCrossfadeProgress.coerceIn(0f, 1f)
-                            }
-                    )
-                }
-                largeArtworkPainter?.let { painter ->
-                    Image(
-                        painter = painter,
-                        contentDescription = "\u4e13\u8f91\u5c01\u9762",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer { alpha = largeArtworkFadeProgress }
-                    )
+                if (artwork.targetPainter == null) {
+                    largeArtworkPainter?.let { painter ->
+                        Image(
+                            painter = painter,
+                            contentDescription = "专辑封面",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .graphicsLayer { alpha = largeArtworkFadeProgress }
+                        )
+                    }
                 }
                 if (collapsedArtworkDimAlpha > 0.01f) {
                     Box(

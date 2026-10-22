@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.ui.player
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -16,13 +17,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
-import coil3.compose.asPainter
 import coil3.ImageLoader
+import coil3.compose.asPainter
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 
 internal enum class PlayerArtworkLoadState {
     Missing,
@@ -40,24 +39,36 @@ internal data class PlayerSongPresentation(
     val key: String?,
     val lyricsSongId: Long?,
     val title: String,
-    val artist: String,
+    val artist: String
+)
+
+/**
+ * 封面有独立于歌曲文字的状态与进度。
+ *
+ * basePainter 在目标图片准备期间保持完整可见；targetPainter 就绪后叠加渐变。
+ * transitionId 只用于取消过期的封面动画，不参与歌曲文字切换。
+ */
+internal data class PlayerArtworkPresentation(
     val imageRequest: ImageRequest?,
-    val artworkRequestIdentity: PlayerArtworkRequestIdentity?,
-    val artworkPainter: Painter?,
-    val artworkPainterIdentity: PlayerArtworkRequestIdentity?,
-    val artworkLoadState: PlayerArtworkLoadState,
-    val previousArtworkPainter: Painter? = null,
-    val previousArtworkPainterIdentity: PlayerArtworkRequestIdentity? = null,
-    val largeArtworkRequestIdentity: PlayerArtworkRequestIdentity? = null,
+    val requestIdentity: PlayerArtworkRequestIdentity? = null,
+    val basePainter: Painter? = null,
+    val baseIdentity: PlayerArtworkRequestIdentity? = null,
+    val targetPainter: Painter? = null,
+    val targetIdentity: PlayerArtworkRequestIdentity? = null,
+    val targetIsPlaceholder: Boolean = false,
+    val loadState: PlayerArtworkLoadState = PlayerArtworkLoadState.Missing,
     val largeArtworkPainter: Painter? = null,
-    val largeArtworkPainterIdentity: PlayerArtworkRequestIdentity? = null
+    val largeArtworkRequestIdentity: PlayerArtworkRequestIdentity? = null,
+    val progress: Float = 1f,
+    val transitionId: Int = 0,
+    val isTransitioning: Boolean = false
 )
 
 internal data class PlayerSongPresentationTransition(
     val previous: PlayerSongPresentation?,
     val current: PlayerSongPresentation,
     val progress: Float,
-    val artworkCrossfadeProgress: Float
+    val artwork: PlayerArtworkPresentation
 )
 
 private data class DesiredPlayerSongPresentation(
@@ -69,78 +80,242 @@ private data class DesiredPlayerSongPresentation(
     val artworkRequestIdentity: PlayerArtworkRequestIdentity?,
     val largeArtworkRequest: ImageRequest?,
     val largeArtworkRequestIdentity: PlayerArtworkRequestIdentity?
-)
+) {
+    fun songPresentation() = PlayerSongPresentation(
+        key = key,
+        lyricsSongId = lyricsSongId,
+        title = title,
+        artist = artist
+    )
+}
 
 internal data class RetainedPlayerArtwork(
     val painter: Painter,
     val identity: PlayerArtworkRequestIdentity?
 )
 
+/**
+ * 快速连续切歌时，保留当前过渡中占比更大的封面作为下一次过渡起点。
+ */
 internal fun retainedPlayerArtworkForNextTarget(
-    presentation: PlayerSongPresentation,
+    artwork: PlayerArtworkPresentation,
     crossfadeProgress: Float
 ): RetainedPlayerArtwork? {
-    val currentArtwork = presentation.artworkPainter?.let { painter ->
-        RetainedPlayerArtwork(painter, presentation.artworkPainterIdentity)
+    val progress = crossfadeProgress.coerceIn(0f, 1f)
+    if (artwork.targetIsPlaceholder) {
+        if (progress >= 0.5f || artwork.basePainter == null) return null
+        return RetainedPlayerArtwork(artwork.basePainter, artwork.baseIdentity)
     }
-    val previousArtwork = presentation.previousArtworkPainter?.let { painter ->
-        RetainedPlayerArtwork(painter, presentation.previousArtworkPainterIdentity)
+
+    val target = artwork.targetPainter?.let { painter ->
+        RetainedPlayerArtwork(painter, artwork.targetIdentity)
+    }
+    val base = artwork.basePainter?.let { painter ->
+        RetainedPlayerArtwork(painter, artwork.baseIdentity)
     }
     return when {
-        currentArtwork == null -> previousArtwork
-        previousArtwork == null -> currentArtwork
-        crossfadeProgress >= 0.5f -> currentArtwork
-        else -> previousArtwork
+        target == null -> base
+        base == null -> target
+        progress >= 0.5f -> target
+        else -> base
     }
+}
+
+internal fun preparePlayerArtworkTarget(
+    current: PlayerArtworkPresentation,
+    imageRequest: ImageRequest?,
+    requestIdentity: PlayerArtworkRequestIdentity?,
+    largeArtworkRequestIdentity: PlayerArtworkRequestIdentity?,
+    crossfadeProgress: Float
+): PlayerArtworkPresentation {
+    val retained = retainedPlayerArtworkForNextTarget(current, crossfadeProgress)
+    val transitionId = current.transitionId + 1
+    val reusesArtwork = requestIdentity != null && retained?.identity == requestIdentity
+    val retainedLargePainter = current.largeArtworkPainter?.takeIf {
+        reusesArtwork &&
+            current.largeArtworkRequestIdentity == largeArtworkRequestIdentity
+    }
+
+    if (reusesArtwork) {
+        return PlayerArtworkPresentation(
+            imageRequest = imageRequest,
+            requestIdentity = requestIdentity,
+            basePainter = retained?.painter,
+            baseIdentity = requestIdentity,
+            loadState = PlayerArtworkLoadState.Ready,
+            largeArtworkPainter = retainedLargePainter,
+            largeArtworkRequestIdentity = largeArtworkRequestIdentity.takeIf {
+                retainedLargePainter != null
+            },
+            progress = 1f,
+            transitionId = transitionId
+        )
+    }
+
+    if (requestIdentity == null && retained != null) {
+        return PlayerArtworkPresentation(
+            imageRequest = null,
+            basePainter = retained.painter,
+            baseIdentity = retained.identity,
+            targetIsPlaceholder = true,
+            loadState = PlayerArtworkLoadState.Missing,
+            progress = 0f,
+            transitionId = transitionId,
+            isTransitioning = true
+        )
+    }
+
+    return PlayerArtworkPresentation(
+        imageRequest = imageRequest,
+        requestIdentity = requestIdentity,
+        basePainter = retained?.painter,
+        baseIdentity = retained?.identity,
+        loadState = if (requestIdentity == null) {
+            PlayerArtworkLoadState.Missing
+        } else {
+            PlayerArtworkLoadState.Loading
+        },
+        largeArtworkRequestIdentity = largeArtworkRequestIdentity,
+        progress = 1f,
+        transitionId = transitionId
+    )
+}
+
+internal fun playerArtworkReadyForTarget(
+    current: PlayerArtworkPresentation,
+    requestedIdentity: PlayerArtworkRequestIdentity,
+    painter: Painter
+): PlayerArtworkPresentation? {
+    if (
+        current.requestIdentity != requestedIdentity ||
+        current.loadState != PlayerArtworkLoadState.Loading
+    ) {
+        return null
+    }
+
+    if (current.basePainter != null && current.baseIdentity == requestedIdentity) {
+        return current.copy(
+            targetPainter = null,
+            targetIdentity = null,
+            targetIsPlaceholder = false,
+            loadState = PlayerArtworkLoadState.Ready,
+            progress = 1f,
+            transitionId = current.transitionId + 1,
+            isTransitioning = false
+        )
+    }
+
+    return current.copy(
+        targetPainter = painter,
+        targetIdentity = requestedIdentity,
+        targetIsPlaceholder = false,
+        loadState = PlayerArtworkLoadState.Ready,
+        progress = 0f,
+        transitionId = current.transitionId + 1,
+        isTransitioning = true
+    )
+}
+
+internal fun playerArtworkFailedForTarget(
+    current: PlayerArtworkPresentation,
+    requestedIdentity: PlayerArtworkRequestIdentity
+): PlayerArtworkPresentation? {
+    if (
+        current.requestIdentity != requestedIdentity ||
+        current.loadState != PlayerArtworkLoadState.Loading
+    ) {
+        return null
+    }
+
+    return if (current.basePainter != null) {
+        current.copy(
+            targetPainter = null,
+            targetIdentity = null,
+            targetIsPlaceholder = true,
+            loadState = PlayerArtworkLoadState.Failed,
+            largeArtworkPainter = null,
+            largeArtworkRequestIdentity = null,
+            progress = 0f,
+            transitionId = current.transitionId + 1,
+            isTransitioning = true
+        )
+    } else {
+        current.copy(
+            targetPainter = null,
+            targetIdentity = null,
+            targetIsPlaceholder = false,
+            loadState = PlayerArtworkLoadState.Failed,
+            largeArtworkPainter = null,
+            largeArtworkRequestIdentity = null,
+            progress = 1f,
+            transitionId = current.transitionId + 1,
+            isTransitioning = false
+        )
+    }
+}
+
+internal fun completePlayerArtworkTransition(
+    current: PlayerArtworkPresentation
+): PlayerArtworkPresentation = when {
+    current.targetIsPlaceholder -> current.copy(
+        basePainter = null,
+        baseIdentity = null,
+        targetPainter = null,
+        targetIdentity = null,
+        targetIsPlaceholder = false,
+        largeArtworkPainter = null,
+        largeArtworkRequestIdentity = null,
+        progress = 1f,
+        isTransitioning = false
+    )
+
+    current.targetPainter != null -> current.copy(
+        basePainter = current.targetPainter,
+        baseIdentity = current.targetIdentity,
+        targetPainter = null,
+        targetIdentity = null,
+        targetIsPlaceholder = false,
+        largeArtworkRequestIdentity = current.largeArtworkRequestIdentity,
+        progress = 1f,
+        isTransitioning = false
+    )
+
+    else -> current.copy(progress = 1f, isTransitioning = false)
+}
+
+internal fun playerArtworkPlaceholderAlpha(
+    artwork: PlayerArtworkPresentation
+): Float = when {
+    artwork.targetIsPlaceholder -> artwork.progress.coerceIn(0f, 1f)
+    artwork.basePainter == null && artwork.targetPainter != null ->
+        1f - artwork.progress.coerceIn(0f, 1f)
+    artwork.basePainter == null -> 1f
+    else -> 0f
 }
 
 internal fun shouldShowMissingArtworkPlaceholder(
-    presentation: PlayerSongPresentation
-): Boolean = when (presentation.artworkLoadState) {
-    PlayerArtworkLoadState.Missing,
-    PlayerArtworkLoadState.Failed -> true
-
-    PlayerArtworkLoadState.Loading ->
-        presentation.artworkPainter == null && presentation.previousArtworkPainter == null
-
-    PlayerArtworkLoadState.Ready ->
-        presentation.artworkPainter == null && presentation.previousArtworkPainter == null
-}
-
-internal fun isRetainingOutgoingArtworkDuringSongSwitch(
-    transition: PlayerSongPresentationTransition,
-    presentation: PlayerSongPresentation
-): Boolean {
-    val outgoing = transition.previous ?: return false
-    if (presentation !== transition.current) return false
-    val painter = presentation.artworkPainter ?: return false
-    return presentation.artworkLoadState == PlayerArtworkLoadState.Loading &&
-        presentation.artworkPainterIdentity != presentation.artworkRequestIdentity &&
-        outgoing.artworkPainter === painter
-}
-
-internal fun playerArtworkSwitchAlpha(
-    transition: PlayerSongPresentationTransition,
-    presentation: PlayerSongPresentation,
-    switchAlpha: Float
-): Float = if (isRetainingOutgoingArtworkDuringSongSwitch(transition, presentation)) {
-    1f
-} else {
-    switchAlpha
-}
+    artwork: PlayerArtworkPresentation
+): Boolean = playerArtworkPlaceholderAlpha(artwork) > 0.001f
 
 internal fun isCurrentPlayerArtworkRequest(
-    current: PlayerSongPresentation,
-    requestedSongKey: String?,
+    current: PlayerArtworkPresentation,
     requestedIdentity: PlayerArtworkRequestIdentity?,
-    latestSongKey: String?,
     latestRequestIdentity: PlayerArtworkRequestIdentity?
 ): Boolean =
-    current.key == requestedSongKey &&
-        current.artworkRequestIdentity == requestedIdentity &&
-        current.artworkLoadState == PlayerArtworkLoadState.Loading &&
-        latestSongKey == requestedSongKey &&
+    requestedIdentity != null &&
+        current.requestIdentity == requestedIdentity &&
+        current.loadState == PlayerArtworkLoadState.Loading &&
         latestRequestIdentity == requestedIdentity
+
+internal suspend fun publishPlayerArtworkPresentation(
+    presentation: PlayerArtworkPresentation,
+    progress: Animatable<Float, AnimationVector1D>,
+    publish: (PlayerArtworkPresentation) -> Unit
+) {
+    // 先重置共享进度再发布新 Painter，避免首帧用上一次已完成的进度绘制目标封面。
+    progress.snapTo(presentation.progress)
+    publish(presentation)
+}
 
 private fun artworkRequestIdentity(
     request: ImageRequest?,
@@ -175,337 +350,156 @@ internal fun rememberPlayerSongPresentationTransition(
     )
     val latestDesired by rememberUpdatedState(desired)
     var current by remember {
-        mutableStateOf(
-            PlayerSongPresentation(
-                key = songKey,
-                lyricsSongId = lyricsSongId,
-                title = title,
-                artist = artist,
-                imageRequest = imageRequest,
-                artworkRequestIdentity = desired.artworkRequestIdentity,
-                artworkPainter = null,
-                artworkPainterIdentity = null,
-                artworkLoadState = if (imageRequest == null) {
-                    PlayerArtworkLoadState.Missing
-                } else {
-                    PlayerArtworkLoadState.Loading
-                },
-                largeArtworkRequestIdentity = desired.largeArtworkRequestIdentity
-            )
-        )
+        mutableStateOf(desired.songPresentation())
     }
     var previous by remember { mutableStateOf<PlayerSongPresentation?>(null) }
     val switchProgress = remember { Animatable(1f) }
-    val artworkCrossfadeProgress = remember { Animatable(1f) }
 
-    // 歌曲和封面请求变化时先更新展示目标，并将当前实际可见的 Painter 留在渲染状态里。
-    LaunchedEffect(desired.key, desired.artworkRequestIdentity, imageLoader) {
-        val songChanged = current.key != desired.key
-        val requestChanged = current.artworkRequestIdentity != desired.artworkRequestIdentity
-        val needsInitialLoad = desired.imageRequest != null &&
-            current.artworkLoadState == PlayerArtworkLoadState.Loading &&
-            current.artworkPainterIdentity != desired.artworkRequestIdentity
-        if (!songChanged && !requestChanged && !needsInitialLoad) {
+    var artwork by remember {
+        mutableStateOf(
+            PlayerArtworkPresentation(
+                imageRequest = imageRequest,
+                loadState = if (imageRequest == null) {
+                    PlayerArtworkLoadState.Missing
+                } else {
+                    PlayerArtworkLoadState.Loading
+                }
+            )
+        )
+    }
+    val artworkProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(desired.key) {
+        val next = latestDesired.songPresentation()
+        if (current.key == desired.key) {
+            current = next
             return@LaunchedEffect
         }
 
-        val retainedArtwork = retainedPlayerArtworkForNextTarget(
-            presentation = current,
-            crossfadeProgress = artworkCrossfadeProgress.value
-        )
-        val reusesArtwork = desired.imageRequest != null &&
-            retainedArtwork?.identity == desired.artworkRequestIdentity
-        val missingArtworkWithSameSong = desired.imageRequest == null &&
-            !songChanged &&
-            retainedArtwork != null
-
-        if (songChanged) {
-            val oldPresentation = current
-            val matchingLargePainter = oldPresentation.largeArtworkPainter?.takeIf {
-                retainedArtwork != null &&
-                    oldPresentation.largeArtworkPainterIdentity?.data == retainedArtwork.identity?.data
-            }
-            previous = oldPresentation.copy(
-                artworkPainter = retainedArtwork?.painter,
-                artworkPainterIdentity = retainedArtwork?.identity,
-                previousArtworkPainter = null,
-                previousArtworkPainterIdentity = null,
-                largeArtworkPainter = matchingLargePainter,
-                largeArtworkPainterIdentity = if (matchingLargePainter != null) {
-                    oldPresentation.largeArtworkPainterIdentity
-                } else {
-                    null
-                }
+        previous = current
+        current = next
+        switchProgress.snapTo(0f)
+        switchProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = PlayerSongSwitchDurationMillis,
+                easing = TrackSwitchProgressEasing
             )
-            switchProgress.snapTo(0f)
-        }
-
-        val matchingLargePainter = current.largeArtworkPainter?.takeIf {
-            desired.largeArtworkRequestIdentity != null &&
-                current.largeArtworkPainterIdentity == desired.largeArtworkRequestIdentity
-        }
-        current = PlayerSongPresentation(
-            key = desired.key,
-            lyricsSongId = desired.lyricsSongId,
-            title = desired.title,
-            artist = desired.artist,
-            imageRequest = desired.imageRequest,
-            artworkRequestIdentity = desired.artworkRequestIdentity,
-            artworkPainter = if (desired.imageRequest == null) {
-                null
-            } else {
-                retainedArtwork?.painter
-            },
-            artworkPainterIdentity = if (desired.imageRequest == null) {
-                null
-            } else {
-                retainedArtwork?.identity
-            },
-            artworkLoadState = when {
-                desired.imageRequest == null -> PlayerArtworkLoadState.Missing
-                reusesArtwork -> PlayerArtworkLoadState.Ready
-                else -> PlayerArtworkLoadState.Loading
-            },
-            previousArtworkPainter = retainedArtwork?.painter.takeIf {
-                missingArtworkWithSameSong
-            },
-            previousArtworkPainterIdentity = retainedArtwork?.identity.takeIf {
-                missingArtworkWithSameSong
-            },
-            largeArtworkRequestIdentity = desired.largeArtworkRequestIdentity,
-            largeArtworkPainter = matchingLargePainter,
-            largeArtworkPainterIdentity = matchingLargePainter?.let {
-                current.largeArtworkPainterIdentity
-            }
         )
-        artworkCrossfadeProgress.snapTo(if (missingArtworkWithSameSong) 0f else 1f)
-
-        coroutineScope {
-            if (previous != null && switchProgress.value < 1f) {
-                launch {
-                    val remainingDuration = (
-                        (1f - switchProgress.value) * PlayerSongSwitchDurationMillis
-                    ).toInt().coerceAtLeast(1)
-                    switchProgress.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(
-                            durationMillis = remainingDuration,
-                            easing = TrackSwitchProgressEasing
-                        )
-                    )
-                    if (
-                        current.key == desired.key &&
-                        current.artworkRequestIdentity == desired.artworkRequestIdentity &&
-                        latestDesired.key == desired.key &&
-                        latestDesired.artworkRequestIdentity == desired.artworkRequestIdentity
-                    ) {
-                        previous = null
-                    }
-                }
-            }
-
-            when {
-                desired.imageRequest == null -> {
-                    if (missingArtworkWithSameSong) {
-                        launch {
-                            artworkCrossfadeProgress.animateTo(
-                                targetValue = 1f,
-                                animationSpec = tween(
-                                    durationMillis = PlayerSongSwitchDurationMillis,
-                                    easing = TrackSwitchProgressEasing
-                                )
-                            )
-                            if (
-                                current.key == desired.key &&
-                                current.artworkRequestIdentity == null &&
-                                latestDesired.key == desired.key &&
-                                latestDesired.artworkRequestIdentity == null
-                            ) {
-                                current = current.copy(
-                                    previousArtworkPainter = null,
-                                    previousArtworkPainterIdentity = null
-                                )
-                            }
-                        }
-                    }
-                }
-
-                reusesArtwork -> Unit
-
-                else -> launch {
-                    val targetPainter = try {
-                        (imageLoader.execute(requireNotNull(desired.imageRequest)) as? SuccessResult)
-                            ?.image
-                            ?.asPainter(context)
-                    } catch (cancellation: CancellationException) {
-                        throw cancellation
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                    if (
-                        !isCurrentPlayerArtworkRequest(
-                            current = current,
-                            requestedSongKey = desired.key,
-                            requestedIdentity = desired.artworkRequestIdentity,
-                            latestSongKey = latestDesired.key,
-                            latestRequestIdentity = latestDesired.artworkRequestIdentity
-                        )
-                    ) {
-                        return@launch
-                    }
-
-                    if (targetPainter == null) {
-                        val fallback = current.artworkPainter?.let { painter ->
-                            RetainedPlayerArtwork(painter, current.artworkPainterIdentity)
-                        }
-                        if (fallback == null) {
-                            current = current.copy(
-                                artworkPainter = null,
-                                artworkPainterIdentity = null,
-                                previousArtworkPainter = null,
-                                previousArtworkPainterIdentity = null,
-                                artworkLoadState = PlayerArtworkLoadState.Failed
-                            )
-                            artworkCrossfadeProgress.snapTo(1f)
-                        } else {
-                            current = current.copy(
-                                artworkPainter = null,
-                                artworkPainterIdentity = null,
-                                previousArtworkPainter = fallback.painter,
-                                previousArtworkPainterIdentity = fallback.identity,
-                                artworkLoadState = PlayerArtworkLoadState.Failed
-                            )
-                            artworkCrossfadeProgress.snapTo(0f)
-                            artworkCrossfadeProgress.animateTo(
-                                targetValue = 1f,
-                                animationSpec = tween(
-                                    durationMillis = PlayerSongSwitchDurationMillis,
-                                    easing = TrackSwitchProgressEasing
-                                )
-                            )
-                            if (
-                                current.key == desired.key &&
-                                current.artworkRequestIdentity == desired.artworkRequestIdentity &&
-                                current.artworkLoadState == PlayerArtworkLoadState.Failed &&
-                                latestDesired.key == desired.key &&
-                                latestDesired.artworkRequestIdentity == desired.artworkRequestIdentity
-                            ) {
-                                current = current.copy(
-                                    previousArtworkPainter = null,
-                                    previousArtworkPainterIdentity = null
-                                )
-                            }
-                        }
-                        return@launch
-                    }
-
-                    val trackSwitchActive = previous != null && switchProgress.value < 1f
-                    val fallback = current.artworkPainter?.let { painter ->
-                        RetainedPlayerArtwork(painter, current.artworkPainterIdentity)
-                    }?.takeIf { artwork ->
-                        artwork.identity != desired.artworkRequestIdentity
-                    }
-                    current = current.copy(
-                        artworkPainter = targetPainter,
-                        artworkPainterIdentity = desired.artworkRequestIdentity,
-                        previousArtworkPainter = fallback?.painter.takeUnless {
-                            trackSwitchActive
-                        },
-                        previousArtworkPainterIdentity = fallback?.identity.takeUnless {
-                            trackSwitchActive
-                        },
-                        artworkLoadState = PlayerArtworkLoadState.Ready
-                    )
-
-                    if (trackSwitchActive || fallback == null) {
-                        artworkCrossfadeProgress.snapTo(1f)
-                    } else {
-                        artworkCrossfadeProgress.snapTo(0f)
-                        artworkCrossfadeProgress.animateTo(
-                            targetValue = 1f,
-                            animationSpec = tween(
-                                durationMillis = PlayerSongSwitchDurationMillis,
-                                easing = TrackSwitchProgressEasing
-                            )
-                        )
-                        if (
-                            current.key == desired.key &&
-                            current.artworkRequestIdentity == desired.artworkRequestIdentity &&
-                            current.artworkPainter === targetPainter &&
-                            current.artworkLoadState == PlayerArtworkLoadState.Ready &&
-                            latestDesired.key == desired.key &&
-                            latestDesired.artworkRequestIdentity == desired.artworkRequestIdentity
-                        ) {
-                            current = current.copy(
-                                previousArtworkPainter = null,
-                                previousArtworkPainterIdentity = null
-                            )
-                        }
-                    }
-                }
-            }
+        if (current.key == desired.key && latestDesired.key == desired.key) {
+            previous = null
         }
     }
 
-    LaunchedEffect(desired.key, desired.lyricsSongId, desired.title, desired.artist, desired.imageRequest) {
+    LaunchedEffect(desired.key, desired.lyricsSongId, desired.title, desired.artist) {
         if (current.key == desired.key) {
-            current = current.copy(
-                lyricsSongId = desired.lyricsSongId,
-                title = desired.title,
-                artist = desired.artist,
-                imageRequest = desired.imageRequest
-            )
+            current = desired.songPresentation()
         }
     }
 
-    LaunchedEffect(desired.key, desired.largeArtworkRequestIdentity) {
-        if (current.key == desired.key &&
-            current.largeArtworkRequestIdentity != desired.largeArtworkRequestIdentity
+    // 加载任务只由图片身份驱动。切换到同一封面的歌曲不会取消并重启图片请求。
+    LaunchedEffect(desired.artworkRequestIdentity, imageLoader) {
+        val requestedIdentity = desired.artworkRequestIdentity
+        if (artwork.requestIdentity == requestedIdentity) {
+            return@LaunchedEffect
+        }
+
+        val nextArtwork = preparePlayerArtworkTarget(
+            current = artwork,
+            imageRequest = desired.imageRequest,
+            requestIdentity = requestedIdentity,
+            largeArtworkRequestIdentity = desired.largeArtworkRequestIdentity,
+            crossfadeProgress = artworkProgress.value
+        )
+        publishPlayerArtworkPresentation(nextArtwork, artworkProgress) {
+            artwork = it
+        }
+
+        if (requestedIdentity == null) {
+            return@LaunchedEffect
+        }
+
+        val request = requireNotNull(desired.imageRequest)
+        val targetPainter = try {
+            (imageLoader.execute(request) as? SuccessResult)
+                ?.image
+                ?.asPainter(context)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            null
+        }
+
+        if (
+            !isCurrentPlayerArtworkRequest(
+                current = artwork,
+                requestedIdentity = requestedIdentity,
+                latestRequestIdentity = latestDesired.artworkRequestIdentity
+            )
         ) {
-            val matchingPainter = current.largeArtworkPainter?.takeIf {
-                current.largeArtworkPainterIdentity == desired.largeArtworkRequestIdentity
-            }
-            current = current.copy(
-                largeArtworkRequestIdentity = desired.largeArtworkRequestIdentity,
-                largeArtworkPainter = matchingPainter,
-                largeArtworkPainterIdentity = matchingPainter?.let {
-                    current.largeArtworkPainterIdentity
-                }
-            )
+            return@LaunchedEffect
+        }
+
+        val result = if (targetPainter != null) {
+            playerArtworkReadyForTarget(artwork, requestedIdentity, targetPainter)
+        } else {
+            playerArtworkFailedForTarget(artwork, requestedIdentity)
+        } ?: return@LaunchedEffect
+
+        publishPlayerArtworkPresentation(result, artworkProgress) {
+            artwork = it
         }
     }
 
-    // 大图只增强已就绪的缩略封面；缩略图仍是稳定的绘制基线。
+    // 每次封面目标变化只运行一条几何一致的进度动画。
+    LaunchedEffect(artwork.transitionId) {
+        val transition = artwork
+        if (!transition.isTransitioning) {
+            return@LaunchedEffect
+        }
+
+        artworkProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = PlayerSongSwitchDurationMillis,
+                easing = TrackSwitchProgressEasing
+            )
+        )
+        if (artwork.transitionId == transition.transitionId) {
+            artwork = completePlayerArtworkTransition(artwork)
+        }
+    }
+
+    val artworkReadyForLargeRequest =
+        artwork.requestIdentity == desired.artworkRequestIdentity &&
+            artwork.loadState == PlayerArtworkLoadState.Ready &&
+            (artwork.baseIdentity == desired.artworkRequestIdentity ||
+                artwork.targetIdentity == desired.artworkRequestIdentity)
+
     LaunchedEffect(
-        desired.key,
+        desired.artworkRequestIdentity,
         desired.largeArtworkRequestIdentity,
-        current.artworkRequestIdentity,
-        current.artworkPainterIdentity,
-        current.artworkLoadState,
+        artworkReadyForLargeRequest,
         imageLoader
     ) {
         val request = desired.largeArtworkRequest
-        if (request == null) {
-            if (current.key == desired.key && current.largeArtworkPainter != null) {
-                current = current.copy(
-                    largeArtworkPainter = null,
-                    largeArtworkPainterIdentity = null
-                )
-            }
-            return@LaunchedEffect
+        val expectedIdentity = desired.largeArtworkRequestIdentity
+        if (artwork.largeArtworkRequestIdentity != expectedIdentity) {
+            artwork = artwork.copy(
+                largeArtworkPainter = null,
+                largeArtworkRequestIdentity = null
+            )
         }
         if (
-            current.key != desired.key ||
-            current.artworkLoadState != PlayerArtworkLoadState.Ready ||
-            current.artworkPainter == null ||
-            current.artworkPainterIdentity != current.artworkRequestIdentity
+            request == null ||
+            expectedIdentity == null ||
+            !artworkReadyForLargeRequest
         ) {
             return@LaunchedEffect
         }
         if (
-            current.largeArtworkPainter != null &&
-            current.largeArtworkPainterIdentity == desired.largeArtworkRequestIdentity
+            artwork.largeArtworkPainter != null &&
+            artwork.largeArtworkRequestIdentity == expectedIdentity
         ) {
             return@LaunchedEffect
         }
@@ -519,24 +513,31 @@ internal fun rememberPlayerSongPresentationTransition(
         }
         if (
             painter != null &&
-            current.key == desired.key &&
-            current.artworkRequestIdentity == desired.artworkRequestIdentity &&
-            current.artworkLoadState == PlayerArtworkLoadState.Ready &&
-            latestDesired.key == desired.key &&
-            latestDesired.largeArtworkRequestIdentity == desired.largeArtworkRequestIdentity
+            artwork.requestIdentity == desired.artworkRequestIdentity &&
+            artworkReadyForLargeRequest &&
+            latestDesired.artworkRequestIdentity == desired.artworkRequestIdentity &&
+            latestDesired.largeArtworkRequestIdentity == expectedIdentity
         ) {
-            current = current.copy(
+            artwork = artwork.copy(
                 largeArtworkPainter = painter,
-                largeArtworkPainterIdentity = desired.largeArtworkRequestIdentity
+                largeArtworkRequestIdentity = expectedIdentity
             )
         }
     }
+
+    val renderedArtwork = artwork.copy(
+        imageRequest = desired.imageRequest,
+        largeArtworkPainter = artwork.largeArtworkPainter.takeIf {
+            artwork.largeArtworkRequestIdentity == desired.largeArtworkRequestIdentity
+        },
+        progress = artworkProgress.value.coerceIn(0f, 1f)
+    )
 
     return PlayerSongPresentationTransition(
         previous = previous,
         current = current,
         progress = switchProgress.value.coerceIn(0f, 1f),
-        artworkCrossfadeProgress = artworkCrossfadeProgress.value.coerceIn(0f, 1f)
+        artwork = renderedArtwork
     )
 }
 
@@ -556,9 +557,7 @@ internal fun PlayerSongPresentationTransitionContent(
 
     Box(modifier = modifier, contentAlignment = Alignment.CenterStart) {
         items.forEach { (presentation, isPrevious) ->
-            val stableKey = presentation.key
-                ?: presentation.imageRequest?.data
-                ?: presentation.title
+            val stableKey = presentation.key ?: presentation.lyricsSongId ?: presentation.title
             key(stableKey) {
                 val itemAlpha = if (isPrevious) 1f - progress else 1f.takeIf {
                     transition.previous == null

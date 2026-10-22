@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.ui.player
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
@@ -102,38 +103,42 @@ internal fun LyricsPlaceholderSongInfo(
         addProgress
     )
 
-    Column(
-        modifier = modifier
-            .offset(x = metadataX, y = safeTopPadding + 56.dp)
-            .width(metadataWidth)
-            .height(56.dp)
-            .graphicsLayer {
-                alpha = contentProgress
-                translationY = (16.dp * (1f - contentProgress)).toPx()
-            },
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.Start
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = titleColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = artist,
-            style = MaterialTheme.typography.bodyMedium,
-            color = artistColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+    Box(modifier = modifier) {
+        // 覆盖层可以占满页面；文字本身固定在封面旁的 56dp 信息行内。
+        Column(
             modifier = Modifier
-                .padding(top = 2.dp)
-                .clickable(
-                    enabled = artistClickable && onArtistClick != null,
-                    onClick = { onArtistClick?.invoke() }
-                )
-        )
+                .align(Alignment.TopStart)
+                .offset(x = metadataX, y = safeTopPadding + 56.dp)
+                .width(metadataWidth)
+                .height(56.dp)
+                .graphicsLayer {
+                    alpha = contentProgress
+                    translationY = (16.dp * (1f - contentProgress)).toPx()
+                },
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = titleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = artistColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clickable(
+                        enabled = artistClickable && onArtistClick != null,
+                        onClick = { onArtistClick?.invoke() }
+                    )
+            )
+        }
     }
 }
 

@@ -197,52 +197,36 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         } else {
             (1f - metrics.artistExitProgress) * artworkVisibilityProgress
         }
-        PlayerSongPresentationTransitionContent(
-            transition = songPresentationTransition,
-            switchDirection = collapsedMetadataSwitchDirection,
-            switchDistancePx = 0,
-            modifier = Modifier.fillMaxSize()
-        ) { presentation, switchAlpha ->
-            Box(modifier = Modifier.fillMaxSize()) {
-                MorphArtworkLayer(
-                    imageRequest = presentation.imageRequest,
-                    artworkPainter = presentation.artworkPainter,
-                    previousArtworkPainter = presentation.previousArtworkPainter,
-                    artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
-                    showMissingArtworkPlaceholder = shouldShowMissingArtworkPlaceholder(presentation),
-                    largeArtworkPainter = presentation.largeArtworkPainter,
-                    progress = artworkAnimationProgress,
-                    scaleProgress = artworkScaleProgress,
-                    currentHeight = designCurrentHeight,
-                    viewportHeight = designCurrentHeight,
-                    collapsedHeight = designCollapsedHeight,
-                    playerWidth = designPlayerWidth,
-                    expandedArtworkSize = designExpandedArtworkSize,
-                    expandedArtworkTop = designExpandedArtworkTop,
-                    fullscreenProgress = fullscreenProgress,
-                    fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
-                    fullscreenArtworkCenterY = designFullscreenCoverCenterY,
-                    contentExitProgress = metrics.artworkContentExitProgress,
-                    addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
-                    addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
-                    addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
-                    playbackScale = artworkPlaybackScale,
-                    playbackRotationDegrees = artworkPlaybackRotationDegrees,
-                    layerAlpha = playbackArtworkAlpha * playerArtworkSwitchAlpha(
-                        transition = songPresentationTransition,
-                        presentation = presentation,
-                        switchAlpha = switchAlpha
-                    ),
-                    layerTranslationY =
-                        16.dp *
-                            (1f - minimizedProgress) *
-                            (1f - fullscreenProgress) -
-                            24.dp * metrics.artistExitProgress -
-                            24.dp * (1f - artworkVisibilityProgress),
-                    modifier = Modifier.align(Alignment.TopStart)
-                )
-            }
-        }
+        MorphArtworkLayer(
+            artwork = songPresentationTransition.artwork,
+            progress = artworkAnimationProgress,
+            scaleProgress = artworkScaleProgress,
+            currentHeight = designCurrentHeight,
+            viewportHeight = designCurrentHeight,
+            collapsedHeight = designCollapsedHeight,
+            playerWidth = designPlayerWidth,
+            expandedArtworkSize = designExpandedArtworkSize,
+            expandedArtworkTop = designExpandedArtworkTop,
+            fullscreenProgress = fullscreenProgress,
+            fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
+            fullscreenArtworkCenterY = designFullscreenCoverCenterY,
+            contentExitProgress = metrics.artworkContentExitProgress,
+            addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
+            addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
+            addToPlaylistArtworkTop = metrics.addToPlaylistArtworkTop,
+            playbackScale = artworkPlaybackScale,
+            playbackRotationDegrees = artworkPlaybackRotationDegrees,
+            layerAlpha = playbackArtworkAlpha,
+            layerTranslationY =
+                16.dp *
+                    (1f - minimizedProgress) *
+                    (1f - fullscreenProgress) -
+                    24.dp * metrics.artistExitProgress -
+                    24.dp * (1f - artworkVisibilityProgress),
+            modifier = Modifier
+                .fillMaxSize()
+                .align(Alignment.TopStart)
+        )
         val lyricsHeaderArtworkAlpha = if (
             addToPlaylistEnteredFromLyrics || songInfoEnteredFromLyrics
         ) {
@@ -324,7 +308,37 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
         } else {
             lyricsMetadataProgress
         }
-        if (lyricsHeaderArtworkAlpha > 0.001f || lyricsHeaderTextAlpha > 0.001f) {
+        if (lyricsHeaderArtworkAlpha > 0.001f) {
+            MorphArtworkLayer(
+                artwork = songPresentationTransition.artwork,
+                progress = 1f,
+                scaleProgress = 1f,
+                currentHeight = designCurrentHeight,
+                viewportHeight = designCurrentHeight,
+                collapsedHeight = designCollapsedHeight,
+                playerWidth = designPlayerWidth,
+                expandedArtworkSize = designExpandedArtworkSize,
+                expandedArtworkTop = designExpandedArtworkTop,
+                fullscreenProgress = 1f,
+                fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
+                fullscreenArtworkCenterY = designFullscreenCoverCenterY,
+                contentExitProgress = 1f,
+                addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
+                addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
+                addToPlaylistArtworkTop = lyricsHeaderArtworkTop,
+                playbackScale = 1f,
+                playbackRotationDegrees = 0f,
+                layerAlpha = lyricsHeaderArtworkAlpha,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(5f)
+                    .graphicsLayer {
+                        translationX =
+                            ((-48).dp * (1f - lyricsHeaderArtworkAlpha)).toPx()
+                    }
+            )
+        }
+        if (lyricsHeaderTextAlpha > 0.001f) {
             val switchDistancePx = with(LocalDensity.current) {
                 LyricsHeaderTrackSwitchDistance.roundToPx()
             }
@@ -336,66 +350,26 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     .fillMaxSize()
                     .zIndex(5f)
             ) { presentation, trackSwitchAlpha ->
-                // 目标封面未就绪时，保留图层不透明；文字仍按切歌进度交接。
-                Box(modifier = Modifier.fillMaxSize()) {
-                    if (lyricsHeaderArtworkAlpha > 0.001f) {
-                        MorphArtworkLayer(
-                            imageRequest = presentation.imageRequest,
-                            artworkPainter = presentation.artworkPainter,
-                            previousArtworkPainter = presentation.previousArtworkPainter,
-                            artworkCrossfadeProgress = songPresentationTransition.artworkCrossfadeProgress,
-                            showMissingArtworkPlaceholder = shouldShowMissingArtworkPlaceholder(presentation),
-                            largeArtworkPainter = presentation.largeArtworkPainter,
-                            progress = 1f,
-                            scaleProgress = 1f,
-                            currentHeight = designCurrentHeight,
-                            viewportHeight = designCurrentHeight,
-                            collapsedHeight = designCollapsedHeight,
-                            playerWidth = designPlayerWidth,
-                            expandedArtworkSize = designExpandedArtworkSize,
-                            expandedArtworkTop = designExpandedArtworkTop,
-                            fullscreenProgress = 1f,
-                            fullscreenArtworkSize = metrics.fullscreenProgressTrackWidth,
-                            fullscreenArtworkCenterY = designFullscreenCoverCenterY,
-                            contentExitProgress = 1f,
-                            addToPlaylistArtworkSize = metrics.addToPlaylistArtworkSize,
-                            addToPlaylistArtworkX = metrics.addToPlaylistArtworkLeft,
-                            addToPlaylistArtworkTop = lyricsHeaderArtworkTop,
-                            playbackScale = 1f,
-                            playbackRotationDegrees = 0f,
-                            layerAlpha = lyricsHeaderArtworkAlpha * playerArtworkSwitchAlpha(
-                                transition = songPresentationTransition,
-                                presentation = presentation,
-                                switchAlpha = trackSwitchAlpha
-                            ),
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .graphicsLayer {
-                                    translationX =
-                                        ((-48).dp * (1f - lyricsHeaderArtworkAlpha)).toPx()
-                                }
-                        )
-                    }
-                    LyricsPlaceholderSongInfo(
-                        title = presentation.title,
-                        artist = presentation.artist,
-                        visibilityProgress = lyricsHeaderTextAlpha,
-                        titleColor = titleColor,
-                        artistColor = artistColor,
-                        playerWidth = designPlayerWidth,
-                        lyricsContentStart = metrics.addToPlaylistArtworkLeft,
-                        addToPlaylistProgress = lyricsAddToPlaylistProgress,
-                        addToPlaylistTextStart = metrics.addToPlaylistTextStart,
-                        addToPlaylistTextWidth = metrics.addToPlaylistTextWidth,
-                        artistClickable = artistClickEnabled &&
-                            trackSwitchAlpha > 0.99f &&
-                            isSelectableArtist(presentation.artist),
-                        onArtistClick = { onArtistClick(presentation.artist) },
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .graphicsLayer { alpha = trackSwitchAlpha }
-                    )
-                }
+                LyricsPlaceholderSongInfo(
+                    title = presentation.title,
+                    artist = presentation.artist,
+                    visibilityProgress = lyricsHeaderTextAlpha,
+                    titleColor = titleColor,
+                    artistColor = artistColor,
+                    playerWidth = designPlayerWidth,
+                    lyricsContentStart = metrics.addToPlaylistArtworkLeft,
+                    addToPlaylistProgress = lyricsAddToPlaylistProgress,
+                    addToPlaylistTextStart = metrics.addToPlaylistTextStart,
+                    addToPlaylistTextWidth = metrics.addToPlaylistTextWidth,
+                    artistClickable = artistClickEnabled &&
+                        trackSwitchAlpha > 0.99f &&
+                        isSelectableArtist(presentation.artist),
+                    onArtistClick = { onArtistClick(presentation.artist) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .align(Alignment.TopStart)
+                        .graphicsLayer { alpha = trackSwitchAlpha }
+                )
             }
         }
         if (
