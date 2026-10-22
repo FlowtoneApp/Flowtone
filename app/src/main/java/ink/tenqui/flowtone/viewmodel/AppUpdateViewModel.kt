@@ -28,6 +28,13 @@ internal class AppUpdateViewModel : ViewModel() {
     private val mutableState = MutableStateFlow(AppUpdateState())
     val state = mutableState.asStateFlow()
     private var request: Job? = null
+    private var launchCheckStarted = false
+
+    fun checkForUpdatesOnLaunch() {
+        if (launchCheckStarted) return
+        launchCheckStarted = true
+        checkForUpdates()
+    }
 
     fun checkForUpdates() {
         if (request?.isActive == true) return

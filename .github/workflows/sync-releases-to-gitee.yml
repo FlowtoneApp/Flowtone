@@ -1,0 +1,63 @@
+name: Sync Releases to Gitee
+
+on:
+  release:
+    types: [published, edited, released, prereleased]
+  # GITHUB_TOKEN 创建的 Release 不会触发另一个 release 工作流。
+  # 此时 gh release create 已完成 APK 上传，再从 API 按构建 SHA 查找对应 Release。
+  workflow_run:
+    workflows: [Android Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'tag：指定 Tag；latest：最新发布（包含预发布）；all：全部历史'
+        type: choice
+        options: [tag, latest, all]
+        default: latest
+      tag:
+        description: '仅 tag 模式需要，例如 v0.15.1'
+        type: string
+        required: false
+  # 每天北京时间 05:15 补齐延迟上传、排队事件遗漏和部分同步失败。
+  schedule:
+    - cron: '15 21 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flowtone-gitee-release-mirror
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      github.repository == 'FlowtoneApp/Flowtone' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == 'FlowtoneApp/Flowtone' &&
+        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # 始终使用默认分支的同步脚本，不执行 Release Tag 或上游构建中的代码。
+      - name: Checkout trusted workflow files
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test synchronization without credentials
+        run: python -B -m unittest discover -s scripts/tests -v
+
+      - name: Synchronize published Releases and attachments
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: python -B scripts/sync-releases-to-gitee.py

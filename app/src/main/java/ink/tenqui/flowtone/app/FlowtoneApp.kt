@@ -58,6 +58,7 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
+import ink.tenqui.flowtone.viewmodel.AppUpdateViewModel
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -75,6 +76,8 @@ fun FlowtoneApp(
     openExpandedPlayerRequest: Int = 0,
     onOpenExpandedPlayerRequestConsumed: () -> Unit = {}
 ) {
+    val updateViewModel: AppUpdateViewModel = viewModel()
+    LaunchedEffect(updateViewModel) { updateViewModel.checkForUpdatesOnLaunch() }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
