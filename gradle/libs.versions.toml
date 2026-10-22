@@ -20,6 +20,7 @@ metrics = "1.0.0"
 javascriptEngine = "1.1.0"
 json = "20250517"
 markwon = "4.6.2"
+androidGifDrawable = "1.2.32"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -57,6 +58,7 @@ json = { group = "org.json", name = "json", version.ref = "json" }
 
 markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
 markwon-image = { group = "io.noties.markwon", name = "image", version.ref = "markwon" }
+androidGifDrawable = { group = "pl.droidsonroids.gif", name = "android-gif-drawable", version.ref = "androidGifDrawable" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
