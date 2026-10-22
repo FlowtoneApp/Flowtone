@@ -1,5 +1,4 @@
 import java.util.Properties
-import org.gradle.api.tasks.bundling.Zip
 
 plugins {
     alias(libs.plugins.android.application)
@@ -110,11 +109,6 @@ android {
             "PERFORMANCE_SAMPLING_ENABLED",
             "false"
         )
-        buildConfigField(
-            "boolean",
-            "UI_TEST_FIXTURE_ENABLED",
-            "false"
-        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -131,14 +125,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            buildConfigField(
-                "boolean",
-                "UI_TEST_FIXTURE_ENABLED",
-                "true"
-            )
-        }
-
         release {
             if (hasReleaseSigningConfig) {
                 signingConfig = signingConfigs.getByName("release")
@@ -191,11 +177,6 @@ android {
                 "PERFORMANCE_SAMPLING_ENABLED",
                 isPerformanceSamplingEnabled.toString()
             )
-            buildConfigField(
-                "boolean",
-                "UI_TEST_FIXTURE_ENABLED",
-                "true"
-            )
 
             matchingFallbacks += listOf("debug")
         }
@@ -211,36 +192,6 @@ android {
         buildConfig = true
     }
 
-}
-
-val providerArtistProfileFixtureAssets =
-    layout.buildDirectory.dir("generated/assets/providerArtistProfileFixture/internal")
-val providerArtistProfileFixturePackage = tasks.register<Zip>("providerArtistProfileFixturePackage") {
-    from("src/internalTestFixture/provider-artist-profile-fixture")
-    archiveFileName.set("provider-artist-profile-fixture.flowtone")
-    destinationDirectory.set(providerArtistProfileFixtureAssets)
-}
-
-listOf("debug", "fast").forEach { buildTypeName ->
-    android.sourceSets.getByName(buildTypeName).assets.directories.add(
-        providerArtistProfileFixtureAssets.get().asFile.absolutePath
-    )
-}
-
-tasks.configureEach {
-    if (
-        (name.contains("Debug", ignoreCase = true) ||
-            name.contains("Fast", ignoreCase = true)) &&
-        name.contains("Assets")
-    ) {
-        dependsOn(providerArtistProfileFixturePackage)
-    }
-}
-
-tasks.register("verifyUiTestFixtureVariantBoundaries") {
-    group = "verification"
-    description = "Runs the static Debug/Fast/Release fixture boundary regression test."
-    dependsOn("testDebugUnitTest")
 }
 
 dependencies {
