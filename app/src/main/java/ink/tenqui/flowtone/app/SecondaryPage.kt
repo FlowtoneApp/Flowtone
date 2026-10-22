@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.app
 internal enum class SecondaryPage(val title: String) {
     Settings("\u8bbe\u7f6e"),
     About("\u5173\u4e8e"),
+    Updates("检查更新"),
     LocalLibrary("\u672c\u5730\u66f2\u5e93"),
     Playlist("\u6b4c\u5355"),
     Album("\u4e13\u8f91"),

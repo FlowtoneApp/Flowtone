@@ -70,6 +70,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenArtist: (String) -> Unit,
     val onOpenProviderArtist: (ProviderArtist) -> Unit,
     val onOpenListeningRecords: (ListeningRecordTab) -> Unit,
+    val onCheckUpdates: () -> Unit,
     val onOpenSource: () -> Unit,
     val onOpenSourceBack: () -> Unit,
     val onRequestPermission: () -> Unit,
@@ -354,6 +355,12 @@ internal fun flowtoneAppCallbacks(
             appState.secondaryPathSegments = emptyList()
             appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
                 SecondaryDestination.Standard(SecondaryPage.ListeningRecords)
+            )
+        },
+        onCheckUpdates = {
+            appState.secondaryPathSegments = emptyList()
+            appState.secondaryNavigation = appState.secondaryNavigation.push(
+                SecondaryDestination.Standard(SecondaryPage.Updates)
             )
         },
         onOpenSource = {

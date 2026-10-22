@@ -220,6 +220,8 @@ dependencies {
     implementation(libs.coil.network.okhttp)
     implementation(libs.google.material)
     implementation(libs.taglib)
+    implementation(libs.markwon.core)
+    implementation(libs.markwon.image)
     testImplementation(libs.junit)
     testImplementation(libs.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))

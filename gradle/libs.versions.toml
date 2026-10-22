@@ -19,6 +19,7 @@ taglib = "1.0.5"
 metrics = "1.0.0"
 javascriptEngine = "1.1.0"
 json = "20250517"
+markwon = "4.6.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,6 +54,9 @@ taglib = { group = "io.github.kyant0", name = "taglib", version.ref = "taglib" }
 androidx-metrics-performance = { group = "androidx.metrics", name = "metrics-performance", version.ref = "metrics" }
 androidx-javascriptengine = { group = "androidx.javascriptengine", name = "javascriptengine", version.ref = "javascriptEngine" }
 json = { group = "org.json", name = "json", version.ref = "json" }
+
+markwon-core = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
+markwon-image = { group = "io.noties.markwon", name = "image", version.ref = "markwon" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

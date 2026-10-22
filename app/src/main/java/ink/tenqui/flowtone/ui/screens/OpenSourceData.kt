@@ -162,6 +162,14 @@ internal val openSourceComponents = listOf(
         licenseType = LicenseType.Apache20
     ),
     OpenSourceComponent(
+        id = "markwon",
+        name = "Markwon",
+        description = "以原生文本渲染版本更新说明中的 Markdown。",
+        projectUrl = "https://github.com/noties/Markwon",
+        category = ComponentCategory.Android,
+        licenseType = LicenseType.Apache20
+    ),
+    OpenSourceComponent(
         id = "flowtone",
         name = "Flowtone",
         description = "本应用自身的源代码与发行项目。",

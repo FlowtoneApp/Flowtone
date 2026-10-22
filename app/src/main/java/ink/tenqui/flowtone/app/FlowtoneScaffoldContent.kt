@@ -740,6 +740,7 @@ internal fun FlowtoneScaffoldContent(
                         onExtensionDiscardChangesConfirmationChange,
                     onSettingsPathSegmentsChange = callbacks.onSettingsPathSegmentsChange,
                     settingsPathSegments = state.secondaryPathSegments,
+                    onCheckUpdates = callbacks.onCheckUpdates,
                     onOpenSource = callbacks.onOpenSource,
                     onOpenSourceBack = callbacks.onOpenSourceBack,
                     onOpenSourceBackActionChange = callbacks.openSourceBackActionChange,

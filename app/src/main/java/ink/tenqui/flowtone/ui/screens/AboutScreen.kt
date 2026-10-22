@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,13 +45,14 @@ private const val GPL_URL = "https://opensource.org/license/gpl-3-0"
 
 @Composable
 internal fun AboutScreen(
+    onCheckUpdates: () -> Unit,
     onOpenSource: () -> Unit,
     onBack: () -> Unit,
     pageScope: PageTransitionScope,
     modifier: Modifier = Modifier
 ) {
     fun elementModifier(order: Int): Modifier {
-        return pageScope.elementModifier(order, orderCount = 2)
+        return pageScope.elementModifier(order, orderCount = 3)
     }
     val context = LocalContext.current
     val versionName = rememberFlowtoneVersionName()
@@ -156,6 +158,46 @@ internal fun AboutScreen(
                     imageVector = Icons.Rounded.ChevronRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        OptionGroup(
+            title = "应用更新",
+            modifier = elementModifier(2).padding(top = 24.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(smallCardColor)
+                    .clickable(onClick = onCheckUpdates)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SystemUpdate,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "检查更新",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 12.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = versionName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }
