@@ -19,6 +19,10 @@ on:
         description: '仅 tag 模式需要，例如 v0.15.1'
         type: string
         required: false
+      preflight_only:
+        description: '仅执行只读 API 预检，不同步 Release、Tag 或附件'
+        type: boolean
+        default: false
   # 每天北京时间 05:15 补齐延迟上传、排队事件遗漏和部分同步失败。
   schedule:
     - cron: '15 21 * * *'
@@ -56,7 +60,14 @@ jobs:
       - name: Test synchronization without credentials
         run: python -B -m unittest discover -s scripts/tests -v
 
+      - name: Read-only API preflight
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: python -B scripts/sync-releases-to-gitee.py --preflight-only
+
       - name: Synchronize published Releases and attachments
+        if: github.event_name != 'workflow_dispatch' || !inputs.preflight_only
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}

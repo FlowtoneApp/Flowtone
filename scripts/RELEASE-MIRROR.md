@@ -31,6 +31,56 @@ GitHub concurrency 可能合并等待中的事件，定时 all 校对用于补�
 新工作流必须进入 GitHub 默认分支才能正常使用 workflow_run、定时和手动入口。
 执行代码始终 checkout 默认分支，不运行 Release Tag 或上游产物携带的脚本。
 
+## 只读预检与 HTTP 403 排查
+
+Actions 的 Run workflow 中可以勾选 preflight_only，仅运行只读预检，不创建/更新 Release、
+不上传附件、不调用 Git 镜像脚本。也可在具备环境变量的受信环境执行：
+
+python -B scripts/sync-releases-to-gitee.py --preflight-only
+
+正常同步也会先执行同一预检。预检仅 GET 以下接口，并分别报告结果：
+
+- GitHub 源仓库 Releases API。
+- Gitee GET /user，验证当前 Token 是否能取得账户资料；不打印账户资料。
+- Gitee 目标仓库 API；只有响应明确报告无写权限时才据此判定，不因缺少 permissions 字段臆断。
+- Gitee 目标仓库 Releases API；空数组是合法结果，仓库尚无发行版也能通过。
+
+预检中的 404 表示必需接口/仓库不可访问，不能当成“没有 Release”。
+同步期间按 Tag 查询目标 Release 的 404 才是允许创建的预期缺失，标记 expected_absent=true。
+403 始终报告失败，不转换成缺失。
+
+HTTP 错误只输出静态诊断字段，例如：
+
+server=Gitee stage=查询目标 Release method=GET HTTP 403 redirected=false rate_limit_evidence=false
+
+阶段包含读取 Release、查询目标 Release、创建/更新 Release、附件列表、上传/下载附件等。
+Git 检查 Tag 失败也只从 stderr 提取 HTTP 状态码，不输出可能带凭据的 Git 错误原文。
+redirected 表示响应是否来自另一主机，不输出主机 URL 或签名下载参数。
+rate_limit_evidence 只表示响应存在限流头证据，不输出原始头。
+401 报认证失败；403 只表示 forbidden，还可能来自权限、限流或网络访问策略。
+
+预检失败后立即阻止同步。同步过程中遇到 401/403，会对出错服务重做只读预检：
+共享 API 访问也失败则提前终止剩余历史版本；共享检查仍成功时保留资源级失败，
+不把单个附件/CDN 403 直接判成所有 Release 的全局权限错误。
+
+## Gitee 认证与权限
+
+官方仓库/Release 接口文档使用 OAuth2 认证：
+https://gitee.com/sdk/gitee5j/blob/main/docs/RepositoriesApi.md
+https://gitee.com/api/v5/oauth_doc
+
+继续使用 Bearer Header；没有证据证明本次 403 由认证传递方式导致，
+因此不增加 access_token URL 参数，也不以真实 Token 在本地做认证 A/B。
+
+请在 Gitee 的 Token 管理界面核对 projects（仓库操作）范围，并核对 Token 所属账户
+是否有目标仓库写权限。/user 账户资料预检还可能需要 user_info 范围。
+Git 镜像推送成功不证明 OpenAPI scopes 正确；公开仓库/Release 的 GET 成功
+也不证明有创建/更新/上传权限。只读预检不会为了探测写权限创建临时 Release。
+脚本无法从没有权限信息的响应推断当前 Token 的授权范围，不会声称已确认 projects 已授予。
+
+仅凭旧版日志的九个 HTTP 403 无法确认失败来自 GitHub、Gitee、附件重定向还是哪一个操作；
+需要查看新版只读预检和分阶段日志。禁止粘贴 Token、认证头、签名 URL 或完整 HTTP 响应排查。
+
 ## 首次手动同步
 
 1. 将新增工作流、脚本和测试放入 GitHub 默认分支。
@@ -74,7 +124,8 @@ POST 遇到响应丢失/5xx 时先按 Tag/附件名查询并验证服务端结�
 不能确认已完成则停止，等待重新运行，避免盲目重发导致重复 Release/附件。
 POST 的明确 429 拒绝允许有限重试。上传成功后仍会下载目标文件验证 SHA-256。
 中断后重新运行可复用已存在的 Release 和已经校验成功的附件。
-批量模式某个 Release 失败不阻止尝试其他 Release，最终仍以非零退出码报告整体失败。
+批量模式一般的 Release/附件失败会继续尝试其他 Release，最终以非零退出码报告整体失败；
+预检失败或中途确认共享 API 访问失败时提前终止。
 
 HTTPS 使用系统证书验证，拒绝降级至 HTTP；跨域下载重定向不携带 Authorization。
 所有网络请求与 Git 子进程都有超时；Token 只通过环境和认证 Header/现有 askpass 传递。

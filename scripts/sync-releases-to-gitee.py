@@ -38,12 +38,42 @@ class SyncError(Exception):
 
 
 class ApiError(SyncError):
-    def __init__(self, status: int):
+    def __init__(self, status: int, *, server="Unknown", stage="API request",
+                 method="GET", redirected=False, rate_limited=False):
         self.status = status
-        suffix = " (authentication/permission denied)" if status in (401, 403) else ""
-        if status in (413, 422):
+        self.server = server
+        self.stage = stage
+        self.method = method
+        self.redirected = redirected
+        self.rate_limited = rate_limited
+        suffix = ""
+        if status == 401:
+            suffix = " (authentication failed)"
+        elif status == 403:
+            suffix = " (forbidden; check scopes/repository access, rate limits or network policy)"
+        elif status in (413, 422):
             suffix = " (check attachment size/type, storage quota, and API validation)"
-        super().__init__(f"HTTP {status}{suffix}")
+        # Only caller-owned labels and booleans enter diagnostics, never URLs,
+        # headers, response bodies, or the underlying exception's text.
+        super().__init__(
+            f"server={server} stage={stage} method={method} HTTP {status}"
+            f" redirected={str(redirected).lower()} rate_limit_evidence={str(rate_limited).lower()}"
+            f"{suffix}"
+        )
+
+
+class PreflightError(SyncError):
+    pass
+
+
+def git_http_status(result):
+    # Extract only a numeric HTTP status from Git's captured stderr. Git errors
+    # may contain credential-bearing URLs, so never print the original stderr.
+    match = re.search(
+        r"(?:returned error:\s*|HTTP(?:/[0-9.]+)?\s+)(401|403|404|429|5\d\d)\b",
+        result.stderr or "", re.IGNORECASE,
+    )
+    return int(match[1]) if match else None
 
 
 class TransientError(SyncError):
@@ -69,8 +99,40 @@ class Client:
             SafeRedirect(), HTTPSHandler(context=ssl.create_default_context())
         )
 
-    def _url(self, path):
-        url = self.base + path
+    @property
+    def server(self):
+        return {"api.github.com": "GitHub", "gitee.com": "Gitee"}.get(
+            urlsplit(self.base).hostname, "Unknown"
+        )
+
+    def operation(self, path, method):
+        # Match the known API route, excluding query values and dynamic identities.
+        route = path.split("?", 1)[0]
+        if route == "/user":
+            return "获取当前账户"
+        if not route:
+            return "访问目标仓库"
+        if route == "/releases":
+            if method == "POST":
+                return "创建 Release"
+            return "读取 Release 列表" if self.server == "GitHub" else "查询目标 Release 列表"
+        if route.startswith("/releases/tags/"):
+            return "读取 Release" if self.server == "GitHub" else "查询目标 Release"
+        if re.fullmatch(r"/releases/assets/\d+", route):
+            return "下载源附件"
+        if re.fullmatch(r"/releases/\d+/assets", route):
+            return "读取源附件列表"
+        if re.fullmatch(r"/releases/\d+/attach_files/\d+/download", route):
+            return "下载目标附件"
+        if re.fullmatch(r"/releases/\d+/attach_files", route):
+            return "上传附件" if method == "POST" else "查询目标附件列表"
+        if re.fullmatch(r"/releases/\d+", route) and method == "PATCH":
+            return "更新 Release"
+        return "API request"
+
+    def _url(self, path, *, api_root=False):
+        base = self.base.split("/repos/", 1)[0] if api_root else self.base
+        url = base + path
         parsed = urlsplit(url)
         if parsed.scheme != "https" or parsed.username or parsed.password or parsed.fragment:
             raise SyncError("Invalid HTTPS API URL")
@@ -83,7 +145,10 @@ class Client:
         self.sleep(delay)
 
     def _request(self, path, *, method="GET", payload=None, body=None, content_type=None,
-                 destination=None, size=None, digest=None, missing_ok=False):
+                 destination=None, size=None, digest=None, missing_ok=False,
+                 api_root=False, stage=None):
+        stage = stage or self.operation(path, method)
+        context = f"server={self.server} stage={stage} method={method}"
         headers = {
             "User-Agent": "Flowtone-Release-Mirror",
             "Accept": "application/octet-stream" if destination else "application/json",
@@ -106,7 +171,7 @@ class Client:
                     if body:
                         file = stack.enter_context(body.open("rb"))
                         data = iter(lambda: file.read(CHUNK), b"")
-                    request = Request(self._url(path), data=data, headers=headers, method=method)
+                    request = Request(self._url(path, api_root=api_root), data=data, headers=headers, method=method)
                     response = stack.enter_context(self.opener.open(request, timeout=120))
                     if destination is not None:
                         hasher = hashlib.sha256()
@@ -134,31 +199,41 @@ class Client:
             except HTTPError as error:
                 status = error.code
                 retry_after = error.headers.get("Retry-After")
+                rate_limited = (
+                    status == 429 or error.headers.get("X-RateLimit-Remaining") == "0"
+                    or bool(retry_after and retry_after.isdecimal())
+                )
+                redirected = urlsplit(error.url).hostname != urlsplit(self.base).hostname
+                failure = ApiError(
+                    status, server=self.server, stage=stage, method=method,
+                    redirected=redirected, rate_limited=rate_limited,
+                )
                 error.close()
                 if missing_ok and status == 404:
+                    print(f"{context} HTTP 404 expected_absent=true")
                     return None
                 if status in (401, 403):
-                    raise ApiError(status) from None
+                    raise failure from None
                 transient = status == 429 or 500 <= status <= 599
                 if not transient:
-                    raise ApiError(status) from None
+                    raise failure from None
                 # 429 means rejected, so even POST can safely retry. A 5xx POST can
                 # have succeeded server-side; let the caller query its identity.
                 if method == "POST" and status != 429:
-                    raise TransientError(f"POST returned HTTP {status}; reconcile required") from None
+                    raise TransientError(f"{failure}; reconcile required") from None
                 if attempt == ATTEMPTS - 1:
-                    raise ApiError(status) from None
+                    raise failure from None
                 self.pause(attempt, retry_after)
             except (URLError, OSError, http.client.HTTPException, TransientError):
                 if method == "POST":
-                    raise TransientError("POST connection failed; reconcile required") from None
+                    raise TransientError(f"{context}: POST connection failed; reconcile required") from None
                 if attempt == ATTEMPTS - 1:
-                    raise TransientError("Network request failed after bounded retries") from None
+                    raise TransientError(f"{context}: Network request failed after bounded retries") from None
                 self.pause(attempt)
         raise SyncError("Request attempts exhausted")
 
-    def get(self, path, *, missing_ok=False):
-        return self._request(path, missing_ok=missing_ok)
+    def get(self, path, *, missing_ok=False, api_root=False, stage=None):
+        return self._request(path, missing_ok=missing_ok, api_root=api_root, stage=stage)
 
     def write(self, method, path, payload=None, *, body=None, content_type=None):
         return self._request(path, method=method, payload=payload, body=body,
@@ -235,7 +310,11 @@ class Tags:
             raise SyncError("Unable to validate Tag with git") from None
         if result.returncode:
             raise SyncError("Invalid Git Tag")
+        server = "GitHub" if remote == SOURCE_GIT else "Gitee"
+        context = f"server={server} stage=检查 Tag method=GET (git ls-remote)"
+        last_status = None
         for attempt in range(ATTEMPTS):
+            last_status = None
             try:
                 result = self.run(
                     ["git", "-c", "credential.helper=", "-c", "http.sslVerify=true",
@@ -253,11 +332,17 @@ class Tags:
                             r"[0-9a-f]{40,64}", peeled):
                         raise SyncError("Invalid Tag object response")
                     return raw, peeled
+                last_status = git_http_status(result)
+                if last_status in (401, 403):
+                    raise ApiError(last_status, server=server, stage="检查 Tag",
+                                   method="GET (git ls-remote)") from None
             except (OSError, subprocess.TimeoutExpired):
                 pass
             if attempt < ATTEMPTS - 1:
                 self.sleep(2 ** (attempt + 1))
-        raise SyncError("Cannot query remote Tag; refusing to create a Release")
+        if last_status is not None:
+            raise ApiError(last_status, server=server, stage="检查 Tag", method="GET (git ls-remote)")
+        raise SyncError(f"{context}: Cannot query remote Tag; refusing to create a Release")
 
     def ensure(self, tag, expected=None):
         source = self.read(SOURCE_GIT, tag)
@@ -280,7 +365,13 @@ class Tags:
             except (OSError, subprocess.TimeoutExpired):
                 raise SyncError("Tag mirror failed or timed out") from None
             if result.returncode:
-                raise SyncError(f"Tag mirror failed (exit {result.returncode})")
+                status = git_http_status(result)
+                if status is not None:
+                    # The mirror invokes both GitHub fetch and Gitee push; do not
+                    # attribute the failing host when Git's diagnostic is ambiguous.
+                    raise ApiError(status, server="GitHub/Gitee", stage="同步 Tag",
+                                   method="Git mirror")
+                raise SyncError(f"stage=同步 Tag method=Git mirror: Tag mirror failed (exit {result.returncode})")
             target = self.read(TARGET_GIT, tag)
         if self.read(SOURCE_GIT, tag) != source:
             raise SyncError("GitHub Tag changed during synchronization; rerun")
@@ -440,6 +531,53 @@ class Mirror:
             print(f"Release synchronized: {tag!r} ({len(assets)} attachments)")
 
 
+def preflight(github, gitee, *, server=None):
+    """Only GET requests; never create a Release, upload a file, or invoke Git."""
+    checks = [
+        (github, "/releases?per_page=1", False, "预检：读取源 Release API", "list"),
+        (gitee, "/user", True, "预检：获取当前账户", "user"),
+        (gitee, "", False, "预检：访问目标仓库", "repo"),
+        (gitee, "/releases?per_page=1", False, "预检：访问目标 Releases API", "list"),
+    ]
+    failures = 0
+    for client, path, api_root, stage, shape in checks:
+        if server in ("GitHub", "Gitee") and client.server != server:
+            continue
+        context = f"server={client.server} stage={stage} method=GET"
+        print(f"{context} checking", flush=True)
+        try:
+            value = client.get(path, api_root=api_root, stage=stage)
+            if shape == "list":
+                valid = isinstance(value, list) and all(
+                    isinstance(item, dict) and type(item.get("id")) is int for item in value
+                )
+            elif shape == "user":
+                valid = (isinstance(value, dict) and type(value.get("id")) is int
+                         and isinstance(value.get("login"), str) and bool(value["login"]))
+            else:
+                valid = (isinstance(value, dict) and type(value.get("id")) is int
+                         and isinstance(value.get("full_name"), str)
+                         and value["full_name"].casefold() == TARGET.casefold())
+            if not valid:
+                raise SyncError(f"{context} HTTP 200: invalid response shape")
+            if shape == "repo":
+                permissions = value.get("permissions")
+                if (isinstance(permissions, dict) and permissions.get("push") is False
+                        and permissions.get("admin") is not True):
+                    raise SyncError(f"{context} HTTP 200: repository reports no write permission")
+            print(f"{context} HTTP 200 OK", flush=True)
+        except SyncError as error:
+            failures += 1
+            print(f"Preflight failed: {error}", file=sys.stderr, flush=True)
+    if failures:
+        raise PreflightError(
+            f"Read-only preflight failed ({failures} checks); synchronization stopped. "
+            "See the per-service/stage results above and check that service's "
+            "credentials, scopes, repository access, rate limits or network policy. "
+            "A 403 alone does not prove which permission is missing."
+        )
+
+
 def select_tags(github, tags, mode, tag="", event=None):
     if mode == "tag":
         if not tag:
@@ -474,9 +612,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("auto", "tag", "latest", "all"), default="auto")
     parser.add_argument("--tag", default="")
+    parser.add_argument("--preflight-only", action="store_true",
+                        help="Only perform read-only API checks; never synchronize or push")
     args = parser.parse_args()
     mode, tag, event = args.mode, args.tag, None
-    if mode == "auto":
+    if mode == "auto" and not args.preflight_only:
         event_path = os.environ.get("GITHUB_EVENT_PATH")
         if not event_path:
             raise SyncError("Auto mode requires an Actions event file")
@@ -499,6 +639,9 @@ def main():
         raise SyncError("GITHUB_TOKEN and GITEE_TOKEN are required")
     github = Client(GITHUB_API, github_token)
     gitee = Client(GITEE_API, gitee_token)
+    preflight(github, gitee)
+    if args.preflight_only:
+        return 0
     tags = Tags(Path(__file__).with_name("mirror-to-gitee.sh"))
     selected = select_tags(github, tags, mode, tag, event)
     failed = False
@@ -510,6 +653,15 @@ def main():
             failed = True
             # Do not print HTTP response bodies, request URLs, or exception internals.
             print(f"Release {selected_tag!r} failed: {error}", file=sys.stderr)
+            if isinstance(error, ApiError) and error.status in (401, 403):
+                # An attachment/CDN refusal can be resource-specific. Confirm a
+                # shared API failure before aborting the remaining historical Tags.
+                try:
+                    preflight(github, gitee, server=error.server)
+                except PreflightError:
+                    print("Shared API access check failed; stopping remaining Releases.",
+                          file=sys.stderr)
+                    return 1
     if failed:
         return 1
     if not selected:

@@ -68,8 +68,10 @@ class ClientTest(unittest.TestCase):
     def test_auth_errors_fail_without_retry_and_without_leaking_response(self):
         for status in (401, 403):
             client, opener = self.client(http_error(status))
-            with self.assertRaisesRegex(sync.ApiError, "authentication/permission"):
+            with self.assertRaises(sync.ApiError) as caught:
                 client.get("/releases", missing_ok=True)
+            self.assertEqual(status, caught.exception.status)
+            self.assertEqual("Gitee", caught.exception.server)
             self.assertEqual(1, opener.open.call_count)
             client.sleep.assert_not_called()
 
@@ -473,6 +475,7 @@ class ActionsEventTest(unittest.TestCase):
                 patch.object(sync, "Client", side_effect=[github, gitee]),
                 patch.object(sync, "Tags", return_value=tags),
                 patch.object(sync, "Mirror", return_value=mirror),
+                patch.object(sync, "preflight"),
                 contextlib.redirect_stdout(io.StringIO()),
                 contextlib.redirect_stderr(io.StringIO()),
             ):
