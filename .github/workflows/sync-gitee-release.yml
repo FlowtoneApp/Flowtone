@@ -16,7 +16,7 @@ jobs:
         uses: trustedinster/sync-release-gitee@v1.3
         with:
           gitee_owner: Tenqui
-          gitee_repo: https://gitee.com/Tenqui/Flowtone-GiteeMirror
+          gitee_repo: Flowtone-GiteeMirror
           gitee_token: ${{ secrets.GITEE_TOKEN }}
           github_owner: ${{ github.repository_owner }}
           github_repo: ${{ github.event.repository.name }}
