@@ -74,6 +74,35 @@ class DiagnosticTest(unittest.TestCase):
         self.assertNotIn("authentication/permission denied", str(caught.exception))
         self.assertNotIn(SECRET, str(caught.exception))
 
+    def test_safe_error_classification_and_header_allowlist(self):
+        samples = [
+            (b'{"message":"Rate Limit Exceeded"}', "rate_limit"),
+            (b'{"message":"permission denied"}', "access_denied"),
+            (b"<html>blocked</html>", "html_block_page"),
+            (b'{"message":"unrecognized"}', "unknown"),
+        ]
+        for body, expected in samples:
+            with self.subTest(category=expected):
+                error = HTTPError(
+                    "https://gitee.com/private?token=" + SECRET, 403, SECRET,
+                    {"Content-Type": "application/json; charset=utf-8",
+                     "X-Request-Id": "req-12345678",
+                     "Authorization": SECRET}, io.BytesIO(body + SECRET.encode()),
+                )
+                category, kind, identifier = sync.safe_http_diagnostics(error)
+                self.assertEqual(expected, category)
+                self.assertEqual("application/json", kind)
+                self.assertEqual("req-12345678", identifier)
+                self.assertNotIn(SECRET, str((category, kind, identifier)))
+
+    def test_untrusted_request_id_is_not_logged(self):
+        error = HTTPError(
+            "https://gitee.com", 403, "forbidden",
+            {"X-Request-Id": "req-" + SECRET, "Content-Type": SECRET},
+            io.BytesIO(SECRET.encode()),
+        )
+        self.assertEqual(("unknown", "other", None), sync.safe_http_diagnostics(error))
+
     def test_expected_404_is_logged_as_absence_but_403_and_unexpected_404_raise(self):
         api, _ = client(sync.GITEE_API, forbidden(404), forbidden(403), forbidden(404))
         output = io.StringIO()
