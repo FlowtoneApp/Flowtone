@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,6 +30,29 @@ import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 
 @Composable
+internal fun PlaylistEmptyMessage(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 28.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 32.dp),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 internal fun EmptyPlaylistState(
     visible: Boolean,
     modifier: Modifier = Modifier
@@ -40,13 +64,9 @@ internal fun EmptyPlaylistState(
         messageVisible = visible
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 28.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
+            modifier = Modifier.fillMaxSize(),
             visible = messageVisible,
             enter = fadeIn(
                 animationSpec = tween(
@@ -73,10 +93,9 @@ internal fun EmptyPlaylistState(
                 targetOffsetY = { with(density) { 12.dp.roundToPx() } }
             )
         ) {
-            Text(
+            PlaylistEmptyMessage(
                 text = "\u6b64\u6b4c\u5355\u4e2d\u6682\u65e0\u6b4c\u66f2",
-                style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center
+                modifier = Modifier.fillMaxSize()
             )
         }
     }
