@@ -537,7 +537,7 @@ fun MiniPlayer(
             transitions.exitFullscreenContentModeForSongChange(artistPlaceholderProgress)
         }
     )
-    val artistClickEnabled = isArtistClickEnabled(
+    val artistClickEnabled = !lyricsModeActive && isArtistClickEnabled(
         isFullscreenPlayer = state.isFullscreenPlayer,
         fullscreenContentMode = state.fullscreenContentMode,
         fullscreenContentExitProgress = fullscreenContentExitProgress,

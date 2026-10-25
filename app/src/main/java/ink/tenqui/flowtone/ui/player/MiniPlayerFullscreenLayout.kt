@@ -361,10 +361,6 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                     addToPlaylistProgress = lyricsAddToPlaylistProgress,
                     addToPlaylistTextStart = metrics.addToPlaylistTextStart,
                     addToPlaylistTextWidth = metrics.addToPlaylistTextWidth,
-                    artistClickable = artistClickEnabled &&
-                        trackSwitchAlpha > 0.99f &&
-                        isSelectableArtist(presentation.artist),
-                    onArtistClick = { onArtistClick(presentation.artist) },
                     modifier = Modifier
                         .fillMaxSize()
                         .align(Alignment.TopStart)
