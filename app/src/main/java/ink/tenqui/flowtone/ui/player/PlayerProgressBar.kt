@@ -206,9 +206,14 @@ internal fun PlaybackProgressBar(
             currentTrackProgress = authoritativePlaybackProgress
         )
     )
+    val lyricSeekAnimationPending = lyricProgressSeekAnimation?.let { request ->
+        request.sequence != lastHandledLyricSeekSequence &&
+            request.songId == currentSongKey
+    } == true
     val visibleProgress = when {
         isScrubbing -> scrubProgress
         isTapSeeking -> tapSeekProgress.value
+        lyricSeekAnimationPending -> lastRenderedProgress
         strictProgressBar && pendingSeekPositionMs != null -> progressFraction(
             positionMs = pendingSeekPositionMs ?: 0L,
             durationMs = durationMs
@@ -238,10 +243,6 @@ internal fun PlaybackProgressBar(
     }
     val currentVisibleProgress by rememberUpdatedState(visibleProgress)
     val currentIsPlayingForVisualLock by rememberUpdatedState(isPlayingForVisualLock)
-    val lyricSeekAnimationPending = lyricProgressSeekAnimation?.let { request ->
-        request.sequence != lastHandledLyricSeekSequence &&
-            request.songId == currentSongKey
-    } == true
     SideEffect {
         if (
             !identityChanged &&
@@ -256,6 +257,10 @@ internal fun PlaybackProgressBar(
         durationMs <= 0L -> 0L
         isScrubbing -> positionFromProgress(durationMs = durationMs, progress = scrubProgress)
         isTapSeeking -> positionFromProgress(durationMs = durationMs, progress = tapSeekProgress.value)
+        lyricSeekAnimationPending -> positionFromProgress(
+            durationMs = durationMs,
+            progress = lastRenderedProgress
+        )
         strictProgressBar && pendingSeekPositionMs != null -> pendingSeekPositionMs
             ?.coerceIn(0L, durationMs.coerceAtLeast(0L))
             ?: 0L
