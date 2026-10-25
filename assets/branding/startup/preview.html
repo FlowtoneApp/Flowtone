@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>声流 · 启动动画</title>
+<style>
+:root{font-family:"Microsoft YaHei", "PingFang SC",system-ui,sans-serif;color:#222940;background:#f3f4f8;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #8c7ee8;outline-offset:4px}
+main{max-width:1060px;padding:44px 32px 28px;margin:auto}.brand{display:flex;align-items:center;gap:10px;font-weight:750;font-size:16px;letter-spacing:.05em}.brand i{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#171d36;color:#a4f4d4;font-style:normal;font-size:20px}
+header{display:flex;align-items:flex-end;justify-content:space-between;margin:36px 0 24px;gap:20px}h1{font-size:34px;letter-spacing:-.025em;margin:0 0 10px;font-weight:650}p{margin:0;color:#73788e;line-height:1.8;font-size:14px}.tag{color:#73788e;font-size:12px;white-space:nowrap;border:1px solid #dde0e9;padding:7px 13px;border-radius:20px}
+.card{background:white;border:1px solid #e3e5ed;border-radius:28px;padding:14px;box-shadow:0 18px 50px #20284907}.stage{height:456px;background:#171d36;border-radius:18px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}.stage svg{display:block;width:432px;height:432px;max-width:90%;max-height:94%}.stage.app-mode{background:#e9ecf3}.stage.app-mode svg{width:350px;height:350px;max-width:78%}.mode-picker{position:absolute;top:18px;left:18px;display:flex;padding:4px;border:1px solid #ffffff20;border-radius:99px;background:#242c45}.mode-picker button{border:0;border-radius:99px;background:transparent;color:#c8cce0;padding:7px 15px;font-size:12px}.mode-picker button[aria-pressed=true]{background:#f2f2fb;color:#292f49}.app-mode .mode-picker{background:#dadee8;border-color:#cfd4e1}.app-mode .mode-picker button{color:#515b76}.app-mode .mode-picker button[aria-pressed=true]{background:#171d36;color:white}.stage-label{position:absolute;bottom:18px;right:21px;color:#a5abc3;letter-spacing:.15em;font-size:11px}.app-mode .stage-label{color:#747e96}
+.controls{padding:22px 14px 10px}.buttons{display:flex;align-items:center;gap:10px}.buttons button{border:1px solid #e0e3ec;padding:9px 17px;border-radius:12px;background:white;color:#3d4660;font-size:13px}.buttons .primary{background:#171d36;color:#fff;border-color:#171d36;min-width:92px}.buttons button[aria-pressed=true]{background:#eeeaff;border-color:#c6baff;color:#6452be}.buttons button:disabled{opacity:.45;cursor:default}.time{margin-left:auto;font-variant-numeric:tabular-nums;font-size:13px;color:#5c657e}.time span{color:#aaaebe}.timeline{display:block;width:100%;margin:22px 0 4px;accent-color:#8672e7;cursor:pointer;height:5px}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin:27px 8px 0}.step{border-top:1px solid #dce0e9;padding:15px 0 0}.step b{font-size:14px;font-weight:600}.step em{font-size:11px;color:#83899c;margin-left:8px;font-style:normal}.step p{font-size:12px;margin-top:6px}.footer{display:flex;justify-content:space-between;gap:20px;font-size:12px;color:#8e94a6;margin:26px 8px 0}.notice{color:#7762b2;margin:0 0 16px;font-size:13px;display:none}
+@media(max-width:640px){main{padding:25px 17px}header{margin-top:28px}h1{font-size:27px}.tag{display:none}.stage{height:360px}.stage svg{width:350px;height:350px}.stage.app-mode svg{width:270px;height:270px}.steps{gap:14px}.step em{display:block;margin:5px 0}.step p{line-height:1.7}.controls{padding:19px 6px 9px}.buttons{gap:6px;flex-wrap:wrap;row-gap:12px}.buttons button{padding:9px 11px;white-space:nowrap}.time{font-size:11px;flex:0 0 100%;text-align:right;white-space:nowrap}.footer{flex-direction:column;gap:6px}}
+</style>
+</head>
+<body><main>
+<div class="brand"><i aria-hidden="true">♪</i>声流</div>
+<header><div><h1>波浪汇入，音符舒展。</h1><p>从一缕流动的声音，到完整的声流标志。</p></div><span class="tag">0.8 秒 · 启动动画</span></header>
+<p class="notice" id="reduced-notice">已按减少动态效果设置展示静态图标，可手动点击「重播」。</p>
+<section class="card" aria-label="启动动画预览">
+<div class="stage" id="stage">
+  <div class="mode-picker" aria-label="预览场景"><button id="splash-mode" aria-pressed="true">启动屏</button><button id="app-mode" aria-pressed="false">应用图标</button></div>
+  <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="svg-title">
+  <title id="svg-title">声流 · 波浪汇入，音符舒展</title>
+  <defs>
+    <clipPath id="note-shape"><path d="M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z"/></clipPath>
+    <clipPath id="purple-y"><path id="purple_reveal_y" d="M0.000000 410.000000L512.000000 410.000000L512.000000 512.000000L0.000000 512.000000Z"></path></clipPath>
+    <clipPath id="purple-x"><path id="purple_reveal_x" d="M0.000000 0.000000L298.000000 0.000000L298.000000 512.000000L0.000000 512.000000Z"></path></clipPath>
+    <clipPath id="wave-cut"><path id="wave_reveal" d="M48.000000 0.000000L48.000000 0.000000L48.000000 512.000000L48.000000 512.000000Z"></path></clipPath>
+  </defs>
+  <rect id="preview-bg" width="512" height="512" rx="116" fill="#171D36"/>
+  <g id="safety" transform="translate(256 256) scale(.7) translate(-256 -256)">
+    <g id="motion-translate" transform="translate(0 10.0)">
+      <g transform="translate(256 256)">
+        <g id="motion-rotation" transform="rotate(-3.0)">
+          <g id="motion-scale" transform="scale(0.94)">
+            <g transform="translate(-256 -256)">
+              <g clip-path="url(#purple-y)"><g clip-path="url(#purple-x)"><path d="M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z" fill="#AC9BFF"/></g></g>
+              <g clip-path="url(#note-shape)"><g clip-path="url(#wave-cut)">
+                <path id="mint_wave" d="M48.000000 292.000000C100.000000 270.000000 128.000000 304.000000 170.000000 296.000000C216.000000 288.000000 240.000000 256.000000 267.000000 263.000000C298.000000 270.000000 326.000000 296.000000 365.000000 288.000000C393.000000 282.000000 419.000000 291.000000 444.000000 302.000000V452.000000H48.000000Z" fill="#59DFCD"></path>
+                <path id="light_wave" d="M48.000000 372.000000C95.000000 346.000000 119.000000 316.000000 159.000000 334.000000C209.000000 358.000000 252.000000 374.000000 280.000000 342.000000C311.000000 307.000000 347.000000 310.000000 444.000000 366.000000V452.000000H48.000000Z" fill="#A4F4D4"></path>
+              </g></g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
+  <span class="stage-label" id="stage-label">声流 / 启动屏</span>
+</div>
+<div class="controls"><div class="buttons"><button class="primary" id="replay">↻ 重播</button><button id="pause">暂停</button><button id="slow" aria-pressed="false">慢放</button><div class="time"><output id="time">0.00</output><span> / 0.80 s</span></div></div><input class="timeline" id="timeline" aria-label="动画进度（毫秒）" type="range" min="0" max="800" value="0" step="1"></div>
+</section>
+<div class="steps"><div class="step"><b>01 波浪汇入</b><em>0–360 ms</em><p>薄荷色波流，从左向右汇成音符底部。</p></div><div class="step"><b>02 音符舒展</b><em>100–560 ms</em><p>紫色符干向上生长，顶部顺势展开。</p></div><div class="step"><b>03 轻轻归位</b><em>560–800 ms</em><p>波浪平缓收束，停在完整标志上。</p></div></div>
+<div class="footer"><span>单次播放，结束后停留；拖动进度条可查看任意瞬间。</span><span>蓝紫 × 薄荷青</span></div>
+</main>
+<script>
+const spec={"name": "声流", "durationMs": 800, "viewport": [512, 512], "colors": {"background": "#171D36", "purple": "#AC9BFF", "mint": "#59DFCD", "light": "#A4F4D4"}, "splash": {"widthDp": 432, "heightDp": 432, "safeScale": 0.7, "pivot": [256, 256], "safeCircleRadius": 170.66666666666666}, "paths": {"note": "M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z", "mintFinal": "M48 263C100 247 128 282 170 279C216 276 240 258 267 266C298 276 326 313 365 305C393 300 419 287 444 292V452H48Z", "mintStart": "M48 292C100 270 128 304 170 296C216 288 240 256 267 263C298 270 326 296 365 288C393 282 419 291 444 302V452H48Z", "lightFinal": "M48 350C95 326 119 338 159 352C209 370 252 350 280 324C311 297 347 299 444 346V452H48Z", "lightStart": "M48 372C95 346 119 316 159 334C209 358 252 374 280 342C311 307 347 310 444 366V452H48Z"}, "easing": [0.2, 0, 0, 1], "tracks": [{"target": "purple_reveal_y", "property": "pathData", "startMs": 100, "durationMs": 360, "from": "M0 410L512 410L512 512L0 512Z", "to": "M0 80L512 80L512 512L0 512Z"}, {"target": "purple_reveal_x", "property": "pathData", "startMs": 320, "durationMs": 240, "from": "M0 0L298 0L298 512L0 512Z", "to": "M0 0L448 0L448 512L0 512Z"}, {"target": "wave_reveal", "property": "pathData", "startMs": 0, "durationMs": 360, "from": "M48 0L48 0L48 512L48 512Z", "to": "M48 0L448 0L448 512L48 512Z"}, {"target": "mint_wave", "property": "pathData", "startMs": 0, "durationMs": 620, "from": "M48 292C100 270 128 304 170 296C216 288 240 256 267 263C298 270 326 296 365 288C393 282 419 291 444 302V452H48Z", "to": "M48 263C100 247 128 282 170 279C216 276 240 258 267 266C298 276 326 313 365 305C393 300 419 287 444 292V452H48Z"}, {"target": "light_wave", "property": "pathData", "startMs": 80, "durationMs": 600, "from": "M48 372C95 346 119 316 159 334C209 358 252 374 280 342C311 307 347 310 444 366V452H48Z", "to": "M48 350C95 326 119 338 159 352C209 370 252 350 280 324C311 297 347 299 444 346V452H48Z"}, {"target": "logo_motion", "property": "scaleX", "startMs": 0, "durationMs": 560, "from": 0.94, "to": 1.025}, {"target": "logo_motion", "property": "scaleX", "startMs": 560, "durationMs": 240, "from": 1.025, "to": 1.0}, {"target": "logo_motion", "property": "scaleY", "startMs": 0, "durationMs": 560, "from": 0.94, "to": 1.025}, {"target": "logo_motion", "property": "scaleY", "startMs": 560, "durationMs": 240, "from": 1.025, "to": 1.0}, {"target": "logo_motion", "property": "rotation", "startMs": 0, "durationMs": 560, "from": -3, "to": 1}, {"target": "logo_motion", "property": "rotation", "startMs": 560, "durationMs": 240, "from": 1, "to": 0}, {"target": "logo_motion", "property": "translateY", "startMs": 0, "durationMs": 560, "from": 10, "to": -2}, {"target": "logo_motion", "property": "translateY", "startMs": 560, "durationMs": 240, "from": -2, "to": 0}], "layerOrder": "safety(.70) > logo_motion > purple group(clips: reveal_y, reveal_x; note purple), wave group(clips: note, wave_reveal; mint, light)", "initialState": "All reveal paths start as track.from. Both wave pathData start at Start. Logo transform starts at scale=.94 rotation=-3 translateY=10.", "finalState": "Every track.to; identical silhouette and color partition to source SVG, inside safety scale .70; no background in native drawable."};
+const $=id=>document.getElementById(id), svg=document.querySelector('.stage svg');
+const number=/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g;
+function ease(v){v=Math.max(0,Math.min(1,v));let lo=0,hi=1;for(let i=0;i<30;i++){const u=(lo+hi)/2,x=3*(1-u)**2*u*.2+u**3;if(x<v)lo=u;else hi=u;}const u=(lo+hi)/2;return 3*(1-u)*u*u+u**3;}
+function morph(a,b,p){const bn=b.match(number).map(Number);let i=0;return a.replace(number,v=>(+v+(bn[i++]-+v)*p).toFixed(6));}
+function getState(ms){const state={};for(const tr of spec.tracks){const key=tr.target+'.'+tr.property;if(ms<tr.startMs&&key in state)continue;const p=ease((ms-tr.startMs)/tr.durationMs);state[key]=typeof tr.from==='string'?morph(tr.from,tr.to,p):tr.from+(tr.to-tr.from)*p;}return state;}
+let time=0,running=false,speed=1,last=0,raf=0,mode='splash';
+function render(ms){time=Math.max(0,Math.min(800,ms));const state=getState(time);for(const tr of spec.tracks)if(tr.property==='pathData')$(tr.target).setAttribute('d',state[tr.target+'.pathData']);$('motion-translate').setAttribute('transform','translate(0 '+state['logo_motion.translateY']+')');$('motion-rotation').setAttribute('transform','rotate('+state['logo_motion.rotation']+')');$('motion-scale').setAttribute('transform','scale('+state['logo_motion.scaleX']+')');$('timeline').value=Math.round(time);$('time').textContent=(time/1000).toFixed(2);$('pause').textContent=running?'暂停':(time>=800?'已结束':'继续');$('pause').disabled=!running&&time>=800;}
+function tick(now){if(!running)return;if(last)time+=(now-last)*speed;last=now;if(time>=800){running=false;render(800);return;}render(time);raf=requestAnimationFrame(tick);}
+function play(restart=false){cancelAnimationFrame(raf);if(restart||time>=800)time=0;running=true;last=0;render(time);raf=requestAnimationFrame(tick);}
+function pause(){running=false;cancelAnimationFrame(raf);render(time);}
+$('replay').onclick=()=>play(true);$('pause').onclick=()=>running?pause():play();$('slow').onclick=()=>{speed=speed===1?.4:1;$('slow').setAttribute('aria-pressed',speed!==1);$('slow').textContent=speed===1?'慢放':'慢放 ×0.4';last=0;};
+$('timeline').addEventListener('input',e=>{pause();render(+e.target.value);});
+function setMode(next){mode=next;const app=mode==='app';$('stage').classList.toggle('app-mode',app);$('safety').setAttribute('transform','translate(256 256) scale('+(app?1:.7)+') translate(-256 -256)');$('preview-bg').style.display=app?'':'none';$('splash-mode').setAttribute('aria-pressed',!app);$('app-mode').setAttribute('aria-pressed',app);$('stage-label').textContent=app?'声流 / 应用图标':'声流 / 启动屏';render(time);}
+$('splash-mode').onclick=()=>setMode('splash');$('app-mode').onclick=()=>setMode('app');
+window.seekAnimation=ms=>{pause();render(ms);};window.previewAnimation={get time(){return time},get running(){return running},setMode};
+setMode('splash');const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');if(reduced.matches){$('reduced-notice').style.display='block';render(800);}else{render(0);setTimeout(()=>play(true),350);}
+</script></body></html>

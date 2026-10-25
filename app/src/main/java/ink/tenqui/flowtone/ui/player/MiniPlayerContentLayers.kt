@@ -56,6 +56,8 @@ internal fun BoxScope.MiniPlayerBackgroundLayers(
         progress = animationProgress,
         isPlaying = isPlaying,
         flowCloudSpeed = flowCloudSpeed,
+        fullBoundsMotion = true,
+        irregularClouds = true,
         modifier = Modifier.matchParentSize()
     )
     LyricsBlurredArtworkBackground(

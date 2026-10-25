@@ -25,12 +25,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.request.ImageRequest
+import kotlin.math.PI
+import kotlin.math.sin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 
@@ -41,6 +44,8 @@ internal fun FlowCloudBackground(
     isPlaying: Boolean,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     motionRangeMultiplier: Float = DefaultFlowCloudMotionRangeMultiplier,
+    fullBoundsMotion: Boolean = false,
+    irregularClouds: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
@@ -106,47 +111,81 @@ internal fun FlowCloudBackground(
             BlendMode.SrcOver
         }
 
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    cloudColors[0].copy(alpha = baseAlpha),
-                    cloudColors[1].copy(alpha = baseAlpha * 0.70f),
-                    cloudColors[2].copy(alpha = baseAlpha * 0.86f)
-                ),
-                start = Offset(size.width * -0.20f, size.height * 0.10f),
-                end = Offset(size.width * 1.20f, size.height * 0.95f)
+        if (fullBoundsMotion) {
+            drawRect(color = averageCloudColor(cloudColors).copy(alpha = baseAlpha))
+        } else {
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        cloudColors[0].copy(alpha = baseAlpha),
+                        cloudColors[1].copy(alpha = baseAlpha * 0.70f),
+                        cloudColors[2].copy(alpha = baseAlpha * 0.86f)
+                    ),
+                    start = Offset(size.width * -0.20f, size.height * 0.10f),
+                    end = Offset(size.width * 1.20f, size.height * 0.95f)
+                )
             )
-        )
+        }
 
         fun drawCloudBlob(
             color: Color,
+            cloudIndex: Int,
             centerX: Float,
             centerY: Float,
             radiusFactor: Float,
             coreAlpha: Float
         ) {
-            val center = Offset(size.width * centerX, size.height * centerY)
-            val radius = base * radiusFactor
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.00f to color.copy(alpha = coreAlpha * alphaMultiplier),
-                        0.22f to color.copy(alpha = coreAlpha * 0.72f * alphaMultiplier),
-                        0.48f to color.copy(alpha = coreAlpha * 0.39f * alphaMultiplier),
-                        0.72f to color.copy(alpha = coreAlpha * 0.14f * alphaMultiplier),
-                        1.00f to Color.Transparent
-                    ),
-                    center = center,
-                    radius = radius
-                ),
-                radius = radius,
-                center = center,
-                blendMode = cloudBlendMode
+            val normalizedCenter = if (fullBoundsMotion) {
+                fullBoundsCloudCenter(motionTimeMs, cloudIndex, safeMotionRangeMultiplier)
+            } else {
+                Offset(centerX, centerY)
+            }
+            val center = Offset(
+                size.width * normalizedCenter.x,
+                size.height * normalizedCenter.y
             )
+            val radius = base * radiusFactor
+            val lobes = if (irregularClouds) RoundedCloudShapes[cloudIndex] else CircularCloudShape
+            val lobeAlphaMultiplier = if (irregularClouds) 0.65f else 1f
+            val coreOpacity = coreAlpha * alphaMultiplier * lobeAlphaMultiplier
+            val coreBrush = Brush.radialGradient(
+                colorStops = arrayOf(
+                    0.00f to color.copy(alpha = coreOpacity),
+                    0.22f to color.copy(alpha = coreOpacity * 0.72f),
+                    0.48f to color.copy(alpha = coreOpacity * 0.39f),
+                    0.72f to color.copy(alpha = coreOpacity * 0.14f),
+                    1.00f to Color.Transparent
+                ),
+                center = Offset.Zero,
+                radius = radius
+            )
+
+            fun drawLobes(brush: Brush, blendMode: BlendMode) {
+                for (lobe in lobes) {
+                    withTransform({
+                        translate(
+                            left = center.x + radius * lobe.offsetX,
+                            top = center.y + radius * lobe.offsetY
+                        )
+                        rotate(lobe.rotationDegrees, pivot = Offset.Zero)
+                        scale(lobe.scaleX, lobe.scaleY, pivot = Offset.Zero)
+                    }) {
+                        drawCircle(
+                            brush = brush,
+                            radius = radius,
+                            center = Offset.Zero,
+                            blendMode = blendMode
+                        )
+                    }
+                }
+            }
+
+            drawLobes(coreBrush, cloudBlendMode)
         }
 
         drawCloudBlob(
             color = cloudColors[0],
+            cloudIndex = 0,
             centerX = -0.30f + blob1Motion * 0.56f,
             centerY = -0.18f + blob1Motion * 0.42f,
             radiusFactor = 1.02f,
@@ -154,6 +193,7 @@ internal fun FlowCloudBackground(
         )
         drawCloudBlob(
             color = cloudColors[1],
+            cloudIndex = 1,
             centerX = 1.30f - blob2Motion * 0.58f,
             centerY = -0.22f + blob2Motion * 0.36f,
             radiusFactor = 0.84f,
@@ -161,6 +201,7 @@ internal fun FlowCloudBackground(
         )
         drawCloudBlob(
             color = cloudColors[2],
+            cloudIndex = 2,
             centerX = 0.40f - blob3Motion * 0.34f,
             centerY = 1.28f - blob3Motion * 0.54f,
             radiusFactor = 1.18f,
@@ -168,6 +209,7 @@ internal fun FlowCloudBackground(
         )
         drawCloudBlob(
             color = cloudColors[1],
+            cloudIndex = 3,
             centerX = 1.12f - blob4Motion * 0.34f,
             centerY = 1.18f - blob4Motion * 0.26f,
             radiusFactor = 0.66f,
@@ -175,6 +217,7 @@ internal fun FlowCloudBackground(
         )
         drawCloudBlob(
             color = cloudColors[0],
+            cloudIndex = 4,
             centerX = 0.16f + blob2Motion * 0.38f,
             centerY = 0.42f + blob3Motion * 0.18f,
             radiusFactor = 0.48f,
@@ -191,7 +234,9 @@ internal fun CrossfadeFlowCloudBackground(
     modifier: Modifier = Modifier,
     alpha: Float = 1f,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
-    motionRangeMultiplier: Float = DefaultFlowCloudMotionRangeMultiplier
+    motionRangeMultiplier: Float = DefaultFlowCloudMotionRangeMultiplier,
+    fullBoundsMotion: Boolean = false,
+    irregularClouds: Boolean = false
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
     val darkOverlayAlpha by animateFloatAsState(
@@ -252,6 +297,7 @@ internal fun CrossfadeFlowCloudBackground(
     ) {
         FlowCloudBaseBackground(
             colors = blendedColors,
+            uniformColor = fullBoundsMotion,
             modifier = Modifier.matchParentSize()
         )
         FlowCloudBackground(
@@ -260,6 +306,8 @@ internal fun CrossfadeFlowCloudBackground(
             isPlaying = isPlaying,
             flowCloudSpeed = flowCloudSpeed,
             motionRangeMultiplier = motionRangeMultiplier,
+            fullBoundsMotion = fullBoundsMotion,
+            irregularClouds = irregularClouds,
             modifier = Modifier.matchParentSize()
         )
         if (darkOverlayAlpha > 0.001f) {
@@ -275,6 +323,7 @@ internal fun CrossfadeFlowCloudBackground(
 @Composable
 private fun FlowCloudBaseBackground(
     colors: List<Color>,
+    uniformColor: Boolean,
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() <= 0.5f
@@ -285,7 +334,14 @@ private fun FlowCloudBaseBackground(
         Color(0xFFDCD8E8)
     }
     val tintFraction = if (isDarkTheme) 0.42f else 0.36f
-    val baseColors = cloudColors.take(3).map { color ->
+    // 全范围运动使用统一底色，避免静态渐变把颜色固定在某个角落。
+    val sourceColors = if (uniformColor) {
+        val baseColor = averageCloudColor(cloudColors)
+        listOf(baseColor, baseColor, baseColor)
+    } else {
+        cloudColors
+    }
+    val baseColors = sourceColors.take(3).map { color ->
         lerp(anchorColor, color, tintFraction)
     }
 
@@ -298,6 +354,74 @@ private fun FlowCloudBaseBackground(
             )
         )
     }
+}
+
+private data class CloudLobe(
+    val offsetX: Float,
+    val offsetY: Float,
+    val scaleX: Float,
+    val scaleY: Float,
+    val rotationDegrees: Float = 0f
+)
+
+private val CircularCloudShape = listOf(CloudLobe(0f, 0f, 1f, 1f))
+
+// 五个云团的轮廓定义。偏移和椭圆半轴均相对云团半径，旋转角度使用度数。
+// 数据固定复用；移动时只变换整组的位置，不重新生成形状。
+private val RoundedCloudShapes = listOf(
+    // 1：倾斜的扁豆形。
+    listOf(
+        CloudLobe(-0.24f, -0.08f, 0.78f, 0.62f, -18f),
+        CloudLobe(0.26f, 0.06f, 0.68f, 0.86f, 18f),
+        CloudLobe(-0.06f, -0.28f, 0.64f, 0.58f, -12f)
+    ),
+    // 2：不对称的圆角三角形。
+    listOf(
+        CloudLobe(-0.06f, -0.30f, 0.66f, 0.65f, -8f),
+        CloudLobe(-0.28f, 0.22f, 0.68f, 0.62f, -20f),
+        CloudLobe(0.30f, 0.14f, 0.73f, 0.62f, 22f)
+    ),
+    // 3：带偏心隆起的鹅卵石形。
+    listOf(
+        CloudLobe(-0.26f, -0.08f, 0.79f, 0.64f, 14f),
+        CloudLobe(0.24f, -0.17f, 0.63f, 0.77f, -24f),
+        CloudLobe(0.06f, 0.29f, 0.76f, 0.57f, -10f)
+    ),
+    // 4：弯曲的长条形。
+    listOf(
+        CloudLobe(-0.37f, 0.12f, 0.65f, 0.57f, -24f),
+        CloudLobe(0f, -0.14f, 0.72f, 0.69f, 12f),
+        CloudLobe(0.37f, 0.08f, 0.62f, 0.58f, 28f)
+    ),
+    // 5：上窄下宽的水滴形。
+    listOf(
+        CloudLobe(-0.05f, -0.32f, 0.55f, 0.68f, -12f),
+        CloudLobe(0.12f, 0.22f, 0.79f, 0.70f, 10f),
+        CloudLobe(-0.30f, 0.12f, 0.53f, 0.57f, -20f)
+    )
+)
+
+private fun fullBoundsCloudCenter(
+    timeMs: Double,
+    cloudIndex: Int,
+    rangeMultiplier: Float
+): Offset {
+    // 两轴使用不同周期与相位，让每个云团跨越画面且在转向时保持连续。
+    val horizontalPeriodMs = 8_000.0 + cloudIndex * 1_100.0
+    val verticalPeriodMs = 11_000.0 + cloudIndex * 1_300.0
+    val phase = cloudIndex * (2.0 * PI / 5.0)
+    val horizontalAngle = (timeMs % horizontalPeriodMs) / horizontalPeriodMs * 2.0 * PI + phase
+    val verticalAngle = (timeMs % verticalPeriodMs) / verticalPeriodMs * 2.0 * PI +
+        phase * 2.0 + PI / 3.0
+    val amplitude = 0.55f * rangeMultiplier
+    return Offset(
+        x = 0.5f + sin(horizontalAngle).toFloat() * amplitude,
+        y = 0.5f + sin(verticalAngle).toFloat() * amplitude
+    )
+}
+
+private fun averageCloudColor(colors: List<Color>): Color {
+    return lerp(lerp(colors[0], colors[1], 0.5f), colors[2], 1f / 3f)
 }
 
 private fun reverseDrift(timeMs: Double, oneWayDurationMs: Int): Float {

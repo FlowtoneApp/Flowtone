@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="svg-title">
+  <title id="svg-title">声流 · 波浪汇入，音符舒展</title>
+  <defs>
+    <clipPath id="note-shape"><path d="M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z"/></clipPath>
+    <clipPath id="purple-y"><path id="purple_reveal_y" d="M0.000000 410.000000L512.000000 410.000000L512.000000 512.000000L0.000000 512.000000Z"><animate attributeName="d" begin="100ms" dur="360ms" from="M0 410L512 410L512 512L0 512Z" to="M0 80L512 80L512 512L0 512Z" calcMode="spline" keyTimes="0;1" keySplines=".2 0 0 1" fill="freeze"/></path></clipPath>
+    <clipPath id="purple-x"><path id="purple_reveal_x" d="M0.000000 0.000000L298.000000 0.000000L298.000000 512.000000L0.000000 512.000000Z"><animate attributeName="d" begin="320ms" dur="240ms" from="M0 0L298 0L298 512L0 512Z" to="M0 0L448 0L448 512L0 512Z" calcMode="spline" keyTimes="0;1" keySplines=".2 0 0 1" fill="freeze"/></path></clipPath>
+    <clipPath id="wave-cut"><path id="wave_reveal" d="M48.000000 0.000000L48.000000 0.000000L48.000000 512.000000L48.000000 512.000000Z"><animate attributeName="d" begin="0ms" dur="360ms" from="M48 0L48 0L48 512L48 512Z" to="M48 0L448 0L448 512L48 512Z" calcMode="spline" keyTimes="0;1" keySplines=".2 0 0 1" fill="freeze"/></path></clipPath>
+  </defs>
+  
+  <g id="safety" transform="translate(256 256) scale(.7) translate(-256 -256)">
+    <g id="motion-translate" transform="translate(0 10.0)"><animateTransform attributeName="transform" type="translate" dur="800ms" values="0 10;0 -2;0 0" keyTimes="0;.7;1" calcMode="spline" keySplines=".2 0 0 1;.2 0 0 1" fill="freeze"/>
+      <g transform="translate(256 256)">
+        <g id="motion-rotation" transform="rotate(-3.0)"><animateTransform attributeName="transform" type="rotate" dur="800ms" values="-3;1;0" keyTimes="0;.7;1" calcMode="spline" keySplines=".2 0 0 1;.2 0 0 1" fill="freeze"/>
+          <g id="motion-scale" transform="scale(0.94)"><animateTransform attributeName="transform" type="scale" dur="800ms" values=".94;1.025;1" keyTimes="0;.7;1" calcMode="spline" keySplines=".2 0 0 1;.2 0 0 1" fill="freeze"/>
+            <g transform="translate(-256 -256)">
+              <g clip-path="url(#purple-y)"><g clip-path="url(#purple-x)"><path d="M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z" fill="#AC9BFF"/></g></g>
+              <g clip-path="url(#note-shape)"><g clip-path="url(#wave-cut)">
+                <path id="mint_wave" d="M48.000000 292.000000C100.000000 270.000000 128.000000 304.000000 170.000000 296.000000C216.000000 288.000000 240.000000 256.000000 267.000000 263.000000C298.000000 270.000000 326.000000 296.000000 365.000000 288.000000C393.000000 282.000000 419.000000 291.000000 444.000000 302.000000V452.000000H48.000000Z" fill="#59DFCD"><animate attributeName="d" begin="0ms" dur="620ms" from="M48 292C100 270 128 304 170 296C216 288 240 256 267 263C298 270 326 296 365 288C393 282 419 291 444 302V452H48Z" to="M48 263C100 247 128 282 170 279C216 276 240 258 267 266C298 276 326 313 365 305C393 300 419 287 444 292V452H48Z" calcMode="spline" keyTimes="0;1" keySplines=".2 0 0 1" fill="freeze"/></path>
+                <path id="light_wave" d="M48.000000 372.000000C95.000000 346.000000 119.000000 316.000000 159.000000 334.000000C209.000000 358.000000 252.000000 374.000000 280.000000 342.000000C311.000000 307.000000 347.000000 310.000000 444.000000 366.000000V452.000000H48.000000Z" fill="#A4F4D4"><animate attributeName="d" begin="80ms" dur="600ms" from="M48 372C95 346 119 316 159 334C209 358 252 374 280 342C311 307 347 310 444 366V452H48Z" to="M48 350C95 326 119 338 159 352C209 370 252 350 280 324C311 297 347 299 444 346V452H48Z" calcMode="spline" keyTimes="0;1" keySplines=".2 0 0 1" fill="freeze"/></path>
+              </g></g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
