@@ -1,0 +1,79 @@
+
+name: "Bug 反馈"
+description: "报告 Flowtone 使用过程中遇到的问题"
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢帮助改进 Flowtone！
+        提交前请先搜索是否存在相同问题。
+        请勿上传登录凭据、Token 或其他敏感信息。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么问题？
+      placeholder: 请清楚描述异常现象
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 出现……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      placeholder: 正常情况下应该发生什么？
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: 涉及的音乐来源
+      options:
+        - 本地音乐
+        - 在线扩展
+        - 两者都有
+        - 与音乐来源无关
+        - 不确定
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Flowtone 版本
+      placeholder: "例如：0.15.0"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备与 Android 版本
+      placeholder: "例如：Pixel 8 / Android 16"
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: 截图、录屏或日志
+      description: 如有相关材料，可在这里上传。
+      placeholder: 拖入文件，或粘贴经过脱敏的日志
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充信息
+      description: 其他有助于定位问题的信息
