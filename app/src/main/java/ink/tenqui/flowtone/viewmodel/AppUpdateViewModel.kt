@@ -19,7 +19,8 @@ internal data class AppUpdateState(
     val checking: Boolean = false,
     val release: AppRelease? = null,
     val versionStatus: UpdateVersionStatus = UpdateVersionStatus.Unknown,
-    val error: String? = null
+    val error: String? = null,
+    val dismissedPromptTag: String? = null
 )
 
 internal class AppUpdateViewModel : ViewModel() {
@@ -36,6 +37,13 @@ internal class AppUpdateViewModel : ViewModel() {
         checkForUpdates()
     }
 
+    fun dismissUpdatePrompt() {
+        val current = mutableState.value
+        if (current.versionStatus != UpdateVersionStatus.Available) return
+        val releaseTag = current.release?.tag ?: return
+        mutableState.value = current.copy(dismissedPromptTag = releaseTag)
+    }
+
     fun checkForUpdates() {
         if (request?.isActive == true) return
         request = viewModelScope.launch {
@@ -49,7 +57,13 @@ internal class AppUpdateViewModel : ViewModel() {
                     current > release.version -> UpdateVersionStatus.Ahead
                     else -> UpdateVersionStatus.Latest
                 }
-                mutableState.value = AppUpdateState(release = release, versionStatus = status)
+                val dismissedPromptTag = mutableState.value.dismissedPromptTag
+                    ?.takeIf { it == release.tag && status == UpdateVersionStatus.Available }
+                mutableState.value = AppUpdateState(
+                    release = release,
+                    versionStatus = status,
+                    dismissedPromptTag = dismissedPromptTag
+                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {

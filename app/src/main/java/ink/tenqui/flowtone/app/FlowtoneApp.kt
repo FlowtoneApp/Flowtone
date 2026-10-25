@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.app
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import android.os.Build
@@ -57,8 +59,10 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
+import ink.tenqui.flowtone.ui.screens.UpdateAvailableDialog
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.viewmodel.AppUpdateViewModel
+import ink.tenqui.flowtone.viewmodel.UpdateVersionStatus
 import ink.tenqui.flowtone.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -78,6 +82,11 @@ fun FlowtoneApp(
 ) {
     val updateViewModel: AppUpdateViewModel = viewModel()
     LaunchedEffect(updateViewModel) { updateViewModel.checkForUpdatesOnLaunch() }
+    val updateState by updateViewModel.state.collectAsState()
+    val updatePromptRelease = updateState.release?.takeIf { release ->
+        updateState.versionStatus == UpdateVersionStatus.Available &&
+            updateState.dismissedPromptTag != release.tag
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
@@ -687,6 +696,17 @@ fun FlowtoneApp(
             modifier = Modifier.fillMaxSize()
             )
         }
+    }
+
+    updatePromptRelease?.let { release ->
+        UpdateAvailableDialog(
+            release = release,
+            onUpdate = {
+                updateViewModel.dismissUpdatePrompt()
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.url)))
+            },
+            onLater = updateViewModel::dismissUpdatePrompt
+        )
     }
 }
 
