@@ -60,6 +60,21 @@ jobs:
       - name: Test synchronization without credentials
         run: python -B -m unittest discover -s scripts/tests -v
 
+      - name: Diagnose runner egress
+        shell: bash
+        run: |
+          echo "event=${{ github.event_name }} sha=$(git rev-parse HEAD) runner_os=$RUNNER_OS"
+          ip=$(curl --fail --silent --show-error --max-time 8 https://api.ipify.org || true)
+          RUNNER_EGRESS_IP="$ip" python - <<'PY'
+          import ipaddress
+          import os
+          try:
+              address = ipaddress.ip_address(os.environ["RUNNER_EGRESS_IP"].strip())
+              print(f"runner_egress_ip={address}" if address.is_global else "runner_egress_ip=unavailable")
+          except ValueError:
+              print("runner_egress_ip=unavailable")
+          PY
+
       - name: Read-only API preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}

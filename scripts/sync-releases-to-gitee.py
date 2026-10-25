@@ -39,13 +39,15 @@ class SyncError(Exception):
 
 class ApiError(SyncError):
     def __init__(self, status: int, *, server="Unknown", stage="API request",
-                 method="GET", redirected=False, rate_limited=False):
+                 method="GET", redirected=False, rate_limited=False,
+                 error_category=None, response_type=None, request_id=None):
         self.status = status
         self.server = server
         self.stage = stage
         self.method = method
         self.redirected = redirected
         self.rate_limited = rate_limited
+        self.error_category = error_category
         suffix = ""
         if status == 401:
             suffix = " (authentication failed)"
@@ -58,8 +60,39 @@ class ApiError(SyncError):
         super().__init__(
             f"server={server} stage={stage} method={method} HTTP {status}"
             f" redirected={str(redirected).lower()} rate_limit_evidence={str(rate_limited).lower()}"
+            f" error_category={error_category or 'unknown'}"
+            f" response_type={response_type or 'unknown'}"
+            f" request_id={request_id or 'unavailable'}"
             f"{suffix}"
         )
+
+
+def safe_http_diagnostics(error):
+    """Return only allowlisted diagnostic values, never raw remote strings."""
+    headers = error.headers
+    content_type = (headers.get("Content-Type") or "").split(";", 1)[0].lower().strip()
+    content_type = content_type if content_type in (
+        "application/json", "text/html", "text/plain"
+    ) else "other"
+    request_id = None
+    for name in ("X-Request-Id", "X-Gitee-Request-Id", "X-Correlation-Id", "X-Git-Request-Id"):
+        candidate = headers.get(name, "")
+        if re.fullmatch(r"[a-zA-Z0-9-]{8,80}", candidate):
+            request_id = candidate
+            break
+    try:
+        body = error.read(4096).decode("utf-8", errors="replace").lower()
+    except (OSError, ValueError):
+        body = ""
+    if any(term in body for term in ("rate limit", "rate_limit", "too many requests", "请求频率", "访问频率", "限流")):
+        category = "rate_limit"
+    elif any(term in body for term in ("permission", "forbidden", "access denied", "权限不足", "无权限")):
+        category = "access_denied"
+    elif "<html" in body or "<!doctype html" in body:
+        category = "html_block_page"
+    else:
+        category = "unknown"
+    return category, content_type, request_id
 
 
 class PreflightError(SyncError):
@@ -204,9 +237,12 @@ class Client:
                     or bool(retry_after and retry_after.isdecimal())
                 )
                 redirected = urlsplit(error.url).hostname != urlsplit(self.base).hostname
+                category, response_type, request_id = safe_http_diagnostics(error)
+                rate_limited = rate_limited or category == "rate_limit"
                 failure = ApiError(
                     status, server=self.server, stage=stage, method=method,
                     redirected=redirected, rate_limited=rate_limited,
+                    error_category=category, response_type=response_type, request_id=request_id,
                 )
                 error.close()
                 if missing_ok and status == 404:
