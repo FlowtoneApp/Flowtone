@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="432dp" android:height="432dp" android:viewportWidth="512" android:viewportHeight="512">
+  <group android:name="safety" android:pivotX="256" android:pivotY="256" android:scaleX="0.7" android:scaleY="0.7">
+    <group android:name="logo_motion" android:pivotX="256" android:pivotY="256" android:scaleX="0.94" android:scaleY="0.94" android:rotation="-3" android:translateY="10">
+      <group>
+        <clip-path android:name="purple_reveal_y" android:pathData="M0 410L512 410L512 512L0 512Z"/>
+        <clip-path android:name="purple_reveal_x" android:pathData="M0 0L298 0L298 512L0 512Z"/>
+        <path android:fillColor="#AC9BFF" android:pathData="M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z"/>
+      </group>
+      <group>
+        <clip-path android:pathData="M268 100C297 100 325 124 355 124C371 124 385 119 397 110C405 104 416 110 416 120V156C416 163 413 169 407 174C392 186 375 192 356 192C331 192 312 178 298 175V331C298 377 257 411 211 403C185 399 163 387 141 387C126 387 114 392 100 395C89 397 80 389 80 378V309C80 298 90 291 100 294C119 300 132 295 148 290C169 283 186 288 204 295C217 300 231 300 240 293V128C240 112 252 100 268 100Z"/>
+        <clip-path android:name="wave_reveal" android:pathData="M48 0L48 0L48 512L48 512Z"/>
+        <path android:name="mint_wave" android:fillColor="#59DFCD" android:pathData="M48 292C100 270 128 304 170 296C216 288 240 256 267 263C298 270 326 296 365 288C393 282 419 291 444 302V452H48Z"/>
+        <path android:name="light_wave" android:fillColor="#A4F4D4" android:pathData="M48 372C95 346 119 316 159 334C209 358 252 374 280 342C311 307 347 310 444 366V452H48Z"/>
+      </group>
+    </group>
+  </group>
+</vector>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<set xmlns:android="http://schemas.android.com/apk/res/android" android:ordering="together">
+  <set android:ordering="sequentially">
+    <objectAnimator android:propertyName="scaleX" android:valueType="floatType" android:valueFrom="0.94" android:valueTo="1.025" android:duration="560" android:interpolator="@interpolator/shengliu_ease"/>
+    <objectAnimator android:propertyName="scaleX" android:valueType="floatType" android:valueFrom="1.025" android:valueTo="1.0" android:duration="240" android:interpolator="@interpolator/shengliu_ease"/>
+  </set>
+  <set android:ordering="sequentially">
+    <objectAnimator android:propertyName="scaleY" android:valueType="floatType" android:valueFrom="0.94" android:valueTo="1.025" android:duration="560" android:interpolator="@interpolator/shengliu_ease"/>
+    <objectAnimator android:propertyName="scaleY" android:valueType="floatType" android:valueFrom="1.025" android:valueTo="1.0" android:duration="240" android:interpolator="@interpolator/shengliu_ease"/>
+  </set>
+  <set android:ordering="sequentially">
+    <objectAnimator android:propertyName="rotation" android:valueType="floatType" android:valueFrom="-3" android:valueTo="1" android:duration="560" android:interpolator="@interpolator/shengliu_ease"/>
+    <objectAnimator android:propertyName="rotation" android:valueType="floatType" android:valueFrom="1" android:valueTo="0" android:duration="240" android:interpolator="@interpolator/shengliu_ease"/>
+  </set>
+  <set android:ordering="sequentially">
+    <objectAnimator android:propertyName="translateY" android:valueType="floatType" android:valueFrom="10" android:valueTo="-2" android:duration="560" android:interpolator="@interpolator/shengliu_ease"/>
+    <objectAnimator android:propertyName="translateY" android:valueType="floatType" android:valueFrom="-2" android:valueTo="0" android:duration="240" android:interpolator="@interpolator/shengliu_ease"/>
+  </set>
+</set>

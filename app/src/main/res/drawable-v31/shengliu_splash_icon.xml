@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/shengliu_logo_initial">
+  <target android:name="purple_reveal_y" android:animation="@animator/shengliu_purple_reveal_y"/>
+  <target android:name="purple_reveal_x" android:animation="@animator/shengliu_purple_reveal_x"/>
+  <target android:name="wave_reveal" android:animation="@animator/shengliu_wave_reveal"/>
+  <target android:name="mint_wave" android:animation="@animator/shengliu_mint_wave"/>
+  <target android:name="light_wave" android:animation="@animator/shengliu_light_wave"/>
+  <target android:name="logo_motion" android:animation="@animator/shengliu_logo_motion"/>
+</animated-vector>

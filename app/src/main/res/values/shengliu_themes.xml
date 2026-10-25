@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Flowtone.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/shengliu_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/shengliu_splash_icon</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
+        <item name="postSplashScreenTheme">@style/Theme.Flowtone</item>
+        <item name="android:statusBarColor">@color/shengliu_background</item>
+        <item name="android:navigationBarColor">@color/shengliu_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

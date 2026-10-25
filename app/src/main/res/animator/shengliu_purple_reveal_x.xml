@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:propertyName="pathData" android:valueType="pathType"
+    android:duration="240" android:startOffset="320"
+    android:valueFrom="M0 0L298 0L298 512L0 512Z"
+    android:valueTo="M0 0L448 0L448 512L0 512Z"
+    android:interpolator="@interpolator/shengliu_ease"/>
