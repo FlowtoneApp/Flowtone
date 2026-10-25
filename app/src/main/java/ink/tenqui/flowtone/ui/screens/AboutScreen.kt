@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -83,7 +85,16 @@ internal fun AboutScreen(
             description = "@Tenqui Noir",
             modifier = elementModifier(0)
                 .fillMaxWidth()
-                .height(144.dp)
+                .height(144.dp),
+            iconBackgroundColor = Color(0xFF171D36),
+            iconContent = {
+                Image(
+                    painter = painterResource(R.drawable.ic_launcher_brand_foreground),
+                    contentDescription = "Flowtone 应用图标",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         ) {
             Row(
                 modifier = Modifier
@@ -95,13 +106,13 @@ internal fun AboutScreen(
                 Icon(
                     painter = painterResource(R.drawable.ic_github),
                     contentDescription = "GitHub",
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
                 Text(
                     text = "github.com/FlowtoneApp/Flowtone",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color(0xFFA4F4D4),
                     modifier = Modifier.padding(start = 10.dp)
                 )
             }

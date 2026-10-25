@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +42,8 @@ internal fun FlowtoneAboutCard(
     versionName: String,
     description: String,
     modifier: Modifier = Modifier,
+    iconBackgroundColor: Color? = null,
+    iconContent: (@Composable BoxScope.() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
     bottomContent: (@Composable () -> Unit)? = null
 ) {
@@ -52,7 +56,7 @@ internal fun FlowtoneAboutCard(
     Column(
         modifier = modifier
             .clip(FlowtoneAboutCardShape)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(Color(0xFF2E344A))
             .then(clickableModifier)
             .padding(16.dp)
     ) {
@@ -61,7 +65,9 @@ internal fun FlowtoneAboutCard(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .background(iconBackgroundColor ?: MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center,
+                content = iconContent ?: {}
             )
             Column(
                 modifier = Modifier.padding(start = 16.dp),
@@ -71,18 +77,18 @@ internal fun FlowtoneAboutCard(
                     text = "声流 / Flowtone",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = Color.White
                 )
                 Text(
                     text = "v$versionName",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color(0xFFE0D7F4)
                 )
                 if (description.isNotBlank()) {
                     Text(
                         text = description,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color(0xFFE0D7F4)
                     )
                 }
             }
