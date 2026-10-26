@@ -3,7 +3,17 @@ package ink.tenqui.flowtone.data.online
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 
-interface MusicProvider {
+interface UserPlaylistProvider {
+    /** 用户账号下可访问的歌单；null 表示未声明此能力，空列表表示当前没有歌单。 */
+    suspend fun getUserPlaylists(): List<ProviderPlaylist>? = null
+}
+
+interface HomePlaylistRecommendationProvider {
+    /** 首页在线流中的歌单推荐；null 表示未声明此能力，空列表表示暂无推荐。 */
+    suspend fun getHomePlaylistRecommendations(): List<ProviderPlaylist>? = null
+}
+
+interface MusicProvider : UserPlaylistProvider, HomePlaylistRecommendationProvider {
     /** manifest 声明的服务身份，独立于网络访问白名单。 */
     val musicSources: Set<String>
 

@@ -92,6 +92,16 @@ data class ProviderPlaylistSearchItem(
     override val searchCategory: ProviderSearchCategory = ProviderSearchCategory.Playlist
 }
 
+/** 可由在线扩展提供的用户歌单或推荐歌单摘要。 */
+data class ProviderPlaylist(
+    val identity: ProviderEntityIdentity,
+    val title: String,
+    val creator: String = "",
+    val artwork: ExtensionImage? = null,
+    val songCount: Int? = null,
+    val metadata: List<ProviderSearchMetadata>? = null
+)
+
 fun ProviderSong.resolvedArtists(): List<ProviderArtistRef> = artists
     .mapNotNull(::sanitizeProviderArtistRef)
     .ifEmpty {
@@ -185,6 +195,9 @@ fun dedupeProviderSongs(songs: List<ProviderSong>): List<ProviderSong> =
 
 fun dedupeProviderAlbums(albums: List<ProviderAlbum>): List<ProviderAlbum> =
     albums.distinctBy { it.identity }
+
+fun dedupeProviderPlaylists(playlists: List<ProviderPlaylist>): List<ProviderPlaylist> =
+    playlists.distinctBy { it.identity }
 
 fun ProviderSong.toPresentationSong(): Song {
     val opaqueUri = Uri.Builder()

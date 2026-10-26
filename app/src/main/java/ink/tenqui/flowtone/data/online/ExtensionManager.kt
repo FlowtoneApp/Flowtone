@@ -420,7 +420,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             )
     }
 
-    /** 当前运行且声明至少一项曲库目录能力的扩展来源。 */
+    /** 当前运行且声明曲库用户歌单能力的扩展来源。 */
     internal fun availableLibraryProviderOptions(): List<LibraryProviderOption> {
         if (_runtimeState.value.isReloading) return emptyList()
         return installedExtensions()
@@ -430,7 +430,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 if (!installed.runtimeAvailable) return@mapNotNull null
                 val supportsSongs = AtomicCapabilityId.CatalogSongsList in provider.capabilities
                 val supportsAlbums = AtomicCapabilityId.CatalogAlbumsList in provider.capabilities
-                if (!supportsSongs && !supportsAlbums) return@mapNotNull null
+                val supportsPlaylists = AtomicCapabilityId.UserPlaylistsList in provider.capabilities
+                if (!supportsPlaylists) return@mapNotNull null
                 LibraryProviderOption(
                     extensionId = installed.manifest.id,
                     name = installed.manifest.name,
@@ -438,7 +439,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     color = installed.manifest.color,
                     visual = ExtensionProviderVisualResolver.resolve(installed),
                     supportsSongs = supportsSongs,
-                    supportsAlbums = supportsAlbums
+                    supportsAlbums = supportsAlbums,
+                    supportsPlaylists = supportsPlaylists
                 )
             }
             .sortedWith(
@@ -526,6 +528,43 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             Log.w(
                 LogTag,
                 "extension.music.playlist.failed extension=$extensionId type=${error.javaClass.simpleName}"
+            )
+            null
+        }
+    }
+
+    internal suspend fun getProviderUserPlaylists(extensionId: String): List<ProviderPlaylist>? =
+        runtimeLifecycle.execute {
+            val provider = musicProviders[extensionId] ?: return@execute null
+            if (AtomicCapabilityId.UserPlaylistsList !in provider.capabilities) return@execute null
+            try {
+                provider.getUserPlaylists()?.let(::dedupeProviderPlaylists)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(
+                    LogTag,
+                    "extension.music.user_playlists.failed extension=" + extensionId +
+                        " type=" + error.javaClass.simpleName
+                )
+                null
+            }
+        }
+
+    internal suspend fun getProviderHomePlaylistRecommendations(
+        extensionId: String
+    ): List<ProviderPlaylist>? = runtimeLifecycle.execute {
+        val provider = musicProviders[extensionId] ?: return@execute null
+        if (AtomicCapabilityId.HomePlaylistRecommendationsGet !in provider.capabilities) return@execute null
+        try {
+            provider.getHomePlaylistRecommendations()?.let(::dedupeProviderPlaylists)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            Log.w(
+                LogTag,
+                "extension.music.home_playlist_recommendations.failed extension=" + extensionId +
+                    " type=" + error.javaClass.simpleName
             )
             null
         }

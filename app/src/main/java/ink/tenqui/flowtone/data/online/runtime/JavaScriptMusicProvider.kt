@@ -13,6 +13,7 @@ import ink.tenqui.flowtone.data.online.ProviderAlbumRef
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderArtistRef
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
+import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchPage
@@ -109,6 +110,16 @@ class JavaScriptMusicProvider internal constructor(
                 parseAlbum(values.optJSONObject(index))?.let(::add)
             }
         }.distinctBy(ProviderAlbum::identity)
+    }
+
+    override suspend fun getUserPlaylists(): List<ProviderPlaylist>? {
+        if (AtomicCapabilityId.UserPlaylistsList !in capabilities) return null
+        return parsePlaylists(runtime.invokeJson("getUserPlaylists"))
+    }
+
+    override suspend fun getHomePlaylistRecommendations(): List<ProviderPlaylist>? {
+        if (AtomicCapabilityId.HomePlaylistRecommendationsGet !in capabilities) return null
+        return parsePlaylists(runtime.invokeJson("getHomePlaylistRecommendations"))
     }
 
     override suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? {
@@ -242,6 +253,32 @@ class JavaScriptMusicProvider internal constructor(
             metadata = parseMetadata(item),
             songs = parsePlaylistSongs(item)
         )
+    }
+
+    private fun parsePlaylists(raw: String): List<ProviderPlaylist> {
+        val values = JSONArray(raw)
+        return buildList {
+            repeat(values.length()) { index ->
+                val item = values.optJSONObject(index) ?: return@repeat
+                val remoteId = item.optString("id").trim().takeIf(String::isNotEmpty) ?: return@repeat
+                val title = item.optString("title").trim().takeIf(String::isNotEmpty) ?: return@repeat
+                val metadata = parseMetadata(item)
+                val songCount = item.optNonNegativeInt("songCount")
+                    ?: metadata?.firstOrNull { it.type == "track_count" }?.value
+                        ?.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
+                add(
+                    ProviderPlaylist(
+                        identity = ProviderEntityIdentity(runtime.extensionId, remoteId),
+                        title = title,
+                        creator = item.optString("creator").trim()
+                            .ifEmpty { item.optString("artist").trim() },
+                        artwork = parseArtwork(item, "artworkUrl"),
+                        songCount = songCount,
+                        metadata = metadata
+                    )
+                )
+            }
+        }.distinctBy(ProviderPlaylist::identity)
     }
 
     private fun parsePlaylistSongs(item: JSONObject): List<ProviderSong> {

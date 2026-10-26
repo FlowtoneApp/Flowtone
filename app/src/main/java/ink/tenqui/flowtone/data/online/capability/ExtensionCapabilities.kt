@@ -9,6 +9,8 @@ enum class AtomicCapabilityId(val value: String) {
     CatalogSongsList("catalog.songs.list"),
     CatalogAlbumsList("catalog.albums.list"),
     PlaylistSongsRead("playlist.songs.read"),
+    UserPlaylistsList("user.playlists.list"),
+    HomePlaylistRecommendationsGet("home.playlist.recommendations.get"),
     SongPersistentResolve("song.persistent.resolve"),
     PlaybackResourceResolve("playback.resource.resolve"),
     ArtistAvatarLookup("artist.avatar.lookup"),
@@ -68,6 +70,12 @@ object AtomicCapabilityDefinitions {
             order = 50
         ),
         AtomicCapabilityDefinition(
+            AtomicCapabilityId.HomePlaylistRecommendationsGet,
+            AtomicCapabilityGroup.SearchAndDiscovery,
+            "获取首页歌单推荐",
+            order = 55
+        ),
+        AtomicCapabilityDefinition(
             AtomicCapabilityId.CatalogSongsList,
             AtomicCapabilityGroup.Catalog,
             "浏览歌曲目录",
@@ -84,6 +92,12 @@ object AtomicCapabilityDefinitions {
             AtomicCapabilityGroup.Playlist,
             "读取歌单歌曲",
             order = 80
+        ),
+        AtomicCapabilityDefinition(
+            AtomicCapabilityId.UserPlaylistsList,
+            AtomicCapabilityGroup.Playlist,
+            "读取用户歌单",
+            order = 85
         ),
         AtomicCapabilityDefinition(
             AtomicCapabilityId.SongPersistentResolve,
@@ -210,7 +224,10 @@ object SummaryCapabilityDefinitions {
                 setOf(AtomicCapabilityId.SearchPlaylistPage),
                 setOf(AtomicCapabilityId.PlaylistSongsRead)
             ),
-            optionalCapabilities = emptySet()
+            optionalCapabilities = setOf(
+                AtomicCapabilityId.UserPlaylistsList,
+                AtomicCapabilityId.HomePlaylistRecommendationsGet
+            )
         )
     )
 }
