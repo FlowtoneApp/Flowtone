@@ -74,10 +74,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.LibraryProviderOption
-import ink.tenqui.flowtone.data.online.ProviderAlbum
-import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.search.SearchProviderVisual
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -138,7 +136,8 @@ internal data class LibrarySourceItem(
     val color: String? = null,
     val visual: SearchProviderVisual? = null,
     val supportsSongs: Boolean = false,
-    val supportsAlbums: Boolean = false
+    val supportsAlbums: Boolean = false,
+    val supportsPlaylists: Boolean = false
 )
 
 internal sealed interface LibrarySourceSwitcherState {
@@ -158,11 +157,8 @@ internal data class LibrarySourceContentState(
     val switcherState: LibrarySourceSwitcherState,
     val swipeEnabled: Boolean,
     val swipeDirection: Int,
-    val providerSongs: List<ProviderSong>?,
-    val providerSongLoadState: ProviderCatalogLoadState?,
-    val providerAlbums: List<ProviderAlbum>?,
-    val providerAlbumLoadState: ProviderCatalogLoadState?,
-    val currentSong: Song?
+    val providerPlaylists: List<ProviderPlaylist>?,
+    val providerPlaylistLoadState: ProviderCatalogLoadState?
 )
 
 internal fun librarySourceItems(
@@ -184,7 +180,8 @@ internal fun librarySourceItems(
                 color = provider.color,
                 visual = provider.visual,
                 supportsSongs = provider.supportsSongs,
-                supportsAlbums = provider.supportsAlbums
+                supportsAlbums = provider.supportsAlbums,
+                supportsPlaylists = provider.supportsPlaylists
             )
         }
         .toList()

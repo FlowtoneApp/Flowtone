@@ -44,8 +44,9 @@ import ink.tenqui.flowtone.core.model.toPresentationSong
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.data.online.LibraryProviderOption
-import ink.tenqui.flowtone.data.online.ProviderAlbum
-import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderPlaylist
+import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
+import ink.tenqui.flowtone.data.online.ProviderSearchMetadata
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -55,7 +56,6 @@ import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
-import ink.tenqui.flowtone.playback.PlaybackSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -424,15 +424,11 @@ internal fun LibraryScreen(
     onSelectedSourceKeyChange: (String) -> Unit,
     libraryProviderSourcesResolved: Boolean,
     libraryProviderOptions: List<LibraryProviderOption>,
-    providerSongs: Map<String, List<ProviderSong>>,
-    providerAlbums: Map<String, List<ProviderAlbum>>,
-    providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState>,
-    providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState>,
-    currentSong: Song?,
+    providerUserPlaylists: Map<String, List<ProviderPlaylist>>,
+    providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState>,
     isPageActive: Boolean,
-    onLoadProviderEntityCollections: (String) -> Unit,
-    onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
-    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    onLoadProviderUserPlaylists: (String) -> Unit,
+    onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
     onOpenLocalLibrary: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     pageScope: PageTransitionScope,
@@ -500,11 +496,9 @@ internal fun LibraryScreen(
             sourceSwitcherState is LibrarySourceSwitcherState.Collapsed &&
             !sourceSwipeLocked,
         swipeDirection = sourceSwipeDirection,
-        providerSongs = selectedProviderId?.let(providerSongs::get),
-        providerSongLoadState = selectedProviderId?.let(providerSongCatalogLoadStates::get),
-        providerAlbums = selectedProviderId?.let(providerAlbums::get),
-        providerAlbumLoadState = selectedProviderId?.let(providerAlbumCatalogLoadStates::get),
-        currentSong = currentSong
+        providerPlaylists = selectedProviderId?.let(providerUserPlaylists::get),
+        providerPlaylistLoadState =
+            selectedProviderId?.let(providerUserPlaylistLoadStates::get)
     )
     val sourceCardContentVisible = !libraryPageActive ||
         sourceCardRenderOwner == LibrarySourceCardRenderOwner.Static
@@ -536,8 +530,8 @@ internal fun LibraryScreen(
     }
     LaunchedEffect(selectedSource.identity) {
         val extension = selectedSource.identity as? LibrarySourceIdentity.Extension
-        if (extension != null && (selectedSource.supportsSongs || selectedSource.supportsAlbums)) {
-            onLoadProviderEntityCollections(extension.extensionId)
+        if (extension != null && selectedSource.supportsPlaylists) {
+            onLoadProviderUserPlaylists(extension.extensionId)
         }
     }
     LaunchedEffect(sourceSwipeLocked, selectedSource.identity) {
@@ -658,15 +652,33 @@ internal fun LibraryScreen(
                 onSourceSwipeToIndex = ::selectSourceAt,
                 onSourceCardBoundsChanged = { sourceCardBoundsRoot = it },
                 onSourceCardContentBoundsChanged = { sourceCardContentBoundsRoot = it },
-                onProviderSongClick = onProviderSongQueueClick,
-                onOpenProviderAlbum = onOpenProviderAlbum,
-                onRetryProviderSongs = {
-                    selectedProviderId?.let(onLoadProviderEntityCollections)
+                onOpenProviderPlaylist = { playlist ->
+                    onOpenProviderPlaylist(
+                        ProviderPlaylistSearchItem(
+                            identity = playlist.identity,
+                            title = playlist.title,
+                            artist = playlist.creator,
+                            artwork = playlist.artwork,
+                            metadata = playlist.metadata.withPlaylistSongCount(playlist.songCount)
+                        )
+                    )
+                },
+                onRetryProviderPlaylists = {
+                    selectedProviderId?.let(onLoadProviderUserPlaylists)
                 },
                 modifier = Modifier.fillMaxSize()
             )
         }
     }
+}
+
+private fun List<ProviderSearchMetadata>?.withPlaylistSongCount(
+    songCount: Int?
+): List<ProviderSearchMetadata>? {
+    if (songCount == null || this?.any { metadata -> metadata.type == "track_count" } == true) {
+        return this
+    }
+    return orEmpty() + ProviderSearchMetadata(type = "track_count", value = songCount.toLong())
 }
 
 private fun hasDuplicatePlaylistTitle(

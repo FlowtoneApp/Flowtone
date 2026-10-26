@@ -19,17 +19,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
-import ink.tenqui.flowtone.data.online.ProviderAlbum
-import ink.tenqui.flowtone.data.online.ProviderSong
-import ink.tenqui.flowtone.data.online.toPresentationSong
-import ink.tenqui.flowtone.playback.PlaybackSource
-import ink.tenqui.flowtone.ui.components.FlowtoneCollectionArtworkCard
-import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.PageTransitionElement
@@ -68,14 +64,14 @@ internal fun LibraryHomeContent(
     onSourceSwipeToIndex: (Int) -> Unit,
     onSourceCardBoundsChanged: (Rect) -> Unit,
     onSourceCardContentBoundsChanged: (Rect) -> Unit,
-    onProviderSongClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
-    onOpenProviderAlbum: (ProviderAlbum) -> Unit,
-    onRetryProviderSongs: () -> Unit,
+    onOpenProviderPlaylist: (ProviderPlaylist) -> Unit,
+    onRetryProviderPlaylists: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
         state = listState,
-        userScrollEnabled = editingPlaylistId == null,
+        userScrollEnabled = editingPlaylistId == null ||
+            sourceContent.selectedSource.identity != LibrarySourceIdentity.Local,
         modifier = modifier
             .fillMaxSize()
             .onGloballyPositioned { coordinates ->
@@ -95,7 +91,9 @@ internal fun LibraryHomeContent(
             end = 20.dp,
             bottom = 32.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(
+            if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) 12.dp else 8.dp
+        )
     ) {
         item(key = "library-header") {
             PageTransitionElement(
@@ -178,120 +176,57 @@ internal fun LibraryHomeContent(
 
         if (sourceContent.selectedSource.identity != LibrarySourceIdentity.Local) {
             val provider = sourceContent.selectedSource
-            val providerId = (provider.identity as? LibrarySourceIdentity.Extension)?.extensionId
-            val providerSongs = sourceContent.providerSongs.orEmpty()
-            val providerAlbums = sourceContent.providerAlbums.orEmpty()
+            val providerPlaylists = sourceContent.providerPlaylists.orEmpty()
 
-            if (!provider.supportsSongs && !provider.supportsAlbums) {
-                item(key = "library-provider-unavailable") {
+            if (!provider.supportsPlaylists) {
+                item(key = "library-provider-playlists-unavailable") {
                     LibraryProviderCatalogMessage(
-                        message = "此扩展来源当前不支持曲库目录浏览",
+                        message = "此扩展来源不支持用户歌单",
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                     )
                 }
-            }
-
-            if (provider.supportsSongs) {
-                item(key = "library-provider-songs-header") {
+            } else {
+                item(key = "library-provider-playlists-header") {
                     Text(
-                        text = "歌曲",
+                        text = "歌单",
                         style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                when (sourceContent.providerSongLoadState) {
-                    ProviderCatalogLoadState.Loading, null -> item(key = "library-provider-songs-loading") {
-                        LibraryProviderCatalogLoading(message = "正在读取歌曲目录")
+                when (sourceContent.providerPlaylistLoadState) {
+                    ProviderCatalogLoadState.Loading, null -> item(key = "library-provider-playlists-loading") {
+                        LibraryProviderCatalogLoading(message = "正在读取歌单")
                     }
 
-                    ProviderCatalogLoadState.Failed -> item(key = "library-provider-songs-failed") {
+                    ProviderCatalogLoadState.Failed -> item(key = "library-provider-playlists-failed") {
                         LibraryProviderCatalogFailure(
-                            message = "暂时无法读取此来源的歌曲目录",
-                            onRetry = onRetryProviderSongs
+                            message = "暂时无法读取此来源的歌单",
+                            onRetry = onRetryProviderPlaylists
                         )
                     }
 
                     ProviderCatalogLoadState.Loaded -> {
-                        if (providerSongs.isEmpty()) {
-                            item(key = "library-provider-songs-empty") {
+                        if (providerPlaylists.isEmpty()) {
+                            item(key = "library-provider-playlists-empty") {
                                 LibraryProviderCatalogMessage(
-                                    message = "此来源暂无可展示的歌曲",
+                                    message = "此来源暂无歌单",
                                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                                 )
                             }
                         } else {
                             itemsIndexed(
-                                items = providerSongs,
-                                key = { _, song -> "provider-song:${song.identity.stableKey}" }
-                            ) { index, providerSong ->
-                                val song = providerSong.toPresentationSong()
-                                SongListItem(
-                                    song = song,
-                                    isCurrentSong = sourceContent.currentSong?.uri == song.uri,
-                                    onClick = {
-                                        onProviderSongClick(
-                                            providerSongs,
-                                            index,
-                                            PlaybackSource.providerCatalog(
-                                                providerId = requireNotNull(providerId),
-                                                displayName = provider.name
-                                            )
-                                        )
-                                    },
-                                    extensionArtwork = providerSong.artwork,
+                                items = providerPlaylists,
+                                key = { _, playlist -> "provider-playlist:${playlist.identity.stableKey}" }
+                            ) { _, playlist ->
+                                LibraryProviderPlaylistListItem(
+                                    playlist = playlist,
+                                    itemHeight = playlistItemHeight,
+                                    flowCloudSpeed = flowCloudSpeed,
+                                    isFlowCloudPlaying = isFlowCloudPlaying,
+                                    onClick = { onOpenProviderPlaylist(playlist) },
                                     modifier = pageScope.elementModifier(1, 2)
-                                        .padding(horizontal = 8.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (provider.supportsAlbums) {
-                item(key = "library-provider-albums-header") {
-                    Text(
-                        text = "专辑",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 4.dp, top = 20.dp)
-                    )
-                }
-                when (sourceContent.providerAlbumLoadState) {
-                    ProviderCatalogLoadState.Loading, null -> item(key = "library-provider-albums-loading") {
-                        LibraryProviderCatalogLoading(message = "正在读取专辑目录")
-                    }
-
-                    ProviderCatalogLoadState.Failed -> item(key = "library-provider-albums-failed") {
-                        LibraryProviderCatalogFailure(
-                            message = "暂时无法读取此来源的专辑目录",
-                            onRetry = onRetryProviderSongs
-                        )
-                    }
-
-                    ProviderCatalogLoadState.Loaded -> {
-                        if (providerAlbums.isEmpty()) {
-                            item(key = "library-provider-albums-empty") {
-                                LibraryProviderCatalogMessage(
-                                    message = "此来源暂无可展示的专辑",
-                                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                                )
-                            }
-                        } else {
-                            itemsIndexed(
-                                items = providerAlbums,
-                                key = { _, album -> "provider-album:${album.identity.stableKey}" }
-                            ) { _, album ->
-                                FlowtoneCollectionArtworkCard(
-                                    title = album.title,
-                                    subtitle = album.songCount?.let { "$it 首歌曲" }
-                                        ?: album.artist.ifBlank { "未知艺术家" },
-                                    extensionArtwork = album.artwork,
-                                    onClick = { onOpenProviderAlbum(album) },
-                                    titleMaxLines = 2,
-                                    modifier = pageScope.elementModifier(1, 2)
-                                        .padding(horizontal = 8.dp)
                                 )
                             }
                         }

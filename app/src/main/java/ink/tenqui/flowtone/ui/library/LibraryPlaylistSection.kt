@@ -61,12 +61,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
+import ink.tenqui.flowtone.core.online.ExtensionImage
+import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.PlaylistCardContentColors
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
+import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.LocalLibraryDarkBackground
 import ink.tenqui.flowtone.ui.components.LocalLibraryLightBackground
@@ -410,6 +414,34 @@ internal fun LibraryPlaylistListVisual(
 }
 
 @Composable
+internal fun LibraryProviderPlaylistListItem(
+    playlist: ProviderPlaylist,
+    itemHeight: Dp,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val subtitle = playlist.songCount?.let { "$it 首歌曲" }
+        ?: playlist.creator.takeIf(String::isNotBlank)
+        ?: "在线歌单"
+
+    PlaylistListItemSurface(
+        visualType = PlaylistCardVisualType.Default,
+        appearanceColorKey = playlistAppearanceColorKeyForStableId(playlist.identity.stableKey),
+        itemHeight = itemHeight,
+        appearProgress = 1f,
+        clickModifier = Modifier.clickable(onClick = onClick),
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
+        extensionArtwork = playlist.artwork,
+        modifier = modifier
+    ) { contentColors ->
+        PlaylistListText(playlist.title, subtitle, contentColors)
+    }
+}
+
+@Composable
 private fun LibraryCreatePlaylistListItem(
     modifier: Modifier,
     itemHeight: Dp,
@@ -439,6 +471,7 @@ private fun PlaylistListItemSurface(
     clickModifier: Modifier,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
+    extensionArtwork: ExtensionImage? = null,
     modifier: Modifier = Modifier,
     content: @Composable RowScope.(PlaylistCardContentColors) -> Unit
 ) {
@@ -473,11 +506,19 @@ private fun PlaylistListItemSurface(
             modifier = Modifier.size(56.dp)
         ) { contentColors ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                contentColors.let { colors ->
-                    when (visualType) {
-                        PlaylistCardVisualType.LikedMusic -> Icon(Icons.Outlined.FavoriteBorder, null, tint = colors.iconColor)
-                        PlaylistCardVisualType.CreatePlaylist -> Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "创建歌单", tint = colors.iconColor)
-                        else -> Icon(Icons.Rounded.QueueMusic, null, tint = colors.iconColor)
+                if (extensionArtwork != null) {
+                    FlowtoneArtwork(
+                        artworkUri = null,
+                        extensionArtwork = extensionArtwork,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    contentColors.let { colors ->
+                        when (visualType) {
+                            PlaylistCardVisualType.LikedMusic -> Icon(Icons.Outlined.FavoriteBorder, null, tint = colors.iconColor)
+                            PlaylistCardVisualType.CreatePlaylist -> Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "创建歌单", tint = colors.iconColor)
+                            else -> Icon(Icons.Rounded.QueueMusic, null, tint = colors.iconColor)
+                        }
                     }
                 }
             }

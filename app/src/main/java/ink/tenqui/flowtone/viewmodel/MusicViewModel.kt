@@ -27,6 +27,7 @@ import ink.tenqui.flowtone.data.online.LibraryProviderOption
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
+import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
@@ -97,11 +98,13 @@ data class MusicUiState(
     /** 在线请求尚未被播放器确认；绝不能覆盖 confirmed PlaybackState。 */
     val providerSongs: Map<String, List<ProviderSong>> = emptyMap(),
     val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
+    val providerUserPlaylists: Map<String, List<ProviderPlaylist>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
-    val providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap()
+    val providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
+    val providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap()
 )
 
 enum class ProviderCatalogLoadState {
@@ -209,6 +212,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
     private val providerCollectionLoads = mutableSetOf<String>()
     private val requestedProviderCollectionIds = mutableSetOf<String>()
+    private val requestedProviderUserPlaylistIds = mutableSetOf<String>()
     private val requestedProviderPlaylists = mutableMapOf<String, ProviderPlaylistSearchItem>()
     private var observedExtensionRuntimeGeneration = extensionManager.runtimeState.value.generation
     private var extensionRuntimeRefreshPending = extensionManager.runtimeState.value.isReloading
@@ -279,9 +283,11 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 currentQueueIndex = confirmedQueueIndex,
                 providerSongs = emptyMap(),
                 providerAlbums = emptyMap(),
+                providerUserPlaylists = emptyMap(),
                 providerPlaylistDetails = emptyMap(),
                 providerSongCatalogLoadStates = emptyMap(),
-            providerAlbumCatalogLoadStates = emptyMap()
+                providerAlbumCatalogLoadStates = emptyMap(),
+                providerUserPlaylistLoadStates = emptyMap()
             )
         }
         _searchUiState.update { state ->
@@ -298,6 +304,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
 
     private fun reloadRequestedProviderData() {
         requestedProviderCollectionIds.toList().forEach(::loadProviderEntityCollections)
+        requestedProviderUserPlaylistIds.toList().forEach(::loadProviderUserPlaylists)
         requestedProviderPlaylists.values.toList()
             .filter { extensionManager.isMusicProviderRuntimeAvailable(it.providerId) }
             .forEach { playlist -> loadProviderPlaylist(playlist, preferEmbeddedSongs = false) }
@@ -906,6 +913,69 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                                                 (normalizedProviderId to ProviderCatalogLoadState.Loaded)
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun loadProviderUserPlaylists(providerId: String) {
+        val normalizedProviderId = providerId.trim()
+        if (normalizedProviderId.isEmpty()) return
+        requestedProviderUserPlaylistIds += normalizedProviderId
+        if (AtomicCapabilityId.UserPlaylistsList !in
+            extensionManager.providerCapabilities(normalizedProviderId)
+        ) return
+
+        val runtimeGeneration = extensionManager.runtimeState.value.generation
+        val loadKey = "$runtimeGeneration:user-playlists:$normalizedProviderId"
+        if (normalizedProviderId in _uiState.value.providerUserPlaylists) {
+            _uiState.update { state ->
+                state.copy(
+                    providerUserPlaylistLoadStates = state.providerUserPlaylistLoadStates +
+                        (normalizedProviderId to ProviderCatalogLoadState.Loaded)
+                )
+            }
+        } else if (providerCollectionLoads.add(loadKey)) {
+            _uiState.update { state ->
+                state.copy(
+                    providerUserPlaylistLoadStates = state.providerUserPlaylistLoadStates +
+                        (normalizedProviderId to ProviderCatalogLoadState.Loading)
+                )
+            }
+            viewModelScope.launch {
+                var playlists: List<ProviderPlaylist>? = null
+                var cancelled = false
+                try {
+                    playlists = extensionManager.getProviderUserPlaylists(normalizedProviderId)
+                } catch (error: CancellationException) {
+                    cancelled = true
+                    throw error
+                } catch (_: Throwable) {
+                    // ExtensionManager 处理 Provider 错误；这里也覆盖 runtime 关闭期间的异常。
+                } finally {
+                    providerCollectionLoads.remove(loadKey)
+                    val runtimeState = extensionManager.runtimeState.value
+                    if (!cancelled && !runtimeState.isReloading &&
+                        runtimeState.generation == runtimeGeneration
+                    ) {
+                        _uiState.update { state ->
+                            if (playlists == null) {
+                                state.copy(
+                                    providerUserPlaylistLoadStates =
+                                        state.providerUserPlaylistLoadStates +
+                                            (normalizedProviderId to ProviderCatalogLoadState.Failed)
+                                )
+                            } else {
+                                state.copy(
+                                    providerUserPlaylists = state.providerUserPlaylists +
+                                        (normalizedProviderId to playlists),
+                                    providerUserPlaylistLoadStates =
+                                        state.providerUserPlaylistLoadStates +
+                                            (normalizedProviderId to ProviderCatalogLoadState.Loaded)
+                                )
                             }
                         }
                     }

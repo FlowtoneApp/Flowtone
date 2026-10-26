@@ -76,6 +76,7 @@ internal data class FlowtoneAppCallbacks(
     val onRequestPermission: () -> Unit,
     val onSongClick: (Song) -> Unit,
     val onLoadProviderEntityCollections: (String) -> Unit,
+    val onLoadProviderUserPlaylists: (String) -> Unit,
     val onOnlineSongClick: (ProviderSong) -> Unit,
     val onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     val onDismissExpandedPlayer: () -> Unit,
@@ -123,6 +124,7 @@ internal fun flowtoneAppCallbacks(
     onRequestPermission: () -> Unit,
     onSongClick: (Song) -> Unit,
     onLoadProviderEntityCollections: (String) -> Unit,
+    onLoadProviderUserPlaylists: (String) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onPlaylistSongClick: (List<Song>, Int, PlaybackSource) -> Unit,
@@ -378,6 +380,7 @@ internal fun flowtoneAppCallbacks(
         onRequestPermission = onRequestPermission,
         onSongClick = onSongClick,
         onLoadProviderEntityCollections = onLoadProviderEntityCollections,
+        onLoadProviderUserPlaylists = onLoadProviderUserPlaylists,
         onOnlineSongClick = onOnlineSongClick,
         onProviderSongQueueClick = onProviderSongQueueClick,
         onDismissExpandedPlayer = {
