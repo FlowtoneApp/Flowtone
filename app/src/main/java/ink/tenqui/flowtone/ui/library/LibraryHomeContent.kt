@@ -1,21 +1,36 @@
 package ink.tenqui.flowtone.ui.library
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.painter.Painter
@@ -23,10 +38,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderPlaceholder
 import ink.tenqui.flowtone.ui.components.PageTransitionElement
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
@@ -68,6 +85,11 @@ internal fun LibraryHomeContent(
     onRetryProviderPlaylists: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLocal = sourceContent.selectedSource.identity == LibrarySourceIdentity.Local
+    val localPlaylists = remember(likedPlaylist, playlists) { listOf(likedPlaylist) + playlists }
+    val alphaSpec = remember { tween<Float>(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing) }
+    val sizeSpec = remember { tween<IntSize>(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing) }
+
     LazyColumn(
         state = listState,
         userScrollEnabled = editingPlaylistId == null ||
@@ -91,9 +113,7 @@ internal fun LibraryHomeContent(
             end = 20.dp,
             bottom = 32.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(
-            if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) 12.dp else 8.dp
-        )
+        verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
     ) {
         item(key = "library-header") {
             PageTransitionElement(
@@ -115,17 +135,9 @@ internal fun LibraryHomeContent(
                 scope = pageScope,
                 order = 1,
                 orderCount = 2,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(
-                        if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) {
-                            32.dp
-                        } else {
-                            24.dp
-                        }
-                    )
-                ) {
+                Column {
                     LibraryProviderHeader(
                         source = sourceContent.selectedSource,
                         sourceIndex = sourceContent.sourceItems.indexOfFirst {
@@ -146,35 +158,83 @@ internal fun LibraryHomeContent(
                         onContentBoundsChanged = onSourceCardContentBoundsChanged,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    if (sourceContent.selectedSource.identity == LibrarySourceIdentity.Local) {
-                        LibraryCollectionMenu(
+                    AnimatedVisibility(
+                        visible = isLocal,
+                        enter = fadeIn(alphaSpec) + expandVertically(animationSpec = sizeSpec),
+                        exit = fadeOut(alphaSpec) + shrinkVertically(animationSpec = sizeSpec)
+                    ) {
+                        LibraryContentEntry(
                             songCount = songCount,
-                            likedPlaylist = likedPlaylist,
-                            playlists = playlists,
-                            playlistItemHeight = playlistItemHeight,
-                            libraryCardsProgress = libraryCardsProgress,
-                            playlistItemOffsetYPx = playlistItemOffsetYPx,
-                            flowCloudSpeed = flowCloudSpeed,
-                            isFlowCloudPlaying = isFlowCloudPlaying,
-                            editingPlaylistId = editingPlaylistId,
-                            newlyCreatedPlaylistId = newlyCreatedPlaylistId,
-                            exitingPlaylistId = exitingPlaylistId,
-                            onCreateAnimationFinished = onCreateAnimationFinished,
-                            onDeleteAnimationFinished = onDeleteAnimationFinished,
                             onOpenLocalLibrary = onOpenLocalLibrary,
-                            onCreatePlaylist = onCreatePlaylist,
-                            onOpenPlaylist = onOpenPlaylist,
-                            onStartPlaylistEditing = onStartPlaylistEditing,
-                            onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
-                            onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.padding(top = 32.dp, bottom = 4.dp)
                         )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .fillMaxWidth()
+                            .height(40.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "歌单",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AnimatedVisibility(
+                            visible = isLocal,
+                            enter = fadeIn(alphaSpec),
+                            exit = fadeOut(alphaSpec)
+                        ) {
+                            IconButton(onClick = onCreatePlaylist, modifier = Modifier.size(40.dp)) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Add,
+                                    contentDescription = "新建歌单",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        if (sourceContent.selectedSource.identity != LibrarySourceIdentity.Local) {
+        if (isLocal) {
+            itemsIndexed(
+                items = localPlaylists,
+                key = { index, playlist ->
+                    if (index == 0) "library-local-liked" else "library-local-playlist:${playlist.id}"
+                }
+            ) { index, playlist ->
+                LibraryLocalPlaylistItem(
+                    playlist = playlist,
+                    isLiked = index == 0,
+                    index = index - 1,
+                    playlistItemHeight = playlistItemHeight,
+                    libraryCardsProgress = libraryCardsProgress,
+                    playlistItemOffsetYPx = playlistItemOffsetYPx,
+                    flowCloudSpeed = flowCloudSpeed,
+                    isFlowCloudPlaying = isFlowCloudPlaying,
+                    editingPlaylistId = editingPlaylistId,
+                    newlyCreatedPlaylistId = newlyCreatedPlaylistId,
+                    exitingPlaylistId = exitingPlaylistId,
+                    onCreateAnimationFinished = onCreateAnimationFinished,
+                    onDeleteAnimationFinished = onDeleteAnimationFinished,
+                    onOpenPlaylist = onOpenPlaylist,
+                    onStartPlaylistEditing = onStartPlaylistEditing,
+                    onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
+                    onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved,
+                    modifier = Modifier
+                        .animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)
+                        .padding(top = if (index == 0) 6.dp else 0.dp)
+                )
+            }
+            item(key = "library-local-bottom") {
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+        } else {
             val provider = sourceContent.selectedSource
             val providerPlaylists = sourceContent.providerPlaylists.orEmpty()
 
@@ -182,29 +242,25 @@ internal fun LibraryHomeContent(
                 item(key = "library-provider-playlists-unavailable") {
                     LibraryProviderCatalogMessage(
                         message = "此扩展来源不支持用户歌单",
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                        modifier = Modifier.animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)
+                            .fillMaxWidth().padding(top = 12.dp)
                     )
                 }
             } else {
-                item(key = "library-provider-playlists-header") {
-                    Text(
-                        text = "歌单",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
                 when (sourceContent.providerPlaylistLoadState) {
                     ProviderCatalogLoadState.Loading, null -> item(key = "library-provider-playlists-loading") {
-                        LibraryProviderCatalogLoading(message = "正在读取歌单")
+                        Box(Modifier.animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)) {
+                            LibraryProviderCatalogLoading(message = "正在读取歌单")
+                        }
                     }
 
                     ProviderCatalogLoadState.Failed -> item(key = "library-provider-playlists-failed") {
-                        LibraryProviderCatalogFailure(
-                            message = "暂时无法读取此来源的歌单",
-                            onRetry = onRetryProviderPlaylists
-                        )
+                        Box(Modifier.animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)) {
+                            LibraryProviderCatalogFailure(
+                                message = "暂时无法读取此来源的歌单",
+                                onRetry = onRetryProviderPlaylists
+                            )
+                        }
                     }
 
                     ProviderCatalogLoadState.Loaded -> {
@@ -212,7 +268,8 @@ internal fun LibraryHomeContent(
                             item(key = "library-provider-playlists-empty") {
                                 LibraryProviderCatalogMessage(
                                     message = "此来源暂无歌单",
-                                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                                    modifier = Modifier.animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)
+                                        .fillMaxWidth().padding(top = 12.dp)
                                 )
                             }
                         } else {
@@ -226,7 +283,10 @@ internal fun LibraryHomeContent(
                                     flowCloudSpeed = flowCloudSpeed,
                                     isFlowCloudPlaying = isFlowCloudPlaying,
                                     onClick = { onOpenProviderPlaylist(playlist) },
-                                    modifier = pageScope.elementModifier(1, 2)
+                                    modifier = Modifier
+                                        .animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)
+                                        .padding(top = 6.dp)
+                                        .then(pageScope.elementModifier(1, 2))
                                 )
                             }
                         }

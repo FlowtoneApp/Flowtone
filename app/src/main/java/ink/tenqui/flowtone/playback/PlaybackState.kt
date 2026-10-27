@@ -31,6 +31,19 @@ data class PlaybackState(
     val errorEventId: Long = 0L
 )
 
+internal fun PlaybackState.withPlayerError(
+    message: String,
+    details: String,
+    eventId: Long
+): PlaybackState = copy(
+    isPlaying = false,
+    playWhenReady = false,
+    isBuffering = false,
+    errorMessage = message,
+    errorDetails = details,
+    errorEventId = eventId
+)
+
 data class PlaybackPositionSnapshot(
     val mediaId: String? = null,
     val positionMs: Long = 0L

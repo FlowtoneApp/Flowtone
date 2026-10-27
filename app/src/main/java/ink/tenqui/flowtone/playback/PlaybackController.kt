@@ -92,14 +92,11 @@ class PlaybackController(
         override fun onPlayerError(error: PlaybackException) {
             val errorEventId = ++playbackErrorEventId
             _playbackState.update {
-                it.copy(
-                    isPlaying = false,
-                    playWhenReady = false,
-                    isBuffering = false,
-                    errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25",
-                    errorDetails = error.extras.getString(PlaybackErrorDetailsExtraKey)
+                it.withPlayerError(
+                    message = error.message ?: "\u64ad\u653e\u5931\u8d25",
+                    details = error.extras.getString(PlaybackErrorDetailsExtraKey)
                         ?: error.stackTraceToString(),
-                    errorEventId = errorEventId
+                    eventId = errorEventId
                 )
             }
         }

@@ -12,6 +12,10 @@ import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import ink.tenqui.flowtone.core.online.ExtensionTrackRef
+import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
+import ink.tenqui.flowtone.playback.PlaybackLinkResolutionFailure
+import ink.tenqui.flowtone.playback.playbackFailureDetails
+import ink.tenqui.flowtone.playback.resolvePlaybackLink
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
@@ -158,6 +162,41 @@ class JavaScriptMusicProviderTest {
         assertEquals("song-2", provider.getPlaylistSongs("playlist-1")?.single()?.id)
         assertEquals("song-3", provider.resolvePersistentSong("persistent-1")?.id)
         assertNotNull(provider.getPlaybackResource(testSong()))
+    }
+
+    @Test fun playbackLinkFailuresFromJavaScriptUseTheSameSafeMessage() = runBlocking {
+        val bodies = listOf(
+            "return null;",
+            "return {type:'progressive',url:'https://'};",
+            "throw new Error('private JavaScript diagnostic');"
+        )
+        for (body in bodies) {
+            val provider = provider(
+                "globalThis.flowtoneExtension = {async getPlaybackResource() { $body }};"
+            )
+            val error = runCatching {
+                resolvePlaybackLink { provider.getPlaybackResource(testSong()) }
+            }.exceptionOrNull()
+
+            assertTrue(error is PlaybackLinkResolutionFailure)
+            assertEquals("获取播放链接失败", playbackFailureDetails(error!!))
+        }
+    }
+
+    @Test fun existingProgressiveAndHlsPlaybackResourcesRemainSupported() = runBlocking {
+        for ((type, expected) in listOf(
+            "progressive" to ExtensionPlaybackResourceType.Progressive,
+            "hls" to ExtensionPlaybackResourceType.Hls
+        )) {
+            val provider = provider(
+                "globalThis.flowtoneExtension = {async getPlaybackResource() { " +
+                    "return {type:'$type',url:'https://example.com/stream?token=abc'}; }};"
+            )
+            val resource = resolvePlaybackLink { provider.getPlaybackResource(testSong()) }
+
+            assertEquals(expected, resource.type)
+            assertEquals("https://example.com/stream?token=abc", resource.url)
+        }
     }
 
     @Test fun providerItemMayOmitArtwork() = runBlocking {

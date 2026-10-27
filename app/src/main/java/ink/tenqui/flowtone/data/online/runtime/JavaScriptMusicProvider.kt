@@ -34,7 +34,14 @@ import ink.tenqui.flowtone.data.online.SearchLandingItem
 import ink.tenqui.flowtone.core.model.normalizeMusicSourceHost
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
+
+internal fun isValidPlaybackResourceUrl(url: String): Boolean =
+    url.startsWith("https://") && runCatching {
+        val uri = URI(url)
+        !uri.host.isNullOrBlank() && uri.port in -1..65535
+    }.getOrDefault(false)
 
 /** Canonical MusicProvider capabilities 的最小 JS bridge，不包含任何 Provider 专用协议。 */
 class JavaScriptMusicProvider internal constructor(
@@ -143,7 +150,7 @@ class JavaScriptMusicProvider internal constructor(
             "progressive" -> ExtensionPlaybackResourceType.Progressive
             else -> return null
         }
-        val url = result.optString("url").trim().takeIf { it.startsWith("https://") } ?: return null
+        val url = result.optString("url").trim().takeIf(::isValidPlaybackResourceUrl) ?: return null
         val headers = result.optJSONObject("headers")?.let { json ->
             json.keys().asSequence().mapNotNull { key -> (json.opt(key) as? String)?.let { key to it } }.toMap()
         }.orEmpty()

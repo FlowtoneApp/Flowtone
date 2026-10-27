@@ -77,10 +77,10 @@ import ink.tenqui.flowtone.ui.components.LocalLibraryLightBackground
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
 
 @Composable
-internal fun LibraryCollectionMenu(
-    songCount: Int,
-    likedPlaylist: LibraryPlaylistCard,
-    playlists: List<LibraryPlaylistCard>,
+internal fun LibraryLocalPlaylistItem(
+    playlist: LibraryPlaylistCard,
+    isLiked: Boolean,
+    index: Int,
     playlistItemHeight: Dp,
     libraryCardsProgress: Float,
     playlistItemOffsetYPx: Float,
@@ -91,154 +91,41 @@ internal fun LibraryCollectionMenu(
     exitingPlaylistId: String?,
     onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
     onDeleteAnimationFinished: (LibraryPlaylistCard) -> Unit,
-    onOpenLocalLibrary: () -> Unit,
-    onCreatePlaylist: () -> Unit,
     onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
     onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
     onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
     onEditingPlaylistBoundsRemoved: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 曲库主页使用常规列表，不再以大卡片包裹或折叠歌单。
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        LibraryContentEntry(
-            songCount = songCount,
-            onOpenLocalLibrary = onOpenLocalLibrary,
-            modifier = Modifier.fillMaxWidth()
+    val editable = !isLiked && !playlist.isSystem
+    val isEditingTarget = editable && editingPlaylistId == playlist.id
+    val playDeleteAnimation = !isLiked && exitingPlaylistId == playlist.id
+    LibraryPlaylistRowMotion(
+        progress = libraryPlaylistItemProgress(
+            libraryCardsProgress,
+            if (isLiked) 8 else 12 + index * 2
+        ),
+        itemOffsetYPx = playlistItemOffsetYPx
+    ) { rowModifier ->
+        LibraryPlaylistListItem(
+            modifier = modifier.then(rowModifier),
+            playlist = playlist,
+            itemHeight = playlistItemHeight,
+            editable = editable && !playDeleteAnimation,
+            isEditingTarget = isEditingTarget,
+            playCreateAnimation = !isLiked && newlyCreatedPlaylistId == playlist.id,
+            playDeleteAnimation = playDeleteAnimation,
+            flowCloudSpeed = flowCloudSpeed,
+            isFlowCloudPlaying = isFlowCloudPlaying,
+            onCreateAnimationFinished = { if (!isLiked) onCreateAnimationFinished(playlist) },
+            onDeleteAnimationFinished = { if (!isLiked) onDeleteAnimationFinished(playlist) },
+            onClick = {
+                if (!isEditingTarget && !playDeleteAnimation) onOpenPlaylist(playlist)
+            },
+            onLongClick = { if (editable) onStartPlaylistEditing(playlist) },
+            onEditingBoundsChanged = { onEditingPlaylistBoundsChanged(playlist.id, it) },
+            onEditingBoundsRemoved = { onEditingPlaylistBoundsRemoved(playlist.id) }
         )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "歌单",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(
-                    onClick = onCreatePlaylist,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    val appliedIconTint = MaterialTheme.colorScheme.onSurface
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "新建歌单",
-                        tint = appliedIconTint
-                    )
-                }
-            }
-            LibraryPlaylistMenuItems(
-                likedPlaylist = likedPlaylist,
-                playlists = playlists,
-                playlistItemHeight = playlistItemHeight,
-                libraryCardsProgress = libraryCardsProgress,
-                playlistItemOffsetYPx = playlistItemOffsetYPx,
-                flowCloudSpeed = flowCloudSpeed,
-                isFlowCloudPlaying = isFlowCloudPlaying,
-                editingPlaylistId = editingPlaylistId,
-                newlyCreatedPlaylistId = newlyCreatedPlaylistId,
-                exitingPlaylistId = exitingPlaylistId,
-                onCreateAnimationFinished = onCreateAnimationFinished,
-                onDeleteAnimationFinished = onDeleteAnimationFinished,
-                onOpenPlaylist = onOpenPlaylist,
-                onStartPlaylistEditing = onStartPlaylistEditing,
-                onEditingPlaylistBoundsChanged = onEditingPlaylistBoundsChanged,
-                onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved
-            )
-        }
-    }
-}
-
-@Composable
-private fun LibraryPlaylistMenuItems(
-    likedPlaylist: LibraryPlaylistCard,
-    playlists: List<LibraryPlaylistCard>,
-    playlistItemHeight: Dp,
-    libraryCardsProgress: Float,
-    playlistItemOffsetYPx: Float,
-    flowCloudSpeed: Float,
-    isFlowCloudPlaying: Boolean,
-    editingPlaylistId: String?,
-    newlyCreatedPlaylistId: String?,
-    exitingPlaylistId: String?,
-    onCreateAnimationFinished: (LibraryPlaylistCard) -> Unit,
-    onDeleteAnimationFinished: (LibraryPlaylistCard) -> Unit,
-    onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
-    onStartPlaylistEditing: (LibraryPlaylistCard) -> Unit,
-    onEditingPlaylistBoundsChanged: (String, Rect) -> Unit,
-    onEditingPlaylistBoundsRemoved: (String) -> Unit
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(LibraryMenuChildSpacing)
-    ) {
-        LibraryPlaylistRowMotion(
-            progress = libraryPlaylistItemProgress(libraryCardsProgress, 8),
-            itemOffsetYPx = playlistItemOffsetYPx
-        ) { rowModifier ->
-            LibraryPlaylistListItem(
-                    modifier = rowModifier,
-                    playlist = likedPlaylist,
-                    itemHeight = playlistItemHeight,
-                    editable = false,
-                    isEditingTarget = false,
-                    playCreateAnimation = false,
-                    playDeleteAnimation = false,
-                    flowCloudSpeed = flowCloudSpeed,
-                    isFlowCloudPlaying = isFlowCloudPlaying,
-                    onCreateAnimationFinished = {},
-                    onDeleteAnimationFinished = {},
-                    onClick = { onOpenPlaylist(likedPlaylist) },
-                    onLongClick = {},
-                    onEditingBoundsChanged = {},
-                    onEditingBoundsRemoved = {}
-            )
-        }
-        playlists.forEachIndexed { index, playlist ->
-            key(playlist.id) {
-                val editable = !playlist.isSystem
-                val isEditingTarget = editingPlaylistId == playlist.id
-                val playDeleteAnimation = exitingPlaylistId == playlist.id
-                LibraryPlaylistRowMotion(
-                        progress = libraryPlaylistItemProgress(
-                            libraryCardsProgress,
-                            12 + index * 2
-                        ),
-                        itemOffsetYPx = playlistItemOffsetYPx
-                ) { rowModifier ->
-                    LibraryPlaylistListItem(
-                            modifier = rowModifier,
-                            playlist = playlist,
-                            itemHeight = playlistItemHeight,
-                            editable = editable && !playDeleteAnimation,
-                            isEditingTarget = editable && isEditingTarget,
-                            playCreateAnimation = newlyCreatedPlaylistId == playlist.id,
-                            playDeleteAnimation = playDeleteAnimation,
-                            flowCloudSpeed = flowCloudSpeed,
-                            isFlowCloudPlaying = isFlowCloudPlaying,
-                            onCreateAnimationFinished = { onCreateAnimationFinished(playlist) },
-                            onDeleteAnimationFinished = { onDeleteAnimationFinished(playlist) },
-                            onClick = {
-                                if (!isEditingTarget && !playDeleteAnimation) onOpenPlaylist(playlist)
-                            },
-                            onLongClick = { if (editable) onStartPlaylistEditing(playlist) },
-                            onEditingBoundsChanged = {
-                                onEditingPlaylistBoundsChanged(playlist.id, it)
-                            },
-                            onEditingBoundsRemoved = {
-                                onEditingPlaylistBoundsRemoved(playlist.id)
-                            }
-                    )
-                }
-            }
-        }
     }
 }
 

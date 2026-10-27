@@ -82,6 +82,24 @@ internal class LibraryPlaylistController internal constructor(
     val listState: LazyListState
 ) {
     private val editablePlaylistBounds = mutableMapOf<String, Rect>()
+    private var scrollUsesLocalSource = true
+    private var localScrollPosition = 0 to 0
+    private var providerScrollPosition = 0 to 0
+
+    fun selectScrollSource(isLocal: Boolean) {
+        if (scrollUsesLocalSource == isLocal) return
+        val currentPosition = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        if (scrollUsesLocalSource) {
+            localScrollPosition = currentPosition
+        } else {
+            providerScrollPosition = currentPosition
+        }
+        val targetPosition = if (isLocal) localScrollPosition else providerScrollPosition
+        if (currentPosition != targetPosition) {
+            listState.requestScrollToItem(targetPosition.first, targetPosition.second)
+        }
+        scrollUsesLocalSource = isLocal
+    }
 
     var playlists by mutableStateOf(playlistStore.loadCards())
     var playlistName by mutableStateOf("")
@@ -477,11 +495,11 @@ internal fun LibraryScreen(
     val selectedSource = sourceItems.firstOrNull {
         it.identity.key == selectedSourceKey
     } ?: sourceItems.first()
-    val providerCatalogListState = rememberLazyListState()
-    val contentListState = if (selectedSource.identity == LibrarySourceIdentity.Local) {
-        playlistController.listState
-    } else {
-        providerCatalogListState
+    val contentListState = playlistController.listState
+    SideEffect {
+        if (libraryPageActive) {
+            playlistController.selectScrollSource(selectedSource.identity == LibrarySourceIdentity.Local)
+        }
     }
     val selectedSourceIndex = sourceItems.indexOfFirst {
         it.identity == selectedSource.identity

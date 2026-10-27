@@ -405,12 +405,12 @@ internal class SessionPlaybackPlayer(
                     requestToken,
                     IllegalStateException("该在线歌曲暂时无法恢复")
                 )
-                val resource = extensionManager.resolvePlaybackResource(providerSong)
-                    ?: return@launch resolveFailed(
-                        item,
-                        requestToken,
-                        IllegalStateException("无法解析在线播放资源")
-                    )
+                val resource = try {
+                    resolvePlaybackLink { extensionManager.resolvePlaybackResource(providerSong) }
+                } catch (error: PlaybackLinkResolutionFailure) {
+                    resolveFailed(item, requestToken, error)
+                    return@launch
+                }
                 Log.d(LOG_TAG, "resolve.resource generation=${requestToken.generation} queueId=${item.queueId}")
                 val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource)
                 commitResolvedItem(
@@ -477,6 +477,9 @@ internal class SessionPlaybackPlayer(
     ) {
         if (!isCurrent(requestToken)) return
         val message = error.message ?: "在线播放失败"
+        if (error is PlaybackLinkResolutionFailure) {
+            Log.w(LOG_TAG, "playback link resolution failed target=${item.stableIdentity}", error.cause ?: error)
+        }
         resolving = false
         resolvingQueueId = null
         desiredPlayWhenReady = false
@@ -484,10 +487,10 @@ internal class SessionPlaybackPlayer(
         pendingSeek = null
         logicalError = PlaybackException(
             message,
-            error,
+            if (error is PlaybackLinkResolutionFailure) null else error,
             PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
             Bundle().apply {
-                putString(PlaybackErrorDetailsExtraKey, error.stackTraceToString())
+                putString(PlaybackErrorDetailsExtraKey, playbackFailureDetails(error))
             }
         )
         onResolveError(item, message)
