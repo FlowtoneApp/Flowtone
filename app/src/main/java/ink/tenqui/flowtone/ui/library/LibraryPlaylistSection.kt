@@ -397,7 +397,8 @@ private fun PlaylistListItemSurface(
                     FlowtoneArtwork(
                         artworkUri = null,
                         extensionArtwork = extensionArtwork,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        fadeInExtensionArtwork = true
                     )
                 } else {
                     contentColors.let { colors ->

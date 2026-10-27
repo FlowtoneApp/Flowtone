@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.request.crossfade
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.LikedSongsPlaylistId
 import ink.tenqui.flowtone.core.model.Song
@@ -258,7 +259,8 @@ internal fun FlowtoneArtwork(
 internal fun FlowtoneArtwork(
     artworkUri: Uri?,
     extensionArtwork: ExtensionImage? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fadeInExtensionArtwork: Boolean = false
 ) {
     val context = LocalContext.current
     val imageRequest: ImageRequest? = remember(artworkUri, context) {
@@ -266,6 +268,16 @@ internal fun FlowtoneArtwork(
             ImageRequest.Builder(context)
                 .data(uri)
                 .size(264, 264)
+                .build()
+        }
+    }
+    val extensionImageRequest = remember(extensionArtwork, context, fadeInExtensionArtwork) {
+        extensionArtwork?.let { artwork ->
+            ImageRequest.Builder(context)
+                .data(artwork)
+                .apply {
+                    if (fadeInExtensionArtwork) crossfade(FlowtoneMotion.ShortDurationMillis)
+                }
                 .build()
         }
     }
@@ -287,9 +299,9 @@ internal fun FlowtoneArtwork(
             tint = iconColor,
             modifier = Modifier.size(24.dp)
         )
-        extensionArtwork?.let { artwork ->
+        extensionImageRequest?.let { request ->
             AsyncImage(
-                model = artwork,
+                model = request,
                 imageLoader = ExtensionManager.get(context).extensionImageLoader,
                 contentDescription = "封面",
                 contentScale = ContentScale.Crop,
