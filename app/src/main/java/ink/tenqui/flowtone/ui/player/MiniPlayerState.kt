@@ -19,6 +19,8 @@ import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.crossfade
+import coil3.size.Size
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.player.lyrics.FullscreenPlaybackContentMode
 
@@ -114,7 +116,7 @@ internal fun rememberMiniPlayerState(
         largeArtworkData?.let { data ->
             ImageRequest.Builder(context)
                 .data(data)
-                .size(1_536, 1_536)
+                .size(if (data is ExtensionImage) Size.ORIGINAL else Size(1_536, 1_536))
                 .crossfade(false)
                 .build()
         }

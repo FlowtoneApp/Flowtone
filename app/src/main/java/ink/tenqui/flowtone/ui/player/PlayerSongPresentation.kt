@@ -21,6 +21,7 @@ import coil3.ImageLoader
 import coil3.compose.asPainter
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import kotlinx.coroutines.CancellationException
 
 internal enum class PlayerArtworkLoadState {
@@ -346,7 +347,10 @@ internal fun rememberPlayerSongPresentationTransition(
         imageRequest = imageRequest,
         artworkRequestIdentity = artworkRequestIdentity(imageRequest, 768),
         largeArtworkRequest = largeArtworkRequest,
-        largeArtworkRequestIdentity = artworkRequestIdentity(largeArtworkRequest, 1_536)
+        largeArtworkRequestIdentity = artworkRequestIdentity(
+            largeArtworkRequest,
+            if (largeArtworkRequest?.data is ExtensionImage) 0 else 1_536
+        )
     )
     val latestDesired by rememberUpdatedState(desired)
     var current by remember {

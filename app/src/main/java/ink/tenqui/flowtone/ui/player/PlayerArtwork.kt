@@ -196,7 +196,7 @@ internal fun MorphArtworkLayer(
         } else {
             artwork.baseIdentity
         }
-        artwork.largeArtworkRequestIdentity == expectedIdentity
+        artwork.requestIdentity == expectedIdentity
     }
     val largeArtworkFadeProgress by animateFloatAsState(
         targetValue = if (largeArtworkPainter != null) 1f else 0f,

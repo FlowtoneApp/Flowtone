@@ -138,7 +138,7 @@ fun MiniPlayer(
     val artworkUri = playerUiState.artworkUri
     val extensionArtwork = playerUiState.extensionArtwork
     val extensionLargeArtwork = playerUiState.extensionLargeArtwork
-    val artworkData = extensionArtwork ?: artworkUri
+    val artworkData = extensionArtwork ?: extensionLargeArtwork ?: artworkUri
     val largeArtworkData = extensionLargeArtwork ?: extensionArtwork ?: artworkUri
     val useLocalArtworkLoading = currentSong?.sourceType == SourceType.Local
     val durationMs = playerUiState.durationMs
@@ -856,8 +856,7 @@ fun MiniPlayer(
                     )
                     MiniPlayerFullscreenLayout(
                         imageRequest = state.coverImageRequest,
-                        largeArtworkRequest = state.largeCoverImageRequest
-                            .takeIf { state.isFullscreenPlayer },
+                        largeArtworkRequest = state.largeCoverImageRequest,
                         artworkImageLoader = state.artworkImageLoader,
                         playerUiState = playerUiState,
                         songLyricsState = songLyricsState,
