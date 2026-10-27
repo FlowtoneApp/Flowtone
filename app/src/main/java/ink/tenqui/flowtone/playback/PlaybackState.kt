@@ -4,6 +4,9 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.online.ExtensionImage
 
+internal const val PlaybackErrorDetailsExtraKey =
+    "ink.tenqui.flowtone.playback.ERROR_DETAILS"
+
 data class PlaybackState(
     val currentSong: Song? = null,
     /** 用于 Likes/歌单等 Flowtone collection 的长期身份，Song 仅保留展示兼容职责。 */
@@ -23,7 +26,9 @@ data class PlaybackState(
     val currentQueueIndex: Int = -1,
     /** 当前 logical playback target 的 queue identity，用于将瞬时位置与展示页关联。 */
     val currentQueueId: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val errorDetails: String? = null,
+    val errorEventId: Long = 0L
 )
 
 data class PlaybackPositionSnapshot(

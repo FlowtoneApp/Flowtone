@@ -551,7 +551,7 @@ private fun SearchResultCategorySelector(
             }
             is SearchScope.Provider -> when (val landing = state.landingState) {
                 ProviderSearchLandingState.Idle, ProviderSearchLandingState.Loading -> Box(Modifier.fillMaxWidth().padding(top = 36.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp) }
-                ProviderSearchLandingState.Error -> LandingMessage("此来源暂时无法加载推荐内容")
+                is ProviderSearchLandingState.Error -> LandingMessage("此来源暂时无法加载推荐内容")
                 is ProviderSearchLandingState.Loaded -> landing.landing?.blocks?.forEach { block -> LandingBlock(block, onSearchAction) } ?: LandingMessage("输入关键词开始搜索")
             }
         }

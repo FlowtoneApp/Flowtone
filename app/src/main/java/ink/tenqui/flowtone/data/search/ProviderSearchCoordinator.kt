@@ -3,7 +3,9 @@ package ink.tenqui.flowtone.data.search
 import android.util.Log
 import ink.tenqui.flowtone.data.online.ProviderSearchCallResult
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
+import ink.tenqui.flowtone.data.online.ProviderSearchFailure
 import ink.tenqui.flowtone.data.online.ProviderSearchRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
@@ -14,7 +16,8 @@ interface ProviderSearchGateway {
 /** 仅协调 Provider 分页请求；状态仍直接写入现有 GlobalSearchUiState。 */
 class ProviderSearchCoordinator(
     private val state: MutableStateFlow<GlobalSearchUiState>,
-    private val gateway: ProviderSearchGateway
+    private val gateway: ProviderSearchGateway,
+    private val onFailure: (SearchScope, ProviderSearchCategory, Throwable) -> Unit = { _, _, _ -> }
 ) {
     suspend fun startSearch(keyword: String, scope: SearchScope, category: ProviderSearchCategory) {
         state.update { current ->
@@ -70,7 +73,33 @@ class ProviderSearchCoordinator(
                 else current.copy(providerCategoryStates = current.providerCategoryStates + (category to categoryState.startRequest(cursor)))
             }
         }
-        val result = gateway.searchPage(scope, ProviderSearchRequest(keyword, category, cursor))
+        val result = try {
+            gateway.searchPage(scope, ProviderSearchRequest(keyword, category, cursor))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            ProviderSearchCallResult.Failure(error)
+        }
+        if (state.value.matches(generation, keyword, scope)) {
+            val failures = when (result) {
+                is ProviderSearchCallResult.Success -> result.failures
+                is ProviderSearchCallResult.Failure -> result.failures.ifEmpty {
+                    listOf(
+                        ProviderSearchFailure(
+                            extensionId = (scope as? SearchScope.Provider)?.extensionId,
+                            exception = result.exception
+                        )
+                    )
+                }
+            }
+            failures.forEach { failure ->
+                onFailure(
+                    failure.extensionId?.let(SearchScope::Provider) ?: scope,
+                    category,
+                    failure.exception
+                )
+            }
+        }
         state.update { current ->
             if (!current.matches(generation, keyword, scope)) return@update current
             val previous = current.providerCategoryState(category)
@@ -85,7 +114,9 @@ class ProviderSearchCoordinator(
                     )
                     previous.acceptPage(result.page, scope != SearchScope.All)
                 }
-                is ProviderSearchCallResult.Failure -> previous.acceptFailure(result.exception.javaClass.simpleName)
+                is ProviderSearchCallResult.Failure -> previous.acceptFailure(
+                    result.exception.stackTraceToString()
+                )
             }
             logSearchDiagnostic(
                 "extension.music.search.page.state.accepted category=$category " +

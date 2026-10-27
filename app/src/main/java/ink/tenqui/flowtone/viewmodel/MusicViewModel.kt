@@ -77,7 +77,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
+
+data class ExtensionContentFailure(
+    val id: Long,
+    val title: String,
+    val details: String
+)
 
 data class MusicUiState(
     val hasPermission: Boolean = false,
@@ -104,7 +111,8 @@ data class MusicUiState(
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
     val providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
-    val providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap()
+    val providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
+    val extensionContentFailures: List<ExtensionContentFailure> = emptyList()
 )
 
 enum class ProviderCatalogLoadState {
@@ -176,7 +184,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchUiState = MutableStateFlow(GlobalSearchUiState())
     private val providerSearchCoordinator = ProviderSearchCoordinator(
         state = _searchUiState,
-        gateway = ExtensionManagerProviderSearchGateway(extensionManager)
+        gateway = ExtensionManagerProviderSearchGateway(extensionManager),
+        onFailure = { scope, category, error ->
+            val source = when (scope) {
+                SearchScope.All -> "所有来源"
+                SearchScope.Local -> "本地音乐"
+                is SearchScope.Provider -> "扩展 ID：${scope.extensionId}"
+            }
+            reportExtensionContentFailure(
+                title = "在线搜索失败",
+                context = "搜索类别：$category\n搜索来源：$source",
+                error = error
+            )
+        }
     )
     private val _lyricsState = MutableStateFlow<LyricsState>(LyricsState.Idle)
     private val _likedTracks = MutableStateFlow(initialLikedTracks)
@@ -211,6 +231,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var lastProgressDiagnosticLogUptimeMs = 0L
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
     private val providerCollectionLoads = mutableSetOf<String>()
+    private val extensionContentFailureSequence = AtomicLong()
     private val requestedProviderCollectionIds = mutableSetOf<String>()
     private val requestedProviderUserPlaylistIds = mutableSetOf<String>()
     private val requestedProviderPlaylists = mutableMapOf<String, ProviderPlaylistSearchItem>()
@@ -227,12 +248,70 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         _confirmedPlaybackPosition.asStateFlow()
     val lyricsFolders: StateFlow<List<LyricsFolder>> = _lyricsFolders.asStateFlow()
 
+    private fun reportExtensionContentFailure(
+        title: String,
+        context: String,
+        error: Throwable
+    ) {
+        enqueueExtensionContentFailure(
+            title = title,
+            details = "$context\n\n${error.stackTraceToString()}"
+        )
+    }
+
+    private fun enqueueExtensionContentFailure(title: String, details: String) {
+        val failure = ExtensionContentFailure(
+            id = extensionContentFailureSequence.incrementAndGet(),
+            title = title,
+            details = details
+        )
+        _uiState.update { state ->
+            state.copy(extensionContentFailures = (state.extensionContentFailures + failure).takeLast(20))
+        }
+    }
+
+    private fun observeExtensionImageFailures() {
+        viewModelScope.launch {
+            extensionManager.extensionImageFailures.collect { failure ->
+                reportExtensionContentFailure(
+                    title = "在线图片加载失败",
+                    context = "扩展 ID：${failure.image.extensionId}\n图片地址：${failure.image.url}",
+                    error = failure.error
+                )
+            }
+        }
+    }
+
+    private fun observePlaybackFailures() {
+        var lastErrorEventId = playbackState.value.errorEventId
+        viewModelScope.launch {
+            playbackState.collect { state ->
+                if (state.errorEventId == lastErrorEventId) return@collect
+                lastErrorEventId = state.errorEventId
+                val details = state.errorDetails ?: return@collect
+                val title = state.currentSong?.title?.takeIf(String::isNotBlank) ?: "未知歌曲"
+                enqueueExtensionContentFailure(
+                    title = "播放失败",
+                    details = "曲目：$title\n队列 ID：${state.currentQueueId ?: "未知"}\n\n$details"
+                )
+            }
+        }
+    }
+
+    fun dismissExtensionContentFailure(id: Long) {
+        _uiState.update { state ->
+            state.copy(extensionContentFailures = state.extensionContentFailures.filterNot { it.id == id })
+        }
+    }
+
     private fun beginPlaybackRequest() {
         playbackController.clearPendingPlaybackRequest()
     }
 
     init {
         observeExtensionRuntime()
+        observeExtensionImageFailures()
+        observePlaybackFailures()
         startProgressTicker()
         startPlaybackOrderTicker()
         startConfirmedPlaybackPositionTicker()
@@ -827,21 +906,28 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 }
                 viewModelScope.launch {
                     var songs: List<ProviderSong>? = null
+                    var failure: Throwable? = null
                     var cancelled = false
                     try {
                         songs = extensionManager.getProviderSongs(normalizedProviderId)
                     } catch (error: CancellationException) {
                         cancelled = true
                         throw error
-                    } catch (_: Throwable) {
-                        // ExtensionManager handles provider errors; this also covers a runtime
-                        // shutdown while a catalog request is in flight.
+                    } catch (error: Throwable) {
+                        failure = error
                     } finally {
                         providerCollectionLoads.remove(loadKey)
                         val runtimeState = extensionManager.runtimeState.value
                         if (!cancelled && !runtimeState.isReloading &&
                             runtimeState.generation == runtimeGeneration
                         ) {
+                            if (songs == null) {
+                                reportExtensionContentFailure(
+                                    title = "扩展歌曲列表读取失败",
+                                    context = "扩展 ID：$normalizedProviderId",
+                                    error = failure ?: IllegalStateException("扩展声明了歌曲列表能力，但没有返回结果。")
+                                )
+                            }
                             _uiState.update { state ->
                                 if (songs == null) {
                                     state.copy(
@@ -883,20 +969,28 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 }
                 viewModelScope.launch {
                     var albums: List<ProviderAlbum>? = null
+                    var failure: Throwable? = null
                     var cancelled = false
                     try {
                         albums = extensionManager.getProviderAlbums(normalizedProviderId)
                     } catch (error: CancellationException) {
                         cancelled = true
                         throw error
-                    } catch (_: Throwable) {
-                        // A stopped or unloaded runtime makes this catalog temporarily unavailable.
+                    } catch (error: Throwable) {
+                        failure = error
                     } finally {
                         providerCollectionLoads.remove(loadKey)
                         val runtimeState = extensionManager.runtimeState.value
                         if (!cancelled && !runtimeState.isReloading &&
                             runtimeState.generation == runtimeGeneration
                         ) {
+                            if (albums == null) {
+                                reportExtensionContentFailure(
+                                    title = "扩展专辑列表读取失败",
+                                    context = "扩展 ID：$normalizedProviderId",
+                                    error = failure ?: IllegalStateException("扩展声明了专辑列表能力，但没有返回结果。")
+                                )
+                            }
                             _uiState.update { state ->
                                 if (albums == null) {
                                     state.copy(
@@ -947,20 +1041,28 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             }
             viewModelScope.launch {
                 var playlists: List<ProviderPlaylist>? = null
+                var failure: Throwable? = null
                 var cancelled = false
                 try {
                     playlists = extensionManager.getProviderUserPlaylists(normalizedProviderId)
                 } catch (error: CancellationException) {
                     cancelled = true
                     throw error
-                } catch (_: Throwable) {
-                    // ExtensionManager 处理 Provider 错误；这里也覆盖 runtime 关闭期间的异常。
+                } catch (error: Throwable) {
+                    failure = error
                 } finally {
                     providerCollectionLoads.remove(loadKey)
                     val runtimeState = extensionManager.runtimeState.value
                     if (!cancelled && !runtimeState.isReloading &&
                         runtimeState.generation == runtimeGeneration
                     ) {
+                        if (playlists == null) {
+                            reportExtensionContentFailure(
+                                title = "扩展歌单读取失败",
+                                context = "扩展 ID：$normalizedProviderId",
+                                error = failure ?: IllegalStateException("扩展声明了用户歌单能力，但没有返回结果。")
+                            )
+                        }
                         _uiState.update { state ->
                             if (playlists == null) {
                                 state.copy(
@@ -1014,23 +1116,41 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             )
         }
         viewModelScope.launch {
+            var songs: List<ProviderSong>? = null
+            var failure: Throwable? = null
+            var cancelled = false
             try {
-                val songs = extensionManager.getProviderPlaylistSongs(
+                songs = extensionManager.getProviderPlaylistSongs(
                     playlist.providerId,
                     playlist.id
                 )
-                val effectiveSongs = songs ?: playlist.songs.takeIf { it.isNotEmpty() }
-                _uiState.update { state ->
-                    state.copy(
-                        providerPlaylistDetails = state.providerPlaylistDetails +
-                            (detailKey to ProviderPlaylistDetailState(
-                                songs = effectiveSongs.orEmpty(),
-                                loadFailed = effectiveSongs == null
-                            ))
-                    )
-                }
+            } catch (error: CancellationException) {
+                cancelled = true
+                throw error
+            } catch (error: Throwable) {
+                failure = error
             } finally {
                 providerCollectionLoads.remove(loadKey)
+                if (!cancelled) {
+                    val effectiveSongs = songs ?: playlist.songs.takeIf { it.isNotEmpty() }
+                    val loadFailed = effectiveSongs == null
+                    _uiState.update { state ->
+                        state.copy(
+                            providerPlaylistDetails = state.providerPlaylistDetails +
+                                (detailKey to ProviderPlaylistDetailState(
+                                    songs = effectiveSongs.orEmpty(),
+                                    loadFailed = loadFailed
+                                ))
+                        )
+                    }
+                    if (failure != null || loadFailed) {
+                        reportExtensionContentFailure(
+                            title = "扩展歌单曲目读取失败",
+                            context = "扩展 ID：${playlist.providerId}\n歌单 ID：${playlist.id}",
+                            error = failure ?: IllegalStateException("扩展没有返回此歌单的曲目。")
+                        )
+                    }
+                }
             }
         }
     }
@@ -1452,15 +1572,31 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
         _searchUiState.update { it.copy(landingState = ProviderSearchLandingState.Loading) }
         searchLandingJob = viewModelScope.launch {
-            val state = runCatching { extensionManager.getSearchLanding(scope.extensionId) }
-                .fold(
-                    onSuccess = { ProviderSearchLandingState.Loaded(it) },
-                    onFailure = { ProviderSearchLandingState.Error }
-                )
-            _searchUiState.update { current ->
-                if (generation == searchLandingGeneration && current.scope == scope && current.query.isBlank) {
-                    current.copy(landingState = state)
-                } else current
+            try {
+                val landing = extensionManager.getSearchLanding(scope.extensionId)
+                _searchUiState.update { current ->
+                    if (generation == searchLandingGeneration && current.scope == scope && current.query.isBlank) {
+                        current.copy(landingState = ProviderSearchLandingState.Loaded(landing))
+                    } else current
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (generation == searchLandingGeneration &&
+                    _searchUiState.value.scope == scope &&
+                    _searchUiState.value.query.isBlank
+                ) {
+                    reportExtensionContentFailure(
+                        title = "扩展推荐内容读取失败",
+                        context = "扩展 ID：${scope.extensionId}",
+                        error = error
+                    )
+                    _searchUiState.update { current ->
+                        if (generation == searchLandingGeneration && current.scope == scope && current.query.isBlank) {
+                            current.copy(landingState = ProviderSearchLandingState.Error(error.stackTraceToString()))
+                        } else current
+                    }
+                }
             }
         }
     }

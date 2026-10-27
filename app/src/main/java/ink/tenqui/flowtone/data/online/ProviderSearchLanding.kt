@@ -49,5 +49,5 @@ sealed interface ProviderSearchLandingState {
     data object Idle : ProviderSearchLandingState
     data object Loading : ProviderSearchLandingState
     data class Loaded(val landing: ProviderSearchLanding?) : ProviderSearchLandingState
-    data object Error : ProviderSearchLandingState
+    data class Error(val errorDetails: String) : ProviderSearchLandingState
 }

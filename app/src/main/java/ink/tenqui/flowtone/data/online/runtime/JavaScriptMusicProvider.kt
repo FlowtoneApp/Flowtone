@@ -87,8 +87,7 @@ class JavaScriptMusicProvider internal constructor(
 
     override suspend fun getSearchLanding(): ProviderSearchLanding? {
         if (AtomicCapabilityId.SearchLandingGet !in capabilities) return null
-        val raw = runCatching { runtime.invokeJson("getSearchLanding", JSONObject()) }.getOrNull()
-            ?: return null
+        val raw = runtime.invokeJson("getSearchLanding", JSONObject())
         return parseSearchLanding(raw)
     }
 

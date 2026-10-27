@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.playback
 
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingSimpleBasePlayer
@@ -100,6 +101,14 @@ internal class SessionPlaybackPlayer(
                 return
             }
             desiredPlayWhenReady = false
+            logicalError = PlaybackException(
+                error.message ?: "播放失败",
+                error,
+                error.errorCode,
+                Bundle(error.extras).apply {
+                    putString(PlaybackErrorDetailsExtraKey, error.stackTraceToString())
+                }
+            )
             onResolveError(item, error.message ?: "播放失败")
             invalidateState()
         }
@@ -394,13 +403,16 @@ internal class SessionPlaybackPlayer(
                 val providerSong = resolveProviderSong(item) ?: return@launch resolveFailed(
                     item,
                     requestToken,
-                    "该在线歌曲暂时无法恢复"
+                    IllegalStateException("该在线歌曲暂时无法恢复")
                 )
                 val resource = extensionManager.resolvePlaybackResource(providerSong)
-                    ?: return@launch resolveFailed(item, requestToken, "无法解析在线播放资源")
+                    ?: return@launch resolveFailed(
+                        item,
+                        requestToken,
+                        IllegalStateException("无法解析在线播放资源")
+                    )
                 Log.d(LOG_TAG, "resolve.resource generation=${requestToken.generation} queueId=${item.queueId}")
                 val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource)
-                    ?: return@launch resolveFailed(item, requestToken, "无法创建在线播放资源")
                 commitResolvedItem(
                     item = item.copy(runtimeProviderSong = providerSong),
                     mediaItem = mediaItem,
@@ -409,7 +421,7 @@ internal class SessionPlaybackPlayer(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                resolveFailed(item, requestToken, error.message ?: "在线播放失败")
+                resolveFailed(item, requestToken, error)
             }
         }
     }
@@ -461,9 +473,10 @@ internal class SessionPlaybackPlayer(
     private fun resolveFailed(
         item: PlaybackQueueItem,
         requestToken: PlaybackRequestToken,
-        message: String
+        error: Throwable
     ) {
         if (!isCurrent(requestToken)) return
+        val message = error.message ?: "在线播放失败"
         resolving = false
         resolvingQueueId = null
         desiredPlayWhenReady = false
@@ -471,8 +484,11 @@ internal class SessionPlaybackPlayer(
         pendingSeek = null
         logicalError = PlaybackException(
             message,
-            null,
-            PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+            error,
+            PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+            Bundle().apply {
+                putString(PlaybackErrorDetailsExtraKey, error.stackTraceToString())
+            }
         )
         onResolveError(item, message)
         invalidateState()
@@ -505,7 +521,7 @@ internal class SessionPlaybackPlayer(
                 try {
                     val providerSong = resolveProviderSong(target) ?: continue
                     val resource = extensionManager.resolvePlaybackResource(providerSong) ?: continue
-                    val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource) ?: continue
+                    val mediaItem = extensionManager.createPlaybackMediaItem(providerSong, resource)
                     preloadedMediaItems[target.queueId] = PreloadedOnlineItem(providerSong, mediaItem)
                     extensionManager.preloadPlaybackContent(
                         mediaItem = mediaItem,

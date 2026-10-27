@@ -60,6 +60,7 @@ class PlaybackController(
     private var logicalRequestGeneration = 0L
     private var expectedLogicalTarget: ExpectedLogicalTarget? = null
     private var playbackStateMediaId: String? = null
+    private var playbackErrorEventId = 0L
     private var isReleased = false
     private val setPlaybackOrderCommand = SessionCommand(
         ACTION_SET_PLAYBACK_ORDER,
@@ -89,12 +90,16 @@ class PlaybackController(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            val errorEventId = ++playbackErrorEventId
             _playbackState.update {
                 it.copy(
                     isPlaying = false,
                     playWhenReady = false,
                     isBuffering = false,
-                    errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
+                    errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25",
+                    errorDetails = error.extras.getString(PlaybackErrorDetailsExtraKey)
+                        ?: error.stackTraceToString(),
+                    errorEventId = errorEventId
                 )
             }
         }
@@ -171,12 +176,15 @@ class PlaybackController(
                 }
 
                 if (pendingPlaybackRequest is PendingPlaybackRequest.SingleSong) {
+                    val errorEventId = ++playbackErrorEventId
                     _playbackState.update {
                         it.copy(
                             isPlaying = false,
                             playWhenReady = false,
                             isBuffering = false,
-                            errorMessage = error.message ?: "\u64ad\u653e\u5668\u8fde\u63a5\u5931\u8d25"
+                            errorMessage = error.message ?: "\u64ad\u653e\u5668\u8fde\u63a5\u5931\u8d25",
+                            errorDetails = error.stackTraceToString(),
+                            errorEventId = errorEventId
                         )
                     }
                 }
@@ -407,8 +415,7 @@ class PlaybackController(
                 positionMs = positionMs.coerceAtLeast(0L),
                 bufferedPositionMs = bufferedPositionMs.coerceAtLeast(0L),
                 durationMs = durationMs.coerceAtLeast(0L),
-                playbackOrderMode = playbackOrderMode,
-                errorMessage = null
+                playbackOrderMode = playbackOrderMode
             )
         }
     }
@@ -572,7 +579,8 @@ class PlaybackController(
         _playbackState.update {
             it.copy(
                 playWhenReady = true,
-                errorMessage = null
+                errorMessage = null,
+                errorDetails = null
             )
         }
     }
@@ -704,7 +712,8 @@ class PlaybackController(
                 positionMs = 0L,
                 bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
-                errorMessage = null
+                errorMessage = null,
+                errorDetails = null
             )
         }
     }
@@ -757,13 +766,15 @@ class PlaybackController(
                 positionMs = 0L,
                 bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
-                errorMessage = null
+                errorMessage = null,
+                errorDetails = null
             )
         }
     }
 
     private fun updatePlaybackFailed(song: Song, error: Throwable) {
         playbackStateMediaId = null
+        val errorEventId = ++playbackErrorEventId
         _playbackState.update {
             it.copy(
                 currentSong = song,
@@ -773,7 +784,9 @@ class PlaybackController(
                 isBuffering = false,
                 bufferedPositionMs = 0L,
                 durationMs = song.durationMs.coerceAtLeast(0L),
-                errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25"
+                errorMessage = error.message ?: "\u64ad\u653e\u5931\u8d25",
+                errorDetails = error.stackTraceToString(),
+                errorEventId = errorEventId
             )
         }
     }

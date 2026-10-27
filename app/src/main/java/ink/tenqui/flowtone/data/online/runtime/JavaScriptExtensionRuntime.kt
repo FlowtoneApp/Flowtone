@@ -70,11 +70,12 @@ class JavaScriptExtensionRuntime(
             evaluateStatements("__flowtoneSetConfig(${configurationPayload()});")
             true
         }.onFailure { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
             Log.w(
                 LogTag,
                 "extension.config.refresh.failed extension=$extensionId type=${error.javaClass.simpleName}"
             )
-        }.getOrDefault(false)
+        }.getOrThrow()
     }
 
     private fun onMessage(message: Message) {

@@ -14,9 +14,21 @@ data class ProviderSearchPage(
     val nextCursor: String? = null
 )
 
+data class ProviderSearchFailure(
+    val extensionId: String?,
+    val exception: Throwable
+)
+
 sealed interface ProviderSearchCallResult {
-    data class Success(val page: ProviderSearchPage) : ProviderSearchCallResult
-    data class Failure(val exception: Throwable) : ProviderSearchCallResult
+    data class Success(
+        val page: ProviderSearchPage,
+        val failures: List<ProviderSearchFailure> = emptyList()
+    ) : ProviderSearchCallResult
+
+    data class Failure(
+        val exception: Throwable,
+        val failures: List<ProviderSearchFailure> = emptyList()
+    ) : ProviderSearchCallResult
 }
 
 const val DefaultProviderSearchPageSize = 20

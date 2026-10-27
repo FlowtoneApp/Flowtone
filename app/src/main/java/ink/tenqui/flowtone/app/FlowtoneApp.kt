@@ -57,6 +57,7 @@ import ink.tenqui.flowtone.permissions.openAppPermissionSettings
 import ink.tenqui.flowtone.permissions.shouldOpenAudioPermissionSettings
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.ui.components.ExtensionFailureDialog
 import ink.tenqui.flowtone.ui.player.PlayerUiState
 import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
 import ink.tenqui.flowtone.ui.screens.UpdateAvailableDialog
@@ -699,15 +700,26 @@ fun FlowtoneApp(
         }
     }
 
-    updatePromptRelease?.let { release ->
-        UpdateAvailableDialog(
-            release = release,
-            onUpdate = {
-                updateViewModel.dismissUpdatePrompt()
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.url)))
-            },
-            onLater = updateViewModel::dismissUpdatePrompt
+    val extensionFailure = uiState.extensionContentFailures.firstOrNull()
+    if (extensionFailure != null) {
+        ExtensionFailureDialog(
+            title = extensionFailure.title,
+            details = extensionFailure.details,
+            onDismiss = {
+                musicViewModel.dismissExtensionContentFailure(extensionFailure.id)
+            }
         )
+    } else {
+        updatePromptRelease?.let { release ->
+            UpdateAvailableDialog(
+                release = release,
+                onUpdate = {
+                    updateViewModel.dismissUpdatePrompt()
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.url)))
+                },
+                onLater = updateViewModel::dismissUpdatePrompt
+            )
+        }
     }
 }
 

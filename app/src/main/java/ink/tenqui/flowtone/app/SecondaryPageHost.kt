@@ -69,6 +69,7 @@ import ink.tenqui.flowtone.ui.theme.AppThemeMode
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsBackgroundStyle
 import ink.tenqui.flowtone.ui.player.localSongsForArtist
 import ink.tenqui.flowtone.viewmodel.MusicUiState
+import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
 
 internal class PlaylistDetailDestination(
@@ -645,8 +646,11 @@ internal fun SecondaryPageHost(
                                 ?.let { uiState.providerSongs[it] }.orEmpty(),
                             providerAlbums = providerIdentity?.providerId
                                 ?.let { uiState.providerAlbums[it] }.orEmpty(),
-                            providerSongsLoaded = providerIdentity?.providerId
-                                ?.let(uiState.providerSongs::containsKey) ?: true,
+                            providerSongsLoaded = providerIdentity?.providerId?.let { providerId ->
+                                uiState.providerSongs.containsKey(providerId) ||
+                                    uiState.providerSongCatalogLoadStates[providerId] ==
+                                    ProviderCatalogLoadState.Failed
+                            } ?: true,
                             songOrderTitle = providerIdentity?.songOrder.displayTitleOrNull(),
                             currentSong = currentSong,
                             onNavigateBack = onCloseSecondaryPage,
@@ -711,8 +715,11 @@ internal fun SecondaryPageHost(
                             hasLocalContent = identity.hasLocalContent,
                             localSongs = localSongs,
                             providerSongs = providerSongs,
-                            providerSongsLoaded = providerIdentity?.providerId
-                                ?.let(uiState.providerSongs::containsKey) ?: true,
+                            providerSongsLoaded = providerIdentity?.providerId?.let { providerId ->
+                                uiState.providerSongs.containsKey(providerId) ||
+                                    uiState.providerSongCatalogLoadStates[providerId] ==
+                                    ProviderCatalogLoadState.Failed
+                            } ?: true,
                             orderTitle = providerIdentity?.songOrder.displayTitleOrNull(),
                             currentSong = currentSong,
                             onLocalSongClick = { songs, index ->

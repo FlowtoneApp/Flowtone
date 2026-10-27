@@ -16,6 +16,7 @@ import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.network.ExtensionStreamClient
 import ink.tenqui.flowtone.data.online.image.ExtensionImageFetcher
 import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
+import ink.tenqui.flowtone.data.online.image.ExtensionImageLoadFailure
 import ink.tenqui.flowtone.data.online.image.ExtensionImageNetworkHost
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageInstaller
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionPackageInspector
@@ -41,6 +42,7 @@ import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ArtistAvatar
 import ink.tenqui.flowtone.core.online.ArtistMetadata
+import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaDataSource
 import ink.tenqui.flowtone.data.online.playback.ExtensionMediaSourceFactory
 import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackContentCache
@@ -48,13 +50,19 @@ import ink.tenqui.flowtone.data.online.playback.ExtensionPlaybackResourceStore
 import ink.tenqui.flowtone.data.online.playback.ExtensionStreamNetworkHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import coil3.EventListener
 import coil3.ImageLoader
+import coil3.request.ErrorResult
+import coil3.request.ImageRequest
 import coil3.svg.SvgDecoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -119,6 +127,11 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val songCollectionCache = ProviderCollectionSessionCache<ProviderSong>()
     private val albumCollectionCache = ProviderCollectionSessionCache<ProviderAlbum>()
     private var initialized = false
+    private val _extensionImageFailures = MutableSharedFlow<ExtensionImageLoadFailure>(
+        extraBufferCapacity = 32
+    )
+    internal val extensionImageFailures: SharedFlow<ExtensionImageLoadFailure> =
+        _extensionImageFailures.asSharedFlow()
     val runtimeState: StateFlow<ExtensionRuntimeState> = _runtimeState.asStateFlow()
     private val artistAvatarRegistry = ArtistAvatarExtensionRegistry(
         resultCache = avatarResultCache,
@@ -133,6 +146,16 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 add(SvgDecoder.Factory())
                 add(ExtensionImageKeyer)
                 add(ExtensionImageFetcher.Factory(ExtensionImageNetworkHost(::networkClientFor)))
+            }
+            .eventListenerFactory {
+                object : EventListener() {
+                    override fun onError(request: ImageRequest, result: ErrorResult) {
+                        val image = request.data as? ExtensionImage ?: return
+                        _extensionImageFailures.tryEmit(
+                            ExtensionImageLoadFailure(image, result.throwable)
+                        )
+                    }
+                }
             }
             .build()
     }
@@ -314,16 +337,22 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             }
             providerCall { provider.getPlaybackResource(song) }
                 .onFailure { error ->
-                    Log.w(LogTag, "extension.playback.resolve.failed extension=${song.trackRef.extensionId} type=${error.javaClass.simpleName}")
+                    Log.w(
+                        LogTag,
+                        "extension.playback.resolve.failed extension=${song.trackRef.extensionId}",
+                        error
+                    )
                 }
-                .getOrNull() ?: return@execute null
+                .getOrThrow() ?: return@execute null
         }
 
     internal fun createPlaybackMediaItem(
         song: ProviderSong,
         resource: ExtensionPlaybackResource
-    ): MediaItem? {
-        if (resource.extensionId != song.trackRef.extensionId) return null
+    ): MediaItem {
+        require(resource.extensionId == song.trackRef.extensionId) {
+            "播放资源扩展 ID 与歌曲来源不匹配"
+        }
         return runCatching {
             createPlaybackMediaItem(
                 extensionId = song.trackRef.extensionId,
@@ -336,10 +365,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         }.onFailure { error ->
             Log.w(
                 LogTag,
-                "extension.playback.mediaItem.failed extension=${song.trackRef.extensionId} " +
-                    "type=${error.javaClass.simpleName}"
+                "extension.playback.mediaItem.failed extension=${song.trackRef.extensionId}",
+                error
             )
-        }.getOrNull()
+        }.getOrThrow()
     }
 
     internal suspend fun createPlaybackMediaItem(song: ProviderSong): MediaItem? {
@@ -370,10 +399,21 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 .map { (extensionId, provider) ->
                     extensionId to providerCall { provider.searchPage(request) }
                 }
+            val failures = calls.mapNotNull { (extensionId, result) ->
+                result.exceptionOrNull()?.let { error ->
+                    ProviderSearchFailure(extensionId, error)
+                }
+            }
+            failures.forEach { failure ->
+                Log.w(
+                    LogTag,
+                    "extension.music.search.page.failed extension=${failure.extensionId} " +
+                        "category=${request.category}",
+                    failure.exception
+                )
+            }
             val pages = calls.mapNotNull { (extensionId, result) ->
-                result.onFailure { error ->
-                    Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
-                }.getOrNull()?.also { page ->
+                result.getOrNull()?.also { page ->
                     Log.d(
                         LogTag,
                         "extension.music.search.page.success extension=$extensionId " +
@@ -383,12 +423,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     )
                 }
             }
-            if (pages.isEmpty() && calls.isNotEmpty()) {
-                val failure = calls.firstNotNullOfOrNull { it.second.exceptionOrNull() }
-                if (failure != null) return@execute ProviderSearchCallResult.Failure(failure)
+            if (pages.isEmpty() && failures.isNotEmpty()) {
+                return@execute ProviderSearchCallResult.Failure(
+                    exception = failures.first().exception,
+                    failures = failures
+                )
             }
             ProviderSearchCallResult.Success(
-                ProviderSearchPage(results = pages.flatMap(ProviderSearchPage::results))
+                page = ProviderSearchPage(results = pages.flatMap(ProviderSearchPage::results)),
+                failures = failures
             )
         }
 
@@ -415,7 +458,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 },
                 onFailure = { error ->
                     Log.w(LogTag, "extension.music.search.page.failed extension=$extensionId category=${request.category} type=${error.javaClass.simpleName}")
-                    ProviderSearchCallResult.Failure(error)
+                    ProviderSearchCallResult.Failure(
+                        exception = error,
+                        failures = listOf(ProviderSearchFailure(extensionId, error))
+                    )
                 }
             )
     }
@@ -493,8 +539,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                Log.w(LogTag, "extension.music.songs.failed extension=$extensionId type=${error.javaClass.simpleName}")
-                null
+                Log.w(LogTag, "extension.music.songs.failed extension=$extensionId", error)
+                throw error
             }
         }
 
@@ -509,8 +555,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                Log.w(LogTag, "extension.music.albums.failed extension=$extensionId type=${error.javaClass.simpleName}")
-                null
+                Log.w(LogTag, "extension.music.albums.failed extension=$extensionId", error)
+                throw error
             }
         }
 
@@ -527,9 +573,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         } catch (error: Throwable) {
             Log.w(
                 LogTag,
-                "extension.music.playlist.failed extension=$extensionId type=${error.javaClass.simpleName}"
+                "extension.music.playlist.failed extension=$extensionId",
+                error
             )
-            null
+            throw error
         }
     }
 
@@ -544,10 +591,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             } catch (error: Throwable) {
                 Log.w(
                     LogTag,
-                    "extension.music.user_playlists.failed extension=" + extensionId +
-                        " type=" + error.javaClass.simpleName
+                    "extension.music.user_playlists.failed extension=$extensionId",
+                    error
                 )
-                null
+                throw error
             }
         }
 
@@ -563,10 +610,10 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         } catch (error: Throwable) {
             Log.w(
                 LogTag,
-                "extension.music.home_playlist_recommendations.failed extension=" + extensionId +
-                    " type=" + error.javaClass.simpleName
+                "extension.music.home_playlist_recommendations.failed extension=$extensionId",
+                error
             )
-            null
+            throw error
         }
     }
 
