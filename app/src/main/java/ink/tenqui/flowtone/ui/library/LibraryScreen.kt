@@ -2,8 +2,11 @@ package ink.tenqui.flowtone.ui.library
 
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +18,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -27,6 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.painter.Painter
@@ -434,6 +445,7 @@ internal fun rememberLibraryPlaylistController(): LibraryPlaylistController {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun LibraryScreen(
     songCount: Int,
@@ -444,7 +456,11 @@ internal fun LibraryScreen(
     libraryProviderOptions: List<LibraryProviderOption>,
     providerUserPlaylists: Map<String, List<ProviderPlaylist>>,
     providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState>,
+    refreshingSources: Set<String>,
+    refreshFailure: Pair<String, Long>?,
+    onRefreshLibrary: (String) -> Unit,
     isPageActive: Boolean,
+    pagerInMotion: Boolean,
     onLoadProviderUserPlaylists: (String) -> Unit,
     onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
     onOpenLocalLibrary: () -> Unit,
@@ -496,6 +512,22 @@ internal fun LibraryScreen(
         it.identity.key == selectedSourceKey
     } ?: sourceItems.first()
     val contentListState = playlistController.listState
+    val selectedKey = selectedSource.identity.key
+    val isRefreshing = selectedKey in refreshingSources
+    val refreshState = rememberPullToRefreshState()
+    var gestureStartedOnSourceCard by remember { mutableStateOf(false) }
+    val latestSourceBounds by rememberUpdatedState(sourceCardBoundsRoot)
+    val latestViewportBounds by rememberUpdatedState(pageViewportBoundsRoot)
+    val context = LocalContext.current
+    LaunchedEffect(refreshFailure) {
+        if (refreshFailure?.first == selectedKey && libraryPageActive) {
+            Toast.makeText(context, "刷新失败，请重试", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val refreshEnabled = libraryPageActive && !pagerInMotion && pageScope.phase == PageTransitionPhase.Current &&
+        sourceSwitcherState is LibrarySourceSwitcherState.Collapsed && !sourceSwipeLocked &&
+        playlistController.visualEditingPlaylistId == null &&
+        playlistController.createPlaylistState == CreatePlaylistState.Idle && !isRefreshing
     SideEffect {
         if (libraryPageActive) {
             playlistController.selectScrollSource(selectedSource.identity == LibrarySourceIdentity.Local)
@@ -620,7 +652,34 @@ internal fun LibraryScreen(
                 pageViewportBoundsRoot = coordinates.boundsInRoot()
             }
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                if (refreshEnabled && !gestureStartedOnSourceCard && !contentListState.canScrollBackward) {
+                    onRefreshLibrary(selectedKey)
+                }
+            },
+            state = refreshState,
+            enabled = refreshEnabled && !gestureStartedOnSourceCard,
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = refreshState,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            },
+            modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val origin = latestViewportBounds?.topLeft ?: Offset.Zero
+                    gestureStartedOnSourceCard = latestSourceBounds?.contains(down.position + origin) == true
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                    } while (event.changes.any { it.pressed })
+                    gestureStartedOnSourceCard = false
+                }
+            }
+        ) {
             LibraryHomeContent(
                 songCount = songCount,
                 pageScope = pageScope,

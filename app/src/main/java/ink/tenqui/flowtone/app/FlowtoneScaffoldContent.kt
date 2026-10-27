@@ -519,6 +519,7 @@ internal fun FlowtoneScaffoldContent(
                                             onSongClick = callbacks.onSongClick,
                                             onLoadProviderUserPlaylists =
                                                 callbacks.onLoadProviderUserPlaylists,
+                                            onRefreshLibrary = callbacks.onRefreshLibrary,
                                             onOpenProviderPlaylist = callbacks.onOpenProviderPlaylist,
                                             onOpenSettings = callbacks.onOpenSettings,
                                             onOpenAbout = callbacks.onOpenAbout,

@@ -528,13 +528,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         if (_runtimeState.value.isReloading) CanonicalAtomicCapabilitySet.Empty
         else musicProviders[extensionId]?.capabilities ?: CanonicalAtomicCapabilitySet.Empty
 
-    internal suspend fun getProviderSongs(extensionId: String): List<ProviderSong>? =
+    internal suspend fun getProviderSongs(extensionId: String, refresh: Boolean = false): List<ProviderSong>? =
         runtimeLifecycle.execute {
             val provider = musicProviders[extensionId] ?: return@execute null
             if (AtomicCapabilityId.CatalogSongsList !in provider.capabilities) return@execute null
             try {
-                songCollectionCache.getOrLoad(extensionId) {
-                    provider.getSongs()?.let(::dedupeProviderSongs)
+                if (refresh) {
+                    songCollectionCache.refresh(extensionId) { provider.getSongs()?.let(::dedupeProviderSongs) }
+                } else {
+                    songCollectionCache.getOrLoad(extensionId) { provider.getSongs()?.let(::dedupeProviderSongs) }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -544,13 +546,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             }
         }
 
-    internal suspend fun getProviderAlbums(extensionId: String): List<ProviderAlbum>? =
+    internal suspend fun getProviderAlbums(extensionId: String, refresh: Boolean = false): List<ProviderAlbum>? =
         runtimeLifecycle.execute {
             val provider = musicProviders[extensionId] ?: return@execute null
             if (AtomicCapabilityId.CatalogAlbumsList !in provider.capabilities) return@execute null
             try {
-                albumCollectionCache.getOrLoad(extensionId) {
-                    provider.getAlbums()?.let(::dedupeProviderAlbums)
+                if (refresh) {
+                    albumCollectionCache.refresh(extensionId) { provider.getAlbums()?.let(::dedupeProviderAlbums) }
+                } else {
+                    albumCollectionCache.getOrLoad(extensionId) { provider.getAlbums()?.let(::dedupeProviderAlbums) }
                 }
             } catch (error: CancellationException) {
                 throw error

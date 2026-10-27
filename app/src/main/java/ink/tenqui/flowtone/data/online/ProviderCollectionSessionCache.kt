@@ -21,6 +21,30 @@ internal class ProviderCollectionSessionCache<T> {
         }
     }
 
+    suspend fun refresh(key: String, loader: suspend () -> List<T>?): List<T>? {
+        val fresh = CompletableDeferred<List<T>?>()
+        val previous = requests.put(key, fresh)
+        try {
+            val result = loader()
+            fresh.complete(result)
+            if (result == null) restore(key, fresh, previous)
+            return result
+        } catch (error: Throwable) {
+            fresh.completeExceptionally(error)
+            restore(key, fresh, previous)
+            throw error
+        }
+    }
+
+    private fun restore(
+        key: String,
+        fresh: CompletableDeferred<List<T>?>,
+        previous: CompletableDeferred<List<T>?>?
+    ) {
+        if (previous == null || previous.isCancelled) requests.remove(key, fresh)
+        else requests.replace(key, fresh, previous)
+    }
+
     fun clear(key: String) {
         requests.remove(key)?.cancel()
     }

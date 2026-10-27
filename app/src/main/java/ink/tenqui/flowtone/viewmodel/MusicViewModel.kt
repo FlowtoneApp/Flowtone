@@ -66,6 +66,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.combine
@@ -77,6 +78,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 
@@ -112,8 +115,19 @@ data class MusicUiState(
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
     val providerAlbumCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
     val providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
-    val extensionContentFailures: List<ExtensionContentFailure> = emptyList()
+    val extensionContentFailures: List<ExtensionContentFailure> = emptyList(),
+    val libraryRefreshingSources: Set<String> = emptySet(),
+    val libraryRefreshFailure: Pair<String, Long>? = null
 )
+
+internal fun MusicUiState.startLibraryRefresh(sourceKey: String): MusicUiState =
+    copy(libraryRefreshingSources = libraryRefreshingSources + sourceKey)
+
+internal fun MusicUiState.finishLibraryRefresh(sourceKey: String, failureId: Long?): MusicUiState =
+    copy(
+        libraryRefreshingSources = libraryRefreshingSources - sourceKey,
+        libraryRefreshFailure = failureId?.let { sourceKey to it } ?: libraryRefreshFailure
+    )
 
 enum class ProviderCatalogLoadState {
     Loading,
@@ -230,7 +244,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
     private var playbackOrderModeJob: Job? = null
     private var lastProgressDiagnosticLogUptimeMs = 0L
     private var currentPlaybackSource: PlaybackSource = PlaybackSource.Unknown
+    private val localScanMutex = Mutex()
     private val providerCollectionLoads = mutableSetOf<String>()
+    private val providerRefreshVersions = mutableMapOf<String, Long>()
+    private var libraryRefreshFailureSequence = 0L
     private val extensionContentFailureSequence = AtomicLong()
     private val requestedProviderCollectionIds = mutableSetOf<String>()
     private val requestedProviderUserPlaylistIds = mutableSetOf<String>()
@@ -585,7 +602,7 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         }
     }
 
-    private fun refreshSearchIndex(songs: List<Song>, albums: List<LocalAlbum>) {
+    private fun refreshSearchIndex(songs: List<Song>, albums: List<LocalAlbum>): Job =
         viewModelScope.launch {
             searchRepository.updateLocalLibrary(songs, albums)
             val currentSearchState = _searchUiState.value
@@ -600,7 +617,6 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                 )
             }
         }
-    }
 
     private fun rebuildPlaybackQueueForMode(
         mode: PlaybackOrderMode,
@@ -690,7 +706,10 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch { performLocalScan(preservePlayback = false) }
+    }
+
+    private suspend fun performLocalScan(preservePlayback: Boolean): Boolean = localScanMutex.withLock {
             _uiState.update {
                 it.copy(
                     isLoading = true,
@@ -704,12 +723,13 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     songs to localAlbumsFrom(songs)
                 }
             }
+            (result.exceptionOrNull() as? CancellationException)?.let { throw it }
             val loadedSongs = result.getOrNull()?.first
 
             _uiState.update { currentState ->
                 result.fold(
                     onSuccess = { (songs, albums) ->
-                        if (playbackState.value.playbackQueue.isEmpty()) {
+                        if (!preservePlayback && playbackState.value.playbackQueue.isEmpty()) {
                             sourceQueue = songs
                             sourceTrackQueue = songs.map { song ->
                                 QueueTrackEntry(song.toPersistentTrack(), song)
@@ -746,12 +766,14 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     refreshSearchIndex(
                         songs = loadedSongs,
                         albums = result.getOrNull()?.second.orEmpty()
-                    )
+                    ).join()
                 }
-                reconcileCurrentSongWithLibrary()
-                restoreFromControllerIfPossible()
+                if (!preservePlayback) {
+                    reconcileCurrentSongWithLibrary()
+                    restoreFromControllerIfPossible()
+                }
             }
-        }
+            result.isSuccess
     }
 
     fun setLyricsDirectory(treeUri: Uri) {
@@ -881,10 +903,84 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         playSongAt(index = selectedIndex, source = source)
     }
 
+    fun refreshLibrary(sourceKey: String) {
+        if (sourceKey in _uiState.value.libraryRefreshingSources) return
+        val providerId = sourceKey.removePrefix("extension:").takeIf { sourceKey.startsWith("extension:") && it.isNotBlank() }
+        if (sourceKey != "local" && providerId == null) return
+        _uiState.update { it.startLibraryRefresh(sourceKey) }
+        val version = providerId?.let { id ->
+            ((providerRefreshVersions[id] ?: 0L) + 1L).also { providerRefreshVersions[id] = it }
+        }
+        viewModelScope.launch {
+            var success = false
+            try {
+                success = if (providerId == null) {
+                    _uiState.first { !it.isLoading }
+                    _uiState.value.hasPermission && performLocalScan(preservePlayback = true)
+                } else {
+                    refreshProviderLibrary(providerId, requireNotNull(version))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Log.w("FlowtoneLibrary", "Library refresh failed for $sourceKey", error)
+            } finally {
+                _uiState.update { state ->
+                    state.finishLibraryRefresh(
+                        sourceKey,
+                        if (success) null else ++libraryRefreshFailureSequence
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshProviderLibrary(providerId: String, version: Long): Boolean {
+        val generation = extensionManager.runtimeState.value.generation
+        if (!extensionManager.isMusicProviderRuntimeAvailable(providerId)) return false
+        val capabilities = extensionManager.providerCapabilities(providerId)
+        var success = true
+        suspend fun <T> fetch(label: String, operation: suspend () -> T?): T? {
+            return try {
+                operation().also { if (it == null) success = false }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                success = false
+                Log.w("FlowtoneLibrary", "Provider $providerId $label refresh failed", error)
+                null
+            }
+        }
+        val wantsSongs = AtomicCapabilityId.CatalogSongsList in capabilities
+        val wantsAlbums = AtomicCapabilityId.CatalogAlbumsList in capabilities
+        val wantsPlaylists = AtomicCapabilityId.UserPlaylistsList in capabilities
+        val songs = if (wantsSongs) fetch("songs") { extensionManager.getProviderSongs(providerId, refresh = true) } else null
+        val albums = if (wantsAlbums) fetch("albums") { extensionManager.getProviderAlbums(providerId, refresh = true) } else null
+        val playlists = if (wantsPlaylists) fetch("playlists") { extensionManager.getProviderUserPlaylists(providerId) } else null
+        val runtimeState = extensionManager.runtimeState.value
+        if (runtimeState.isReloading || runtimeState.generation != generation || providerRefreshVersions[providerId] != version) return false
+        _uiState.update { state ->
+            state.copy(
+                providerSongs = if (songs != null) state.providerSongs + (providerId to songs) else state.providerSongs,
+                providerAlbums = if (albums != null) state.providerAlbums + (providerId to albums) else state.providerAlbums,
+                providerUserPlaylists = if (playlists != null) state.providerUserPlaylists + (providerId to playlists) else state.providerUserPlaylists,
+                providerSongCatalogLoadStates = if (wantsSongs) state.providerSongCatalogLoadStates +
+                    (providerId to if (songs != null || providerId in state.providerSongs) ProviderCatalogLoadState.Loaded else ProviderCatalogLoadState.Failed) else state.providerSongCatalogLoadStates,
+                providerAlbumCatalogLoadStates = if (wantsAlbums) state.providerAlbumCatalogLoadStates +
+                    (providerId to if (albums != null || providerId in state.providerAlbums) ProviderCatalogLoadState.Loaded else ProviderCatalogLoadState.Failed) else state.providerAlbumCatalogLoadStates,
+                providerUserPlaylistLoadStates = if (wantsPlaylists) state.providerUserPlaylistLoadStates +
+                    (providerId to if (playlists != null || providerId in state.providerUserPlaylists) ProviderCatalogLoadState.Loaded else ProviderCatalogLoadState.Failed) else state.providerUserPlaylistLoadStates
+            )
+        }
+        return success
+    }
+
     fun loadProviderEntityCollections(providerId: String) {
         val normalizedProviderId = providerId.trim()
         if (normalizedProviderId.isEmpty()) return
         requestedProviderCollectionIds += normalizedProviderId
+        if ("extension:$normalizedProviderId" in _uiState.value.libraryRefreshingSources) return
+        val refreshVersion = providerRefreshVersions[normalizedProviderId] ?: 0L
         val capabilities = extensionManager.providerCapabilities(normalizedProviderId)
         val runtimeGeneration = extensionManager.runtimeState.value.generation
 
@@ -919,7 +1015,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                         providerCollectionLoads.remove(loadKey)
                         val runtimeState = extensionManager.runtimeState.value
                         if (!cancelled && !runtimeState.isReloading &&
-                            runtimeState.generation == runtimeGeneration
+                            runtimeState.generation == runtimeGeneration &&
+                            (providerRefreshVersions[normalizedProviderId] ?: 0L) == refreshVersion
                         ) {
                             if (songs == null) {
                                 reportExtensionContentFailure(
@@ -982,7 +1079,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                         providerCollectionLoads.remove(loadKey)
                         val runtimeState = extensionManager.runtimeState.value
                         if (!cancelled && !runtimeState.isReloading &&
-                            runtimeState.generation == runtimeGeneration
+                            runtimeState.generation == runtimeGeneration &&
+                            (providerRefreshVersions[normalizedProviderId] ?: 0L) == refreshVersion
                         ) {
                             if (albums == null) {
                                 reportExtensionContentFailure(
@@ -1019,6 +1117,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
         val normalizedProviderId = providerId.trim()
         if (normalizedProviderId.isEmpty()) return
         requestedProviderUserPlaylistIds += normalizedProviderId
+        if ("extension:$normalizedProviderId" in _uiState.value.libraryRefreshingSources) return
+        val refreshVersion = providerRefreshVersions[normalizedProviderId] ?: 0L
         if (AtomicCapabilityId.UserPlaylistsList !in
             extensionManager.providerCapabilities(normalizedProviderId)
         ) return
@@ -1054,7 +1154,8 @@ private var playbackTrackQueue: List<QueueTrackEntry> = emptyList()
                     providerCollectionLoads.remove(loadKey)
                     val runtimeState = extensionManager.runtimeState.value
                     if (!cancelled && !runtimeState.isReloading &&
-                        runtimeState.generation == runtimeGeneration
+                        runtimeState.generation == runtimeGeneration &&
+                        (providerRefreshVersions[normalizedProviderId] ?: 0L) == refreshVersion
                     ) {
                         if (playlists == null) {
                             reportExtensionContentFailure(

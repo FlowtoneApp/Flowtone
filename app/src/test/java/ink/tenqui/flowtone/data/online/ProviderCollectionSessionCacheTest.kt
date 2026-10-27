@@ -9,6 +9,34 @@ import org.junit.Test
 
 class ProviderCollectionSessionCacheTest {
     @Test
+    fun refreshDoesNotCancelExistingRequestAndKeepsNewestResult() = runBlocking {
+        val cache = ProviderCollectionSessionCache<String>()
+        val release = CompletableDeferred<Unit>()
+        val old = async { cache.getOrLoad("provider") { release.await(); listOf("old") } }
+        yield()
+        val shared = async { cache.getOrLoad("provider") { error("must share") } }
+        yield()
+        assertEquals(listOf("new"), cache.refresh("provider") { listOf("new") })
+        release.complete(Unit)
+        assertEquals(listOf("old"), old.await())
+        assertEquals(listOf("old"), shared.await())
+        assertEquals(listOf("new"), cache.getOrLoad("provider") { error("must use refreshed cache") })
+    }
+
+    @Test
+    fun failedRefreshRetainsPreviousResult() = runBlocking {
+        val cache = ProviderCollectionSessionCache<String>()
+        cache.getOrLoad("provider") { listOf("old") }
+        try {
+            cache.refresh("provider") { throw IllegalStateException("failure") }
+        } catch (_: IllegalStateException) {
+        }
+        assertEquals(listOf("old"), cache.getOrLoad("provider") { error("must retain cache") })
+        assertEquals(null, cache.refresh("provider") { null })
+        assertEquals(listOf("old"), cache.getOrLoad("provider") { error("must retain cache") })
+    }
+
+    @Test
     fun concurrentAndRepeatedLoadsShareOneExecution() = runBlocking {
         val cache = ProviderCollectionSessionCache<String>()
         val release = CompletableDeferred<Unit>()
