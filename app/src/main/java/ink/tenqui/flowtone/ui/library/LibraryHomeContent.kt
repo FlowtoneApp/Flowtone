@@ -1,6 +1,8 @@
 package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -56,6 +59,8 @@ internal fun LibraryHomeContent(
     playlists: List<LibraryPlaylistCard>,
     playlistItemHeight: Dp,
     libraryCardsProgress: Float,
+    enteringSourceKey: String?,
+    sourceEnterAlpha: Animatable<Float, AnimationVector1D>,
     playlistItemOffsetYPx: Float,
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
@@ -86,6 +91,9 @@ internal fun LibraryHomeContent(
     modifier: Modifier = Modifier
 ) {
     val isLocal = sourceContent.selectedSource.identity == LibrarySourceIdentity.Local
+    val sourceEntryModifier = if (sourceContent.selectedSource.identity.key == enteringSourceKey) {
+        Modifier.graphicsLayer { alpha = sourceEnterAlpha.value }
+    } else Modifier
     val localPlaylists = remember(likedPlaylist, playlists) { listOf(likedPlaylist) + playlists }
     val alphaSpec = remember { tween<Float>(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing) }
     val sizeSpec = remember { tween<IntSize>(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing) }
@@ -228,6 +236,7 @@ internal fun LibraryHomeContent(
                     onEditingPlaylistBoundsRemoved = onEditingPlaylistBoundsRemoved,
                     modifier = Modifier
                         .animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)
+                        .then(sourceEntryModifier)
                         .padding(top = if (index == 0) 6.dp else 0.dp)
                 )
             }
@@ -285,6 +294,7 @@ internal fun LibraryHomeContent(
                                     onClick = { onOpenProviderPlaylist(playlist) },
                                     modifier = Modifier
                                         .animateItem(fadeInSpec = alphaSpec, placementSpec = null, fadeOutSpec = alphaSpec)
+                                        .then(sourceEntryModifier)
                                         .padding(top = 6.dp)
                                         .then(pageScope.elementModifier(1, 2))
                                 )

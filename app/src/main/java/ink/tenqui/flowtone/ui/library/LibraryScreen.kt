@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.ui.library
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -32,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -69,6 +71,7 @@ import ink.tenqui.flowtone.viewmodel.MusicUiState
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal sealed class CreatePlaylistState {
@@ -93,25 +96,6 @@ internal class LibraryPlaylistController internal constructor(
     val listState: LazyListState
 ) {
     private val editablePlaylistBounds = mutableMapOf<String, Rect>()
-    private var scrollUsesLocalSource = true
-    private var localScrollPosition = 0 to 0
-    private var providerScrollPosition = 0 to 0
-
-    fun selectScrollSource(isLocal: Boolean) {
-        if (scrollUsesLocalSource == isLocal) return
-        val currentPosition = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
-        if (scrollUsesLocalSource) {
-            localScrollPosition = currentPosition
-        } else {
-            providerScrollPosition = currentPosition
-        }
-        val targetPosition = if (isLocal) localScrollPosition else providerScrollPosition
-        if (currentPosition != targetPosition) {
-            listState.requestScrollToItem(targetPosition.first, targetPosition.second)
-        }
-        scrollUsesLocalSource = isLocal
-    }
-
     var playlists by mutableStateOf(playlistStore.loadCards())
     var playlistName by mutableStateOf("")
     var createPlaylistState by mutableStateOf<CreatePlaylistState>(CreatePlaylistState.Idle)
@@ -492,6 +476,10 @@ internal fun LibraryScreen(
         mutableStateOf(LibrarySourceCardRenderOwner.Static)
     }
     var sourceSwipeLocked by remember { mutableStateOf(false) }
+    var sourceReturnInProgress by remember { mutableStateOf(false) }
+    val sourceSwitchScope = rememberCoroutineScope()
+    var enteringSourceKey by remember { mutableStateOf<String?>(null) }
+    var sourceEnterAlpha by remember { mutableStateOf(Animatable(1f)) }
     var sourceSwipeDirection by remember { mutableStateOf(0) }
     var sourceCardBoundsRoot by remember { mutableStateOf<Rect?>(null) }
     var sourceCardContentBoundsRoot by remember { mutableStateOf<Rect?>(null) }
@@ -525,14 +513,9 @@ internal fun LibraryScreen(
         }
     }
     val refreshEnabled = libraryPageActive && !pagerInMotion && pageScope.phase == PageTransitionPhase.Current &&
-        sourceSwitcherState is LibrarySourceSwitcherState.Collapsed && !sourceSwipeLocked &&
+        sourceSwitcherState is LibrarySourceSwitcherState.Collapsed && !sourceSwipeLocked && !sourceReturnInProgress &&
         playlistController.visualEditingPlaylistId == null &&
         playlistController.createPlaylistState == CreatePlaylistState.Idle && !isRefreshing
-    SideEffect {
-        if (libraryPageActive) {
-            playlistController.selectScrollSource(selectedSource.identity == LibrarySourceIdentity.Local)
-        }
-    }
     val selectedSourceIndex = sourceItems.indexOfFirst {
         it.identity == selectedSource.identity
     }.coerceAtLeast(0)
@@ -544,7 +527,7 @@ internal fun LibraryScreen(
         switcherState = sourceSwitcherState,
         swipeEnabled = libraryPageActive &&
             sourceSwitcherState is LibrarySourceSwitcherState.Collapsed &&
-            !sourceSwipeLocked,
+            !sourceSwipeLocked && !sourceReturnInProgress,
         swipeDirection = sourceSwipeDirection,
         providerPlaylists = selectedProviderId?.let(providerUserPlaylists::get),
         providerPlaylistLoadState =
@@ -592,18 +575,38 @@ internal fun LibraryScreen(
         }
     }
 
+    fun selectSource(targetKey: String) {
+        if (targetKey == selectedKey) return
+        val enterAlpha = Animatable(0f)
+        enteringSourceKey = targetKey
+        sourceEnterAlpha = enterAlpha
+        onSelectedSourceKeyChange(targetKey)
+        sourceSwitchScope.launch {
+            enterAlpha.animateTo(1f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
+        }
+    }
+
     fun selectSourceAt(index: Int) {
         if (!libraryPageActive ||
             sourceSwitcherState !is LibrarySourceSwitcherState.Collapsed ||
-            sourceSwipeLocked ||
+            sourceSwipeLocked || sourceReturnInProgress ||
             index !in sourceItems.indices ||
             index == selectedSourceIndex
         ) {
             return
         }
+        val targetKey = sourceItems[index].identity.key
         sourceSwipeDirection = if (index > selectedSourceIndex) -1 else 1
         sourceSwipeLocked = true
-        onSelectedSourceKeyChange(sourceItems[index].identity.key)
+        sourceReturnInProgress = true
+        selectSource(targetKey)
+        sourceSwitchScope.launch {
+            try {
+                contentListState.animateScrollToItem(0)
+            } finally {
+                sourceReturnInProgress = false
+            }
+        }
     }
 
     val latestOverlayContent = rememberUpdatedState<@Composable (Offset) -> Unit>(
@@ -623,9 +626,10 @@ internal fun LibraryScreen(
                 onSourceIconPainterLoaded = onSourceIconPainterLoaded,
                 progress = sourceSwitcherProgress,
                 onStateChange = { sourceSwitcherState = it },
+                onPrepareSourceSwitch = { contentListState.animateScrollToItem(0) },
                 onSourceSelected = { source ->
                     if (sourceItems.any { it.identity == source.identity }) {
-                        onSelectedSourceKeyChange(source.identity.key)
+                        selectSource(source.identity.key)
                         sourceSwipeDirection = 0
                     }
                 }
@@ -687,6 +691,8 @@ internal fun LibraryScreen(
                 playlists = playlistController.displayedPlaylists,
                 playlistItemHeight = playlistItemHeight,
                 libraryCardsProgress = libraryCardsProgress,
+                enteringSourceKey = enteringSourceKey,
+                sourceEnterAlpha = sourceEnterAlpha,
                 playlistItemOffsetYPx = playlistItemOffsetYPx,
                 flowCloudSpeed = flowCloudSpeed,
                 isFlowCloudPlaying = isFlowCloudPlaying,
@@ -722,7 +728,7 @@ internal fun LibraryScreen(
                 sourceIconPainters = sourceIconPaintersByIdentity,
                 onSourceIconPainterLoaded = onSourceIconPainterLoaded,
                 onSourceHeaderClick = {
-                    if (libraryPageActive && !sourceSwipeLocked) {
+                    if (libraryPageActive && !sourceSwipeLocked && !sourceReturnInProgress) {
                         sourceSwitcherState = LibrarySourceSwitcherState.Expanded
                     }
                 },

@@ -82,6 +82,8 @@ import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.ProviderExtensionIcon
 import ink.tenqui.flowtone.ui.components.extensionManifestColor
 import ink.tenqui.flowtone.ui.theme.LocalMainPagesCloudPalette
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -439,6 +441,7 @@ internal fun LibrarySourceSwitcherOverlay(
     onSourceIconPainterLoaded: (String, Painter) -> Unit,
     progress: Animatable<Float, AnimationVector1D>,
     onStateChange: (LibrarySourceSwitcherState) -> Unit,
+    onPrepareSourceSwitch: suspend () -> Unit,
     onSourceSelected: (LibrarySourceItem) -> Unit
 ) {
     val latestSourceItems by rememberUpdatedState(sourceItems)
@@ -612,15 +615,18 @@ internal fun LibrarySourceSwitcherOverlay(
 
                     if (layoutSnapshot == null) layoutSnapshot = snapshot
                     movingIdentity = target.identity
-                    // 静态卡片在 Overlay 期间先切到最终数据，且 swipeDirection=0 不启动第二套切换动画。
-                    onSourceSelected(currentTarget)
-                    progress.animateTo(
-                        targetValue = 0f,
-                        animationSpec = tween(
-                            FlowtoneMotion.DurationMillis,
-                            easing = FlowtoneMotion.Easing
+                    coroutineScope {
+                        val returnToTop = launch { onPrepareSourceSwitch() }
+                        onSourceSelected(currentTarget)
+                        progress.animateTo(
+                            targetValue = 0f,
+                            animationSpec = tween(
+                                FlowtoneMotion.DurationMillis,
+                                easing = FlowtoneMotion.Easing
+                            )
                         )
-                    )
+                        returnToTop.join()
+                    }
                     handoffToStatic(collapseSwitcher = true)
                 }
             }
@@ -648,7 +654,12 @@ internal fun LibrarySourceSwitcherOverlay(
             localAnchorBounds != null
         ) {
             val snapshot = snapshotForRender
-            val geometry = snapshot.geometry
+            val geometry = if (state is LibrarySourceSwitcherState.Switching) {
+                snapshot.geometry.copy(
+                    collapsedBounds = localAnchorBounds,
+                    collapsedContentBounds = localContentBounds ?: localAnchorBounds
+                )
+            } else snapshot.geometry
             val items = snapshot.sourceItems
             val scrollState = rememberScrollState(
                 initial = geometry.initialScrollPx.roundToInt()
