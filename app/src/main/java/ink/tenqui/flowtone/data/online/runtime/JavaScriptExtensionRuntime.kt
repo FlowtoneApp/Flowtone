@@ -17,16 +17,22 @@ import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
 import ink.tenqui.flowtone.data.online.configuration.extensionRuntimeConfigurationSnapshot
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import java.net.SocketTimeoutException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /** 一个扩展一个 isolate；能力代理仅通过它调用 JS，Host API 与生命周期在这里统一管理。 */
@@ -41,6 +47,10 @@ class JavaScriptExtensionRuntime(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val callbackExecutor = Executors.newSingleThreadExecutor()
     private val closed = AtomicBoolean(false)
+    private val portLock = Any()
+    private val configRefreshMutex = Mutex()
+    private val configUpdateSequence = AtomicLong()
+    private val pendingConfigUpdates = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private lateinit var port: MessagePort
 
     suspend fun start() {
@@ -63,19 +73,32 @@ class JavaScriptExtensionRuntime(
         return evaluateExpression("JSON.stringify(await globalThis.flowtoneExtension.$method())")
     }
 
-    /** Pushes a new ordinary-configuration snapshot without recreating the isolate. */
-    internal suspend fun refreshConfiguration(): Boolean {
-        if (closed.get()) return false
-        return runCatching {
-            evaluateStatements("__flowtoneSetConfig(${configurationPayload()});")
+    /** 更新闭包中的配置，并等待对应的 JS 确认。 */
+    internal suspend fun refreshConfiguration(): Boolean = configRefreshMutex.withLock {
+        if (closed.get()) return@withLock false
+        val id = "config-" + configUpdateSequence.incrementAndGet()
+        val acknowledgement = CompletableDeferred<Unit>()
+        val message = JSONObject()
+            .put("id", id)
+            .put("type", "config.update")
+            .put("payload", JSONObject(configurationPayload()))
+        try {
+            synchronized(portLock) {
+                check(!closed.get() && ::port.isInitialized) { "扩展 runtime 或消息端口不可用" }
+                pendingConfigUpdates[id] = acknowledgement
+                port.postMessage(Message.createStringMessage(message.toString()))
+            }
+            val confirmed = withTimeoutOrNull(ConfigRefreshTimeoutMillis) {
+                acknowledgement.await()
+                true
+            } ?: false
+            if (!confirmed) {
+                throw TimeoutException("等待扩展配置刷新确认超时：$extensionId")
+            }
             true
-        }.onFailure { error ->
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            Log.w(
-                LogTag,
-                "extension.config.refresh.failed extension=$extensionId type=${error.javaClass.simpleName}"
-            )
-        }.getOrThrow()
+        } finally {
+            pendingConfigUpdates.remove(id, acknowledgement)
+        }
     }
 
     private fun onMessage(message: Message) {
@@ -83,6 +106,22 @@ class JavaScriptExtensionRuntime(
         val incoming = runCatching { JSONObject(message.string) }.getOrNull() ?: return
         val requestId = incoming.optString("id")
         if (requestId.isEmpty()) return
+        if (incoming.optString("type") == "config.update.ack") {
+            synchronized(portLock) {
+                if (closed.get()) return
+                val acknowledgement = pendingConfigUpdates.remove(requestId) ?: return
+                if (incoming.opt("ok") == true) {
+                    acknowledgement.complete(Unit)
+                } else {
+                    acknowledgement.completeExceptionally(
+                        IllegalStateException(
+                            incoming.optString("error").ifBlank { "扩展拒绝配置更新：$extensionId" }
+                        )
+                    )
+                }
+            }
+            return
+        }
         val admission = if (incoming.optString("type") == "http.request") {
             val client = network as? AdmissionAwareExtensionNetworkClient
             val accepted = client?.tryAcquireAdmission()
@@ -161,13 +200,29 @@ class JavaScriptExtensionRuntime(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        scope.cancel(); if (::port.isInitialized) port.close(); isolate.close(); callbackExecutor.shutdownNow()
+        synchronized(portLock) {
+            pendingConfigUpdates.values.forEach {
+                it.completeExceptionally(IllegalStateException("扩展 runtime 已关闭：$extensionId"))
+            }
+            pendingConfigUpdates.clear()
+            if (::port.isInitialized) port.close()
+        }
+        scope.cancel(); isolate.close(); callbackExecutor.shutdownNow()
     }
 
     internal fun bootstrapScript(): String = """
         const __port = await android.getNamedPort('$PortName');
         const __pending = new Map(); let __sequence = 0;
         __port.onmessage = event => { let message; try { message = JSON.parse(event.data); } catch (_) { return; }
+          if (message.type === 'config.update') {
+            try {
+              __flowtoneSetConfig(message.payload);
+              __port.postMessage(JSON.stringify({id: message.id, type: 'config.update.ack', ok: true}));
+            } catch (error) {
+              __port.postMessage(JSON.stringify({id: message.id, type: 'config.update.ack', ok: false, error: String(error?.stack || error)}));
+            }
+            return;
+          }
           const pending = __pending.get(message.id); if (!pending) return; __pending.delete(message.id);
           message.ok ? pending.resolve(message.result) : pending.reject(new Error(message.error?.type || 'HOST_ERROR')); };
         function __rpc(type, payload) { const id = 'req-' + (++__sequence) + '-' + Date.now(); return new Promise((resolve, reject) => { __pending.set(id, {resolve, reject}); __port.postMessage(JSON.stringify({id, type, payload})); }); }
@@ -215,5 +270,11 @@ class JavaScriptExtensionRuntime(
 
     private fun success(id: String, value: Any?) = JSONObject().put("id", id).put("ok", true).put("result", value)
     private fun failure(id: String, type: String, message: String) = JSONObject().put("id", id).put("ok", false).put("error", JSONObject().put("type", type).put("message", message))
-    private companion object { val MethodName = Regex("[A-Za-z][A-Za-z0-9_]*"); const val PortName="flowtone-host"; const val EvaluationTimeoutSeconds=20L; const val LogTag="FlowtoneExtension" }
+    private companion object {
+        val MethodName = Regex("[A-Za-z][A-Za-z0-9_]*")
+        const val PortName = "flowtone-host"
+        const val EvaluationTimeoutSeconds = 20L
+        const val ConfigRefreshTimeoutMillis = 20_000L
+        const val LogTag = "FlowtoneExtension"
+    }
 }
