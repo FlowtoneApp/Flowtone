@@ -47,7 +47,7 @@ internal fun rememberTopLevelPageCollapseProgress(
 
     return TopLevelPageCollapseProgress(
         home = homeProgress,
-        library = libraryProgress,
+        library = if (libraryListState.firstVisibleItemIndex >= 2) 1f else libraryProgress,
         mine = 0f
     )
 }
