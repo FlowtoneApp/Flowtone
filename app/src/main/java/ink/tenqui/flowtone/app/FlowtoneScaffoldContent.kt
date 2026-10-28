@@ -58,7 +58,6 @@ import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.artistTopBarContentOcclusionProgress
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
-import ink.tenqui.flowtone.ui.library.LibrarySourceIdentity
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
@@ -97,9 +96,6 @@ internal fun FlowtoneScaffoldContent(
     artistTopBarStateStore: ArtistTopBarStateStore,
     modifier: Modifier = Modifier
 ) {
-    var selectedLibrarySourceKey by rememberSaveable {
-        mutableStateOf(LibrarySourceIdentity.Local.key)
-    }
     val secondaryPageStateHolder = rememberSaveableStateHolder()
     val retainedSecondaryStateKeys = remember { mutableSetOf<String>() }
     val activeSecondaryStateKeys = remember(state.secondaryEntries) {
@@ -501,33 +497,13 @@ internal fun FlowtoneScaffoldContent(
                                     ) {
                                         TopLevelPagerContent(
                                             pagerState = state.pagerState,
-                                            uiState = state.uiState,
-                                            selectedLibrarySourceKey = selectedLibrarySourceKey,
-                                            onSelectedLibrarySourceKeyChange = {
-                                                selectedLibrarySourceKey = it
-                                            },
-                                            homeScrollState = homeScrollState,
-                                            libraryPlaylistController =
-                                                libraryPlaylistController,
-                                            playlistSongEntries = playlistSongEntries,
-                                            permissionDenied = state.permissionDenied,
                                             showSwipeHint = state.showSwipeHint,
                                             pageScope = mainModeScope,
                                             userScrollEnabled =
                                                 libraryPlaylistController.editingPlaylistId == null,
-                                            onRequestPermission = callbacks.onRequestPermission,
-                                            onSongClick = callbacks.onSongClick,
-                                            onLoadProviderUserPlaylists =
-                                                callbacks.onLoadProviderUserPlaylists,
-                                            onRefreshLibrary = callbacks.onRefreshLibrary,
-                                            onOpenProviderPlaylist = callbacks.onOpenProviderPlaylist,
                                             onOpenSettings = callbacks.onOpenSettings,
                                             onOpenAbout = callbacks.onOpenAbout,
                                             cloudAccent = animatedCloudPalette.primary,
-                                            onOpenLocalLibrary = callbacks.onOpenLocalLibrary,
-                                            onOpenPlaylist = callbacks.onOpenPlaylist,
-                                            likedSongCount = likedSongCount,
-                                            flowCloudSpeed = state.flowCloudSpeed,
                                             modifier = Modifier.fillMaxSize()
                                         )
                                         TopLevelSharedPageHeader(
