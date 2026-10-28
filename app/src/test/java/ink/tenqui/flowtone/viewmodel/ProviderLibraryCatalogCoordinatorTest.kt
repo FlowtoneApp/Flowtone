@@ -199,6 +199,47 @@ class ProviderLibraryCatalogCoordinatorTest {
     }
 
     @Test
+    fun stalePlaylistDetailFromPreviousRuntimeCannotOverwriteReloadedDetail() = runBlocking {
+        withTimeout(5_000) {
+            val gateway = FakeGateway()
+            val coordinator = ProviderLibraryCatalogCoordinator(
+                scope = this,
+                gateway = gateway,
+                onFailure = { _, _, _ -> }
+            )
+            val playlist = ProviderPlaylistSearchItem(
+                identity = ProviderEntityIdentity("a", "playlist"),
+                title = "Playlist",
+                artist = ""
+            )
+            val detailKey = playlist.identity.stableKey
+            coordinator.loadProviderPlaylist(playlist)
+            yield()
+            assertEquals(1, gateway.detailCalls.size)
+
+            gateway.runtimeState.value = ExtensionRuntimeState(generation = 2)
+            coordinator.invalidateRuntime()
+            coordinator.reloadRequestedProviderData()
+            yield()
+            assertEquals(2, gateway.detailCalls.size)
+
+            gateway.detailCalls[1].result.complete(listOf(song("runtime-b")))
+            yield()
+            assertEquals(
+                listOf(song("runtime-b")),
+                coordinator.state.value.providerPlaylistDetails.getValue(detailKey).songs
+            )
+
+            gateway.detailCalls[0].result.complete(listOf(song("runtime-a")))
+            yield()
+            assertEquals(
+                listOf(song("runtime-b")),
+                coordinator.state.value.providerPlaylistDetails.getValue(detailKey).songs
+            )
+        }
+    }
+
+    @Test
     fun userPlaylistsWaitForRefreshDeduplicateAndRetryAfterFailure() = runBlocking {
         withTimeout(5_000) {
             val gateway = FakeGateway(AtomicCapabilityId.UserPlaylistsList)

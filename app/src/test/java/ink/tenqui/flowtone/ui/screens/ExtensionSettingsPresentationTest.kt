@@ -21,6 +21,10 @@ class ExtensionSettingsPresentationTest {
             SettingsSection.General,
             settingsSectionForPathSegments(listOf("通用"))
         )
+        assertEquals(
+            SettingsSection.Online,
+            settingsSectionForPathSegments(listOf(SettingsSection.Online.title))
+        )
         assertEquals(null, settingsSectionForPathSegments(emptyList()))
     }
 
@@ -41,15 +45,14 @@ class ExtensionSettingsPresentationTest {
         val breadcrumbs = secondaryStackBreadcrumbs(
             entries = listOf(
                 SecondaryStackEntry(0, SecondaryDestination.Standard(SecondaryPage.Settings)),
-                SecondaryStackEntry(1, SecondaryDestination.Standard(SecondaryPage.OnlineExtensions)),
-                SecondaryStackEntry(2, SecondaryDestination.ExtensionSettings(installed)),
-                SecondaryStackEntry(3, SecondaryDestination.ExtensionNetworkAccess(emptySet()))
+                SecondaryStackEntry(1, SecondaryDestination.ExtensionSettings(installed)),
+                SecondaryStackEntry(2, SecondaryDestination.ExtensionNetworkAccess(emptySet()))
             ),
-            settingsPathSegments = listOf("通用")
+            settingsPathSegments = listOf(SettingsSection.Online.title)
         )
 
         assertEquals(
-            listOf("设置", "通用", "在线扩展", "SoundCloud", "网络详情"),
+            listOf("设置", SettingsSection.Online.title, "SoundCloud", "网络详情"),
             breadcrumbs
         )
     }

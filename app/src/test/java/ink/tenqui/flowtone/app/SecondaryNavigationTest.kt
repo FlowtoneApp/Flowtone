@@ -16,17 +16,22 @@ import ink.tenqui.flowtone.ui.components.FullTitleOverlayBackResult
 import ink.tenqui.flowtone.ui.components.canOpenFullTitleOverlay
 import ink.tenqui.flowtone.ui.components.fullTitleOverlayBackResult
 import ink.tenqui.flowtone.ui.library.ArtistHeroBackgroundKind
+import ink.tenqui.flowtone.ui.screens.SettingsSection
+import ink.tenqui.flowtone.ui.screens.settingsSectionForPathSegments
 
 class SecondaryNavigationTest {
 
     @Test
-    fun onlineExtensionsPopRetainsTheSettingsSubsectionContext() {
+    fun extensionInstallPopRetainsOnlineSettingsSubsectionContext() {
+        val onlineSettingsPath = listOf(SettingsSection.Online.title)
         val remaining = SecondaryNavigationState()
             .push(SecondaryDestination.Standard(SecondaryPage.Settings))
-            .push(SecondaryDestination.Standard(SecondaryPage.OnlineExtensions))
+            .push(SecondaryDestination.ExtensionInstall)
             .pop()
 
+        assertEquals(SecondaryPage.Settings, remaining.current?.page)
         assertTrue(remaining.retainsSettingsPathSegments())
+        assertEquals(SettingsSection.Online, settingsSectionForPathSegments(onlineSettingsPath))
     }
 
     @Test
@@ -91,7 +96,7 @@ class SecondaryNavigationTest {
     @Test
     fun extensionNetworkAccessPopsBackToInstallWithoutReplacingTheInstallEntry() {
         val installState = SecondaryNavigationState()
-            .push(SecondaryDestination.Standard(SecondaryPage.OnlineExtensions))
+            .push(SecondaryDestination.Standard(SecondaryPage.Settings))
             .push(SecondaryDestination.ExtensionInstall)
         val installEntry = installState.currentEntry
 
@@ -102,6 +107,7 @@ class SecondaryNavigationTest {
         assertEquals(SecondaryDestination.ExtensionInstall, result.current)
         assertEquals(installEntry, result.currentEntry)
         assertEquals(2, result.entries.size)
+        assertTrue(result.retainsSettingsPathSegments())
     }
 
     @Test

@@ -46,9 +46,16 @@ internal object ExtensionManifestV2Parser {
         val knownCapabilities = capabilityIds.mapNotNull(AtomicCapabilityId::fromValue).toSet()
         val unknownCapabilities = capabilityIds.filter { AtomicCapabilityId.fromValue(it) == null }.distinct()
         val configuration = parseConfiguration(json.optJSONObject("configuration"))
-        val credentialRequests = parseCredentialRequests(json)
+        val parsedCredentialRequests = parseCredentialRequests(json)
         val credentialAtLeastOneGroups = parseCredentialAtLeastOneGroups(json)
-        CredentialRequestValidator.requireValid(credentialRequests, credentialAtLeastOneGroups)
+        CredentialRequestValidator.requireValid(parsedCredentialRequests, credentialAtLeastOneGroups)
+        val credentialRequests = parsedCredentialRequests.map { request ->
+            if (request.credentialType == CredentialType.GenericAccount) {
+                request.copy(genericFieldIds = request.contract.fields.map { it.id })
+            } else {
+                request
+            }
+        }
         val networkPermissions = parseNetworkPermissions(json)
         val manifest = ExtensionManifestJson.commonManifest(
             json = json,
@@ -237,13 +244,7 @@ internal object ExtensionManifestV2Parser {
                 )
             }
         }.orEmpty()
-        return requests.map { request ->
-            if (request.credentialType == CredentialType.GenericAccount) {
-                request.copy(genericFieldIds = request.contract.fields.map { it.id })
-            } else {
-                request
-            }
-        }
+        return requests
     }
 
     private fun parseCredentialAtLeastOneGroups(json: JSONObject): List<CredentialAtLeastOneGroup> {

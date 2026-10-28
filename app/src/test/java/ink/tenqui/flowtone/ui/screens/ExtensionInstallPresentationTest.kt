@@ -152,7 +152,7 @@ class ExtensionInstallPresentationTest {
             listOf("旧 WebDAV 凭证 · WebDAV 凭证 · 字段：服务器地址、用户名、密码"),
             presentation.removed.credentialRequests
         )
-        assertEquals(listOf("新服务器地址"), presentation.added.configurationFields)
+        assertEquals(listOf("运行必须：新服务器地址"), presentation.added.configurationFields)
         assertEquals(listOf("旧服务器地址"), presentation.removed.configurationFields)
         assertEquals(1, presentation.securityDowngrades.size)
         assertEquals("https://example.com", presentation.securityDowngrades.single().previousOrigin)
@@ -194,7 +194,7 @@ class ExtensionInstallPresentationTest {
 
         val presentation = extensionInstallOverlayPresentation(preview)
 
-        assertEquals("一、二、三 等 4 项", presentation.configurationSummary)
+        assertEquals("运行必须：一、二、三 等 4 项", presentation.configurationSummary)
         assertTrue(presentation.hasInsecureNetworkPermissions)
         assertEquals(4, extensionInstallConfigurationFields(preview).size)
     }

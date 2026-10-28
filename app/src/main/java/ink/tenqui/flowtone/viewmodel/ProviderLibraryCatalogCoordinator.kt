@@ -362,7 +362,8 @@ internal class ProviderLibraryCatalogCoordinator(
             }
             return
         }
-        val loadKey = "${gateway.runtimeState.value.generation}:playlist:$detailKey"
+        val runtimeGeneration = gateway.runtimeState.value.generation
+        val loadKey = "$runtimeGeneration:playlist:$detailKey"
         if (!providerCollectionLoads.add(loadKey)) return
         _state.update { state ->
             state.copy(
@@ -386,7 +387,10 @@ internal class ProviderLibraryCatalogCoordinator(
                 failure = error
             } finally {
                 providerCollectionLoads.remove(loadKey)
-                if (!cancelled) {
+                val runtimeState = gateway.runtimeState.value
+                if (!cancelled && !runtimeState.isReloading &&
+                    runtimeState.generation == runtimeGeneration
+                ) {
                     val effectiveSongs = songs ?: playlist.songs.takeIf { it.isNotEmpty() }
                     val loadFailed = effectiveSongs == null
                     _state.update { state ->

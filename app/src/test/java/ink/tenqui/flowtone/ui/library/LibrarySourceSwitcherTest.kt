@@ -10,7 +10,7 @@ import org.junit.Test
 
 class LibrarySourceSwitcherTest {
     @Test
-    fun localSourceIsFirstAndExtensionsAreSortedByName() {
+    fun localSourceIsFirstAndExtensionsAreSortedByNameThenId() {
         val sources = librarySourceItems(
             listOf(
                 provider("z.extension", "Zulu"),
@@ -20,14 +20,17 @@ class LibrarySourceSwitcherTest {
             )
         )
 
-        assertEquals(
-            listOf("本地音乐", "Able", "able", "Zulu"),
-            sources.map(LibrarySourceItem::name)
-        )
         assertEquals(LibrarySourceIdentity.Local, sources.first().identity)
+        assertEquals("本地音乐", sources.first().name)
         assertEquals(
-            listOf("a.extension", "b.extension", "z.extension"),
-            sources.drop(1).map { (it.identity as LibrarySourceIdentity.Extension).extensionId }
+            listOf(
+                "a.extension" to "able",
+                "b.extension" to "Able",
+                "z.extension" to "Zulu"
+            ),
+            sources.drop(1).map {
+                (it.identity as LibrarySourceIdentity.Extension).extensionId to it.name
+            }
         )
     }
 
@@ -113,7 +116,8 @@ class LibrarySourceSwitcherTest {
         )
 
         assertEquals(244f, geometry.contentHeightPx, 0.001f)
-        assertEquals(92f, geometry.rowBounds(1).top - geometry.rowBounds(0).top, 0.001f)
+        assertEquals(84f, geometry.rowStridePx, 0.001f)
+        assertEquals(84f, geometry.rowBounds(1).top - geometry.rowBounds(0).top, 0.001f)
     }
 
     @Test
