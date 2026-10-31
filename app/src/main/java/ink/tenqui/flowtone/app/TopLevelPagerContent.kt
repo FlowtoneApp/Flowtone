@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,12 +20,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.screens.MineScreen
 
 @Composable
 internal fun TopLevelPagerContent(
     pagerState: PagerState,
+    homeGallery: HomeGallerySelection,
+    homeScrollState: ScrollState,
+    onSongClick: (Song) -> Unit,
     showSwipeHint: Boolean,
     pageScope: PageTransitionScope,
     userScrollEnabled: Boolean,
@@ -44,7 +49,13 @@ internal fun TopLevelPagerContent(
             modifier = Modifier.fillMaxSize()
         ) { pageIndex ->
             when (TopLevelPage.entries[pageIndex]) {
-                TopLevelPage.Home,
+                TopLevelPage.Home -> HomeGalleryContent(
+                    selection = homeGallery,
+                    scrollState = homeScrollState,
+                    onSongClick = onSongClick,
+                    modifier = Modifier.fillMaxSize()
+                )
+
                 TopLevelPage.Library -> Box(modifier = Modifier.fillMaxSize())
 
                 TopLevelPage.Mine -> MineScreen(

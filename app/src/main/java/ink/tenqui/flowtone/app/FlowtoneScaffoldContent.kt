@@ -98,6 +98,10 @@ internal fun FlowtoneScaffoldContent(
 ) {
     val secondaryPageStateHolder = rememberSaveableStateHolder()
     val retainedSecondaryStateKeys = remember { mutableSetOf<String>() }
+    val homeGallerySeed = remember { kotlin.random.Random.nextLong() }
+    val homeGallery = remember(state.uiState.songs, homeGallerySeed) {
+        selectHomeGallery(state.uiState.songs, homeGallerySeed)
+    }
     val activeSecondaryStateKeys = remember(state.secondaryEntries) {
         state.secondaryEntries.mapTo(mutableSetOf(), SecondaryStackEntry::uiStateKey)
     }
@@ -497,6 +501,9 @@ internal fun FlowtoneScaffoldContent(
                                     ) {
                                         TopLevelPagerContent(
                                             pagerState = state.pagerState,
+                                            homeGallery = homeGallery,
+                                            homeScrollState = homeScrollState,
+                                            onSongClick = callbacks.onSongClick,
                                             showSwipeHint = state.showSwipeHint,
                                             pageScope = mainModeScope,
                                             userScrollEnabled =
