@@ -2,7 +2,6 @@ package ink.tenqui.flowtone.app
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -34,6 +33,7 @@ import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderBodyGap
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedStartPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedTopPadding
 import ink.tenqui.flowtone.ui.components.FlowtonePageHeaderExpandedEndPadding
+import ink.tenqui.flowtone.ui.components.flowtoneRoundedClickable
 import ink.tenqui.flowtone.ui.components.SongListItem
 
 /** 按当前会话种子从本地歌曲池构造不重复的首页推荐。 */
@@ -64,48 +64,74 @@ internal fun HomeGalleryContent(
         )
         Spacer(Modifier.height(FlowtonePageHeaderBodyGap))
         if (featuredSong != null) {
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                val artworkSize = minOf(132.dp, maxWidth * 0.4f)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                val contentWidth = maxWidth - 24.dp
+                val artworkSize = minOf(132.dp, contentWidth * 0.4f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .flowtoneRoundedClickable { onSongClick(featuredSong) }
+                        .padding(12.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.size(artworkSize)
-                            .clip(FlowtoneContentCardShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.MusicNote, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
-                        AsyncImage(
-                            model = featuredSong.artworkUri,
-                            contentDescription = "封面",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("本地音乐 · 随机发现",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(5.dp))
-                        Text(featuredSong.title,
-                            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(4.dp))
-                        Text(featuredSong.artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(10.dp))
-                        Text("播放歌曲",
-                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable {
-                                onSongClick(featuredSong)
-                            }.padding(vertical = 4.dp))
+                        Box(
+                            modifier = Modifier.size(artworkSize)
+                                .clip(FlowtoneContentCardShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            AsyncImage(
+                                model = featuredSong.artworkUri,
+                                contentDescription = "封面",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "本地音乐 · 随机发现",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                featuredSong.title,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                featuredSong.artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "点击播放",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }

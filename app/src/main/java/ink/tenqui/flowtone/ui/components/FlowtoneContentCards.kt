@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,13 @@ import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
 internal val FlowtoneContentCardShape = RoundedCornerShape(8.dp)
 internal val FlowtoneCollectionCardWidth = 140.dp
 internal val FlowtoneCollectionTrailingActionCardWidth = 84.dp
+
+internal fun Modifier.flowtoneRoundedClickable(
+    shape: Shape = FlowtoneContentCardShape,
+    onClick: () -> Unit
+): Modifier = this
+    .clip(shape)
+    .clickable(onClick = onClick)
 
 @Composable
 internal fun FlowtoneContentSectionTitle(
