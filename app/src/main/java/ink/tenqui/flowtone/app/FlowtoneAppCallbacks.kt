@@ -62,6 +62,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenAbout: () -> Unit,
     val onOpenLocalLibrary: () -> Unit,
     val onOpenPlaylist: (LibraryPlaylistCard) -> Unit,
+    val onOpenFastInteractionTestPlaylist: (List<Song>) -> Unit,
     val onOpenAlbum: (Long) -> Unit,
     val onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     val onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
@@ -346,6 +347,17 @@ internal fun flowtoneAppCallbacks(
             appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
                 SecondaryDestination.Playlist(playlist.id, playlist.title)
             )
+        },
+        onOpenFastInteractionTestPlaylist = { songs ->
+            if (ink.tenqui.flowtone.BuildConfig.BUILD_TYPE == "fast") {
+                appState.secondaryNavigation = appState.secondaryNavigation.replaceWith(
+                    SecondaryDestination.Playlist(
+                        playlistId = null,
+                        title = "测试歌单",
+                        fastTestSongs = songs
+                    )
+                )
+            }
         },
         onOpenAlbum = onOpenAlbum,
         onOpenProviderAlbum = onOpenProviderAlbum,

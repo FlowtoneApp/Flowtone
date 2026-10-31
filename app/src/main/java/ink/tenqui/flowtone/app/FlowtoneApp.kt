@@ -7,6 +7,7 @@ import android.util.Log
 import android.widget.Toast
 import android.os.Build
 import android.provider.MediaStore
+import ink.tenqui.flowtone.BuildConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -59,6 +60,7 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.ExtensionFailureDialog
 import ink.tenqui.flowtone.ui.player.PlayerUiState
+import ink.tenqui.flowtone.ui.library.FastInteractionTrace
 import ink.tenqui.flowtone.ui.screens.AudioPermissionGateScreen
 import ink.tenqui.flowtone.ui.screens.UpdateAvailableDialog
 import ink.tenqui.flowtone.ui.theme.AppThemeMode
@@ -98,6 +100,20 @@ fun FlowtoneApp(
     val searchUiState by musicViewModel.searchUiState.collectAsState()
     val likedTracks by musicViewModel.likedTracks.collectAsState()
     val playerUiState = PlayerUiState.from(playbackState)
+    val playerUiSong = playerUiState.currentSong
+    val playerUiSongIdentity = playerUiSong?.let { "${it.sourceType}:${it.id}:${it.uri}" }
+    if (BuildConfig.BUILD_TYPE == "fast") {
+        LaunchedEffect(playerUiSongIdentity) {
+            playerUiSong?.let { song ->
+                FastInteractionTrace.record(
+                    stage = "PLAYER_UI_STATE_OBSERVED",
+                    page = "player-ui",
+                    song = song,
+                    details = "observer=LaunchedEffect; rendered frame not measured"
+                )
+            }
+        }
+    }
     val appPreferences = remember(context) {
         AppPreferences(context.applicationContext)
     }
@@ -596,6 +612,12 @@ fun FlowtoneApp(
                 permissionLauncher.launch(currentAudioPermission())
             },
             onSongClick = { song ->
+                FastInteractionTrace.record(
+                    stage = "PLAY_COMMAND",
+                    page = "single-song",
+                    song = song,
+                    details = "queue=single"
+                )
                 musicViewModel.playSong(song, PlaybackSource.LocalLibrary)
             },
             onOnlineSongClick = musicViewModel::playProviderSong,
@@ -604,9 +626,21 @@ fun FlowtoneApp(
             onRefreshLibrary = musicViewModel::refreshLibrary,
             onProviderSongQueueClick = musicViewModel::playProviderSongQueue,
             onPlaylistSongClick = { songs, startIndex, source ->
+                FastInteractionTrace.record(
+                    stage = "PLAY_COMMAND",
+                    page = "song-queue",
+                    song = songs.getOrNull(startIndex),
+                    details = "index=$startIndex size=${songs.size} source=$source"
+                )
                 musicViewModel.playSongQueue(songs, startIndex, source)
             },
             onPersistentTrackQueueClick = { tracks, startIndex, source ->
+                FastInteractionTrace.record(
+                    stage = "PLAY_COMMAND",
+                    page = "persistent-track-queue",
+                    details = "index=$startIndex size=${tracks.size} " +
+                        "track=${tracks.getOrNull(startIndex)?.identityKey} source=$source"
+                )
                 musicViewModel.playPersistentTrackQueue(tracks, startIndex, source)
             },
             onOpenAlbum = { albumId ->

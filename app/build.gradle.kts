@@ -107,6 +107,9 @@ android {
             "PERFORMANCE_SAMPLING_ENABLED",
             "false"
         )
+        buildConfigField("boolean", "HOME_OVERSCROLL_EXPERIMENT_ENABLED", "false")
+        buildConfigField("boolean", "MINIMAL_HOME_EXPERIMENT_ENABLED", "false")
+        buildConfigField("String", "HOME_ISOLATION_MODE", "\"normal\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -174,6 +177,43 @@ android {
                 "boolean",
                 "PERFORMANCE_SAMPLING_ENABLED",
                 isPerformanceSamplingEnabled.toString()
+            )
+            val runHomeOverscrollExperiment = providers
+                .gradleProperty("flowtoneHomeOverscrollExperiment")
+                .orNull
+                ?.toBooleanStrictOrNull()
+                ?: false
+            buildConfigField(
+                "boolean",
+                "HOME_OVERSCROLL_EXPERIMENT_ENABLED",
+                runHomeOverscrollExperiment.toString()
+            )
+            val runMinimalHomeExperiment = providers
+                .gradleProperty("flowtoneMinimalHomeExperiment")
+                .orNull
+                ?.toBooleanStrictOrNull()
+                ?: false
+            val requestedHomeIsolation = providers
+                .gradleProperty("flowtoneHomeIsolation")
+                .orNull
+                ?.trim()
+                ?.lowercase()
+            val homeIsolationMode = when (requestedHomeIsolation) {
+                null -> if (runMinimalHomeExperiment) "baseline" else "normal"
+                "baseline", "hero", "discovery", "songs", "legacy", "original-hero" -> requestedHomeIsolation
+                else -> throw GradleException(
+                    "flowtoneHomeIsolation must be one of: baseline, hero, discovery, songs, legacy, original-hero"
+                )
+            }
+            buildConfigField(
+                "String",
+                "HOME_ISOLATION_MODE",
+                "\"$homeIsolationMode\""
+            )
+            buildConfigField(
+                "boolean",
+                "MINIMAL_HOME_EXPERIMENT_ENABLED",
+                (homeIsolationMode == "baseline").toString()
             )
 
             matchingFallbacks += listOf("debug")

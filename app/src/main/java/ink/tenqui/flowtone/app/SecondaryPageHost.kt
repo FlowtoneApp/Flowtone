@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.app
 
+import ink.tenqui.flowtone.BuildConfig
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +47,7 @@ import ink.tenqui.flowtone.ui.library.ProviderPlaylistDetailScreen
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
+import ink.tenqui.flowtone.ui.library.FastInteractionTestPlaylistScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.screens.AboutScreen
@@ -446,7 +448,28 @@ internal fun SecondaryPageHost(
                 val navigationDestination =
                     destination as? SecondaryDestination.Playlist ?: return@Box
                 val providerPlaylist = navigationDestination.providerPlaylist
-                if (providerPlaylist != null) {
+                val fastTestSongs = navigationDestination.fastTestSongs
+                if (BuildConfig.BUILD_TYPE == "fast" && fastTestSongs != null) {
+                    FastInteractionTestPlaylistScreen(
+                        songs = fastTestSongs,
+                        currentSong = currentSong,
+                        onSongClick = { tracks, index ->
+                            onPersistentTrackQueueClick(
+                                tracks,
+                                index,
+                                PlaybackSource.LocalLibrary
+                            )
+                        },
+                        pageTransition = pageScope,
+                        itemModifier = ::playlistItemModifier,
+                        onCollapseProgressStateChange =
+                            onDetailHeaderCollapseProgressStateChange,
+                        headerModifier = elementModifier(0),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .rightSwipeBackGesture(::closeSelectionOrPage)
+                    )
+                } else if (providerPlaylist != null) {
                     val detail = uiState.providerPlaylistDetails[providerPlaylist.identity.stableKey]
                     ProviderPlaylistDetailScreen(
                         playlist = providerPlaylist,

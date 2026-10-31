@@ -21,8 +21,10 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Playlist
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.PlaylistSongEntry
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.toPresentationSong
+import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.LibraryPlaylistCardStore
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
@@ -644,5 +646,114 @@ internal fun PlaylistDetailScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+    }
+}
+
+@Composable
+internal fun FastInteractionTestPlaylistScreen(
+    songs: List<Song>,
+    currentSong: Song?,
+    onSongClick: (List<PersistentTrack>, Int) -> Unit,
+    pageTransition: PageTransitionScope,
+    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
+        { _, _, _ -> Modifier },
+    onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
+    headerModifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
+) {
+    val title = "测试歌单"
+    val listState = rememberLazyListState()
+    val entries = remember(songs) {
+        songs.map { song ->
+            SelectablePlaylistSong(
+                selectionKey = "local:${song.id}",
+                song = song,
+                track = song.toPersistentTrack()
+            )
+        }
+    }
+    val artworkUri = remember(entries) {
+        entries.firstNotNullOfOrNull { entry -> entry.song.artworkUri }
+    }
+    val metadata = remember {
+        PlaylistDetailMetadata(
+            title = title,
+            creatorName = "Flowtone 临时对照",
+            description = "仅用于 fast 构建中的歌曲点击对照，不会保存为歌单。"
+        )
+    }
+    val batchActions = remember { PlaylistBatchActions() }
+
+    PlaylistDetailCollapsingHeaderScaffold(
+        title = title,
+        listState = listState.takeIf { entries.isNotEmpty() },
+        showContentHeader = false,
+        onCollapseProgressStateChange = onCollapseProgressStateChange,
+        headerModifier = headerModifier,
+        contentModifier = contentModifier,
+        modifier = modifier.observeFastInteractionPointerEvents("test-playlist-detail")
+    ) {
+        if (entries.isEmpty()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                PlaylistMetadataHeader(
+                    metadata = metadata,
+                    songCount = 0,
+                    artworkUri = null,
+                    modifier = pageTransition.elementModifier(0)
+                )
+            }
+        } else {
+            SelectablePlaylistSongList(
+                sourceKey = "fast-interaction-test-playlist",
+                source = PlaylistSelectionSource.UserPlaylist,
+                playlistTitle = title,
+                entries = entries,
+                listState = listState,
+                currentSong = currentSong,
+                likedSongKeys = batchActions.likedSongKeys,
+                editablePlaylists = batchActions.editablePlaylists,
+                clearSelectionRequest = batchActions.clearSelectionRequest,
+                onSelectionModeChange = batchActions.onSelectionModeChange,
+                onSelectionTopBarStateChange = batchActions.onSelectionTopBarStateChange,
+                onSongClick = { tracks, index ->
+                    entries.getOrNull(index)?.song?.let { song ->
+                        FastInteractionTrace.record(
+                            stage = "ON_CLICK_BEGIN",
+                            page = "test-playlist-detail",
+                            song = song,
+                            details = "queueIndex=$index queueSize=${tracks.size}"
+                        )
+                    }
+                    onSongClick(tracks, index)
+                },
+                onAddSongsNext = batchActions.onAddSongsNext,
+                onAppendSongsToQueue = batchActions.onAppendSongsToQueue,
+                onAddSongsToPlaylists = batchActions.onAddSongsToPlaylists,
+                onSetSongsLiked = batchActions.onSetSongsLiked,
+                onDeleteSongs = batchActions.onDeleteSongs,
+                onRemoveEntries = { _, done -> done(false) },
+                reorderAnimationKey = title,
+                pageTransition = pageTransition,
+                itemModifier = itemModifier,
+                headerContent = {
+                    PlaylistMetadataHeader(
+                        metadata = metadata,
+                        songCount = entries.size,
+                        artworkUri = artworkUri,
+                        modifier = pageTransition.elementModifier(0)
+                    )
+                },
+                onDiagnosticPressInteraction = { song ->
+                    FastInteractionTrace.record(
+                        stage = "PRESS_INTERACTION_COLLECTED",
+                        page = "test-playlist-detail",
+                        song = song,
+                        details = "source=MutableInteractionSource collector; visual frame not measured"
+                    )
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }

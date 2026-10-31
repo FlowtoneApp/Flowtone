@@ -300,6 +300,30 @@ internal fun LibraryPlaylistListVisual(
     }
 }
 
+/** 仅供 fast 交互实验使用，不创建或伪造歌单身份。 */
+@Composable
+internal fun LibraryTemporaryPlaylistListItem(
+    title: String,
+    subtitle: String,
+    itemHeight: Dp,
+    flowCloudSpeed: Float,
+    isFlowCloudPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    PlaylistListItemSurface(
+        visualType = PlaylistCardVisualType.UserPlaylist,
+        itemHeight = itemHeight,
+        appearProgress = 1f,
+        clickModifier = Modifier.clickable(onClick = onClick),
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = isFlowCloudPlaying,
+        modifier = modifier
+    ) { contentColors ->
+        PlaylistListText(title, subtitle, contentColors)
+    }
+}
+
 @Composable
 internal fun LibraryProviderPlaylistListItem(
     playlist: ProviderPlaylist,

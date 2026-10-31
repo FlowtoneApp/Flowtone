@@ -18,6 +18,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,9 +36,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -68,6 +71,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.image.ExtensionImageKeyer
+import kotlinx.coroutines.flow.collect
 
 internal data class SongListItemLayoutSpec(
     val rowMinHeight: Dp,
@@ -168,10 +172,22 @@ fun SongListItem(
     isNextSelected: Boolean = false,
     selectionSlotPadding: Dp = 0.dp,
     onLongClick: ((Song) -> Unit)? = null,
-    extensionArtwork: ExtensionImage? = null
+    extensionArtwork: ExtensionImage? = null,
+    onPressInteraction: ((Song) -> Unit)? = null
 ) {
     val hapticFeedback = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
+    if (onPressInteraction != null) {
+        val latestSong by rememberUpdatedState(song)
+        val latestPressInteraction by rememberUpdatedState(onPressInteraction)
+        LaunchedEffect(interactionSource) {
+            interactionSource.interactions.collect { interaction ->
+                if (interaction is PressInteraction.Press) {
+                    latestPressInteraction?.invoke(latestSong)
+                }
+            }
+        }
+    }
     val itemIndication = if (selectionMode) null else LocalIndication.current
     val itemClickModifier = if (!selectionMode && onLongClick != null) {
         Modifier.combinedClickable(

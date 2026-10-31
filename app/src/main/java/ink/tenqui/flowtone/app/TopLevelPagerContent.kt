@@ -27,9 +27,14 @@ import ink.tenqui.flowtone.ui.screens.MineScreen
 @Composable
 internal fun TopLevelPagerContent(
     pagerState: PagerState,
-    homeGallery: HomeGallerySelection,
+    homeGallery: HomeGallerySelection?,
     homeScrollState: ScrollState,
+    homeSongs: List<Song>,
+    minimalHomeSongs: List<Song>,
+    fastInteractionTestSelection: FastInteractionTestSelection?,
+    currentSong: Song?,
     onSongClick: (Song) -> Unit,
+    onOpenFastInteractionTestPlaylist: (List<Song>) -> Unit,
     showSwipeHint: Boolean,
     pageScope: PageTransitionScope,
     userScrollEnabled: Boolean,
@@ -52,11 +57,31 @@ internal fun TopLevelPagerContent(
                 TopLevelPage.Home -> HomeGalleryContent(
                     selection = homeGallery,
                     scrollState = homeScrollState,
+                    pagerState = pagerState,
+                    pagerFlingBehavior = pagerFlingBehavior,
+                    pagerScrollEnabled = userScrollEnabled,
+                    pageScope = pageScope,
+                    songs = homeSongs,
+                    minimalSongs = minimalHomeSongs,
+                    currentSong = currentSong,
                     onSongClick = onSongClick,
                     modifier = Modifier.fillMaxSize()
                 )
 
-                TopLevelPage.Library -> Box(modifier = Modifier.fillMaxSize())
+                TopLevelPage.Library -> {
+                    val selection = fastInteractionTestSelection
+                    if (selection != null) {
+                        FastLibraryInteractionContent(
+                            selection = selection,
+                            currentSong = currentSong,
+                            onSongClick = onSongClick,
+                            onOpenTestPlaylist = onOpenFastInteractionTestPlaylist,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize())
+                    }
+                }
 
                 TopLevelPage.Mine -> MineScreen(
                     cloudAccent = cloudAccent,

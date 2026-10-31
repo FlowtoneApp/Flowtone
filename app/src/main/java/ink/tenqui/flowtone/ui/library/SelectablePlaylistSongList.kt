@@ -179,6 +179,7 @@ internal fun SelectablePlaylistSongList(
     descriptionEditing: Boolean = false,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier,
     headerContent: (@Composable () -> Unit)? = null,
+    onDiagnosticPressInteraction: ((Song) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val headerItemCount = if (headerContent == null) 0 else 1
@@ -824,6 +825,7 @@ internal fun SelectablePlaylistSongList(
                             onSongClick(renderedEntries.map { it.track }, index)
                         }
                     },
+                    onPressInteraction = onDiagnosticPressInteraction,
                     // 长按与拖动统一由 LazyColumn 识别，避免松手时再触发播放。
                     onLongClick = null,
                     modifier = if (enterGroupReady) {
