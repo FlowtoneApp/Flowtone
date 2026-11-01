@@ -30,6 +30,7 @@ internal fun TopLevelPagerContent(
     homeGallery: HomeGallerySelection,
     homeScrollState: ScrollState,
     onSongClick: (Song) -> Unit,
+    libraryContent: @Composable () -> Unit,
     showSwipeHint: Boolean,
     pageScope: PageTransitionScope,
     userScrollEnabled: Boolean,
@@ -56,7 +57,7 @@ internal fun TopLevelPagerContent(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                TopLevelPage.Library -> Box(modifier = Modifier.fillMaxSize())
+                TopLevelPage.Library -> libraryContent()
 
                 TopLevelPage.Mine -> MineScreen(
                     cloudAccent = cloudAccent,

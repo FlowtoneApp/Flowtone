@@ -32,6 +32,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalView
+import ink.tenqui.flowtone.ui.library.LibrarySourceTitle
+import ink.tenqui.flowtone.ui.library.librarySourceItems
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.blur
@@ -310,6 +314,10 @@ internal fun FlowtoneScaffold(
         }
     )
 
+    var librarySourceKey by rememberSaveable { mutableStateOf("mine") }
+    val librarySources = remember(state.uiState.libraryProviderOptions) { librarySourceItems(state.uiState.libraryProviderOptions) }
+    val view = LocalView.current
+    val libraryViewportBottom = view.height - with(LocalDensity.current) { state.miniPlayerContentBottomPadding.toPx() }
     val modalOverlayHostState = remember { FlowtoneModalOverlayHostState() }
     CompositionLocalProvider(
         LocalDarkFlowCloudOverlayEnabled provides state.darkFlowCloudOverlayEnabled,
@@ -328,6 +336,12 @@ internal fun FlowtoneScaffold(
             contentWindowInsets = WindowInsets(0),
             topBar = {
                 FlowtoneScaffoldTopLayer(
+                    librarySourceControl = {
+                        if (!state.miniPlayerExpanded && !state.miniPlayerFullscreen) {
+                            LibrarySourceTitle(librarySources, librarySourceKey, true, libraryViewportBottom,
+                                onSourceSelected = { librarySourceKey = it }, compact = true)
+                        }
+                    },
                     state = state,
                     callbacks = callbacks,
                     detailHeaderCollapseProgressState = detailHeaderCollapseProgressState,
@@ -350,6 +364,8 @@ internal fun FlowtoneScaffold(
                 bottom = innerPadding.calculateBottomPadding()
             )
             FlowtoneScaffoldContent(
+                librarySourceKey = librarySourceKey,
+                onLibrarySourceSelected = { librarySourceKey = it },
                 state = state,
                 callbacks = callbacks,
                 homeScrollState = homeScrollState,

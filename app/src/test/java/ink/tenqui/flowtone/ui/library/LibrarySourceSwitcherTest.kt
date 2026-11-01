@@ -2,6 +2,10 @@ package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import ink.tenqui.flowtone.data.online.LibraryProviderOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -9,6 +13,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LibrarySourceSwitcherTest {
+    @Test
+    fun sourceMenuIsAnchoredBelowTitleAndClampedToWindow() {
+        val position = LibrarySourceMenuPosition(gap = 4, margin = 12)
+        assertEquals(IntOffset(20, 104), position.calculatePosition(
+            IntRect(20, 50, 180, 100), IntSize(400, 800), LayoutDirection.Ltr, IntSize(280, 200)))
+        assertEquals(IntOffset(108, 588), position.calculatePosition(
+            IntRect(300, 700, 390, 750), IntSize(400, 800), LayoutDirection.Ltr, IntSize(280, 200)))
+    }
+
     @Test
     fun localSourceIsFirstAndExtensionsAreSortedByNameThenId() {
         val sources = librarySourceItems(

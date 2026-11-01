@@ -58,6 +58,7 @@ import ink.tenqui.flowtone.ui.library.ArtistScrollStateStore
 import ink.tenqui.flowtone.ui.library.ArtistTopBarStateStore
 import ink.tenqui.flowtone.ui.library.artistTopBarContentOcclusionProgress
 import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
+import ink.tenqui.flowtone.ui.library.LibraryHomeContent
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
@@ -74,6 +75,8 @@ import ink.tenqui.flowtone.ui.screens.rememberInstalledExtensionIconAccent
 internal fun FlowtoneScaffoldContent(
     state: FlowtoneAppScaffoldState,
     callbacks: FlowtoneAppCallbacks,
+    librarySourceKey: String,
+    onLibrarySourceSelected: (String) -> Unit,
     homeScrollState: ScrollState,
     topLevelPageCollapseProgress: TopLevelPageCollapseProgress,
     libraryPlaylistController: LibraryPlaylistController,
@@ -504,6 +507,30 @@ internal fun FlowtoneScaffoldContent(
                                             homeGallery = homeGallery,
                                             homeScrollState = homeScrollState,
                                             onSongClick = callbacks.onSongClick,
+                                            libraryContent = {
+                                                LibraryHomeContent(
+                                                    uiState = state.uiState,
+                                                    playlistController = libraryPlaylistController,
+                                                    likedSongCount = likedSongCount,
+                                                    selectedSourceKey = librarySourceKey,
+                                                    isPageActive = state.pagerState.currentPage == TopLevelPage.Library.index &&
+                                                        state.secondaryPage == null && !state.searchActive &&
+                                                        !state.miniPlayerExpanded && !state.miniPlayerFullscreen,
+                                                    onSourceSelected = onLibrarySourceSelected,
+                                                    onOpenPlaylist = callbacks.onOpenPlaylist,
+                                                    onOpenLocalLibrary = callbacks.onOpenLocalLibrary,
+                                                    onOpenAlbum = callbacks.onOpenAlbum,
+                                                    onOpenArtist = callbacks.onOpenArtist,
+                                                    onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
+                                                    onOpenProviderPlaylist = callbacks.onOpenProviderPlaylist,
+                                                    onProviderSongQueueClick = callbacks.onProviderSongQueueClick,
+                                                    onLoadProviderCollections = callbacks.onLoadProviderEntityCollections,
+                                                    onLoadProviderPlaylists = callbacks.onLoadProviderUserPlaylists,
+                                                    onRefreshLibrary = callbacks.onRefreshLibrary,
+                                                    flowCloudSpeed = state.flowCloudSpeed,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            },
                                             showSwipeHint = state.showSwipeHint,
                                             pageScope = mainModeScope,
                                             userScrollEnabled =

@@ -101,7 +101,8 @@ internal fun FlowtoneTopBar(
     onSearchImeAction: () -> Unit,
     onFullTitleRequest: (String) -> Unit = {},
     playlistSortProgress: Float = 0f,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    librarySourceControl: @Composable () -> Unit = {}
 ) {
     val pathSegments = when (secondaryPage) {
         SecondaryPage.Settings -> listOf(SecondaryPage.Settings.title) + additionalPathSegments
@@ -337,6 +338,11 @@ internal fun FlowtoneTopBar(
                         }
                     }
                 }
+            }
+        }
+        if (searchAvailable && selectedTopLevelPage == TopLevelPage.Library && songSelectionState == null) {
+            Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 84.dp), contentAlignment = Alignment.CenterStart) {
+                librarySourceControl()
             }
         }
         AnimatedVisibility(
