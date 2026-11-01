@@ -61,7 +61,6 @@ import ink.tenqui.flowtone.ui.library.LibraryPlaylistController
 import ink.tenqui.flowtone.ui.library.PlaylistBatchActions
 import ink.tenqui.flowtone.ui.library.PlaylistDetailMetadata
 import ink.tenqui.flowtone.ui.library.PlaylistSongSort
-import ink.tenqui.flowtone.BuildConfig
 import ink.tenqui.flowtone.ui.search.GlobalSearchContent
 import ink.tenqui.flowtone.ui.components.topLevelPageBackground
 import ink.tenqui.flowtone.ui.theme.FlowtoneCloudPalette
@@ -100,30 +99,8 @@ internal fun FlowtoneScaffoldContent(
     val secondaryPageStateHolder = rememberSaveableStateHolder()
     val retainedSecondaryStateKeys = remember { mutableSetOf<String>() }
     val homeGallerySeed = remember { kotlin.random.Random.nextLong() }
-    val homeIsolationMode = if (BuildConfig.BUILD_TYPE == "fast") {
-        BuildConfig.HOME_ISOLATION_MODE
-    } else {
-        "normal"
-    }
-    val hasBaselineSongs = homeIsolationMode != "normal" && homeIsolationMode != "legacy" && homeIsolationMode != "original-hero"
-    val hasGallerySelection = homeIsolationMode != "baseline" && homeIsolationMode != "legacy"
-    val homeGallery = remember(state.uiState.songs, homeGallerySeed, homeIsolationMode) {
-        if (hasGallerySelection) {
-            selectHomeGallery(state.uiState.songs, homeGallerySeed)
-        } else {
-            null
-        }
-    }
-    val minimalHomeSongs = remember(state.uiState.songs, hasBaselineSongs) {
-        if (hasBaselineSongs) selectMinimalHomeSongs(state.uiState.songs) else emptyList()
-    }
-    val fastInteractionSeed = remember { kotlin.random.Random.nextLong() }
-    val fastInteractionTestSelection = remember(state.uiState.songs, fastInteractionSeed) {
-        if (BuildConfig.BUILD_TYPE == "fast") {
-            selectFastInteractionTestSongs(state.uiState.songs, fastInteractionSeed)
-        } else {
-            null
-        }
+    val homeGallery = remember(state.uiState.songs, homeGallerySeed) {
+        selectHomeGallery(state.uiState.songs, homeGallerySeed)
     }
     val activeSecondaryStateKeys = remember(state.secondaryEntries) {
         state.secondaryEntries.mapTo(mutableSetOf(), SecondaryStackEntry::uiStateKey)
@@ -526,13 +503,7 @@ internal fun FlowtoneScaffoldContent(
                                             pagerState = state.pagerState,
                                             homeGallery = homeGallery,
                                             homeScrollState = homeScrollState,
-                                            homeSongs = state.uiState.songs,
-                                            minimalHomeSongs = minimalHomeSongs,
-                                            fastInteractionTestSelection = fastInteractionTestSelection,
-                                            currentSong = state.playerUiState.currentSong,
                                             onSongClick = callbacks.onSongClick,
-                                            onOpenFastInteractionTestPlaylist =
-                                                callbacks.onOpenFastInteractionTestPlaylist,
                                             showSwipeHint = state.showSwipeHint,
                                             pageScope = mainModeScope,
                                             userScrollEnabled =

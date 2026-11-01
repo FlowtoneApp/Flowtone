@@ -12,7 +12,6 @@ import ink.tenqui.flowtone.data.online.ArtistSongOrderInfo
 import ink.tenqui.flowtone.data.online.displayTitleOrNull
 import ink.tenqui.flowtone.data.online.preferredProfileArtwork
 import ink.tenqui.flowtone.data.online.sanitizedFor
-import ink.tenqui.flowtone.core.model.Song
 
 /** Artist destination identity remains source-scoped; local and Provider names are not merged. */
 internal sealed interface ArtistDestinationIdentity {
@@ -80,9 +79,7 @@ internal sealed interface SecondaryDestination {
     data class Playlist(
         val playlistId: String?,
         val title: String,
-        val providerPlaylist: ProviderPlaylistSearchItem? = null,
-        /** Fast-build-only in-memory content; never treated as a persisted playlist identity. */
-        val fastTestSongs: List<Song>? = null
+        val providerPlaylist: ProviderPlaylistSearchItem? = null
     ) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Playlist
     }
