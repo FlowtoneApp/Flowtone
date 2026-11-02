@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -349,7 +350,10 @@ internal fun FlowtoneTopBar(
                 }
             }
         }
-        if (searchAvailable && selectedTopLevelPage == TopLevelPage.Library && songSelectionState == null) {
+        if (searchAvailable && songSelectionState == null) {
+            val libraryDistance = TopLevelPage.Library.index - topLevelHeaderPagePosition(pagerState)
+            val libraryAlpha = topLevelHeaderAlpha(libraryDistance)
+            val libraryActive = pagerState.currentPage == TopLevelPage.Library.index && !pagerState.isScrollInProgress
             var frozenProgress by remember { mutableStateOf(0f) }
             var heldProgress by remember { mutableStateOf(false) }
             var scrollHandoff by remember { mutableStateOf<Float?>(null) }
@@ -392,12 +396,16 @@ internal fun FlowtoneTopBar(
                 stringResource(R.string.top_level_library_title),
                 style = expandedStyle.copy(fontWeight = FontWeight.Medium), maxLines = 1
             ).size.width * flowtoneCollapsedTitleScale(expandedStyle, collapsedStyle)
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 20.dp, end = 84.dp),
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 20.dp, end = 84.dp)
+                .graphicsLayer {
+                    alpha = libraryAlpha
+                    translationX = libraryDistance * TopLevelHeaderTransitionDistance.toPx()
+                }.then(if (libraryActive) Modifier else Modifier.clearAndSetSemantics {}),
                 contentAlignment = Alignment.CenterStart) {
                 val maxTravel = with(density) { (maxWidth - 68.dp).toPx().coerceAtLeast(0f) }
                 val travel = (titleWidth + with(density) { 10.dp.toPx() }).coerceAtMost(maxTravel)
                 Box(Modifier.offset { IntOffset((travel * effectiveProgress).toInt(), 0) }) {
-                    librarySourceControl(effectiveProgress, true)
+                    librarySourceControl(effectiveProgress, libraryActive)
                 }
             }
         }

@@ -122,16 +122,20 @@ internal fun TopLevelSharedPageHeader(
     }
 }
 
-private val TopLevelHeaderTransitionDistance = 48.dp
+internal val TopLevelHeaderTransitionDistance = 48.dp
 
-private fun topLevelHeaderPagePosition(pagerState: PagerState): Float {
-    return (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(
+internal fun topLevelHeaderPagePosition(pagerState: PagerState): Float {
+    return topLevelHeaderPagePosition(pagerState.currentPage, pagerState.currentPageOffsetFraction)
+}
+
+internal fun topLevelHeaderPagePosition(currentPage: Int, offset: Float): Float {
+    return (currentPage + offset).coerceIn(
         minimumValue = 0f,
         maximumValue = TopLevelPage.entries.lastIndex.toFloat()
     )
 }
 
-private fun topLevelHeaderAlpha(distance: Float): Float {
+internal fun topLevelHeaderAlpha(distance: Float): Float {
     return (1f - abs(distance)).coerceIn(0f, 1f)
 }
 
