@@ -6,7 +6,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +52,7 @@ internal fun LibrarySourceTitle(
     val current = all.firstOrNull { it.first == selectedSourceKey } ?: all.first()
     val ordered = remember(all, selectedSourceKey) { listOf(current) + all.filterNot { it.first == current.first } }
     var showing by remember { mutableStateOf(false) }
+    var popupReady by remember { mutableStateOf(false) }
     DisposableEffect(showing) {
         onExpandedChange(showing)
         onDispose { if (showing) onExpandedChange(false) }
@@ -61,9 +61,9 @@ internal fun LibrarySourceTitle(
     LaunchedEffect(isPageActive) { if (!isPageActive) showing = false }
     val density = LocalDensity.current
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-    val style = MaterialTheme.typography.labelLarge
+    val style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium)
     fun widthFor(item: Pair<String, LibrarySourceItem?>): Dp = with(density) {
-        (measurer.measure(item.second?.name ?: "我的音乐", style).size.width.toDp() + 72.dp).coerceIn(116.dp, 240.dp)
+        (measurer.measure(item.second?.name ?: "我的音乐", style).size.width.toDp() + 68.dp).coerceIn(116.dp, 240.dp)
     }
     val fullWidth = widthFor(current)
     val collapsedWidth = 68.dp
@@ -72,12 +72,14 @@ internal fun LibrarySourceTitle(
     Box(modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
         val interaction = remember { MutableInteractionSource() }
         Box(Modifier.width(currentWidth).height(48.dp)
-            .clickable(interactionSource = interaction, indication = null, enabled = isPageActive && !showing) { showing = true },
+            .clickable(interactionSource = interaction, indication = null, enabled = isPageActive && !showing) {
+                popupReady = false
+                showing = true
+            },
             contentAlignment = Alignment.CenterStart) {
-            SourceMorphRow(current, Modifier.height(40.dp).alpha(if (showing) 0f else 1f)
+            SourceMorphRow(current, Modifier.height(40.dp).alpha(if (showing && popupReady) 0f else 1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(containerColor)
-                .indication(interaction, ripple()), true)
+                .background(containerColor), true)
         }
         if (showing && isPageActive) {
             val maxWidth = (LocalConfiguration.current.screenWidthDp.dp - 40.dp).coerceAtMost(280.dp)
@@ -116,7 +118,7 @@ internal fun LibrarySourceTitle(
             val anchorInset = with(density) { 4.dp.roundToPx() }
             Popup(popupPositionProvider = remember(anchorInset) { SourceMorphPosition(anchorInset) }, onDismissRequest = { close() },
                 properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true)) {
-                Box(Modifier.width(width).height(height).clip(RoundedCornerShape(20.dp))
+                Box(Modifier.width(width).height(height).onGloballyPositioned { popupReady = true }.clip(RoundedCornerShape(20.dp))
                     .background(containerColor)) {
                     if (target != null) {
                         SourceMorphRow(target!!, Modifier.height(40.dp), true)
@@ -152,7 +154,7 @@ private fun SourceMorphRow(item: Pair<String, LibrarySourceItem?>, modifier: Mod
     Row(modifier.fillMaxWidth().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         LibrarySourceIcon(item.second)
         Spacer(Modifier.width(8.dp))
-        Text(item.second?.name ?: "我的音乐", Modifier.weight(1f), fontSize = 15.sp,
+        Text(item.second?.name ?: "我的音乐", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, fontSize = 15.sp,
             fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         Icon(if (current) Icons.Filled.KeyboardArrowDown else Icons.Filled.Check, null,

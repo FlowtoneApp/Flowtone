@@ -109,7 +109,9 @@ internal fun FlowtoneTopBar(
     modifier: Modifier = Modifier,
     librarySourceControl: @Composable (Float, Boolean) -> Unit = { _, _ -> },
     libraryCollapseProgress: Float = 0f,
-    librarySourceExpanded: Boolean = false
+    librarySourceExpanded: Boolean = false,
+    librarySourceKey: String = "mine",
+    libraryUserScrolling: Boolean = false
 ) {
     val pathSegments = when (secondaryPage) {
         SecondaryPage.Settings -> listOf(SecondaryPage.Settings.title) + additionalPathSegments
@@ -349,9 +351,41 @@ internal fun FlowtoneTopBar(
         }
         if (searchAvailable && selectedTopLevelPage == TopLevelPage.Library && songSelectionState == null) {
             var frozenProgress by remember { mutableStateOf(0f) }
+            var heldProgress by remember { mutableStateOf(false) }
+            var scrollHandoff by remember { mutableStateOf<Float?>(null) }
+            var sourceAtOpen by remember { mutableStateOf(librarySourceKey) }
+            val returnProgress = remember { androidx.compose.animation.core.Animatable(0f) }
             val progress = libraryCollapseProgress.coerceIn(0f, 1f)
-            androidx.compose.runtime.SideEffect { if (!librarySourceExpanded) frozenProgress = progress }
-            val effectiveProgress = if (librarySourceExpanded) frozenProgress else progress
+            val currentProgress by androidx.compose.runtime.rememberUpdatedState(progress)
+            val currentSource by androidx.compose.runtime.rememberUpdatedState(librarySourceKey)
+            androidx.compose.runtime.SideEffect {
+                if (!librarySourceExpanded) {
+                    frozenProgress = if (heldProgress) returnProgress.value else (progress + (scrollHandoff ?: 0f)).coerceIn(0f, 1f)
+                }
+            }
+            LaunchedEffect(librarySourceExpanded, libraryUserScrolling) {
+                if (librarySourceExpanded) {
+                    sourceAtOpen = currentSource
+                    heldProgress = true
+                    scrollHandoff = null
+                    returnProgress.snapTo(frozenProgress)
+                } else if (!librarySourceExpanded && heldProgress) {
+                    if (libraryUserScrolling) {
+                        scrollHandoff = returnProgress.value - currentProgress
+                    } else if (sourceAtOpen != currentSource) {
+                        returnProgress.animateTo(currentProgress, tween(400, easing = FlowtoneMotion.Easing))
+                    }
+                    heldProgress = false
+                } else if (!librarySourceExpanded && !libraryUserScrolling && scrollHandoff != null) {
+                    returnProgress.snapTo((currentProgress + scrollHandoff!!).coerceIn(0f, 1f))
+                    heldProgress = true
+                    scrollHandoff = null
+                    returnProgress.animateTo(currentProgress, tween(400, easing = FlowtoneMotion.Easing))
+                    heldProgress = false
+                }
+            }
+            val effectiveProgress = if (librarySourceExpanded) frozenProgress else if (heldProgress) returnProgress.value
+                else (progress + (scrollHandoff ?: 0f)).coerceIn(0f, 1f)
             val expandedStyle = MaterialTheme.typography.headlineLarge
             val collapsedStyle = MaterialTheme.typography.titleLarge
             val titleWidth = rememberTextMeasurer().measure(

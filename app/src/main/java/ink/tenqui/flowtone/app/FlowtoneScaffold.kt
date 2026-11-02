@@ -339,6 +339,8 @@ internal fun FlowtoneScaffold(
                 FlowtoneScaffoldTopLayer(
                     libraryCollapseProgress = topLevelPageCollapseProgress.progressFor(TopLevelPage.Library),
                     librarySourceExpanded = librarySourceExpanded,
+                    librarySourceKey = librarySourceKey,
+                    libraryUserScrolling = libraryPlaylistController.listState.isScrollInProgress,
                     librarySourceControl = { collapse, enabled ->
                         if (!state.miniPlayerExpanded && !state.miniPlayerFullscreen) {
                             LibrarySourceTitle(librarySources, librarySourceKey, enabled, libraryViewportBottom,
