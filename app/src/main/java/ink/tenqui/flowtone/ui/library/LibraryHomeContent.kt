@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +36,7 @@ import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.ui.components.*
 import ink.tenqui.flowtone.viewmodel.MusicUiState
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
+import kotlin.math.roundToInt
 
 @Composable
 internal fun LibraryHomeContent(
@@ -97,20 +102,39 @@ internal fun LibraryHomeContent(
             Spacer(Modifier.height(FlowtonePageHeaderBodyGap))
         }
         if (selectedSourceKey != "mine" && categories.isNotEmpty()) item(key = "category-navigation") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            val bounds = remember(categories) { mutableStateMapOf<LibraryCategory, Pair<Float, Float>>() }
+            var parentX by remember(categories) { mutableFloatStateOf(0f) }
+            val target = bounds[category]
+            Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                .onGloballyPositioned { parentX = it.positionInRoot().x }) {
+            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 categories.forEach { item ->
-                    val indicatorAlpha by animateFloatAsState(if (item == category) 1f else 0f, tween(150), label = "CategoryIndicator")
-                    Column(Modifier.heightIn(min = 48.dp).clickable { requestedCategory = item }
+                    val interaction = remember { MutableInteractionSource() }
+                    Column(Modifier.heightIn(min = 48.dp).clickable(interactionSource = interaction, indication = null) { requestedCategory = item }
                         .padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center) {
                         Text(item.title, style = MaterialTheme.typography.titleMedium,
                             fontWeight = if (item == category) FontWeight.SemiBold else FontWeight.Medium,
+                            modifier = Modifier.onGloballyPositioned {
+                                bounds[item] = it.positionInRoot().x to it.size.width.toFloat()
+                            },
                             color = if (item == category) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
-                        Box(Modifier.height(3.dp).width(28.dp).alpha(indicatorAlpha)
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
+                        Spacer(Modifier.height(3.dp))
                     }
                 }
+            }
+            if (target != null) {
+                val indicatorX by animateFloatAsState(target.first - parentX,
+                    tween(320, easing = FlowtoneMotion.Easing), label = "CategoryIndicatorX")
+                val indicatorWidth by animateFloatAsState(target.second,
+                    tween(320, easing = FlowtoneMotion.Easing), label = "CategoryIndicatorWidth")
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                Box(Modifier.align(Alignment.BottomStart).padding(bottom = 6.dp)
+                    .offset { IntOffset(indicatorX.roundToInt(), 0) }
+                    .width(with(density) { indicatorWidth.toDp() }).height(3.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
+            }
             }
         }
         when {
