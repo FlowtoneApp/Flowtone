@@ -46,7 +46,9 @@ internal fun FlowtoneScaffoldTopLayer(
     artistHeroStateStore: ArtistHeroStateStore,
     artistScrollStateStore: ArtistScrollStateStore,
     artistTopBarStateStore: ArtistTopBarStateStore,
-    librarySourceControl: @Composable () -> Unit = {}
+    librarySourceControl: @Composable (Float, Boolean) -> Unit = { _, _ -> },
+    libraryCollapseProgress: Float = 0f,
+    librarySourceExpanded: Boolean = false
 ) {
     val artistRoute = artistTopBarRoute(state.secondaryEntries)
     val retainedArtistPresentation = remember {
@@ -121,6 +123,8 @@ internal fun FlowtoneScaffoldTopLayer(
 
         FlowtoneTopBar(
             librarySourceControl = librarySourceControl,
+            libraryCollapseProgress = libraryCollapseProgress,
+            librarySourceExpanded = librarySourceExpanded,
             selectedTopLevelPage = state.selectedTopLevelPage,
             pagerState = state.pagerState,
             secondaryPage = state.secondaryPage,

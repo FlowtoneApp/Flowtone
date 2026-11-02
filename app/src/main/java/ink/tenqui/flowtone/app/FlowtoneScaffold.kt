@@ -315,6 +315,7 @@ internal fun FlowtoneScaffold(
     )
 
     var librarySourceKey by rememberSaveable { mutableStateOf("mine") }
+    var librarySourceExpanded by remember { mutableStateOf(false) }
     val librarySources = remember(state.uiState.libraryProviderOptions) { librarySourceItems(state.uiState.libraryProviderOptions) }
     val view = LocalView.current
     val libraryViewportBottom = view.height - with(LocalDensity.current) { state.miniPlayerContentBottomPadding.toPx() }
@@ -336,10 +337,13 @@ internal fun FlowtoneScaffold(
             contentWindowInsets = WindowInsets(0),
             topBar = {
                 FlowtoneScaffoldTopLayer(
-                    librarySourceControl = {
+                    libraryCollapseProgress = topLevelPageCollapseProgress.progressFor(TopLevelPage.Library),
+                    librarySourceExpanded = librarySourceExpanded,
+                    librarySourceControl = { collapse, enabled ->
                         if (!state.miniPlayerExpanded && !state.miniPlayerFullscreen) {
-                            LibrarySourceTitle(librarySources, librarySourceKey, true, libraryViewportBottom,
-                                onSourceSelected = { librarySourceKey = it }, compact = true)
+                            LibrarySourceTitle(librarySources, librarySourceKey, enabled, libraryViewportBottom,
+                                onSourceSelected = { librarySourceKey = it }, compact = true,
+                                collapseProgress = collapse, onExpandedChange = { librarySourceExpanded = it })
                         }
                     },
                     state = state,

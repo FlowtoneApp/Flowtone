@@ -62,6 +62,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
+import ink.tenqui.flowtone.R
+import ink.tenqui.flowtone.ui.components.flowtoneCollapsedTitleScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
@@ -102,7 +107,9 @@ internal fun FlowtoneTopBar(
     onFullTitleRequest: (String) -> Unit = {},
     playlistSortProgress: Float = 0f,
     modifier: Modifier = Modifier,
-    librarySourceControl: @Composable () -> Unit = {}
+    librarySourceControl: @Composable (Float, Boolean) -> Unit = { _, _ -> },
+    libraryCollapseProgress: Float = 0f,
+    librarySourceExpanded: Boolean = false
 ) {
     val pathSegments = when (secondaryPage) {
         SecondaryPage.Settings -> listOf(SecondaryPage.Settings.title) + additionalPathSegments
@@ -341,8 +348,23 @@ internal fun FlowtoneTopBar(
             }
         }
         if (searchAvailable && selectedTopLevelPage == TopLevelPage.Library && songSelectionState == null) {
-            Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 84.dp), contentAlignment = Alignment.CenterStart) {
-                librarySourceControl()
+            var frozenProgress by remember { mutableStateOf(0f) }
+            val progress = libraryCollapseProgress.coerceIn(0f, 1f)
+            androidx.compose.runtime.SideEffect { if (!librarySourceExpanded) frozenProgress = progress }
+            val effectiveProgress = if (librarySourceExpanded) frozenProgress else progress
+            val expandedStyle = MaterialTheme.typography.headlineLarge
+            val collapsedStyle = MaterialTheme.typography.titleLarge
+            val titleWidth = rememberTextMeasurer().measure(
+                stringResource(R.string.top_level_library_title),
+                style = expandedStyle.copy(fontWeight = FontWeight.Medium), maxLines = 1
+            ).size.width * flowtoneCollapsedTitleScale(expandedStyle, collapsedStyle)
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 20.dp, end = 84.dp),
+                contentAlignment = Alignment.CenterStart) {
+                val maxTravel = with(density) { (maxWidth - 68.dp).toPx().coerceAtLeast(0f) }
+                val travel = (titleWidth + with(density) { 10.dp.toPx() }).coerceAtMost(maxTravel)
+                Box(Modifier.offset { IntOffset((travel * effectiveProgress).toInt(), 0) }) {
+                    librarySourceControl(effectiveProgress, true)
+                }
             }
         }
         AnimatedVisibility(

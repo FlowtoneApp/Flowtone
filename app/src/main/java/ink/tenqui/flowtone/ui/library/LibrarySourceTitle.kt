@@ -45,12 +45,18 @@ internal fun LibrarySourceTitle(
     viewportBottom: Float,
     onSourceSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
-    compact: Boolean = false
+    compact: Boolean = false,
+    collapseProgress: Float = 0f,
+    onExpandedChange: (Boolean) -> Unit = {}
 ) {
     val all = remember(sources) { listOf("mine" to null) + sources.map { it.identity.key to it } }
     val current = all.firstOrNull { it.first == selectedSourceKey } ?: all.first()
     val ordered = remember(all, selectedSourceKey) { listOf(current) + all.filterNot { it.first == current.first } }
     var showing by remember { mutableStateOf(false) }
+    DisposableEffect(showing) {
+        onExpandedChange(showing)
+        onDispose { if (showing) onExpandedChange(false) }
+    }
     var anchorTop by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(isPageActive) { if (!isPageActive) showing = false }
     val density = LocalDensity.current
@@ -59,7 +65,10 @@ internal fun LibrarySourceTitle(
     fun widthFor(item: Pair<String, LibrarySourceItem?>): Dp = with(density) {
         (measurer.measure(item.second?.name ?: "我的音乐", style).size.width.toDp() + 72.dp).coerceIn(116.dp, 240.dp)
     }
-    val currentWidth = widthFor(current)
+    val fullWidth = widthFor(current)
+    val collapsedWidth = 68.dp
+    val currentWidth = fullWidth + (collapsedWidth - fullWidth) * collapseProgress.coerceIn(0f, 1f)
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f)
     Box(modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
         val interaction = remember { MutableInteractionSource() }
         Box(Modifier.width(currentWidth).height(48.dp)
@@ -67,7 +76,7 @@ internal fun LibrarySourceTitle(
             contentAlignment = Alignment.CenterStart) {
             SourceMorphRow(current, Modifier.height(40.dp).alpha(if (showing) 0f else 1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f))
+                .background(containerColor)
                 .indication(interaction, ripple()), true)
         }
         if (showing && isPageActive) {
@@ -93,7 +102,10 @@ internal fun LibrarySourceTitle(
             }
             val open = state !is LibrarySourceSwitcherState.Collapsed
             val width by androidx.compose.animation.core.animateDpAsState(
-                if (open) frozen.maxOf { widthFor(it) }.coerceAtMost(maxWidth) else widthFor(target ?: frozen.first()).coerceAtMost(maxWidth),
+                if (open) frozen.maxOf { widthFor(it) }.coerceAtMost(maxWidth) else {
+                    val targetWidth = widthFor(target ?: frozen.first())
+                    (targetWidth + (collapsedWidth - targetWidth) * collapseProgress.coerceIn(0f, 1f)).coerceAtMost(maxWidth)
+                },
                 tween(400, easing = ink.tenqui.flowtone.ui.components.FlowtoneMotion.Easing), label = "LibrarySourceMorphWidth")
             val height by androidx.compose.animation.core.animateDpAsState(
                 if (open) (40.dp * frozen.size.coerceAtMost(5)).coerceAtMost(maxHeight) else 40.dp,
@@ -105,7 +117,7 @@ internal fun LibrarySourceTitle(
             Popup(popupPositionProvider = remember(anchorInset) { SourceMorphPosition(anchorInset) }, onDismissRequest = { close() },
                 properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true)) {
                 Box(Modifier.width(width).height(height).clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f))) {
+                    .background(containerColor)) {
                     if (target != null) {
                         SourceMorphRow(target!!, Modifier.height(40.dp), true)
                     } else {
