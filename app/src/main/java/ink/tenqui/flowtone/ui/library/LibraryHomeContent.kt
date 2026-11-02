@@ -1,6 +1,10 @@
 package ink.tenqui.flowtone.ui.library
 
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +35,7 @@ import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 
 @Composable
 internal fun LibraryHomeContent(
+    pageTransition: PageTransitionScope,
     uiState: MusicUiState,
     playlistController: LibraryPlaylistController,
     likedSongCount: Int,
@@ -53,6 +58,9 @@ internal fun LibraryHomeContent(
     val sources = remember(uiState.libraryProviderOptions) { librarySourceItems(uiState.libraryProviderOptions) }
     val selectedSource = sources.firstOrNull { it.identity.key == selectedSourceKey }
     val provider = (selectedSource?.identity as? LibrarySourceIdentity.Extension)?.extensionId
+    val categories = remember(selectedSourceKey, selectedSource) { libraryCategories(selectedSourceKey, selectedSource) }
+    var requestedCategory by remember(selectedSourceKey) { mutableStateOf<LibraryCategory?>(null) }
+    val category = validLibraryCategory(categories, requestedCategory)
     val playlists = remember(playlistController.playlists, likedSongCount) {
         listOf(likedSongsPlaylistCard(likedSongCount)) + playlistController.playlists
     }
@@ -88,6 +96,23 @@ internal fun LibraryHomeContent(
             )
             Spacer(Modifier.height(FlowtonePageHeaderBodyGap))
         }
+        if (selectedSourceKey != "mine" && categories.isNotEmpty()) item(key = "category-navigation") {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                categories.forEach { item ->
+                    val indicatorAlpha by animateFloatAsState(if (item == category) 1f else 0f, tween(150), label = "CategoryIndicator")
+                    Column(Modifier.heightIn(min = 48.dp).clickable { requestedCategory = item }
+                        .padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center) {
+                        Text(item.title, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (item == category) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (item == category) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(6.dp))
+                        Box(Modifier.height(3.dp).width(28.dp).alpha(indicatorAlpha)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
+                    }
+                }
+            }
+        }
         when {
             selectedSourceKey == "mine" -> {
                 item(key = "playlist-section") {
@@ -108,18 +133,26 @@ internal fun LibraryHomeContent(
                         }
                     }
                 }
-                items(playlists, key = { "playlist:${it.id}" }) { playlist ->
+                itemsIndexed(playlists, key = { _, playlist -> "playlist:${playlist.id}" }) { index, playlist ->
                     if (!playlist.isSystem && playlist.customArtworkUri != null) {
                         ListItem(headlineContent = { Text(playlist.title, maxLines = 1) },
                             supportingContent = { Text(playlist.subtitle, maxLines = 1) },
                             leadingContent = { FlowtoneArtwork(artworkUri = playlist.customArtworkUri, modifier = Modifier.size(56.dp)) },
                             colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                            modifier = Modifier.clickable { onOpenPlaylist(playlist) })
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis),
+                                placementSpec = null,
+                                fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
+                            ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23))).clickable { onOpenPlaylist(playlist) })
                     } else {
                         LibraryPlaylistListVisual(playlist = playlist, itemHeight = 72.dp, appearProgress = 1f,
                             clickModifier = Modifier.clickable { onOpenPlaylist(playlist) },
                             flowCloudSpeed = flowCloudSpeed, isFlowCloudPlaying = false,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp))
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis),
+                                placementSpec = null,
+                                fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
+                            ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23))).fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp))
                     }
                 }
                 if (!hasUserPlaylists) item(key = "empty-playlists") {
@@ -135,19 +168,17 @@ internal fun LibraryHomeContent(
                 }
             }
             selectedSourceKey == LibrarySourceIdentity.Local.key -> {
-                item(key = "local-songs") {
+                if (category == LibraryCategory.Songs) item(key = "local-songs") {
                     ListItem(headlineContent = { Text("歌曲") }, supportingContent = { Text(if (uiState.hasPermission) "${uiState.songs.size} 首歌曲" else "需要媒体访问权限") },
                         leadingContent = { Icon(Icons.Default.MusicNote, null) }, trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent), modifier = Modifier.clickable(onClick = onOpenLocalLibrary))
                 }
-                if (uiState.albums.isNotEmpty()) item(key = "albums-title") { Text("专辑", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp)) }
-                items(uiState.albums, key = { "album:${it.id}" }) { album ->
+                if (category == LibraryCategory.Albums) items(uiState.albums, key = { "album:${it.id}" }) { album ->
                     ListItem(headlineContent = { Text(album.title, maxLines = 1) }, supportingContent = { Text(album.artist, maxLines = 1) },
                         leadingContent = { FlowtoneArtwork(artworkUri = album.artworkUri, modifier = Modifier.size(48.dp)) },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent), modifier = Modifier.clickable { onOpenAlbum(album.id) })
                 }
-                if (artists.isNotEmpty()) item(key = "artists-title") { Text("艺术家", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp)) }
-                items(artists, key = { "artist:$it" }) { artist ->
+                if (category == LibraryCategory.Artists) items(artists, key = { "artist:$it" }) { artist ->
                     ListItem(headlineContent = { Text(artist) }, leadingContent = { Icon(Icons.Default.Person, null) },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent), modifier = Modifier.clickable { onOpenArtist(artist) })
                 }
@@ -156,32 +187,48 @@ internal fun LibraryHomeContent(
                 val providerPlaylists = uiState.providerUserPlaylists[provider].orEmpty()
                 val providerAlbums = uiState.providerAlbums[provider].orEmpty()
                 val providerSongs = uiState.providerSongs[provider].orEmpty()
-                val loading = "extension:$provider" in uiState.libraryRefreshingSources || uiState.providerUserPlaylistLoadStates[provider] == ProviderCatalogLoadState.Loading || uiState.providerAlbumCatalogLoadStates[provider] == ProviderCatalogLoadState.Loading || uiState.providerSongCatalogLoadStates[provider] == ProviderCatalogLoadState.Loading
-                val failed = uiState.providerUserPlaylistLoadStates[provider] == ProviderCatalogLoadState.Failed || uiState.providerAlbumCatalogLoadStates[provider] == ProviderCatalogLoadState.Failed || uiState.providerSongCatalogLoadStates[provider] == ProviderCatalogLoadState.Failed
-                if (providerPlaylists.isNotEmpty()) item(key = "provider-playlists-title") { Text("歌单", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp)) }
-                items(providerPlaylists, key = { "provider-playlist:${it.identity.stableKey}" }) { playlist ->
+                val loadState = when (category) {
+                    LibraryCategory.Playlists -> uiState.providerUserPlaylistLoadStates[provider]
+                    LibraryCategory.Albums -> uiState.providerAlbumCatalogLoadStates[provider]
+                    LibraryCategory.Songs -> uiState.providerSongCatalogLoadStates[provider]
+                    else -> null
+                }
+                val loading = "extension:$provider" in uiState.libraryRefreshingSources || loadState == ProviderCatalogLoadState.Loading
+                val failed = loadState == ProviderCatalogLoadState.Failed
+                if (category == LibraryCategory.Playlists) itemsIndexed(providerPlaylists, key = { _, playlist -> "provider-playlist:${playlist.identity.stableKey}" }) { index, playlist ->
                     LibraryProviderPlaylistListItem(playlist = playlist, itemHeight = 72.dp, flowCloudSpeed = flowCloudSpeed, isFlowCloudPlaying = false,
                         onClick = { onOpenProviderPlaylist(ProviderPlaylistSearchItem(playlist.identity, playlist.title, playlist.creator, playlist.artwork, playlist.metadata)) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp))
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis),
+                            placementSpec = null,
+                            fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
+                        ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23))).fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp))
                 }
-                if (providerAlbums.isNotEmpty()) item(key = "provider-albums-title") { Text("专辑", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp)) }
-                items(providerAlbums, key = { "provider-album:${it.identity.stableKey}" }) { album ->
+                if (category == LibraryCategory.Albums) items(providerAlbums, key = { "provider-album:${it.identity.stableKey}" }) { album ->
                     ListItem(headlineContent = { Text(album.title, maxLines = 1) }, supportingContent = { Text(album.artist, maxLines = 1) },
                         leadingContent = { FlowtoneArtwork(artworkUri = null, extensionArtwork = album.artwork, modifier = Modifier.size(48.dp)) },
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent), modifier = Modifier.clickable { onOpenProviderAlbum(album) })
                 }
-                if (providerSongs.isNotEmpty()) item(key = "provider-songs-title") { Text("歌曲", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp)) }
-                itemsIndexed(providerSongs, key = { _, song -> "provider-song:${song.identity.stableKey}" }) { index, song ->
+                if (category == LibraryCategory.Songs) itemsIndexed(providerSongs, key = { _, song -> "provider-song:${song.identity.stableKey}" }) { index, song ->
                     SongListItem(song = song.toPresentationSong(), isCurrentSong = false, compact = true,
                         extensionArtwork = song.artwork,
                         onClick = { onProviderSongQueueClick(providerSongs, index, PlaybackSource.providerCatalog(provider, selectedSource.name)) },
                         modifier = Modifier.padding(horizontal = 12.dp))
                 }
-                if (providerPlaylists.isEmpty() && providerAlbums.isEmpty() && providerSongs.isEmpty() && !failed) item(key = "provider-empty") {
+                val activeEmpty = when (category) {
+                    LibraryCategory.Playlists -> providerPlaylists.isEmpty()
+                    LibraryCategory.Albums -> providerAlbums.isEmpty()
+                    LibraryCategory.Songs -> providerSongs.isEmpty()
+                    else -> false
+                }
+                if (category == LibraryCategory.Favorites) item(key = "favorites-unavailable") {
+                    Text("收藏功能暂不可用", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (activeEmpty && !failed) item(key = "provider-empty") {
                     Text(if (loading) "正在加载来源内容" else "此来源暂无可浏览内容",
                         modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (failed && !loading) item(key = "provider-error") {
+                if (category != LibraryCategory.Favorites && failed && !loading) item(key = "provider-error") {
                     Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                         Text("部分来源内容加载失败", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         TextButton(onClick = { onRefreshLibrary("extension:$provider") }) { Text("重试") }

@@ -509,6 +509,7 @@ internal fun FlowtoneScaffoldContent(
                                             onSongClick = callbacks.onSongClick,
                                             libraryContent = {
                                                 LibraryHomeContent(
+                                                    pageTransition = mainModeScope,
                                                     uiState = state.uiState,
                                                     playlistController = libraryPlaylistController,
                                                     likedSongCount = likedSongCount,
