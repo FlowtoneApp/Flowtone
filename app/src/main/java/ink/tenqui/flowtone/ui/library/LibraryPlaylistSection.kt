@@ -307,7 +307,8 @@ internal fun LibraryProviderPlaylistListItem(
     flowCloudSpeed: Float,
     isFlowCloudPlaying: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    clickModifier: Modifier = Modifier.clickable(onClick = onClick)
 ) {
     val subtitle = playlist.songCount?.let { "$it 首歌曲" }
         ?: playlist.creator.takeIf(String::isNotBlank)
@@ -318,7 +319,7 @@ internal fun LibraryProviderPlaylistListItem(
         appearanceColorKey = playlistAppearanceColorKeyForStableId(playlist.identity.stableKey),
         itemHeight = itemHeight,
         appearProgress = 1f,
-        clickModifier = Modifier.clickable(onClick = onClick),
+        clickModifier = clickModifier,
         flowCloudSpeed = flowCloudSpeed,
         isFlowCloudPlaying = isFlowCloudPlaying,
         extensionArtwork = playlist.artwork,

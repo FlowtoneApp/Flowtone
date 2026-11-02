@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
@@ -157,26 +158,31 @@ internal fun LibraryHomeContent(
                         }
                     }
                 }
+                if (playlists.isNotEmpty()) item(key = "playlist-group-gap") { Spacer(Modifier.height(16.dp)) }
                 itemsIndexed(playlists, key = { _, playlist -> "playlist:${playlist.id}" }) { index, playlist ->
+                    val groupShape = playlistGroupRowShape(index, playlists.size)
+                    val cardModifier = Modifier.animateItem(
+                        fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis), placementSpec = null,
+                        fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
+                    ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23)))
+                        .fillMaxWidth().padding(horizontal = 16.dp)
+                        .clip(groupShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.20f))
+                        .clickable { onOpenPlaylist(playlist) }
+                    Box(cardModifier.padding(top = if (index == 0) 4.dp else 0.dp,
+                        bottom = if (index == playlists.lastIndex) 4.dp else 0.dp)) {
                     if (!playlist.isSystem && playlist.customArtworkUri != null) {
                         ListItem(headlineContent = { Text(playlist.title, maxLines = 1) },
                             supportingContent = { Text(playlist.subtitle, maxLines = 1) },
                             leadingContent = { FlowtoneArtwork(artworkUri = playlist.customArtworkUri, modifier = Modifier.size(56.dp)) },
                             colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                            modifier = Modifier.animateItem(
-                                fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis),
-                                placementSpec = null,
-                                fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
-                            ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23))).clickable { onOpenPlaylist(playlist) })
+                            modifier = Modifier.fillMaxWidth())
                     } else {
                         LibraryPlaylistListVisual(playlist = playlist, itemHeight = 72.dp, appearProgress = 1f,
-                            clickModifier = Modifier.clickable { onOpenPlaylist(playlist) },
+                            clickModifier = Modifier,
                             flowCloudSpeed = flowCloudSpeed, isFlowCloudPlaying = false,
-                            modifier = Modifier.animateItem(
-                                fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis),
-                                placementSpec = null,
-                                fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
-                            ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23))).fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp))
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+                    }
                     }
                 }
                 if (!hasUserPlaylists) item(key = "empty-playlists") {
@@ -219,14 +225,24 @@ internal fun LibraryHomeContent(
                 }
                 val loading = "extension:$provider" in uiState.libraryRefreshingSources || loadState == ProviderCatalogLoadState.Loading
                 val failed = loadState == ProviderCatalogLoadState.Failed
+                if (category == LibraryCategory.Playlists && providerPlaylists.isNotEmpty()) item(key = "provider-playlist-group-gap") { Spacer(Modifier.height(16.dp)) }
                 if (category == LibraryCategory.Playlists) itemsIndexed(providerPlaylists, key = { _, playlist -> "provider-playlist:${playlist.identity.stableKey}" }) { index, playlist ->
+                    val groupShape = playlistGroupRowShape(index, providerPlaylists.size)
+                    Box(Modifier.animateItem(
+                        fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis), placementSpec = null,
+                        fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
+                    ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23)))
+                        .fillMaxWidth().padding(horizontal = 16.dp)
+                        .clip(groupShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.20f))
+                        .clickable { onOpenProviderPlaylist(ProviderPlaylistSearchItem(playlist.identity, playlist.title, playlist.creator, playlist.artwork, playlist.metadata)) }
+                        .padding(top = if (index == 0) 4.dp else 0.dp,
+                            bottom = if (index == providerPlaylists.lastIndex) 4.dp else 0.dp)) {
                     LibraryProviderPlaylistListItem(playlist = playlist, itemHeight = 72.dp, flowCloudSpeed = flowCloudSpeed, isFlowCloudPlaying = false,
                         onClick = { onOpenProviderPlaylist(ProviderPlaylistSearchItem(playlist.identity, playlist.title, playlist.creator, playlist.artwork, playlist.metadata)) },
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis),
-                            placementSpec = null,
-                            fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
-                        ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23))).fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp))
+                        clickModifier = Modifier,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+                    }
                 }
                 if (category == LibraryCategory.Albums) items(providerAlbums, key = { "provider-album:${it.identity.stableKey}" }) { album ->
                     ListItem(headlineContent = { Text(album.title, maxLines = 1) }, supportingContent = { Text(album.artist, maxLines = 1) },
@@ -263,4 +279,10 @@ internal fun LibraryHomeContent(
         }
     }
     }
+}
+
+private fun playlistGroupRowShape(index: Int, count: Int): RoundedCornerShape {
+    val top = if (index == 0) 22.dp else 0.dp
+    val bottom = if (index == count - 1) 22.dp else 0.dp
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
 }
