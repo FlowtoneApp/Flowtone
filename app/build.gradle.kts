@@ -222,6 +222,7 @@ dependencies {
     implementation(libs.markwon.core)
     implementation(libs.markwon.image)
     implementation(libs.androidGifDrawable)
+    implementation(libs.haze)
     testImplementation(libs.junit)
     testImplementation(libs.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))

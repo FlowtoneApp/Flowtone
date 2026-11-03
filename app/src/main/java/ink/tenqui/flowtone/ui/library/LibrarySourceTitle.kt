@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.ui.library
 
+import android.os.Build
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +36,10 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import ink.tenqui.flowtone.ui.components.ProviderExtensionIcon
 import ink.tenqui.flowtone.ui.components.extensionManifestColor
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 
 @Composable
 internal fun LibrarySourceTitle(
@@ -42,6 +47,7 @@ internal fun LibrarySourceTitle(
     selectedSourceKey: String,
     isPageActive: Boolean,
     viewportBottom: Float,
+    hazeState: HazeState,
     onSourceSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
@@ -69,6 +75,18 @@ internal fun LibrarySourceTitle(
     val collapsedWidth = 68.dp
     val currentWidth = fullWidth + (collapsedWidth - fullWidth) * collapseProgress.coerceIn(0f, 1f)
     val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f)
+    val hazeStyle = HazeStyle(
+        backgroundColor = MaterialTheme.colorScheme.background,
+        tint = HazeTint(containerColor),
+        blurRadius = 14.dp,
+        noiseFactor = 0f,
+        fallbackTint = HazeTint(containerColor)
+    )
+    val material = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Modifier.hazeEffect(state = hazeState, style = hazeStyle)
+    } else {
+        Modifier.background(containerColor)
+    }
     Box(modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
         val interaction = remember { MutableInteractionSource() }
         Box(Modifier.width(currentWidth).height(48.dp)
@@ -79,7 +97,7 @@ internal fun LibrarySourceTitle(
             contentAlignment = Alignment.CenterStart) {
             SourceMorphRow(current, Modifier.height(40.dp).alpha(if (showing && popupReady) 0f else 1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(containerColor), true)
+                .then(material), true)
         }
         if (showing && isPageActive) {
             val maxWidth = (LocalConfiguration.current.screenWidthDp.dp - 40.dp).coerceAtMost(280.dp)
@@ -119,7 +137,7 @@ internal fun LibrarySourceTitle(
             Popup(popupPositionProvider = remember(anchorInset) { SourceMorphPosition(anchorInset) }, onDismissRequest = { close() },
                 properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true)) {
                 Box(Modifier.width(width).height(height).onGloballyPositioned { popupReady = true }.clip(RoundedCornerShape(20.dp))
-                    .background(containerColor)) {
+                    .then(material)) {
                     if (target != null) {
                         SourceMorphRow(target!!, Modifier.height(40.dp), true)
                     } else {

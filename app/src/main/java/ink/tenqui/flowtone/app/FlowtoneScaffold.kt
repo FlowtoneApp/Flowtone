@@ -2,6 +2,8 @@ package ink.tenqui.flowtone.app
 
 import android.os.Build
 import android.util.Log
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -77,6 +79,7 @@ internal fun FlowtoneScaffold(
     val playlistActionMotionDistancePx = with(LocalDensity.current) { 16.dp.roundToPx() }
     val coroutineScope = rememberCoroutineScope()
     val homeScrollState = rememberScrollState()
+    val librarySourceHazeState = rememberHazeState()
     val libraryPlaylistController = rememberLibraryPlaylistController()
     val artistHeroStateStore = remember { ArtistHeroStateStore() }
     val artistScrollStateStore = remember { ArtistScrollStateStore() }
@@ -344,6 +347,7 @@ internal fun FlowtoneScaffold(
                     librarySourceControl = { collapse, enabled ->
                         if (!state.miniPlayerExpanded && !state.miniPlayerFullscreen) {
                             LibrarySourceTitle(librarySources, librarySourceKey, enabled, libraryViewportBottom,
+                                hazeState = librarySourceHazeState,
                                 onSourceSelected = { librarySourceKey = it }, compact = true,
                                 collapseProgress = collapse, onExpandedChange = { librarySourceExpanded = it })
                         }
@@ -413,7 +417,10 @@ internal fun FlowtoneScaffold(
                 artistHeroStateStore = artistHeroStateStore,
                 artistScrollStateStore = artistScrollStateStore,
                 artistTopBarStateStore = artistTopBarStateStore,
-                modifier = Modifier.blur(
+                modifier = Modifier.then(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.hazeSource(librarySourceHazeState)
+                    else Modifier
+                ).blur(
                     PlaylistSortContentBlurRadius *
                         playlistSortProgress.coerceIn(0f, 1f)
                 )
