@@ -14,6 +14,33 @@ import org.junit.Test
 
 class LibrarySourceSwitcherTest {
     @Test
+    fun switchingKeepsScrolledTargetInsideShrinkingContainer() {
+        for (targetTop in listOf(-12f, 40f, 80f, 150f)) {
+            for (step in 0..100) {
+                val frame = librarySourceSwitchFrame(240f, 160f, 116f, 40f, targetTop, step / 100f)
+                assertTrue(frame.targetTop >= 0f)
+                assertTrue(frame.targetTop + 40f <= frame.height + 0.001f)
+            }
+        }
+        val end = librarySourceSwitchFrame(240f, 160f, 116f, 40f, 80f, 1f)
+        assertEquals(116f, end.width, 0.001f)
+        assertEquals(40f, end.height, 0.001f)
+        assertEquals(0f, end.targetTop, 0.001f)
+        assertEquals(0f, end.otherAlpha, 0.001f)
+    }
+
+    @Test
+    fun switchingEndsAtTargetCapsuleForNarrowerAndWiderNames() {
+        for (endWidth in listOf(68f, 116f, 240f)) {
+            val frame = librarySourceSwitchFrame(180f, 120f, endWidth, 40f, 70f, 1f)
+            assertEquals(endWidth, frame.width, 0.001f)
+            assertEquals(40f, frame.height, 0.001f)
+            assertEquals(0f, frame.targetTop, 0.001f)
+            assertEquals(0f, frame.otherAlpha, 0.001f)
+        }
+    }
+
+    @Test
     fun sourceMenuIsAnchoredBelowTitleAndClampedToWindow() {
         val position = LibrarySourceMenuPosition(gap = 4, margin = 12)
         assertEquals(IntOffset(20, 104), position.calculatePosition(

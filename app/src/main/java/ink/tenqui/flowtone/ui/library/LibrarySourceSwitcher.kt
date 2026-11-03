@@ -37,6 +37,32 @@ internal sealed interface LibrarySourceSwitcherState {
     data class Switching(val targetKey: String) : LibrarySourceSwitcherState
 }
 
+internal data class LibrarySourceSwitchFrame(
+    val width: Float,
+    val height: Float,
+    val targetTop: Float,
+    val otherAlpha: Float
+)
+
+internal fun librarySourceSwitchFrame(
+    startWidth: Float,
+    startHeight: Float,
+    endWidth: Float,
+    rowHeight: Float,
+    targetTop: Float,
+    progress: Float
+): LibrarySourceSwitchFrame {
+    val p = progress.coerceIn(0f, 1f)
+    val safeHeight = startHeight.coerceAtLeast(rowHeight)
+    val visibleTop = targetTop.coerceIn(0f, safeHeight - rowHeight)
+    return LibrarySourceSwitchFrame(
+        width = startWidth + (endWidth - startWidth) * p,
+        height = safeHeight + (rowHeight - safeHeight) * p,
+        targetTop = visibleTop * (1f - p),
+        otherAlpha = 1f - p
+    )
+}
+
 internal enum class LibrarySourceCardRenderOwner {
     Static,
     Overlay

@@ -1,7 +1,7 @@
 package ink.tenqui.flowtone.ui.library
 
 import android.os.Build
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.alpha
@@ -36,6 +36,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import ink.tenqui.flowtone.ui.components.ProviderExtensionIcon
 import ink.tenqui.flowtone.ui.components.extensionManifestColor
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -104,8 +105,12 @@ internal fun LibrarySourceTitle(
             val maxHeight = with(density) { (viewportBottom - anchorTop - 12.dp.toPx()).coerceAtLeast(40.dp.toPx()).toDp() }
             var state by remember { mutableStateOf<LibrarySourceSwitcherState>(LibrarySourceSwitcherState.Collapsed) }
             val frozen = remember { ordered }
-            var target by remember { mutableStateOf<Pair<String, LibrarySourceItem?>?>(null) }
             var closing by remember { mutableStateOf(false) }
+            val switchProgress = remember { Animatable(0f) }
+            var switchStartWidth by remember { mutableStateOf(0.dp) }
+            var switchStartHeight by remember { mutableStateOf(0.dp) }
+            var switchEndWidth by remember { mutableStateOf(0.dp) }
+            var selectedDistance by remember { mutableStateOf(0.dp) }
             val callback by rememberUpdatedState(onSourceSelected)
             LaunchedEffect(Unit) { state = LibrarySourceSwitcherState.Expanded }
             fun close() { if (state !is LibrarySourceSwitcherState.Switching) closing = true }
@@ -113,54 +118,65 @@ internal fun LibrarySourceTitle(
                 if (closing) { state = LibrarySourceSwitcherState.Collapsed; kotlinx.coroutines.delay(400); showing = false }
             }
             LaunchedEffect(state) {
-                val switching = state as? LibrarySourceSwitcherState.Switching ?: return@LaunchedEffect
-                kotlinx.coroutines.delay(348)
-                target = frozen.first { it.first == switching.targetKey }
-                callback(switching.targetKey)
-                state = LibrarySourceSwitcherState.Collapsed
-                closing = true
+                if (state !is LibrarySourceSwitcherState.Switching) return@LaunchedEffect
+                switchProgress.snapTo(0f)
+                switchProgress.animateTo(1f, tween(FlowtoneMotion.DurationMillis, easing = FlowtoneMotion.Easing))
+                // 让 Popup 的最终几何状态参与一帧绘制，再将绘制权交回顶栏。
+                withFrameNanos { }
+                showing = false
             }
             val open = state !is LibrarySourceSwitcherState.Collapsed
-            val width by androidx.compose.animation.core.animateDpAsState(
+            val animatedWidth by androidx.compose.animation.core.animateDpAsState(
                 if (open) frozen.maxOf { widthFor(it) }.coerceAtMost(maxWidth) else {
-                    val targetWidth = widthFor(target ?: frozen.first())
+                    val targetWidth = widthFor(frozen.first())
                     (targetWidth + (collapsedWidth - targetWidth) * collapseProgress.coerceIn(0f, 1f)).coerceAtMost(maxWidth)
                 },
                 tween(400, easing = ink.tenqui.flowtone.ui.components.FlowtoneMotion.Easing), label = "LibrarySourceMorphWidth")
-            val height by androidx.compose.animation.core.animateDpAsState(
+            val animatedHeight by androidx.compose.animation.core.animateDpAsState(
                 if (open) (40.dp * frozen.size.coerceAtMost(5)).coerceAtMost(maxHeight) else 40.dp,
                 tween(400, easing = ink.tenqui.flowtone.ui.components.FlowtoneMotion.Easing), label = "LibrarySourceMorphHeight")
             val scroll = androidx.compose.foundation.rememberScrollState()
-            var selectedDistance by remember { mutableStateOf(0.dp) }
             val switchingKey = (state as? LibrarySourceSwitcherState.Switching)?.targetKey
+            val switchFrame = switchingKey?.let {
+                librarySourceSwitchFrame(
+                    startWidth = switchStartWidth.value,
+                    startHeight = switchStartHeight.value,
+                    endWidth = switchEndWidth.value,
+                    rowHeight = 40f,
+                    targetTop = selectedDistance.value,
+                    progress = switchProgress.value
+                )
+            }
+            val width = switchFrame?.width?.dp ?: animatedWidth
+            val height = switchFrame?.height?.dp ?: animatedHeight
             val anchorInset = with(density) { 4.dp.roundToPx() }
             Popup(popupPositionProvider = remember(anchorInset) { SourceMorphPosition(anchorInset) }, onDismissRequest = { close() },
                 properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true)) {
                 Box(Modifier.width(width).height(height).onGloballyPositioned { popupReady = true }.clip(RoundedCornerShape(20.dp))
                     .then(material)) {
-                    if (target != null) {
-                        SourceMorphRow(target!!, Modifier.height(40.dp), true)
-                    } else {
                         Column(Modifier.fillMaxSize().verticalScroll(scroll, enabled = switchingKey == null && !closing)) {
                             frozen.forEachIndexed { index, item -> key(item.first) {
-                                val alpha by animateFloatAsState(if (switchingKey == null) 1f else 0f,
-                                    tween(160), label = "LibrarySourceFade")
+                                val alpha = if (item.first == switchingKey) 0f else switchFrame?.otherAlpha ?: 1f
                                 SourceMorphRow(item, Modifier.height(40.dp).alpha(alpha)
                                     .clickable(enabled = state is LibrarySourceSwitcherState.Expanded && !closing) {
+                                        if (state !is LibrarySourceSwitcherState.Expanded || closing) return@clickable
                                         if (index == 0) close() else {
                                             selectedDistance = with(density) { (index * 40.dp.toPx() - scroll.value).toDp() }
+                                            switchStartWidth = width
+                                            switchStartHeight = height
+                                            val targetWidth = widthFor(item)
+                                            switchEndWidth = (targetWidth + (collapsedWidth - targetWidth) *
+                                                collapseProgress.coerceIn(0f, 1f)).coerceAtMost(maxWidth)
                                             state = LibrarySourceSwitcherState.Switching(item.first)
+                                            callback(item.first)
                                         }
                                     }, index == 0)
                             } }
                         }
                         if (switchingKey != null) {
-                            // 单独的动画起点保留点击时的实际滚动位置。
-                            val movement = remember { androidx.compose.animation.core.Animatable(selectedDistance.value) }
-                            LaunchedEffect(switchingKey) { movement.animateTo(0f, tween(300, easing = ink.tenqui.flowtone.ui.components.FlowtoneMotion.Easing)) }
-                            SourceMorphRow(frozen.first { it.first == switchingKey }, Modifier.height(40.dp).offset(y = movement.value.dp), true)
+                            SourceMorphRow(frozen.first { it.first == switchingKey },
+                                Modifier.height(40.dp).offset(y = switchFrame!!.targetTop.dp), true)
                         }
-                    }
                 }
             }
         }
