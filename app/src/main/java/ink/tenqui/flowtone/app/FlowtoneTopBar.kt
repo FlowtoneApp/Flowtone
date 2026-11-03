@@ -171,6 +171,12 @@ internal fun FlowtoneTopBar(
         FlowtoneTopBarNavigationTitleShift.toPx()
     } * backButtonProgress
     val searchAvailable = secondaryPage == null && !searchActive
+    val librarySourceVisible = searchAvailable && songSelectionState == null
+    val librarySourceVisibilityAlpha by animateFloatAsState(
+        targetValue = if (librarySourceVisible) 1f else 0f,
+        animationSpec = tween(200, easing = FlowtonePageEasing),
+        label = "LibrarySourceVisibilityAlpha"
+    )
     val titleEndPadding = if (searchAvailable) 84.dp else 24.dp
     val titleExitDistancePx = with(density) { 12.dp.toPx() }
     val actionButtonMotionDistancePx = with(density) { 16.dp.roundToPx() }
@@ -350,10 +356,11 @@ internal fun FlowtoneTopBar(
                 }
             }
         }
-        if (searchAvailable && songSelectionState == null) {
+        if (librarySourceVisible || librarySourceVisibilityAlpha > 0f) {
             val libraryDistance = TopLevelPage.Library.index - topLevelHeaderPagePosition(pagerState)
             val libraryAlpha = topLevelHeaderAlpha(libraryDistance)
-            val libraryActive = pagerState.currentPage == TopLevelPage.Library.index && !pagerState.isScrollInProgress
+            val libraryActive = librarySourceVisible && librarySourceVisibilityAlpha > 0f &&
+                pagerState.currentPage == TopLevelPage.Library.index && !pagerState.isScrollInProgress
             var frozenProgress by remember { mutableStateOf(0f) }
             var heldProgress by remember { mutableStateOf(false) }
             var scrollHandoff by remember { mutableStateOf<Float?>(null) }
@@ -398,7 +405,7 @@ internal fun FlowtoneTopBar(
             ).size.width * flowtoneCollapsedTitleScale(expandedStyle, collapsedStyle)
             BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 20.dp, end = 84.dp)
                 .graphicsLayer {
-                    alpha = libraryAlpha
+                    alpha = libraryAlpha * librarySourceVisibilityAlpha
                     translationX = libraryDistance * TopLevelHeaderTransitionDistance.toPx()
                 }.then(if (libraryActive) Modifier else Modifier.clearAndSetSemantics {}),
                 contentAlignment = Alignment.CenterStart) {
