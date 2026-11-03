@@ -62,6 +62,20 @@ internal class SessionPlaybackPlayer(
     val sourceItems: List<PlaybackQueueItem>
         get() = queue.sourceItems
 
+    fun addProviderItemsNext(items: List<PlaybackQueueItem>): Boolean {
+        if (!canAddProviderItemsNext(queue.sourceItems, items)) return false
+        val hadCurrent = queue.currentItem != null
+        queue.addNext(items)
+        if (hadCurrent) {
+            invalidateState()
+            schedulePreload()
+        } else {
+            desiredPlayWhenReady = true
+            activateCurrentTarget("add-provider-next")
+        }
+        return true
+    }
+
     private val engineListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             pendingInitialPositionVerification?.let { pending ->

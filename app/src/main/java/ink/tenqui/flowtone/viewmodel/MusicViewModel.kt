@@ -315,6 +315,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun playPersistentTrack(track: PersistentTrack) = playbackSession.playPersistentTrack(track)
     fun playQueueSong(song: Song) = playbackSession.playQueueSong(song)
     fun addSongsToNext(songs: List<Song>): Boolean = playbackSession.addSongsToNext(songs)
+    fun addProviderSongsToNext(songs: List<ProviderSong>, onResult: (Boolean) -> Unit) =
+        playbackSession.addProviderSongsToNext(songs, onResult)
     fun appendSongsToQueue(songs: List<Song>): Boolean = playbackSession.appendSongsToQueue(songs)
     fun togglePlayPause() = playbackSession.togglePlayPause()
     fun togglePlaybackOrderMode() = playbackSession.togglePlaybackOrderMode()

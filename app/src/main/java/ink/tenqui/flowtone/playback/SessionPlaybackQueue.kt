@@ -1,5 +1,11 @@
 package ink.tenqui.flowtone.playback
 
+internal fun canAddProviderItemsNext(existing: List<PlaybackQueueItem>, items: List<PlaybackQueueItem>): Boolean {
+    val existingIds = existing.mapTo(mutableSetOf()) { it.queueId }
+    return items.isNotEmpty() && items.all { it.runtimeProviderSong != null } &&
+        items.map { it.queueId }.toSet().size == items.size && items.none { it.queueId in existingIds }
+}
+
 /** Service-owned logical queue. The exposed list is already in effective playback order. */
 internal class SessionPlaybackQueue(
     private val shuffle: (List<PlaybackQueueItem>) -> List<PlaybackQueueItem> = { it.shuffled() }

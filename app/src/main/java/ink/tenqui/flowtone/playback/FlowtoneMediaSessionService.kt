@@ -50,6 +50,7 @@ class FlowtoneMediaSessionService : MediaSessionService() {
         Bundle.EMPTY
     )
     private val toggleLikedCommand = SessionCommand(ACTION_TOGGLE_LIKED, Bundle.EMPTY)
+    private val addProviderNextCommand = SessionCommand(ACTION_ADD_PROVIDER_NEXT, Bundle.EMPTY)
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) = logPlayerState("onIsPlayingChanged")
@@ -90,6 +91,7 @@ class FlowtoneMediaSessionService : MediaSessionService() {
                 .add(togglePlaybackOrderCommand)
                 .add(setPlaybackOrderCommand)
                 .add(toggleLikedCommand)
+                .add(addProviderNextCommand)
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
@@ -121,6 +123,21 @@ class FlowtoneMediaSessionService : MediaSessionService() {
             args: Bundle
         ): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
+                ACTION_ADD_PROVIDER_NEXT -> {
+                    if (controller.packageName != packageName) {
+                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_PERMISSION_DENIED))
+                    }
+                    @Suppress("DEPRECATION")
+                    val bundles = args.getParcelableArrayList<Bundle>(EXTRA_PROVIDER_QUEUE_ITEMS)
+                    val items = runCatching {
+                        bundles?.map { bundle -> PlaybackQueueMediaItemCodec.decode(androidx.media3.common.MediaItem.fromBundle(bundle)) }
+                    }.getOrNull()
+                    val accepted = items != null && items.isNotEmpty() && items.all { it != null } &&
+                        player?.addProviderItemsNext(items.filterNotNull()) == true
+                    return Futures.immediateFuture(SessionResult(
+                        if (accepted) SessionResult.RESULT_SUCCESS else SessionResult.RESULT_ERROR_BAD_VALUE
+                    ))
+                }
                 ACTION_TOGGLE_PLAYBACK_ORDER -> {
                     player?.let { sessionPlayer ->
                         sessionPlayer.setPlaybackOrderMode(

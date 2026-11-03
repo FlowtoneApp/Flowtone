@@ -289,8 +289,8 @@ internal fun FlowtoneTopBar(
                             translationX = titleExitDistancePx * (1f - selectionProgress)
                         }
                 ) {
-                    IconButton(
-                        onClick = displayedSelectionState.onAddNext,
+                    displayedSelectionState.onAddNext?.let { onAddNext -> IconButton(
+                        onClick = onAddNext,
                         enabled = !displayedSelectionState.busy,
                         colors = IconButtonDefaults.iconButtonColors(
                             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -315,10 +315,10 @@ internal fun FlowtoneTopBar(
                                     .size(14.dp)
                             )
                         }
-                    }
+                    } }
                     IconButton(
                         onClick = displayedSelectionState.onAddToPlaylist,
-                        enabled = !displayedSelectionState.busy,
+                        enabled = !displayedSelectionState.busy && displayedSelectionState.canAddToPlaylist,
                         colors = IconButtonDefaults.iconButtonColors(
                             contentColor = MaterialTheme.colorScheme.onSurface,
                             disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(

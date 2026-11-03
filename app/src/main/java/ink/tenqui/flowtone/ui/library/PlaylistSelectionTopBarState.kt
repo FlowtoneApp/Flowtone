@@ -13,7 +13,8 @@ internal enum class PlaylistSelectionSource {
 internal data class PlaylistSelectionTopBarState(
     val selectedCount: Int,
     val busy: Boolean,
-    val onAddNext: () -> Unit,
+    val onAddNext: (() -> Unit)?,
     val onAddToPlaylist: () -> Unit,
-    val onDelete: (() -> Unit)?
+    val onDelete: (() -> Unit)?,
+    val canAddToPlaylist: Boolean = true
 )

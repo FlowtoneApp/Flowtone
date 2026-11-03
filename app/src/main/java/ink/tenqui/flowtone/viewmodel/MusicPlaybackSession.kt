@@ -291,6 +291,15 @@ internal class MusicPlaybackSession(
         return true
     }
 
+    fun addProviderSongsToNext(songs: List<ProviderSong>, onResult: (Boolean) -> Unit) {
+        if (songs.isEmpty()) { onResult(false); return }
+        val items = songs.mapIndexed { index, song ->
+            PlaybackQueueItem.provider(song, song.toPresentationSong(), PlaybackSource.Unknown, index)
+                .copy(queueId = java.util.UUID.randomUUID().toString())
+        }
+        playbackController.addProviderItemsNext(items, onResult)
+    }
+
     fun appendSongsToQueue(songs: List<Song>): Boolean {
         if (songs.isEmpty()) return false
         if (playbackState.value.currentSong == null) {

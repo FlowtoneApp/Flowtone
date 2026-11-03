@@ -32,7 +32,9 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.data.online.toPresentationSong
+import ink.tenqui.flowtone.playback.toPersistentTrackOrNull
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
@@ -44,6 +46,29 @@ internal data class SongListAnimationOrder(
     val order: Int,
     val orderCount: Int
 )
+
+internal fun providerPlaylistSelectionKeys(identities: List<ProviderEntityIdentity>): List<String> {
+    val occurrences = mutableMapOf<String, Int>()
+    return identities.map { item ->
+        val identity = item.stableKey
+        val occurrence = occurrences.getOrDefault(identity, 0)
+        occurrences[identity] = occurrence + 1
+        "provider:${identity.length}:$identity:$occurrence"
+    }
+}
+
+internal fun providerPlaylistSelectableSongs(songs: List<ProviderSong>): List<SelectablePlaylistSong> {
+    val keys = providerPlaylistSelectionKeys(songs.map { it.identity })
+    return songs.mapIndexed { index, song ->
+        SelectablePlaylistSong(
+            selectionKey = keys[index],
+            song = song.toPresentationSong(),
+            track = song.toPersistentTrackOrNull(),
+            artwork = song.artwork,
+            providerSong = song
+        )
+    }
+}
 
 internal fun songListAnimationOrder(
     songKey: String,
@@ -204,6 +229,7 @@ internal fun ProviderAlbumDetailScreen(
     headerModifier: Modifier = Modifier,
     useVinylArtwork: Boolean = true,
     emptyMessage: String = "未找到该专辑的在线歌曲",
+    playlistBatchActions: PlaylistBatchActions? = null,
     modifier: Modifier = Modifier
 ) {
     val listState = remember(album.identity) { LazyListState() }
@@ -211,6 +237,66 @@ internal fun ProviderAlbumDetailScreen(
     val songKeys = remember(songs) { songs.map { it.identity.stableKey } }
     val currentUri = currentSong?.uri
     val vinylMotionActive = isPlaying && presentedSongs.any { it.uri == currentUri }
+    if (playlistBatchActions != null) {
+        val entries = remember(songs) { providerPlaylistSelectableSongs(songs) }
+        val indexByKey = remember(entries) { entries.mapIndexed { index, entry -> entry.selectionKey to index }.toMap() }
+        PlaylistDetailCollapsingHeaderScaffold(
+            title = album.title,
+            listState = listState,
+            showContentHeader = false,
+            onCollapseProgressStateChange = onCollapseProgressStateChange,
+            headerModifier = headerModifier,
+            modifier = modifier
+        ) {
+            SelectablePlaylistSongList(
+                sourceKey = "provider-playlist:$presentationSessionKey",
+                source = PlaylistSelectionSource.ReadOnly,
+                playlistTitle = album.title,
+                entries = entries,
+                listState = listState,
+                currentSong = currentSong,
+                likedSongKeys = playlistBatchActions.likedSongKeys,
+                editablePlaylists = playlistBatchActions.editablePlaylists,
+                clearSelectionRequest = playlistBatchActions.clearSelectionRequest,
+                onSelectionModeChange = playlistBatchActions.onSelectionModeChange,
+                onSelectionTopBarStateChange = playlistBatchActions.onSelectionTopBarStateChange,
+                onSongClick = { _, _ -> },
+                onEntryClick = { key -> indexByKey[key]?.let { onSongClick(songs, it) } },
+                onlineReadOnly = true,
+                onAddProviderSongsNext = playlistBatchActions.onAddProviderSongsNext,
+                dynamicEnterSessionKey = presentationSessionKey,
+                onAddSongsNext = playlistBatchActions.onAddSongsNext,
+                onAppendSongsToQueue = playlistBatchActions.onAppendSongsToQueue,
+                onAddSongsToPlaylists = playlistBatchActions.onAddSongsToPlaylists,
+                onSetSongsLiked = playlistBatchActions.onSetSongsLiked,
+                onDeleteSongs = playlistBatchActions.onDeleteSongs,
+                onRemoveEntries = { _, done -> done(false) },
+                pageTransition = pageTransition,
+                itemModifier = itemModifier,
+                headerContent = {
+                    Column {
+                        AlbumMetadataHeader(
+                            vinylSeed = album.identity.stableKey.hashCode().toLong(),
+                            title = album.title,
+                            artist = album.artist.ifBlank { "未知艺术家" },
+                            songCount = presentedSongs.size.takeIf { it > 0 } ?: album.songCount ?: 0,
+                            releaseMetadata = album.releaseMetadata,
+                            artworkUri = null,
+                            extensionArtwork = album.artwork,
+                            useVinylArtwork = useVinylArtwork,
+                            vinylMotionActive = vinylMotionActive,
+                            modifier = pageTransition.elementModifier(0)
+                        )
+                        if (entries.isEmpty()) Text(emptyMessage,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp))
+                    }
+                }
+            )
+        }
+        return
+    }
     val visibleSongKeys by remember(listState, songKeys) {
         derivedStateOf {
             listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
@@ -351,6 +437,7 @@ internal fun ProviderPlaylistDetailScreen(
     currentSong: Song?,
     isPlaying: Boolean,
     onSongClick: (List<ProviderSong>, Int) -> Unit,
+    batchActions: PlaylistBatchActions,
     pageTransition: PageTransitionScope,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
         { _, _, _ -> Modifier },
@@ -380,6 +467,7 @@ internal fun ProviderPlaylistDetailScreen(
         currentSong = currentSong,
         isPlaying = isPlaying,
         onSongClick = onSongClick,
+        playlistBatchActions = batchActions,
         pageTransition = pageTransition,
         itemModifier = itemModifier,
         onCollapseProgressStateChange = onCollapseProgressStateChange,

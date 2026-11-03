@@ -456,6 +456,7 @@ internal fun SecondaryPageHost(
                         presentationSessionKey = navigationEntryKey,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
+                        batchActions = activeBatchActions,
                         onSongClick = { queue, index ->
                             onProviderSongQueueClick(
                                 queue,

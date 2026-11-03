@@ -262,6 +262,7 @@ internal fun FlowtoneScaffold(
         },
         onRequestClearSelection = { clearSongSelectionRequest += 1 },
         onAddSongsNext = callbacks.onAddSongsToNext,
+        onAddProviderSongsNext = callbacks.onAddProviderSongsToNext,
         onAppendSongsToQueue = callbacks.onAppendSongsToQueue,
         onSetSongsLiked = callbacks.onSetTracksLiked,
         onDeleteSongs = callbacks.onDeleteSongs,

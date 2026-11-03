@@ -679,6 +679,7 @@ fun FlowtoneApp(
             onTogglePlaybackOrderMode = musicViewModel::togglePlaybackOrderMode,
             onPlayQueueSong = musicViewModel::playQueueSong,
             onAddSongsToNext = musicViewModel::addSongsToNext,
+            onAddProviderSongsToNext = musicViewModel::addProviderSongsToNext,
             onAppendSongsToQueue = musicViewModel::appendSongsToQueue,
             onSetSongLiked = ::setSongLiked,
             onSetSongsLiked = ::setSongsLiked,

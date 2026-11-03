@@ -77,10 +77,13 @@ import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import androidx.compose.ui.platform.LocalContext
 import ink.tenqui.flowtone.core.model.toPersistentTrack
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
+import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
+import androidx.compose.runtime.SideEffect
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.MINI_PLAYER_ANIMATION_DURATION_MS
@@ -128,9 +131,11 @@ private sealed interface SecondaryScrollCommand {
 internal data class SelectablePlaylistSong(
     val selectionKey: String,
     val song: Song,
-    val track: PersistentTrack = song.toPersistentTrack(),
+    val track: PersistentTrack? = song.toPersistentTrack(),
     val playlistEntryId: String? = null,
-    val playlistAddedAtSeconds: Long? = null
+    val playlistAddedAtSeconds: Long? = null,
+    val artwork: ExtensionImage? = null,
+    val providerSong: ProviderSong? = null
 )
 
 internal data class PlaylistBatchActions(
@@ -141,6 +146,7 @@ internal data class PlaylistBatchActions(
     val onSelectionTopBarStateChange: (PlaylistSelectionTopBarState?) -> Unit = {},
     val onRequestClearSelection: () -> Unit = {},
     val onAddSongsNext: (List<Song>) -> Boolean = { false },
+    val onAddProviderSongsNext: (List<ProviderSong>, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     val onAppendSongsToQueue: (List<Song>) -> Boolean = { false },
     val onAddSongsToPlaylists:
         (Set<String>, List<PersistentTrack>, (Boolean, Int) -> Unit) -> Unit =
@@ -179,6 +185,10 @@ internal fun SelectablePlaylistSongList(
     descriptionEditing: Boolean = false,
     itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier,
     headerContent: (@Composable () -> Unit)? = null,
+    onEntryClick: ((String) -> Unit)? = null,
+    onlineReadOnly: Boolean = false,
+    onAddProviderSongsNext: (List<ProviderSong>, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
+    dynamicEnterSessionKey: String? = null,
     modifier: Modifier = Modifier
 ) {
     val headerItemCount = if (headerContent == null) 0 else 1
@@ -227,12 +237,20 @@ internal fun SelectablePlaylistSongList(
         SortItemStaggerMillis * SortStaggeredItemCount
     val entriesByKey = renderedEntries.associateBy { it.selectionKey }
     val entryKeys = remember(renderedEntries) { renderedEntries.map { it.selectionKey } }
+    var previousOnlineKeys by remember(sourceKey) { mutableStateOf(entries.map { it.selectionKey }) }
+    LaunchedEffect(entries, onlineReadOnly) {
+        if (onlineReadOnly) {
+            val keys = entries.map { it.selectionKey }
+            if (keys != previousOnlineKeys) selectedKeys = emptyList()
+            previousOnlineKeys = keys
+        }
+    }
     val latestEntries by rememberUpdatedState(renderedEntries)
     val selectedKeySet = remember(selectedKeys) { selectedKeys.toSet() }
     // 按 selectionKey 被加入集合的先后生成操作列表。
     val selectedEntries = selectedKeys.mapNotNull(entriesByKey::get)
     val selectedSongs = selectedEntries.map { it.song }
-    val selectedTracks = selectedEntries.map { it.track }
+    val selectedTracks = selectedEntries.mapNotNull { it.track }
     var frozenTransitionId by remember(sourceKey) { mutableStateOf<Int?>(null) }
     var frozenViewportKeys by remember(sourceKey) { mutableStateOf<List<String>>(emptyList()) }
     var capturedPageProgress by remember(sourceKey) { mutableStateOf(0f) }
@@ -245,6 +263,20 @@ internal fun SelectablePlaylistSongList(
                 .distinct()
         }
     }
+    val dynamicEnterScope = if (dynamicEnterSessionKey != null) {
+        val initialKeys = remember(dynamicEnterSessionKey) { entryKeys.toSet() }
+        rememberPageElementEnterScope(
+            sessionKey = dynamicEnterSessionKey,
+            elementKeys = if (pageTransition.phase == PageTransitionPhase.Current) entryKeys else emptyList(),
+            viewportKeys = visibleSongKeys,
+            awaitViewportKeys = true,
+            initiallyEnteredKeys = initialKeys
+        ).also { enterScope ->
+            if (pageTransition.phase != PageTransitionPhase.Current && entryKeys.isNotEmpty()) {
+                SideEffect { enterScope.markEntered(entryKeys) }
+            }
+        }
+    } else null
     LaunchedEffect(
         pageTransition.transitionId,
         pageTransition.phase,
@@ -460,7 +492,7 @@ internal fun SelectablePlaylistSongList(
     LaunchedEffect(selectionMode) {
         onSelectionModeChange(selectionMode)
     }
-    LaunchedEffect(selectedKeys, busy, source) {
+    LaunchedEffect(selectedKeys, selectedTracks, busy, source, onlineReadOnly) {
         if (!selectionMode) {
             onSelectionTopBarStateChange(null)
         } else {
@@ -471,7 +503,19 @@ internal fun SelectablePlaylistSongList(
                     onAddNext = {
                         if (!busy) {
                             busy = true
-                            if (onAddSongsNext(selectedSongs)) {
+                            if (onlineReadOnly) {
+                                val providerSongs = selectedEntries.mapNotNull { it.providerSong }
+                                if (providerSongs.size != selectedEntries.size || providerSongs.isEmpty()) {
+                                    busy = false
+                                    scope.launch { snackbarHostState.showSnackbar("添加失败，请重试") }
+                                } else onAddProviderSongsNext(providerSongs) { success ->
+                                    if (success) finishWith("已添加 ${providerSongs.size} 首到下一首")
+                                    else {
+                                        busy = false
+                                        scope.launch { snackbarHostState.showSnackbar("添加失败，请重试") }
+                                    }
+                                }
+                            } else if (onAddSongsNext(selectedSongs)) {
                                 finishWith("已添加 ${selectedSongs.size} 首到下一首")
                             } else {
                                 busy = false
@@ -481,6 +525,8 @@ internal fun SelectablePlaylistSongList(
                     onAddToPlaylist = {
                         if (!busy) showPlaylistDialog = true
                     },
+                    canAddToPlaylist = selectedEntries.isNotEmpty() &&
+                        selectedEntries.size == selectedKeys.size && selectedTracks.size == selectedEntries.size,
                     onDelete = when (source) {
                         PlaylistSelectionSource.LocalLibrary -> {
                             { if (!busy) showDeleteDialog = true }
@@ -791,15 +837,31 @@ internal fun SelectablePlaylistSongList(
                 }
                 val itemReorderProgress = MiniPlayerEasing.transform(itemRawProgress)
                 val selected = entry.selectionKey in selectedKeySet
-                val hydratedArtwork = rememberOnlineArtwork(entry.track)
+                val hydratedArtwork = if (!onlineReadOnly && entry.artwork == null) {
+                    rememberOnlineArtwork(entry.track)
+                } else null
                 val isPreviousSelected = index > 0 &&
                     renderedEntries[index - 1].selectionKey in selectedKeySet
                 val isNextSelected = index < renderedEntries.lastIndex &&
                     renderedEntries[index + 1].selectionKey in selectedKeySet
+                val pageItemModifier = if (dynamicEnterScope != null && pageTransition.phase == PageTransitionPhase.Current) {
+                    dynamicEnterScope.elementMotionModifier(entry.selectionKey)
+                } else if (enterGroupReady) {
+                    itemModifier(listProgress, viewportOrder, viewportOrderCount)
+                } else {
+                    Modifier.graphicsLayer { alpha = 0f }
+                }
+                // 在线歌单不使用排序转场，保持其原有页面动画的绘制层次。
+                val reorderItemModifier = if (!onlineReadOnly || reorderAnimationActive) {
+                    Modifier.graphicsLayer {
+                        alpha = itemReorderProgress
+                        translationY = reorderDistancePx * (1f - itemReorderProgress)
+                    }
+                } else Modifier
                 SongListItem(
                     song = entry.song,
                     isCurrentSong = currentSong?.id == entry.song.id,
-                    extensionArtwork = hydratedArtwork,
+                    extensionArtwork = entry.artwork ?: hydratedArtwork,
                     selectionMode = selectionMode,
                     isSelected = selected,
                     isPreviousSelected = isPreviousSelected,
@@ -821,20 +883,14 @@ internal fun SelectablePlaylistSongList(
                                 onSelectionTopBarStateChange(null)
                             }
                         } else {
-                            onSongClick(renderedEntries.map { it.track }, index)
+                            if (onEntryClick != null) onEntryClick(entry.selectionKey)
+                            else onSongClick(renderedEntries.mapNotNull { it.track }, index)
                         }
                     },
                     // 长按与拖动统一由 LazyColumn 识别，避免松手时再触发播放。
                     onLongClick = null,
-                    modifier = if (enterGroupReady) {
-                        itemModifier(listProgress, viewportOrder, viewportOrderCount)
-                    } else {
-                        Modifier.graphicsLayer { alpha = 0f }
-                    }
-                        .graphicsLayer {
-                            alpha = itemReorderProgress
-                            translationY = reorderDistancePx * (1f - itemReorderProgress)
-                        }
+                    modifier = pageItemModifier
+                        .then(reorderItemModifier)
                         .padding(horizontal = 8.dp)
                 )
                 }
@@ -1007,10 +1063,10 @@ internal fun SelectablePlaylistSongList(
 }
 
 @Composable
-private fun rememberOnlineArtwork(track: PersistentTrack): ExtensionImage? {
+private fun rememberOnlineArtwork(track: PersistentTrack?): ExtensionImage? {
     val context = LocalContext.current
-    var artwork by remember(track.identityKey) { mutableStateOf<ExtensionImage?>(null) }
-    LaunchedEffect(track.identityKey) {
+    var artwork by remember(track?.identityKey) { mutableStateOf<ExtensionImage?>(null) }
+    LaunchedEffect(track?.identityKey) {
         val online = track as? PersistentTrack.Online ?: return@LaunchedEffect
         artwork = ExtensionManager.get(context).hydratePersistentPresentation(online)?.artwork
     }

@@ -16,6 +16,54 @@ import org.junit.Test
 
 class SessionPlaybackQueueTest {
     @Test
+    fun `provider next preserves order identity and current in mixed shuffled queue`() {
+        val queue = SessionPlaybackQueue(shuffle = { it.reversed() })
+        queue.replace(listOf(local("A", 0), online("B", 1), local("C", 2)), 1)
+        queue.setOrderMode(PlaybackOrderMode.Shuffle)
+        val current = queue.currentItem
+        val first = online("D", 10).copy(persistentTrack = null, queueId = "unique-1")
+        val second = first.copy(queueId = "unique-2")
+        assertTrue(canAddProviderItemsNext(queue.sourceItems, listOf(first, second)))
+        queue.addNext(listOf(first, second))
+        assertEquals(current?.queueId, queue.currentItem?.queueId)
+        assertEquals(listOf("unique-1", "unique-2"), queue.playbackItems.drop(queue.currentIndex + 1).take(2).map { it.queueId })
+        assertEquals(first.runtimeProviderSong, queue.playbackItems[queue.currentIndex + 1].runtimeProviderSong)
+        assertEquals(null, queue.playbackItems[queue.currentIndex + 1].persistentTrack)
+    }
+
+    @Test
+    fun `invalid provider insertion leaves queue untouched`() {
+        val queue = SessionPlaybackQueue()
+        queue.replace(listOf(local("A", 0), online("B", 1)), 0)
+        val before = queue.playbackItems.toList()
+        val duplicate = online("C", 3).copy(queueId = before.first().queueId)
+        assertFalse(canAddProviderItemsNext(queue.sourceItems, listOf(duplicate)))
+        assertFalse(canAddProviderItemsNext(queue.sourceItems, listOf(local("D", 4))))
+        assertEquals(before, queue.playbackItems)
+    }
+
+    @Test
+    fun `provider next inserts after current without replacing mixed queue`() {
+        val queue = SessionPlaybackQueue()
+        val current = local("A", 0)
+        val tail = online("B", 1)
+        val next = listOf(online("C", 2), online("D", 3))
+        queue.replace(listOf(current, tail), 0)
+        queue.addNext(next)
+        assertEquals(listOf("A", "C", "D", "B"), queue.playbackItems.map { it.presentation.title })
+        assertEquals(current.queueId, queue.currentItem?.queueId)
+        assertEquals("https://image/C", queue.playbackItems[1].extensionArtwork?.url)
+        assertEquals("persistent-C", (queue.playbackItems[1].persistentTrack as ink.tenqui.flowtone.core.model.PersistentTrack.Online).persistentId)
+    }
+
+    @Test
+    fun `empty queue starts at first inserted provider item`() {
+        val queue = SessionPlaybackQueue()
+        queue.addNext(listOf(online("B", 0), online("C", 1)))
+        assertEquals("B", queue.currentItem?.presentation?.title)
+        assertEquals(listOf("B", "C"), queue.playbackItems.map { it.presentation.title })
+    }
+    @Test
     fun `mixed logical queue keeps local and online items`() {
         val items = listOf(local("A", 0), online("B", 1), online("C", 2), local("D", 3))
         val queue = SessionPlaybackQueue()

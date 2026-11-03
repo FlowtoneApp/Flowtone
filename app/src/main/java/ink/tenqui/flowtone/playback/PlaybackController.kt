@@ -10,6 +10,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import androidx.core.content.ContextCompat
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.core.model.PersistentTrack
@@ -50,6 +52,7 @@ class PlaybackController(
     private val onPlaybackEnded: () -> Unit,
     private val onMediaItemChanged: (String) -> Unit = {}
 ) {
+    private val mainExecutor = ContextCompat.getMainExecutor(context.applicationContext)
     private val mediaControllerConnection = FlowtoneMediaControllerConnection(context.applicationContext)
     private val _playbackState = MutableStateFlow(
         PlaybackState(playbackOrderMode = initialPlaybackOrderMode)
@@ -326,6 +329,28 @@ class PlaybackController(
             )
             true
         }.getOrDefault(false)
+    }
+
+    fun addProviderItemsNext(items: List<PlaybackQueueItem>, onResult: (Boolean) -> Unit) {
+        val controller = currentControllerOrNull()
+        if (controller == null || items.isEmpty()) {
+            onResult(false)
+            return
+        }
+        val request = runCatching {
+            val payload = ArrayList(items.map { PlaybackQueueMediaItemCodec.encode(it).toBundle() })
+            controller.sendCustomCommand(
+                SessionCommand(ACTION_ADD_PROVIDER_NEXT, Bundle.EMPTY),
+                Bundle().apply { putParcelableArrayList(EXTRA_PROVIDER_QUEUE_ITEMS, payload) }
+            )
+        }.getOrNull()
+        if (request == null) {
+            onResult(false)
+            return
+        }
+        request.addListener({
+            onResult(runCatching { request.get().resultCode == SessionResult.RESULT_SUCCESS }.getOrDefault(false))
+        }, mainExecutor)
     }
 
     fun appendSongsToQueue(

@@ -3,12 +3,37 @@ package ink.tenqui.flowtone.ui.library
 import ink.tenqui.flowtone.ui.components.PageMotion
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.pageElementVisualState
+import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.core.online.ExtensionTrackRef
+import ink.tenqui.flowtone.playback.toPersistentTrackOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AlbumDetailScreenTest {
+    @Test
+    fun providerPlaylistKeysSeparateSourcesAndRepeatedEntries() {
+        val a = ProviderEntityIdentity("provider-a", "same")
+        val b = ProviderEntityIdentity("provider-b", "same")
+        val keys = providerPlaylistSelectionKeys(listOf(a, b, a))
+        assertEquals(3, keys.toSet().size)
+        assertEquals(keys, providerPlaylistSelectionKeys(listOf(a, b, a)))
+    }
+
+    @Test
+    fun onlinePersistenceRequiresProviderDeclaredIdentity() {
+        val song = ProviderSong(
+            trackRef = ExtensionTrackRef("provider-a", "runtime-id"),
+            title = "Song", artist = "Artist",
+            sourceHost = "example.com", persistentId = "stable-id"
+        )
+        val track = song.toPersistentTrackOrNull()!!
+        assertEquals("example.com", track.sourceHost)
+        assertEquals("stable-id", track.persistentId)
+        assertEquals(null, song.copy(persistentId = null).toPersistentTrackOrNull())
+    }
     @Test
     fun albumSongKeysProvideStableElementOrder() {
         val keys = listOf("track-1", "track-2", "track-3")
