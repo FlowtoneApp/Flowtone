@@ -26,15 +26,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.clipPath
 
 @Composable
 internal fun FavoriteButton(
@@ -63,7 +64,20 @@ internal fun FavoriteButton(
                 contentDescription = null,
                 tint = if (remoteLiked) Color(0xFFFF4D67) else Color.White.copy(alpha = 0.92f),
                 modifier = Modifier.offset(x = (-6).dp).size(PlayerSideButtonIconSize)
-                    .drawWithContent { clipRect(right = 6.dp.toPx()) { this@drawWithContent.drawContent() } }
+                    .drawWithCache {
+                        val scale = size.width / 24f
+                        val shift = 6.dp.toPx()
+                        val visibleRegion = Path().apply {
+                            moveTo(0f, 3f * scale)
+                            lineTo(shift + 7.5f * scale, 3f * scale)
+                            cubicTo(shift + 4.42f * scale, 3f * scale, shift + 2f * scale, 5.42f * scale, shift + 2f * scale, 8.5f * scale)
+                            cubicTo(shift + 2f * scale, 13.1f * scale, shift + 10.55f * scale, 20.03f * scale, shift + 12f * scale, 21.35f * scale)
+                            lineTo(shift + 12f * scale, size.height)
+                            lineTo(0f, size.height)
+                            close()
+                        }
+                        onDrawWithContent { clipPath(visibleRegion) { this@onDrawWithContent.drawContent() } }
+                    }
             )
         }
         Icon(
