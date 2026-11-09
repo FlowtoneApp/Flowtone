@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -23,6 +25,7 @@ import ink.tenqui.flowtone.core.model.PlaylistSongEntry
 import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.displayTitleOrNull
 import ink.tenqui.flowtone.data.online.providerAlbumsForArtist
@@ -41,10 +44,12 @@ import ink.tenqui.flowtone.ui.library.ArtistScrollStateOwner
 import ink.tenqui.flowtone.ui.library.artistAlbumsFor
 import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
-import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
-import ink.tenqui.flowtone.ui.library.ProviderPlaylistDetailScreen
+import ink.tenqui.flowtone.ui.library.ProviderSongCollectionDetailScreen
+import ink.tenqui.flowtone.ui.library.ProviderSongCollectionHeader
+import ink.tenqui.flowtone.ui.library.collectionHeader
 import ink.tenqui.flowtone.ui.library.providerCatalogPresentation
 import ink.tenqui.flowtone.ui.library.providerPlaylistDetailPresentation
+import ink.tenqui.flowtone.ui.library.providerLikedSongsPresentation
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
@@ -184,6 +189,7 @@ internal fun SecondaryPageHost(
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
+    onRefreshProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
     onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onFullTitleRequest: (String) -> Unit = {},
@@ -445,31 +451,61 @@ internal fun SecondaryPageHost(
             )
 
             SecondaryPage.Playlist -> {
-                val navigationDestination =
-                    destination as? SecondaryDestination.Playlist ?: return@Box
-                val providerPlaylist = navigationDestination.providerPlaylist
-                if (providerPlaylist != null) {
-                    val detail = uiState.providerPlaylistDetails[providerPlaylist.identity.stableKey]
-                    val songs = detail?.songs ?: providerPlaylist.songs
-                    ProviderPlaylistDetailScreen(
-                        playlist = providerPlaylist,
+                val providerPlaylist = (destination as? SecondaryDestination.Playlist)?.providerPlaylist
+                val likedCollection = (destination as? SecondaryDestination.ProviderLikedSongsDetail)?.collection
+                val header = if (likedCollection != null) {
+                    ProviderSongCollectionHeader(
+                        key = likedCollection.stableKey,
+                        title = ProviderLikedSongs.Title,
+                        subtitle = uiState.libraryProviderOptions.firstOrNull {
+                            it.extensionId == likedCollection.providerId
+                        }?.name ?: "在线来源",
+                        likedArtwork = true
+                    )
+                } else providerPlaylist?.collectionHeader()
+                if (header != null) {
+                    val likedDetail = likedCollection?.let(uiState.providerLikedSongs::get)
+                    val playlistDetail = providerPlaylist?.identity?.stableKey?.let(uiState.providerPlaylistDetails::get)
+                    val songs = if (likedCollection != null) likedDetail?.songs.orEmpty()
+                        else playlistDetail?.songs ?: providerPlaylist?.songs.orEmpty()
+                    val playbackSource = if (likedCollection != null) {
+                        PlaybackSource.providerLikedSongs(likedCollection)
+                    } else {
+                        val playlist = requireNotNull(providerPlaylist)
+                        PlaybackSource.providerPlaylist(playlist.providerId, playlist.id, playlist.title)
+                    }
+                    ProviderSongCollectionDetailScreen(
+                        header = header,
                         songs = songs,
-                        presentation = providerPlaylistDetailPresentation(songs.isNotEmpty(), detail),
+                        presentation = if (likedCollection != null) providerLikedSongsPresentation(likedDetail)
+                            else providerPlaylistDetailPresentation(songs.isNotEmpty(), playlistDetail),
                         presentationSessionKey = navigationEntryKey,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
-                        batchActions = activeBatchActions,
+                        playlistBatchActions = activeBatchActions,
                         onSongClick = { queue, index ->
-                            onProviderSongQueueClick(
-                                queue,
-                                index,
-                                PlaybackSource.providerPlaylist(
-                                    providerPlaylist.providerId,
-                                    providerPlaylist.id,
-                                    providerPlaylist.title
-                                )
-                            )
+                            onProviderSongQueueClick(queue, index, playbackSource)
                         },
+                        emptyMessage = if (likedCollection != null) "此来源暂无喜欢的歌曲" else "该歌单暂无歌曲",
+                        errorMessage = if (likedCollection != null) "当前在线来源无法读取喜欢的歌曲"
+                            else "当前在线来源无法读取该歌单",
+                        headerAction = if (likedCollection != null) {
+                            {
+                                TextButton(
+                                    onClick = { onRefreshProviderLikedSongs(likedCollection) },
+                                    enabled = likedDetail?.isLoading == false
+                                ) {
+                                    Text(
+                                        when {
+                                            likedDetail?.isLoading != false -> "正在读取"
+                                            likedDetail.loadFailed && likedDetail.songs == null -> "重试"
+                                            likedDetail.loadFailed -> "刷新失败，重试"
+                                            else -> "刷新"
+                                        }
+                                    )
+                                }
+                            }
+                        } else null,
                         pageTransition = pageScope,
                         itemModifier = ::playlistItemModifier,
                         onCollapseProgressStateChange =
@@ -596,8 +632,8 @@ internal fun SecondaryPageHost(
                         val album = navigationDestination.providerAlbum ?: return@Box
                         val catalog = uiState.providerSongs[identity.providerId].orEmpty()
                         val songs = remember(catalog, album) { providerSongsForAlbum(catalog, album) }
-                        ProviderAlbumDetailScreen(
-                            album = album,
+                        ProviderSongCollectionDetailScreen(
+                            header = album.collectionHeader(),
                             songs = songs,
                             presentation = providerCatalogPresentation(
                                 hasContent = songs.isNotEmpty(),

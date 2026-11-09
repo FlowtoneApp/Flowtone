@@ -37,6 +37,9 @@ interface MusicProvider : UserPlaylistProvider, HomePlaylistRecommendationProvid
     /** 可选的只读歌单曲目接口；未声明 capability 时保持 null。 */
     suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? = null
 
+    /** 当前账号喜欢的歌曲。空列表表示读取成功且没有喜欢的歌曲。 */
+    suspend fun getLikedSongs(): List<ProviderSong>? = null
+
     suspend fun resolvePersistentSong(persistentId: String): ProviderSong?
 
     suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource?

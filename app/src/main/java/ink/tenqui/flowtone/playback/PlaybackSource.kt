@@ -1,5 +1,6 @@
 package ink.tenqui.flowtone.playback
 
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import java.util.Locale
 
 enum class PlaybackSourceType(val label: String) {
@@ -125,6 +126,13 @@ data class PlaybackSource(
                 displayName = displayName.trim().ifBlank { "专辑" }
             )
         }
+
+        fun providerLikedSongs(collection: ProviderLikedSongs): PlaybackSource = PlaybackSource(
+            type = PlaybackSourceType.LikedSongs,
+            key = collection.stableKey,
+            sourceId = collection.stableKey,
+            displayName = ProviderLikedSongs.Title
+        )
 
         fun providerPlaylist(
             providerId: String,

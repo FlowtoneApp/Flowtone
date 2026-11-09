@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -12,6 +14,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +50,8 @@ import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.PageElementEnterScope
+import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
+import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 
 internal val DetailSongRowHorizontalPadding = 8.dp
 
@@ -322,10 +329,38 @@ internal fun AlbumDetailScreen(
     }
 }
 
+internal data class ProviderSongCollectionHeader(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val artwork: ExtensionImage? = null,
+    val songCount: Int? = null,
+    val releaseMetadata: String? = null,
+    val likedArtwork: Boolean = false
+)
+
+internal fun ProviderAlbum.collectionHeader() = ProviderSongCollectionHeader(
+    key = identity.stableKey,
+    title = title,
+    subtitle = artist.ifBlank { "未知艺术家" },
+    artwork = artwork,
+    songCount = songCount,
+    releaseMetadata = releaseMetadata
+)
+
+internal fun ProviderPlaylistSearchItem.collectionHeader() = ProviderSongCollectionHeader(
+    key = identity.stableKey,
+    title = title,
+    subtitle = artist.ifBlank { "在线歌单" },
+    artwork = artwork,
+    songCount = metadata?.firstOrNull { it.type == "track_count" }?.value
+        ?.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt()
+)
+
 @SuppressLint("ModifierParameter")
 @Composable
-internal fun ProviderAlbumDetailScreen(
-    album: ProviderAlbum,
+internal fun ProviderSongCollectionDetailScreen(
+    header: ProviderSongCollectionHeader,
     songs: List<ProviderSong>,
     presentation: ProviderLibraryPresentation,
     presentationSessionKey: String,
@@ -337,17 +372,33 @@ internal fun ProviderAlbumDetailScreen(
         { _, _, _ -> Modifier },
     onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
     headerModifier: Modifier = Modifier,
-    useVinylArtwork: Boolean = true,
     emptyMessage: String = "未找到该专辑的在线歌曲",
     errorMessage: String = "当前在线来源无法读取该专辑的歌曲",
     playlistBatchActions: PlaylistBatchActions? = null,
+    headerAction: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val listState = remember(album.identity) { LazyListState() }
+    val listState = remember(header.key) { LazyListState() }
     val presentedSongs = remember(songs) { songs.map(ProviderSong::toPresentationSong) }
     val songKeys = remember(songs) { songs.map { it.identity.stableKey } }
     val currentUri = currentSong?.uri
     val vinylMotionActive = isPlaying && presentedSongs.any { it.uri == currentUri }
+    val headerContent: @Composable () -> Unit = {
+        AlbumMetadataHeader(
+            vinylSeed = header.key.hashCode().toLong(),
+            title = header.title,
+            artist = header.subtitle,
+            songCount = presentedSongs.size.takeIf { it > 0 } ?: header.songCount ?: 0,
+            releaseMetadata = header.releaseMetadata,
+            artworkUri = null,
+            extensionArtwork = header.artwork,
+            useVinylArtwork = playlistBatchActions == null,
+            useLikedArtwork = header.likedArtwork,
+            vinylMotionActive = vinylMotionActive,
+            modifier = pageTransition.elementModifier(0),
+            additionalContent = { headerAction?.invoke() }
+        )
+    }
     val skeletonPageMotion = if (presentation == ProviderLibraryPresentation.Loading) {
         val visibleSkeletonKeys by remember(listState) {
             derivedStateOf {
@@ -367,7 +418,7 @@ internal fun ProviderAlbumDetailScreen(
         val entries = remember(songs) { providerPlaylistSelectableSongs(songs) }
         val indexByKey = remember(entries) { entries.mapIndexed { index, entry -> entry.selectionKey to index }.toMap() }
         PlaylistDetailCollapsingHeaderScaffold(
-            title = album.title,
+            title = header.title,
             listState = listState,
             showContentHeader = false,
             onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -377,7 +428,7 @@ internal fun ProviderAlbumDetailScreen(
             SelectablePlaylistSongList(
                 sourceKey = "provider-playlist:$presentationSessionKey",
                 source = PlaylistSelectionSource.ReadOnly,
-                playlistTitle = album.title,
+                playlistTitle = header.title,
                 entries = entries,
                 listState = listState,
                 currentSong = currentSong,
@@ -399,20 +450,7 @@ internal fun ProviderAlbumDetailScreen(
                 onRemoveEntries = { _, done -> done(false) },
                 pageTransition = pageTransition,
                 itemModifier = itemModifier,
-                headerContent = {
-                    AlbumMetadataHeader(
-                        vinylSeed = album.identity.stableKey.hashCode().toLong(),
-                        title = album.title,
-                        artist = album.artist.ifBlank { "未知艺术家" },
-                        songCount = presentedSongs.size.takeIf { it > 0 } ?: album.songCount ?: 0,
-                        releaseMetadata = album.releaseMetadata,
-                        artworkUri = null,
-                        extensionArtwork = album.artwork,
-                        useVinylArtwork = useVinylArtwork,
-                        vinylMotionActive = vinylMotionActive,
-                        modifier = pageTransition.elementModifier(0)
-                    )
-                },
+                headerContent = headerContent,
                 emptyRows = {
                     providerDetailStatusRows(
                         presentation, emptyMessage, errorMessage, pageTransition,
@@ -441,7 +479,7 @@ internal fun ProviderAlbumDetailScreen(
     )
 
     PlaylistDetailCollapsingHeaderScaffold(
-        title = album.title,
+        title = header.title,
         listState = listState,
         showContentHeader = false,
         onCollapseProgressStateChange = onCollapseProgressStateChange,
@@ -453,19 +491,8 @@ internal fun ProviderAlbumDetailScreen(
             verticalArrangement = Arrangement.spacedBy(StandardSongListItemSpacing),
             modifier = Modifier.fillMaxSize()
         ) {
-            item(key = "provider-album-header:${album.identity.stableKey}") {
-                AlbumMetadataHeader(
-                    vinylSeed = album.identity.stableKey.hashCode().toLong(),
-                    title = album.title,
-                    artist = album.artist.ifBlank { "未知艺术家" },
-                    songCount = presentedSongs.size.takeIf { it > 0 } ?: album.songCount ?: 0,
-                    releaseMetadata = album.releaseMetadata,
-                    artworkUri = null,
-                    extensionArtwork = album.artwork,
-                    useVinylArtwork = useVinylArtwork,
-                    vinylMotionActive = vinylMotionActive,
-                    modifier = pageTransition.elementModifier(0)
-                )
+            item(key = "provider-album-header:${header.key}") {
+                headerContent()
             }
             if (presentedSongs.isEmpty()) {
                 providerDetailStatusRows(
@@ -508,59 +535,6 @@ internal fun ProviderAlbumDetailScreen(
     }
 }
 
-@SuppressLint("ModifierParameter")
-@Composable
-internal fun ProviderPlaylistDetailScreen(
-    playlist: ProviderPlaylistSearchItem,
-    songs: List<ProviderSong>,
-    presentation: ProviderLibraryPresentation,
-    presentationSessionKey: String,
-    currentSong: Song?,
-    isPlaying: Boolean,
-    onSongClick: (List<ProviderSong>, Int) -> Unit,
-    batchActions: PlaylistBatchActions,
-    pageTransition: PageTransitionScope,
-    itemModifier: (pageProgress: Float, order: Int, orderCount: Int) -> Modifier =
-        { _, _, _ -> Modifier },
-    onCollapseProgressStateChange: (State<Float>?) -> Unit = {},
-    headerModifier: Modifier = Modifier,
-    modifier: Modifier = Modifier
-) {
-    val reportedSongCount = playlist.metadata
-        ?.firstOrNull { metadata -> metadata.type == "track_count" }
-        ?.value
-        ?.takeIf { value -> value in 0..Int.MAX_VALUE.toLong() }
-        ?.toInt()
-    val detailAdapter = remember(playlist, reportedSongCount) {
-        ProviderAlbum(
-            identity = playlist.identity,
-            title = playlist.title,
-            artist = playlist.artist.ifBlank { "在线歌单" },
-            artwork = playlist.artwork,
-            songCount = reportedSongCount,
-            metadata = playlist.metadata
-        )
-    }
-    ProviderAlbumDetailScreen(
-        album = detailAdapter,
-        songs = songs,
-        presentation = presentation,
-        presentationSessionKey = presentationSessionKey,
-        currentSong = currentSong,
-        isPlaying = isPlaying,
-        onSongClick = onSongClick,
-        playlistBatchActions = batchActions,
-        pageTransition = pageTransition,
-        itemModifier = itemModifier,
-        onCollapseProgressStateChange = onCollapseProgressStateChange,
-        headerModifier = headerModifier,
-        useVinylArtwork = false,
-        emptyMessage = "该歌单暂无歌曲",
-        errorMessage = "当前在线来源无法读取该歌单",
-        modifier = modifier
-    )
-}
-
 @Composable
 private fun AlbumMetadataHeader(
     vinylSeed: Long,
@@ -571,8 +545,10 @@ private fun AlbumMetadataHeader(
     artworkUri: android.net.Uri?,
     extensionArtwork: ExtensionImage? = null,
     useVinylArtwork: Boolean = true,
+    useLikedArtwork: Boolean = false,
     vinylMotionActive: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    additionalContent: @Composable ColumnScope.() -> Unit = {}
 ) {
     val supportingText = listOfNotNull(
         artist,
@@ -583,7 +559,22 @@ private fun AlbumMetadataHeader(
         title = title,
         supportingText = supportingText,
         artwork = {
-            if (useVinylArtwork) {
+            if (useLikedArtwork) {
+                PlaylistCardSurface(
+                    visualType = PlaylistCardVisualType.LikedMusic,
+                    shape = MaterialTheme.shapes.medium,
+                    contentPadding = PaddingValues(0.dp),
+                    isFlowCloudPlaying = false,
+                    modifier = Modifier.size(128.dp)
+                ) { colors ->
+                    Icon(
+                        imageVector = Icons.Outlined.FavoriteBorder,
+                        contentDescription = null,
+                        tint = colors.iconColor,
+                        modifier = Modifier.align(Alignment.Center).size(42.dp)
+                    )
+                }
+            } else if (useVinylArtwork) {
                 AlbumArtwork(
                     artworkUri = artworkUri,
                     extensionArtwork = extensionArtwork,
@@ -598,6 +589,7 @@ private fun AlbumMetadataHeader(
                 )
             }
         },
-        modifier = modifier
+        modifier = modifier,
+        additionalContent = additionalContent
     )
 }

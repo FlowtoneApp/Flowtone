@@ -64,6 +64,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.playlistAppearanceColorKeyForStableId
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -332,6 +333,25 @@ internal fun LibraryProviderPlaylistListItem(
         modifier = modifier
     ) { contentColors ->
         PlaylistListText(playlist.title, subtitle, contentColors)
+    }
+}
+
+@Composable
+internal fun LibraryProviderLikedSongsListItem(
+    songCount: Int?,
+    flowCloudSpeed: Float,
+    modifier: Modifier = Modifier
+) {
+    PlaylistListItemSurface(
+        visualType = PlaylistCardVisualType.LikedMusic,
+        itemHeight = ProviderPlaylistItemHeight,
+        appearProgress = 1f,
+        clickModifier = Modifier,
+        flowCloudSpeed = flowCloudSpeed,
+        isFlowCloudPlaying = false,
+        modifier = modifier
+    ) { contentColors ->
+        PlaylistListText(ProviderLikedSongs.Title, songCount?.let { "$it 首歌曲" } ?: "在线来源", contentColors)
     }
 }
 

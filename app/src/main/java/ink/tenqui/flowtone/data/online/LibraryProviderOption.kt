@@ -11,5 +11,6 @@ data class LibraryProviderOption(
     val visual: SearchProviderVisual?,
     val supportsSongs: Boolean,
     val supportsAlbums: Boolean,
-    val supportsPlaylists: Boolean = false
+    val supportsPlaylists: Boolean = false,
+    val supportsLikedSongs: Boolean = false
 )

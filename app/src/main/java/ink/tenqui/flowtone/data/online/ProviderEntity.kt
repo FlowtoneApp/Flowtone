@@ -102,6 +102,19 @@ data class ProviderPlaylist(
     val metadata: List<ProviderSearchMetadata>? = null
 )
 
+/** 当前扩展账号的喜欢集合。每个 Provider 有且仅有一个集合身份。 */
+data class ProviderLikedSongs(val providerId: String) {
+    init {
+        require(providerId.isNotBlank())
+    }
+
+    val stableKey: String get() = "provider-liked-songs:$providerId"
+
+    companion object {
+        const val Title = "我喜欢的音乐"
+    }
+}
+
 fun ProviderSong.resolvedArtists(): List<ProviderArtistRef> = artists
     .mapNotNull(::sanitizeProviderArtistRef)
     .ifEmpty {

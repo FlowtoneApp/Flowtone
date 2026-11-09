@@ -601,6 +601,8 @@ fun FlowtoneApp(
             onOnlineSongClick = musicViewModel::playProviderSong,
             onLoadProviderEntityCollections = musicViewModel::loadProviderEntityCollections,
             onLoadProviderUserPlaylists = musicViewModel::loadProviderUserPlaylists,
+            onLoadProviderLikedSongs = musicViewModel::loadProviderLikedSongs,
+            onRefreshProviderLikedSongs = musicViewModel::refreshProviderLikedSongs,
             onRefreshLibrary = musicViewModel::refreshLibrary,
             onProviderSongQueueClick = musicViewModel::playProviderSongQueue,
             onPlaylistSongClick = { songs, startIndex, source ->
@@ -657,6 +659,12 @@ fun FlowtoneApp(
                         title = playlist.title,
                         providerPlaylist = playlist
                     )
+                )
+            },
+            onOpenProviderLikedSongs = { collection ->
+                musicViewModel.loadProviderLikedSongs(collection)
+                appState.secondaryNavigation = appState.secondaryNavigation.push(
+                    SecondaryDestination.ProviderLikedSongsDetail(collection)
                 )
             },
             onOpenArtistSongs = { artist ->

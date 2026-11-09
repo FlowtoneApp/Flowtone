@@ -30,6 +30,7 @@ import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.likedSongsPlaylistCard
 import ink.tenqui.flowtone.data.local.parseLocalArtistCandidates
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.toPresentationSong
@@ -54,9 +55,11 @@ internal fun LibraryHomeContent(
     onOpenArtist: (String) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
+    onOpenProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
     onLoadProviderCollections: (String) -> Unit,
     onLoadProviderPlaylists: (String) -> Unit,
+    onLoadProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     onRefreshLibrary: (String) -> Unit,
     flowCloudSpeed: Float,
     modifier: Modifier = Modifier
@@ -67,10 +70,12 @@ internal fun LibraryHomeContent(
     val categories = remember(selectedSourceKey, selectedSource) { libraryCategories(selectedSourceKey, selectedSource) }
     var requestedCategory by remember(selectedSourceKey) { mutableStateOf<LibraryCategory?>(null) }
     val category = validLibraryCategory(categories, requestedCategory)
+    val sourceLikedCollection = remember(selectedSource) { libraryProviderLikedSongs(selectedSource) }
+    val likedCollection = sourceLikedCollection.takeIf { category == LibraryCategory.Playlists }
     val providerPlaylists = if (provider != null && category == LibraryCategory.Playlists) {
         uiState.providerUserPlaylists[provider].orEmpty()
     } else emptyList()
-    val playlistPresentation = if (provider != null && category == LibraryCategory.Playlists) {
+    val playlistPresentation = if (provider != null && selectedSource.supportsPlaylists && category == LibraryCategory.Playlists) {
         providerCatalogPresentation(
             hasContent = providerPlaylists.isNotEmpty(),
             loadState = uiState.providerUserPlaylistLoadStates[provider],
@@ -125,10 +130,11 @@ internal fun LibraryHomeContent(
             onSourceSelected("mine")
         }
     }
-    LaunchedEffect(provider, selectedSource?.supportsAlbums, selectedSource?.supportsPlaylists) {
+    LaunchedEffect(provider, selectedSource?.supportsAlbums, selectedSource?.supportsPlaylists, sourceLikedCollection) {
         if (provider != null) {
             if (selectedSource.supportsSongs || selectedSource.supportsAlbums) onLoadProviderCollections(provider)
             if (selectedSource.supportsPlaylists) onLoadProviderPlaylists(provider)
+            sourceLikedCollection?.let(onLoadProviderLikedSongs)
         }
     }
 
@@ -267,10 +273,26 @@ internal fun LibraryHomeContent(
                 val isRefreshing = "extension:$provider" in uiState.libraryRefreshingSources
                 val loading = isRefreshing || loadState == ProviderCatalogLoadState.Loading
                 val failed = loadState == ProviderCatalogLoadState.Failed
-                if (playlistPresentation == ProviderLibraryPresentation.Loading ||
-                    (playlistPresentation != null && providerPlaylists.isNotEmpty())
-                ) {
+                val likedRowCount = if (likedCollection != null) 1 else 0
+                val groupCount = likedRowCount + if (playlistPresentation == ProviderLibraryPresentation.Loading) {
+                    ProviderPlaylistSkeletonCount
+                } else providerPlaylists.size
+                if (groupCount > 0) {
                     item(key = "provider-playlist-group-gap") { Spacer(Modifier.height(16.dp)) }
+                }
+                if (likedCollection != null) item(key = likedCollection.stableKey) {
+                    ProviderPlaylistGroupRow(
+                        index = 0,
+                        count = groupCount,
+                        onClick = { onOpenProviderLikedSongs(likedCollection) },
+                        modifier = pageTransition.elementAppearanceModifierAt(pageTransition.progress, 0)
+                    ) { rowModifier ->
+                        LibraryProviderLikedSongsListItem(
+                            songCount = uiState.providerLikedSongs[likedCollection]?.songs?.size,
+                            flowCloudSpeed = flowCloudSpeed,
+                            modifier = rowModifier
+                        )
+                    }
                 }
                 when (playlistPresentation) {
                     ProviderLibraryPresentation.Loading -> items(
@@ -278,8 +300,8 @@ internal fun LibraryHomeContent(
                         key = playlistSkeletonKeys::get
                     ) { index ->
                         ProviderPlaylistGroupRow(
-                            index = index,
-                            count = ProviderPlaylistSkeletonCount,
+                            index = index + likedRowCount,
+                            count = groupCount,
                             modifier = providerSkeletonRowModifier(
                                 skeletonEnterScope, playlistSkeletonKeys[index],
                                 pageTransition, index, ProviderPlaylistSkeletonCount
@@ -300,7 +322,7 @@ internal fun LibraryHomeContent(
                         }
                         val rowKey = playlistRowKeys[index]
                         val asyncEnterScope = playlistEnterScope?.takeIf { rowKey !in initialPlaylistRowKeys }
-                        val order = index.coerceAtMost(PageMotion.DefaultOrderCount - 1)
+                        val order = (index + likedRowCount).coerceAtMost(PageMotion.DefaultOrderCount - 1)
                         val pageModifier = {
                             pageTransition.elementAppearanceModifierAt(pageTransition.progress, order)
                         }
@@ -311,8 +333,8 @@ internal fun LibraryHomeContent(
                             )
                         } else pageModifier()
                         ProviderPlaylistGroupRow(
-                            index = index,
-                            count = providerPlaylists.size,
+                            index = index + likedRowCount,
+                            count = groupCount,
                             onClick = openPlaylist,
                             modifier = Modifier.animateItem(
                                 fadeInSpec = if (asyncEnterScope != null) null else tween(FlowtoneMotion.ShortDurationMillis),
@@ -349,15 +371,14 @@ internal fun LibraryHomeContent(
                     LibraryCategory.Songs -> providerSongs.isEmpty()
                     else -> false
                 }
-                if (category == LibraryCategory.Favorites) item(key = "favorites-unavailable") {
-                    Text("收藏功能暂不可用", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (playlistPresentation == ProviderLibraryPresentation.Empty || activeEmpty && !failed) item(key = "provider-empty") {
+                if (playlistPresentation == ProviderLibraryPresentation.Empty && likedCollection == null ||
+                    activeEmpty && !failed
+                ) item(key = "provider-empty") {
                     Text(if (playlistPresentation == null && loading) "正在加载来源内容" else "此来源暂无可浏览内容",
                         modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (playlistPresentation == ProviderLibraryPresentation.Error ||
-                    playlistPresentation == null && category != LibraryCategory.Favorites && failed && !loading
+                    playlistPresentation == null && category != LibraryCategory.Playlists && failed && !loading
                 ) item(key = "provider-error") {
                     Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                         Text("部分来源内容加载失败", color = MaterialTheme.colorScheme.onSurfaceVariant)

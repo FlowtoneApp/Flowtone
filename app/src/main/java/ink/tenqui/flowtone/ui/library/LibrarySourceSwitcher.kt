@@ -28,7 +28,8 @@ internal data class LibrarySourceItem(
     val visual: SearchProviderVisual? = null,
     val supportsSongs: Boolean = false,
     val supportsAlbums: Boolean = false,
-    val supportsPlaylists: Boolean = false
+    val supportsPlaylists: Boolean = false,
+    val supportsLikedSongs: Boolean = false
 )
 
 internal sealed interface LibrarySourceSwitcherState {
@@ -98,7 +99,8 @@ internal fun librarySourceItems(
                 visual = provider.visual,
                 supportsSongs = provider.supportsSongs,
                 supportsAlbums = provider.supportsAlbums,
-                supportsPlaylists = provider.supportsPlaylists
+                supportsPlaylists = provider.supportsPlaylists,
+                supportsLikedSongs = provider.supportsLikedSongs
             )
         }
         .toList()

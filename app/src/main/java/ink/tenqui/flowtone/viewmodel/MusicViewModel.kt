@@ -18,6 +18,7 @@ import ink.tenqui.flowtone.data.listening.ListeningStatsRepositoryProvider
 import ink.tenqui.flowtone.data.repository.MusicRepository
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSearchCategory
 import ink.tenqui.flowtone.core.model.LocalAlbum
@@ -371,6 +372,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadProviderUserPlaylists(providerId: String) {
         providerLibraryCatalogCoordinator.loadProviderUserPlaylists(providerId)
+    }
+
+    fun loadProviderLikedSongs(collection: ProviderLikedSongs) {
+        providerLibraryCatalogCoordinator.loadProviderLikedSongs(collection)
+    }
+
+    fun refreshProviderLikedSongs(collection: ProviderLikedSongs) {
+        providerLibraryCatalogCoordinator.loadProviderLikedSongs(collection, refresh = true)
     }
 
     fun loadProviderPlaylist(playlist: ProviderPlaylistSearchItem) {

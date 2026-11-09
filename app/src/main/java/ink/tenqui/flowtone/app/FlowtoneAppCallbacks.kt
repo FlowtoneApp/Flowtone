@@ -6,6 +6,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.search.SearchScope
 import ink.tenqui.flowtone.playback.PlaybackSource
@@ -65,6 +66,7 @@ internal data class FlowtoneAppCallbacks(
     val onOpenAlbum: (Long) -> Unit,
     val onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     val onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
+    val onOpenProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     val onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
     val onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     val onOpenArtist: (String) -> Unit,
@@ -77,6 +79,8 @@ internal data class FlowtoneAppCallbacks(
     val onSongClick: (Song) -> Unit,
     val onLoadProviderEntityCollections: (String) -> Unit,
     val onLoadProviderUserPlaylists: (String) -> Unit,
+    val onLoadProviderLikedSongs: (ProviderLikedSongs) -> Unit,
+    val onRefreshProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     val onRefreshLibrary: (String) -> Unit,
     val onOnlineSongClick: (ProviderSong) -> Unit,
     val onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
@@ -127,6 +131,8 @@ internal fun flowtoneAppCallbacks(
     onSongClick: (Song) -> Unit,
     onLoadProviderEntityCollections: (String) -> Unit,
     onLoadProviderUserPlaylists: (String) -> Unit,
+    onLoadProviderLikedSongs: (ProviderLikedSongs) -> Unit,
+    onRefreshProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     onRefreshLibrary: (String) -> Unit,
     onOnlineSongClick: (ProviderSong) -> Unit,
     onProviderSongQueueClick: (List<ProviderSong>, Int, PlaybackSource) -> Unit,
@@ -135,6 +141,7 @@ internal fun flowtoneAppCallbacks(
     onOpenAlbum: (Long) -> Unit,
     onOpenProviderAlbum: (ProviderAlbum) -> Unit,
     onOpenProviderPlaylist: (ProviderPlaylistSearchItem) -> Unit,
+    onOpenProviderLikedSongs: (ProviderLikedSongs) -> Unit,
     onOpenArtistSongs: (ArtistDestinationIdentity) -> Unit,
     onOpenArtistAlbums: (ArtistDestinationIdentity) -> Unit,
     onExitMiniPlayerFullscreen: () -> Unit,
@@ -352,6 +359,7 @@ internal fun flowtoneAppCallbacks(
         onOpenAlbum = onOpenAlbum,
         onOpenProviderAlbum = onOpenProviderAlbum,
         onOpenProviderPlaylist = onOpenProviderPlaylist,
+        onOpenProviderLikedSongs = onOpenProviderLikedSongs,
         onOpenArtistSongs = onOpenArtistSongs,
         onOpenArtistAlbums = onOpenArtistAlbums,
         onOpenArtist = onOpenArtist,
@@ -385,6 +393,8 @@ internal fun flowtoneAppCallbacks(
         onSongClick = onSongClick,
         onLoadProviderEntityCollections = onLoadProviderEntityCollections,
         onLoadProviderUserPlaylists = onLoadProviderUserPlaylists,
+        onLoadProviderLikedSongs = onLoadProviderLikedSongs,
+        onRefreshProviderLikedSongs = onRefreshProviderLikedSongs,
         onRefreshLibrary = onRefreshLibrary,
         onOnlineSongClick = onOnlineSongClick,
         onProviderSongQueueClick = onProviderSongQueueClick,

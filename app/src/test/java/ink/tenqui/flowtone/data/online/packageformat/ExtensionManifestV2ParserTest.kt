@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.online.packageformat
 
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
+import ink.tenqui.flowtone.data.online.capability.ExtensionRuntimeCapabilityPolicy
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityId
 import ink.tenqui.flowtone.data.online.capability.SummaryCapabilityStatus
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationFieldType
@@ -17,6 +18,19 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ExtensionManifestV2ParserTest {
+    @Test
+    fun likedSongsIsAnOptionalV2CapabilityThatCanRegisterAMusicProviderOnItsOwn() {
+        val legacy = ExtensionManifestParser.parseNormalized(v2Manifest())
+        val likedOnly = ExtensionManifestParser.parseNormalized(
+            v2Manifest(capabilities = listOf("user.liked.songs.list"))
+        )
+
+        assertTrue(AtomicCapabilityId.UserLikedSongsList !in legacy.canonicalCapabilities)
+        assertEquals(setOf(AtomicCapabilityId.UserLikedSongsList), likedOnly.canonicalCapabilities.values)
+        assertTrue(likedOnly.unknownAtomicCapabilityIds.isEmpty())
+        assertTrue(ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(likedOnly.canonicalCapabilities))
+    }
+
     @Test
     fun v1IsRejectedWithDeprecatedFormatMessage() {
         val error = assertThrows(IllegalArgumentException::class.java) {

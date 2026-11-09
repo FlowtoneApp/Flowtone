@@ -1,15 +1,33 @@
 package ink.tenqui.flowtone.ui.library
 
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
+import ink.tenqui.flowtone.core.online.ExtensionTrackRef
+import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.pageElementKeysAwaitingEntry
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import ink.tenqui.flowtone.viewmodel.ProviderPlaylistDetailState
+import ink.tenqui.flowtone.viewmodel.ProviderLikedSongsState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProviderLibraryPresentationTest {
+    @Test
+    fun providerLikedSongsDistinguishEmptyFailureAndRefreshWithoutDroppingContent() {
+        val song = ProviderSong(ExtensionTrackRef("example.music", "track"), "Track", "Artist")
+        val cached = ProviderLikedSongsState(songs = listOf(song))
+        val empty = ProviderLikedSongsState(songs = emptyList())
+
+        assertEquals(ProviderLibraryPresentation.Loading, providerLikedSongsPresentation(null))
+        assertEquals(ProviderLibraryPresentation.Ready, providerLikedSongsPresentation(cached))
+        assertEquals(ProviderLibraryPresentation.Refreshing, providerLikedSongsPresentation(cached.copy(isLoading = true)))
+        assertEquals(ProviderLibraryPresentation.Ready, providerLikedSongsPresentation(cached.copy(loadFailed = true)))
+        assertEquals(ProviderLibraryPresentation.Empty, providerLikedSongsPresentation(empty))
+        assertEquals(ProviderLibraryPresentation.Empty, providerLikedSongsPresentation(empty.copy(isLoading = true)))
+        assertEquals(ProviderLibraryPresentation.Error, providerLikedSongsPresentation(ProviderLikedSongsState(loadFailed = true)))
+    }
+
     @Test
     fun initialRequestsShowLoadingBeforeAndAfterTheRequestStateIsPublished() {
         assertPresentations(

@@ -4,6 +4,7 @@ import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.ExtensionRuntimeState
 import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
@@ -21,6 +22,90 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProviderLibraryCatalogCoordinatorTest {
+    @Test
+    fun likedSongsShareInFlightRequestsAndKeepTheLastSuccessfulSnapshotOnRefreshFailure() = runBlocking {
+        withTimeout(5_000) {
+            val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsList)
+            val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+            val first = ProviderLikedSongs("a")
+            val second = ProviderLikedSongs("b")
+            val songs = listOf(song("liked"))
+            coordinator.loadProviderLikedSongs(first)
+            coordinator.loadProviderLikedSongs(first)
+            coordinator.loadProviderLikedSongs(second)
+            val initialRefresh = async { coordinator.refreshProviderLibrary("a", coordinator.beginRefresh("a")) }
+            yield()
+
+            assertEquals(listOf(first, second), gateway.likedCalls.map { it.first })
+            assertEquals(ProviderLikedSongsState(isLoading = true), coordinator.state.value.providerLikedSongs[first])
+            gateway.likedCalls[0].second.complete(songs)
+            gateway.likedCalls[1].second.complete(emptyList())
+            assertTrue(initialRefresh.await())
+            yield()
+            assertEquals(ProviderLikedSongsState(songs = emptyList()), coordinator.state.value.providerLikedSongs[second])
+
+            val refresh = async { coordinator.refreshProviderLibrary("a", coordinator.beginRefresh("a")) }
+            yield()
+            assertEquals(ProviderLikedSongsState(songs, isLoading = true), coordinator.state.value.providerLikedSongs[first])
+            yield()
+            gateway.likedCalls.last().second.complete(null)
+            assertFalse(refresh.await())
+            assertEquals(ProviderLikedSongsState(songs, loadFailed = true), coordinator.state.value.providerLikedSongs[first])
+
+            coordinator.loadProviderLikedSongs(first, refresh = true)
+            coordinator.loadProviderLikedSongs(first, refresh = true)
+            yield()
+            assertEquals(4, gateway.likedCalls.size)
+            assertEquals(ProviderLikedSongsState(songs, isLoading = true), coordinator.state.value.providerLikedSongs[first])
+            gateway.likedCalls.last().second.complete(emptyList())
+            yield()
+            assertEquals(ProviderLikedSongsState(songs = emptyList()), coordinator.state.value.providerLikedSongs[first])
+            assertTrue(gateway.userPlaylistCalls.isEmpty())
+        }
+    }
+
+    @Test
+    fun likedSongsRequireCapabilityAndPublishColdFailure() = runBlocking {
+        withTimeout(5_000) {
+            val collection = ProviderLikedSongs("a")
+            val legacy = FakeGateway(AtomicCapabilityId.UserPlaylistsList)
+            ProviderLibraryCatalogCoordinator(this, legacy, { _, _, _ -> }).loadProviderLikedSongs(collection)
+            assertTrue(legacy.likedCalls.isEmpty())
+
+            val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsList)
+            val failures = mutableListOf<Throwable>()
+            val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, error -> failures += error })
+            coordinator.loadProviderLikedSongs(collection)
+            yield()
+            gateway.likedCalls.single().second.complete(null)
+            yield()
+            assertEquals(ProviderLikedSongsState(loadFailed = true), coordinator.state.value.providerLikedSongs[collection])
+            assertTrue(failures.isEmpty())
+        }
+    }
+
+    @Test
+    fun likedSongsDiscardResultsFromThePreviousExtensionRuntime() = runBlocking {
+        withTimeout(5_000) {
+            val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsList)
+            val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+            val collection = ProviderLikedSongs("a")
+            coordinator.loadProviderLikedSongs(collection)
+            yield()
+
+            gateway.runtimeState.value = ExtensionRuntimeState(generation = 2)
+            coordinator.invalidateRuntime()
+            coordinator.reloadRequestedProviderData()
+            yield()
+            gateway.likedCalls[1].second.complete(listOf(song("new")))
+            yield()
+            gateway.likedCalls[0].second.complete(listOf(song("old")))
+            yield()
+
+            assertEquals(listOf(song("new")), coordinator.state.value.providerLikedSongs[collection]?.songs)
+        }
+    }
+
     @Test
     fun normalLoadDeduplicatesUsesCachedStateAndChecksCapabilities() = runBlocking {
         withTimeout(5_000) {
@@ -326,6 +411,7 @@ class ProviderLibraryCatalogCoordinatorTest {
         val songCalls = mutableListOf<SongCall>()
         val userPlaylistCalls = mutableListOf<CompletableDeferred<List<ProviderPlaylist>?>>()
         val detailCalls = mutableListOf<DetailCall>()
+        val likedCalls = mutableListOf<Pair<ProviderLikedSongs, CompletableDeferred<List<ProviderSong>?>>>()
         var albumCalls = 0
 
         override fun providerCapabilities(extensionId: String) = capabilities
@@ -353,6 +439,12 @@ class ProviderLibraryCatalogCoordinatorTest {
             val call = DetailCall()
             detailCalls += call
             return call.result.await()
+        }
+
+        override suspend fun getProviderLikedSongs(collection: ProviderLikedSongs): List<ProviderSong>? {
+            val result = CompletableDeferred<List<ProviderSong>?>()
+            likedCalls += collection to result
+            return result.await()
         }
 
         class SongCall(

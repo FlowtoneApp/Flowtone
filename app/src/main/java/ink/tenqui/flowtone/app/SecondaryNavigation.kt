@@ -4,6 +4,7 @@ import ink.tenqui.flowtone.data.local.localArtistStableId
 import ink.tenqui.flowtone.core.online.ArtistMetadata
 import ink.tenqui.flowtone.core.online.ExtensionImage
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderArtist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
@@ -81,6 +82,10 @@ internal sealed interface SecondaryDestination {
         val title: String,
         val providerPlaylist: ProviderPlaylistSearchItem? = null
     ) : SecondaryDestination {
+        override val page: SecondaryPage = SecondaryPage.Playlist
+    }
+
+    data class ProviderLikedSongsDetail(val collection: ProviderLikedSongs) : SecondaryDestination {
         override val page: SecondaryPage = SecondaryPage.Playlist
     }
 
@@ -392,6 +397,7 @@ internal fun secondaryDestinationBreadcrumbs(
             current.title
         )
         is SecondaryDestination.Playlist -> listOf(current.title)
+        is SecondaryDestination.ProviderLikedSongsDetail -> listOf(ProviderLikedSongs.Title)
         is SecondaryDestination.Standard -> nestedSegments
         SecondaryDestination.ExtensionInstall -> emptyList()
         SecondaryDestination.CredentialSources -> listOf("凭据")

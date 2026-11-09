@@ -6,6 +6,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.data.listening.ListeningStatsSnapshot
 import ink.tenqui.flowtone.data.online.LibraryProviderOption
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderSong
 import ink.tenqui.flowtone.playback.PlaybackQueueItem
@@ -37,6 +38,7 @@ data class MusicUiState(
     val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
     val providerUserPlaylists: Map<String, List<ProviderPlaylist>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
+    val providerLikedSongs: Map<ProviderLikedSongs, ProviderLikedSongsState> = emptyMap(),
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
@@ -65,6 +67,13 @@ enum class ProviderCatalogLoadState {
 
 data class ProviderPlaylistDetailState(
     val songs: List<ProviderSong> = emptyList(),
+    val isLoading: Boolean = false,
+    val loadFailed: Boolean = false
+)
+
+data class ProviderLikedSongsState(
+    /** null 表示还没有成功的快照，空列表是有效结果。 */
+    val songs: List<ProviderSong>? = null,
     val isLoading: Boolean = false,
     val loadFailed: Boolean = false
 )
@@ -101,6 +110,7 @@ internal fun assembleMusicUiState(
     providerAlbums = provider.providerAlbums,
     providerUserPlaylists = provider.providerUserPlaylists,
     providerPlaylistDetails = provider.providerPlaylistDetails,
+    providerLikedSongs = provider.providerLikedSongs,
     libraryProviderOptions = provider.libraryProviderOptions,
     libraryProviderSourcesResolved = provider.libraryProviderSourcesResolved,
     providerSongCatalogLoadStates = provider.providerSongCatalogLoadStates,

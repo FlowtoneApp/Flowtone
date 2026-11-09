@@ -119,6 +119,7 @@ class JavaScriptMusicProviderTest {
                   async getSongs() { throw new Error('songs invoked'); },
                   async getAlbums() { throw new Error('albums invoked'); },
                   async getPlaylistSongs() { throw new Error('playlist invoked'); },
+                  async getLikedSongs() { throw new Error('liked songs invoked'); },
                   async resolvePersistentSong() { throw new Error('persistent invoked'); },
                   async getPlaybackResource() { throw new Error('playback invoked'); }
                 };
@@ -130,8 +131,42 @@ class JavaScriptMusicProviderTest {
         assertNull(provider.getSongs())
         assertNull(provider.getAlbums())
         assertNull(provider.getPlaylistSongs("playlist-1"))
+        assertNull(provider.getLikedSongs())
         assertNull(provider.resolvePersistentSong("persistent-1"))
         assertNull(provider.getPlaybackResource(testSong()))
+    }
+
+    @Test fun likedSongsUseTheProviderBoundSongProtocol() = runBlocking {
+        val provider = provider(
+            script = """
+                globalThis.flowtoneExtension = {
+                  async getLikedSongs(...args) {
+                    if (args.length !== 0) throw new Error('unexpected arguments');
+                    const song = {id:'liked-1', title:'Liked Song', artist:'Artist', durationMs:12000,
+                      artworkUrl:'https://example.com/art.png', persistentId:'stable-1', sourceHost:'example.com',
+                      providerId:'spoofed-provider'};
+                    return [song, song];
+                  }
+                };
+            """.trimIndent(),
+            capabilities = CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.UserLikedSongsList)
+        )
+        val song = requireNotNull(provider.getLikedSongs()).single()
+
+        assertEquals(ExtensionTrackRef("example.music", "liked-1"), song.trackRef)
+        assertEquals("Liked Song", song.title)
+        assertEquals("Artist", song.artist)
+        assertEquals(12_000L, song.durationMs)
+        assertEquals("https://example.com/art.png", song.artwork?.url)
+        assertEquals("stable-1", song.persistentId)
+        assertEquals("example.com", song.sourceHost)
+        assertNull(provider.getUserPlaylists())
+        val runtimeOnly = song.copy(trackRef = ExtensionTrackRef("example.music", "runtime-only"), persistentId = null)
+        val selection = ink.tenqui.flowtone.ui.library.providerPlaylistSelectableSongs(listOf(song, runtimeOnly))
+        assertEquals(listOf(song, runtimeOnly), selection.map { it.providerSong })
+        assertEquals(2, selection.map { it.selectionKey }.toSet().size)
+        assertNotNull(selection[0].track)
+        assertNull(selection[1].track)
     }
 
     @Test fun declaredProviderMethodsAreInvoked() = runBlocking {

@@ -466,7 +466,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             )
     }
 
-    /** 当前运行且声明曲库用户歌单能力的扩展来源。 */
+    /** 当前运行且可读取账号歌单或喜欢集合的扩展来源。 */
     internal fun availableLibraryProviderOptions(): List<LibraryProviderOption> {
         if (_runtimeState.value.isReloading) return emptyList()
         return installedExtensions()
@@ -477,7 +477,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                 val supportsSongs = AtomicCapabilityId.CatalogSongsList in provider.capabilities
                 val supportsAlbums = AtomicCapabilityId.CatalogAlbumsList in provider.capabilities
                 val supportsPlaylists = AtomicCapabilityId.UserPlaylistsList in provider.capabilities
-                if (!supportsPlaylists) return@mapNotNull null
+                val supportsLikedSongs = AtomicCapabilityId.UserLikedSongsList in provider.capabilities
+                if (!supportsPlaylists && !supportsLikedSongs) return@mapNotNull null
                 LibraryProviderOption(
                     extensionId = installed.manifest.id,
                     name = installed.manifest.name,
@@ -486,7 +487,8 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     visual = ExtensionProviderVisualResolver.resolve(installed),
                     supportsSongs = supportsSongs,
                     supportsAlbums = supportsAlbums,
-                    supportsPlaylists = supportsPlaylists
+                    supportsPlaylists = supportsPlaylists,
+                    supportsLikedSongs = supportsLikedSongs
                 )
             }
             .sortedWith(
@@ -599,6 +601,18 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
                     error
                 )
                 throw error
+            }
+        }
+
+    internal suspend fun getProviderLikedSongs(collection: ProviderLikedSongs): List<ProviderSong>? =
+        runtimeLifecycle.execute {
+            val provider = musicProviders[collection.providerId] ?: return@execute null
+            if (AtomicCapabilityId.UserLikedSongsList !in provider.capabilities) return@execute null
+            provider.getLikedSongs()?.let { songs ->
+                require(songs.all { it.providerId == collection.providerId }) {
+                    "喜欢列表包含其他来源的歌曲"
+                }
+                dedupeProviderSongs(songs)
             }
         }
 

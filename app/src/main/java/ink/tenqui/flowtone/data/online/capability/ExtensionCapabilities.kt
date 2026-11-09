@@ -10,6 +10,7 @@ enum class AtomicCapabilityId(val value: String) {
     CatalogAlbumsList("catalog.albums.list"),
     PlaylistSongsRead("playlist.songs.read"),
     UserPlaylistsList("user.playlists.list"),
+    UserLikedSongsList("user.liked.songs.list"),
     HomePlaylistRecommendationsGet("home.playlist.recommendations.get"),
     SongPersistentResolve("song.persistent.resolve"),
     PlaybackResourceResolve("playback.resource.resolve"),
@@ -98,6 +99,12 @@ object AtomicCapabilityDefinitions {
             AtomicCapabilityGroup.Playlist,
             "读取用户歌单",
             order = 85
+        ),
+        AtomicCapabilityDefinition(
+            AtomicCapabilityId.UserLikedSongsList,
+            AtomicCapabilityGroup.Playlist,
+            "读取账号喜欢的歌曲",
+            order = 86
         ),
         AtomicCapabilityDefinition(
             AtomicCapabilityId.SongPersistentResolve,
@@ -226,6 +233,7 @@ object SummaryCapabilityDefinitions {
             ),
             optionalCapabilities = setOf(
                 AtomicCapabilityId.UserPlaylistsList,
+                AtomicCapabilityId.UserLikedSongsList,
                 AtomicCapabilityId.HomePlaylistRecommendationsGet
             )
         )

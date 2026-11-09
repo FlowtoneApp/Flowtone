@@ -2,6 +2,7 @@ package ink.tenqui.flowtone.ui.library
 
 import ink.tenqui.flowtone.viewmodel.ProviderCatalogLoadState
 import ink.tenqui.flowtone.viewmodel.ProviderPlaylistDetailState
+import ink.tenqui.flowtone.viewmodel.ProviderLikedSongsState
 
 internal enum class ProviderLibraryPresentation {
     Loading,
@@ -34,6 +35,14 @@ internal fun providerPlaylistDetailPresentation(
     loadFailed = detail?.loadFailed == true,
     isRefreshing = detail?.isLoading == true
 )
+
+internal fun providerLikedSongsPresentation(detail: ProviderLikedSongsState?): ProviderLibraryPresentation =
+    providerLibraryPresentation(
+        hasContent = !detail?.songs.isNullOrEmpty(),
+        isLoading = detail == null || (detail.isLoading && detail.songs == null),
+        loadFailed = detail?.loadFailed == true,
+        isRefreshing = detail?.isLoading == true
+    )
 
 private fun providerLibraryPresentation(
     hasContent: Boolean,

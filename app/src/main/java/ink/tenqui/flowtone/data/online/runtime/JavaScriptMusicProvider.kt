@@ -100,12 +100,7 @@ class JavaScriptMusicProvider internal constructor(
 
     override suspend fun getSongs(): List<ProviderSong>? {
         if (AtomicCapabilityId.CatalogSongsList !in capabilities) return null
-        val values = JSONArray(runtime.invokeJson("getSongs"))
-        return buildList {
-            repeat(values.length()) { index ->
-                parseSong(values.optJSONObject(index), ProviderSearchCategory.Single)?.let(::add)
-            }
-        }.distinctBy(ProviderSong::identity)
+        return parseSongList(runtime.invokeJson("getSongs"))
     }
 
     override suspend fun getAlbums(): List<ProviderAlbum>? {
@@ -131,9 +126,18 @@ class JavaScriptMusicProvider internal constructor(
     override suspend fun getPlaylistSongs(playlistId: String): List<ProviderSong>? {
         if (AtomicCapabilityId.PlaylistSongsRead !in capabilities) return null
         val normalizedId = playlistId.trim().takeIf(String::isNotEmpty) ?: return null
-        val values = JSONArray(
+        return parseSongList(
             runtime.invokeJson("getPlaylistSongs", JSONObject().put("id", normalizedId))
         )
+    }
+
+    override suspend fun getLikedSongs(): List<ProviderSong>? {
+        if (AtomicCapabilityId.UserLikedSongsList !in capabilities) return null
+        return parseSongList(runtime.invokeJson("getLikedSongs"))
+    }
+
+    private fun parseSongList(raw: String): List<ProviderSong> {
+        val values = JSONArray(raw)
         return buildList {
             repeat(values.length()) { index ->
                 parseSong(values.optJSONObject(index), ProviderSearchCategory.Single)?.let(::add)

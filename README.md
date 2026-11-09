@@ -114,6 +114,13 @@ Provider 搜索歌单可以在结果中直接返回 `songs`（兼容字段 `trac
 两种方法都返回歌单数组：每项必须有稳定的 `id` 和非空 `title`，可选 `creator`、`artworkUrl`、
 `songCount` 与 `metadata`。Host 会将扩展身份与远端歌单 ID 绑定。
 
+Manifest v2 可声明 `user.liked.songs.list`，并在 `globalThis.flowtoneExtension` 上实现无参数异步方法
+`getLikedSongs()`。返回值是当前账号喜欢的全量歌曲数组，沿用 `getSongs()` 的歌曲结构及稳定 `id`，
+可提供 `artist`、`durationMs`、`artworkUrl` 和用于保存到声流歌单的 `sourceHost`、`persistentId`。
+成功但没有喜欢的歌曲时返回 `[]`。读取失败时抛出异常，Host 会保留已有结果。
+此接口没有游标参数，服务端分页由扩展在方法内处理。每个扩展在在线曲库拥有自己的「我喜欢的音乐」入口。
+这是只读接口，声流本地红心独立保存。未声明此能力的旧扩展继续使用现有接口。
+
 `song` 与 `album` 是可选能力。未声明这些能力、也未实现对应方法的旧 Provider 仍可继续使用搜索、Artist Profile 与既有播放能力。
 
 歌曲可提供 `artworkUrl`（普通封面）和 `largeArtworkUrl`（原图），两者均为可选 HTTPS 地址，由扩展决定提供的图片。歌曲列表继续使用普通封面；播放器会加载原图并在就绪后显示，未提供原图时回退到普通封面。

@@ -22,6 +22,7 @@ object ExtensionRuntimeCapabilityPolicy {
         AtomicCapabilityId.CatalogAlbumsList,
         AtomicCapabilityId.PlaylistSongsRead,
         AtomicCapabilityId.UserPlaylistsList,
+        AtomicCapabilityId.UserLikedSongsList,
         AtomicCapabilityId.HomePlaylistRecommendationsGet,
         AtomicCapabilityId.SongPersistentResolve,
         AtomicCapabilityId.PlaybackResourceResolve

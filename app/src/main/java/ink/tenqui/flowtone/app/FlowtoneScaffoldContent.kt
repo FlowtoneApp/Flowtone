@@ -166,6 +166,7 @@ internal fun FlowtoneScaffoldContent(
         }
     }
     val selectedPlaylistVisualType = when {
+        state.secondaryDestination is SecondaryDestination.ProviderLikedSongsDetail -> PlaylistCardVisualType.LikedMusic
         selectedPlaylistDestination?.playlistId == LikedSongsPlaylistId -> PlaylistCardVisualType.LikedMusic
         selectedPlaylistCard != null -> playlistCardVisualTypeFor(selectedPlaylistCard)
         selectedPlaylistDestination != null -> PlaylistCardVisualType.UserPlaylist
@@ -524,9 +525,11 @@ internal fun FlowtoneScaffoldContent(
                                                     onOpenArtist = callbacks.onOpenArtist,
                                                     onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
                                                     onOpenProviderPlaylist = callbacks.onOpenProviderPlaylist,
+                                                    onOpenProviderLikedSongs = callbacks.onOpenProviderLikedSongs,
                                                     onProviderSongQueueClick = callbacks.onProviderSongQueueClick,
                                                     onLoadProviderCollections = callbacks.onLoadProviderEntityCollections,
                                                     onLoadProviderPlaylists = callbacks.onLoadProviderUserPlaylists,
+                                                    onLoadProviderLikedSongs = callbacks.onLoadProviderLikedSongs,
                                                     onRefreshLibrary = callbacks.onRefreshLibrary,
                                                     flowCloudSpeed = state.flowCloudSpeed,
                                                     modifier = Modifier.fillMaxSize()
@@ -729,6 +732,7 @@ internal fun FlowtoneScaffoldContent(
                     onProviderSongQueueClick = callbacks.onProviderSongQueueClick,
                     onOpenAlbum = callbacks.onOpenAlbum,
                     onOpenProviderAlbum = callbacks.onOpenProviderAlbum,
+                    onRefreshProviderLikedSongs = callbacks.onRefreshProviderLikedSongs,
                     onOpenArtistSongs = callbacks.onOpenArtistSongs,
                     onOpenArtistAlbums = callbacks.onOpenArtistAlbums,
                     onFullTitleRequest = onFullTitleRequest,

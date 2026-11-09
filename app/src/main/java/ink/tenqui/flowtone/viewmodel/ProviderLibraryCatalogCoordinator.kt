@@ -5,6 +5,7 @@ import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ExtensionRuntimeState
 import ink.tenqui.flowtone.data.online.LibraryProviderOption
 import ink.tenqui.flowtone.data.online.ProviderAlbum
+import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
@@ -12,6 +13,9 @@ import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +27,7 @@ internal data class ProviderLibraryState(
     val providerAlbums: Map<String, List<ProviderAlbum>> = emptyMap(),
     val providerUserPlaylists: Map<String, List<ProviderPlaylist>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
+    val providerLikedSongs: Map<ProviderLikedSongs, ProviderLikedSongsState> = emptyMap(),
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
@@ -45,6 +50,8 @@ internal class ProviderLibraryCatalogCoordinator(
     private val requestedProviderCollectionIds = mutableSetOf<String>()
     private val requestedProviderUserPlaylistIds = mutableSetOf<String>()
     private val requestedProviderPlaylists = mutableMapOf<String, ProviderPlaylistSearchItem>()
+    private val requestedLikedSongs = mutableSetOf<ProviderLikedSongs>()
+    private val likedSongsLoads = mutableMapOf<Pair<Long, ProviderLikedSongs>, Deferred<Boolean>>()
 
     // 与 ViewModel 的 UI 状态更新一样，这些请求登记仅从主线程访问。
     fun beginRefresh(providerId: String): Long =
@@ -54,12 +61,14 @@ internal class ProviderLibraryCatalogCoordinator(
 
     fun invalidateRuntime() {
         providerCollectionLoads.clear()
+        likedSongsLoads.clear()
         _state.update {
             it.copy(
                 providerSongs = emptyMap(),
                 providerAlbums = emptyMap(),
                 providerUserPlaylists = emptyMap(),
                 providerPlaylistDetails = emptyMap(),
+                providerLikedSongs = emptyMap(),
                 providerSongCatalogLoadStates = emptyMap(),
                 providerAlbumCatalogLoadStates = emptyMap(),
                 providerUserPlaylistLoadStates = emptyMap(),
@@ -84,6 +93,7 @@ internal class ProviderLibraryCatalogCoordinator(
     fun reloadRequestedProviderData() {
         requestedProviderCollectionIds.toList().forEach(::loadProviderEntityCollections)
         requestedProviderUserPlaylistIds.toList().forEach(::loadProviderUserPlaylists)
+        requestedLikedSongs.toList().forEach { loadProviderLikedSongs(it) }
         requestedProviderPlaylists.values.toList().forEach { playlist ->
             if (gateway.isMusicProviderRuntimeAvailable(playlist.providerId)) {
                 loadProviderPlaylist(playlist, preferEmbeddedSongs = false)
@@ -117,9 +127,15 @@ internal class ProviderLibraryCatalogCoordinator(
         val wantsSongs = AtomicCapabilityId.CatalogSongsList in capabilities
         val wantsAlbums = AtomicCapabilityId.CatalogAlbumsList in capabilities
         val wantsPlaylists = AtomicCapabilityId.UserPlaylistsList in capabilities
+        val likedSongsRefresh = if (AtomicCapabilityId.UserLikedSongsList in capabilities) {
+            val collection = ProviderLikedSongs(providerId)
+            requestedLikedSongs += collection
+            requestLikedSongs(collection, generation, reportFailure = false)
+        } else null
         val songs = if (wantsSongs) fetch("songs") { gateway.getProviderSongs(providerId, refresh = true) } else null
         val albums = if (wantsAlbums) fetch("albums") { gateway.getProviderAlbums(providerId, refresh = true) } else null
         val playlists = if (wantsPlaylists) fetch("playlists") { gateway.getProviderUserPlaylists(providerId) } else null
+        val likedSongsLoaded = likedSongsRefresh?.await() ?: true
         val runtimeState = gateway.runtimeState.value
         if (runtimeState.isReloading || runtimeState.generation != generation || providerRefreshVersions[providerId] != version) return false
         _state.update { state ->
@@ -135,7 +151,71 @@ internal class ProviderLibraryCatalogCoordinator(
                     (providerId to if (playlists != null || providerId in state.providerUserPlaylists) ProviderCatalogLoadState.Loaded else ProviderCatalogLoadState.Failed) else state.providerUserPlaylistLoadStates
             )
         }
-        return success
+        return success && likedSongsLoaded
+    }
+
+    fun loadProviderLikedSongs(collection: ProviderLikedSongs, refresh: Boolean = false) {
+        requestedLikedSongs += collection
+        val runtime = gateway.runtimeState.value
+        if (runtime.isReloading) return
+        if (AtomicCapabilityId.UserLikedSongsList !in gateway.providerCapabilities(collection.providerId)) {
+            updateLikedSongs(collection) { ProviderLikedSongsState(loadFailed = true) }
+            return
+        }
+        val previous = _state.value.providerLikedSongs[collection]
+        if (previous?.isLoading == true || (!refresh && previous?.songs != null)) return
+        requestLikedSongs(collection, runtime.generation, reportFailure = refresh)
+    }
+
+    private fun requestLikedSongs(
+        collection: ProviderLikedSongs,
+        generation: Long,
+        reportFailure: Boolean
+    ): Deferred<Boolean> {
+        val key = generation to collection
+        likedSongsLoads[key]?.let { return it }
+        updateLikedSongs(collection) { it.copy(isLoading = true, loadFailed = false) }
+        val request = scope.async(start = CoroutineStart.LAZY) {
+            var songs: List<ProviderSong>? = null
+            var failure: Throwable? = null
+            try {
+                songs = gateway.getProviderLikedSongs(collection)
+                songs != null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failure = error
+                false
+            } finally {
+                val registered = likedSongsLoads.remove(key) != null
+                val runtime = gateway.runtimeState.value
+                if (registered && !runtime.isReloading && runtime.generation == generation) {
+                    updateLikedSongs(collection) { previous ->
+                        ProviderLikedSongsState(songs = songs ?: previous.songs, loadFailed = songs == null)
+                    }
+                    if (songs == null && reportFailure) {
+                        reportExtensionContentFailure(
+                            title = "扩展喜欢列表读取失败",
+                            context = "扩展 ID：${collection.providerId}",
+                            error = failure ?: IllegalStateException("扩展没有返回喜欢的歌曲列表。")
+                        )
+                    }
+                }
+            }
+        }
+        likedSongsLoads[key] = request
+        request.start()
+        return request
+    }
+
+    private fun updateLikedSongs(
+        collection: ProviderLikedSongs,
+        update: (ProviderLikedSongsState) -> ProviderLikedSongsState
+    ) {
+        _state.update { state ->
+            val previous = state.providerLikedSongs[collection] ?: ProviderLikedSongsState()
+            state.copy(providerLikedSongs = state.providerLikedSongs + (collection to update(previous)))
+        }
     }
 
     fun loadProviderEntityCollections(providerId: String) {
@@ -445,6 +525,7 @@ internal interface ProviderLibraryCatalogGateway {
     suspend fun getProviderSongs(extensionId: String, refresh: Boolean = false): List<ProviderSong>?
     suspend fun getProviderAlbums(extensionId: String, refresh: Boolean = false): List<ProviderAlbum>?
     suspend fun getProviderUserPlaylists(extensionId: String): List<ProviderPlaylist>?
+    suspend fun getProviderLikedSongs(collection: ProviderLikedSongs): List<ProviderSong>?
     suspend fun getProviderPlaylistSongs(extensionId: String, playlistId: String): List<ProviderSong>?
 }
 
@@ -467,6 +548,9 @@ internal class ExtensionManagerProviderLibraryCatalogGateway(
 
     override suspend fun getProviderUserPlaylists(extensionId: String): List<ProviderPlaylist>? =
         extensionManager.getProviderUserPlaylists(extensionId)
+
+    override suspend fun getProviderLikedSongs(collection: ProviderLikedSongs): List<ProviderSong>? =
+        extensionManager.getProviderLikedSongs(collection)
 
     override suspend fun getProviderPlaylistSongs(extensionId: String, playlistId: String): List<ProviderSong>? =
         extensionManager.getProviderPlaylistSongs(extensionId, playlistId)
