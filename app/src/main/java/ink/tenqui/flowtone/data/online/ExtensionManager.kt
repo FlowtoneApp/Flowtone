@@ -151,7 +151,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             .components {
                 add(SvgDecoder.Factory())
                 add(ExtensionImageKeyer)
-                add(ExtensionImageFetcher.Factory(ExtensionImageNetworkHost(::networkClientFor)))
+                add(ExtensionImageFetcher.Factory(ExtensionImageNetworkHost(::streamClientFor)))
             }
             .eventListenerFactory {
                 object : EventListener() {

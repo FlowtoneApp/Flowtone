@@ -12,10 +12,10 @@ import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import ink.tenqui.flowtone.core.online.ExtensionImage
-import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
-import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
-import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
-import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
+import ink.tenqui.flowtone.data.online.network.ExtensionStreamRequest
+import ink.tenqui.flowtone.data.online.network.ExtensionStreamResponse
+import ink.tenqui.flowtone.data.online.network.ExtensionStreamClient
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
@@ -38,7 +38,6 @@ class ExtensionImageHostRoutingTest {
         assertTrue(result is SuccessResult)
         assertEquals(listOf("test.extension"), host.resolvedExtensionIds)
         assertEquals(1, host.requests.size)
-        assertEquals(ExtensionHttpMethod.Get, host.requests.single().request.method)
         assertEquals(InvalidUrl, host.requests.single().request.url)
     }
 
@@ -85,6 +84,26 @@ class ExtensionImageHostRoutingTest {
             assertTrue(secondHost.resolvedExtensionIds.isEmpty())
         } finally {
             secondLoader.shutdown()
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun failedDownloadDoesNotCommitDiskCache() = runBlocking {
+        val directory = File(context.cacheDir, "extension-image-failed-${UUID.randomUUID()}")
+        val image = ExtensionImage("test.extension", InvalidUrl)
+        val failedHost = RecordingExtensionImageHost(pngBytes(), failRead = true)
+        val failedLoader = diskCachingImageLoader(failedHost, directory)
+        try {
+            assertTrue(failedLoader.execute(diskRequest(image)) is ErrorResult)
+        } finally { failedLoader.shutdown() }
+        val retryHost = RecordingExtensionImageHost(pngBytes())
+        val retryLoader = diskCachingImageLoader(retryHost, directory)
+        try {
+            assertTrue(retryLoader.execute(diskRequest(image)) is SuccessResult)
+            assertEquals(1, retryHost.requests.size)
+        } finally {
+            retryLoader.shutdown()
             directory.deleteRecursively()
         }
     }
@@ -138,22 +157,26 @@ class ExtensionImageHostRoutingTest {
 
     private class RecordingExtensionImageHost(
         private val body: ByteArray,
-        private val deniedExtensions: Set<String> = emptySet()
+        private val deniedExtensions: Set<String> = emptySet(),
+        private val failRead: Boolean = false
     ) : ExtensionImageNetworkHost {
-        data class RequestRecord(val extensionId: String, val request: ExtensionHttpRequest)
+        data class RequestRecord(val extensionId: String, val request: ExtensionStreamRequest)
         val resolvedExtensionIds = mutableListOf<String>()
         val requests = mutableListOf<RequestRecord>()
 
-        override fun clientFor(extensionId: String): ExtensionNetworkClient {
+        override fun clientFor(extensionId: String): ExtensionStreamClient {
             resolvedExtensionIds += extensionId
-            return object : ExtensionNetworkClient {
-                override suspend fun execute(request: ExtensionHttpRequest): ExtensionHttpResponse {
+            return object : ExtensionStreamClient {
+                override fun open(request: ExtensionStreamRequest): ExtensionStreamResponse {
                     requests += RequestRecord(extensionId, request)
                     if (extensionId in deniedExtensions) throw SecurityException("host permission denied")
-                    return ExtensionHttpResponse(
+                    return ExtensionStreamResponse(
                         statusCode = 200,
                         headers = mapOf("Content-Type" to listOf("image/png")),
-                        body = body
+                        body = if (failRead) object : java.io.InputStream() {
+                            override fun read(): Int = throw java.io.IOException("test read failure")
+                        } else ByteArrayInputStream(body),
+                        resolvedUrl = request.url
                     )
                 }
             }

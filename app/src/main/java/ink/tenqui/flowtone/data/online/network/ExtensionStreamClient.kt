@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.online.network
 import androidx.media3.common.C
 import java.io.Closeable
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Flowtone 内部用于大体积扩展资源的流式网络入口。调用者身份由宿主绑定。 */
 interface ExtensionStreamClient {
@@ -24,12 +25,10 @@ class ExtensionStreamResponse(
     val resolvedUrl: String,
     private val closeAction: () -> Unit = {}
 ) : Closeable {
-    @Volatile
-    private var closed = false
+    private val closed = AtomicBoolean(false)
 
     override fun close() {
-        if (closed) return
-        closed = true
+        if (!closed.compareAndSet(false, true)) return
         runCatching { body.close() }
         closeAction()
     }
