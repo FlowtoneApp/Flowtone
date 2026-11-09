@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,11 +42,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.imageLoader
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
+import ink.tenqui.flowtone.core.model.PersistentTrack
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.core.model.toPersistentTrack
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
+import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.search.SearchProviderOption
+import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -99,7 +105,11 @@ fun MiniPlayer(
     onPlayArtistSongQueue: (List<Song>, Int, PlaybackSource) -> Unit = { _, _, _ -> },
     likedSongKeys: List<String> = emptyList(),
     providerLikedSongStatus: ProviderSongLikedStatus? = null,
+    providerOptions: List<SearchProviderOption> = emptyList(),
     onToggleSongLiked: (Song) -> Unit = {},
+    onSetTrackLiked: (PersistentTrack, Boolean) -> Unit = { _, _ -> },
+    onSetProviderSongLiked: suspend (ProviderSong, Boolean, Long, Long) -> Boolean = { _, _, _, _ -> false },
+    onRefreshProviderSongLiked: (ProviderSong) -> Unit = {},
     onOpenArtist: (String) -> Unit = {},
     forceHidden: Boolean = false,
     modifier: Modifier = Modifier
@@ -155,6 +165,18 @@ fun MiniPlayer(
         }
     }
     val lyricsViewModel: MusicViewModel = viewModel()
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
+    val extensionRuntime by extensionManager.runtimeState.collectAsState()
+    val currentProviderSong = remember(playbackQueueItems, playerUiState.currentQueueId) {
+        playbackQueueItems.firstOrNull { it.queueId == playerUiState.currentQueueId }?.runtimeProviderSong
+    }
+    var favoriteDialogVisible by remember(playerUiState.currentQueueId, currentSong, extensionRuntime.generation, extensionRuntime.accountContextGeneration, extensionRuntime.isReloading) { mutableStateOf(false) }
+    val openFavoriteDialog = {
+        if (providerLikedSongStatus == null || providerLikedSongStatus == ProviderSongLikedStatus.Unknown) {
+            currentProviderSong?.let(onRefreshProviderSongLiked)
+        }
+        favoriteDialogVisible = true
+    }
     val lyricsDirectoryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { treeUri ->
@@ -499,6 +521,28 @@ fun MiniPlayer(
         playerUiState.currentTrack?.identityKey?.let(likedSongKeys::contains)
             ?: isSongLiked(song, likedSongKeys)
     } ?: false
+    if (favoriteDialogVisible && currentSong != null) {
+        val providerInfo = remember(currentProviderSong, providerOptions) {
+            currentProviderSong?.let { song -> providerOptions.firstOrNull { it.extensionId == song.providerId } }
+        }
+        val canWrite = currentProviderSong?.let { song ->
+            AtomicCapabilityId.UserLikedSongsWrite in extensionManager.providerCapabilities(song.providerId)
+        } == true
+        val persistentTrack = playerUiState.currentTrack ?: currentSong.takeIf { it.sourceType == SourceType.Local }?.toPersistentTrack()
+        FavoriteManagementDialog(
+            localLiked = isCurrentSongLiked,
+            localAvailable = persistentTrack != null,
+            providerName = currentProviderSong?.let { providerInfo?.name ?: it.providerId },
+            providerColor = providerInfo?.color,
+            providerStatus = providerLikedSongStatus,
+            providerWritable = canWrite,
+            onSetLocal = { liked -> persistentTrack?.let { onSetTrackLiked(it, liked) } },
+            onSetProvider = { liked -> currentProviderSong?.let {
+                onSetProviderSongLiked(it, liked, extensionRuntime.generation, extensionRuntime.accountContextGeneration)
+            } ?: false },
+            onDismiss = { favoriteDialogVisible = false }
+        )
+    }
     BackHandler(
         enabled = state.fullscreenContentMode == FullscreenContentMode.AddToPlaylist &&
             fullscreenInteractionActive
@@ -952,6 +996,7 @@ fun MiniPlayer(
                         onMoreMenuExpandedChange =
                             fullscreenInteractionHandlers.onMoreMenuExpandedChange,
                         onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
+                        onManageLiked = openFavoriteDialog,
                         onOpenQueue = fullscreenInteractionHandlers.onOpenQueue,
                         onArtistHostBack = fullscreenInteractionHandlers.onArtistHostBack,
                         onArtistHostArtistClick =
@@ -1009,12 +1054,14 @@ fun MiniPlayer(
                     lyricsControlsOffsetY = lyricsControlsOffsetY,
                     layoutMetrics = stableFullscreenLayoutMetrics,
                     liked = isCurrentSongLiked,
+                    providerLikedSongStatus = providerLikedSongStatus,
                     hasCurrentSong = hasCurrentSong,
                     iconColor = controlIconColor,
                     moreMenuExpanded = state.expandedMoreMenu,
                     onMoreMenuExpandedChange =
                         fullscreenInteractionHandlers.onMoreMenuExpandedChange,
                     onToggleLiked = fullscreenInteractionHandlers.onToggleLiked,
+                    onManageLiked = openFavoriteDialog,
                     onAddToPlaylist = fullscreenInteractionHandlers.onAddToPlaylist,
                     onOpenSongInfo = fullscreenInteractionHandlers.onOpenSongInfo,
                     modifier = Modifier.matchParentSize()

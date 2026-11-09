@@ -27,6 +27,9 @@ class ExtensionManifestV2ParserTest {
         val checkOnly = ExtensionManifestParser.parseNormalized(
             v2Manifest(capabilities = listOf("user.liked.songs.check"))
         )
+        val writeOnly = ExtensionManifestParser.parseNormalized(
+            v2Manifest(capabilities = listOf("user.liked.songs.write"))
+        )
 
         assertTrue(AtomicCapabilityId.UserLikedSongsList !in legacy.canonicalCapabilities)
         assertEquals(setOf(AtomicCapabilityId.UserLikedSongsList), likedOnly.canonicalCapabilities.values)
@@ -35,6 +38,9 @@ class ExtensionManifestV2ParserTest {
         assertEquals(setOf(AtomicCapabilityId.UserLikedSongsCheck), checkOnly.canonicalCapabilities.values)
         assertTrue(checkOnly.unknownAtomicCapabilityIds.isEmpty())
         assertTrue(ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(checkOnly.canonicalCapabilities))
+        assertEquals(setOf(AtomicCapabilityId.UserLikedSongsWrite), writeOnly.canonicalCapabilities.values)
+        assertTrue(writeOnly.unknownAtomicCapabilityIds.isEmpty())
+        assertTrue(ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(writeOnly.canonicalCapabilities))
     }
 
     @Test

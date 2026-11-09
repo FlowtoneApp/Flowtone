@@ -25,6 +25,112 @@ import org.junit.Test
 
 class ProviderLibraryCatalogCoordinatorTest {
     @Test
+    fun pendingWriteKeepsOriginalSongAndProviderWhenSelectionChanges() = runBlocking {
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck, AtomicCapabilityId.UserLikedSongsWrite)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        val first = ProviderSong(ExtensionTrackRef("a", "same"), "A", "artist")
+        val second = ProviderSong(ExtensionTrackRef("b", "same"), "B", "artist")
+        coordinator.updateProviderLikedSongState(first, false)
+        coordinator.updateProviderLikedSongState(second, false)
+        val write = async { coordinator.setProviderLikedSongState(first, true) }
+        yield()
+        assertEquals(first.trackRef, gateway.writeCalls.single().trackRef)
+        gateway.writeCalls.single().result.complete(true)
+        assertTrue(write.await())
+        assertEquals(ProviderSongLikedStatus.Liked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(first.trackRef)])
+        assertEquals(ProviderSongLikedStatus.NotLiked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(second.trackRef)])
+    }
+
+    @Test
+    fun newAccountQueryClearsOldVisibleStatesBeforeInvalidationObserverRuns() = runBlocking {
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        val oldSong = song("old")
+        val newSong = song("new")
+        coordinator.updateProviderLikedSongState(oldSong, true)
+        gateway.runtimeState.value = ExtensionRuntimeState(generation = 1, accountContextGeneration = 2)
+        coordinator.loadProviderLikedSongStates(listOf(newSong))
+        assertEquals(null, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(oldSong.trackRef)])
+        yield()
+        gateway.likedStateCalls.single().result.complete(mapOf(newSong.trackRef to false))
+        yield()
+        assertEquals(ProviderSongLikedStatus.NotLiked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(newSong.trackRef)])
+    }
+
+    @Test
+    fun likedCollectionIgnoresOldAccountResponse() = runBlocking {
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsList)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        val collection = ProviderLikedSongs("a")
+        coordinator.loadProviderLikedSongs(collection)
+        yield()
+        gateway.runtimeState.value = ExtensionRuntimeState(generation = 1, accountContextGeneration = 2)
+        gateway.likedCalls.single().second.complete(listOf(song("old")))
+        yield()
+        assertEquals(null, coordinator.state.value.providerLikedSongs[collection]?.songs)
+        coordinator.invalidateProviderLikedSongStates()
+        yield()
+        gateway.likedCalls.last().second.complete(listOf(song("new")))
+        yield()
+        assertEquals(listOf(song("new")), coordinator.state.value.providerLikedSongs[collection]?.songs)
+    }
+
+    @Test
+    fun writesUpdateStatusAndRefreshLikedCollectionWhileRejectingLateChecks() = runBlocking {
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck, AtomicCapabilityId.UserLikedSongsWrite, AtomicCapabilityId.UserLikedSongsList)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        val song = song("one")
+        val collection = ProviderLikedSongs("a")
+        coordinator.loadProviderLikedSongs(collection)
+        coordinator.loadProviderLikedSongStates(listOf(song))
+        yield()
+        gateway.likedCalls.single().second.complete(emptyList())
+        val write = async { coordinator.setProviderLikedSongState(song, true) }
+        yield()
+        assertFalse(coordinator.setProviderLikedSongState(song, false))
+        gateway.writeCalls.single().result.complete(true)
+        assertTrue(write.await())
+        gateway.likedStateCalls.single().result.complete(mapOf(song.trackRef to false))
+        yield()
+        assertEquals(ProviderSongLikedStatus.Liked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(song.trackRef)])
+        assertEquals(2, gateway.likedCalls.size)
+        gateway.likedCalls.last().second.complete(listOf(song))
+        yield()
+        assertEquals(listOf(song), coordinator.state.value.providerLikedSongs[collection]?.songs)
+        val unlike = async { coordinator.setProviderLikedSongState(song, false) }
+        yield()
+        gateway.writeCalls.last().result.complete(true)
+        assertTrue(unlike.await())
+        assertEquals(ProviderSongLikedStatus.NotLiked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(song.trackRef)])
+        yield()
+        gateway.likedCalls.last().second.complete(emptyList())
+        Unit
+    }
+
+    @Test
+    fun failedOrStaleWritesDoNotChangeCachedStatusAndUnsupportedNeverCallsProvider() = runBlocking {
+        val song = song("one")
+        val unsupported = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck)
+        assertFalse(ProviderLibraryCatalogCoordinator(this, unsupported, { _, _, _ -> }).setProviderLikedSongState(song, true))
+        assertTrue(unsupported.writeCalls.isEmpty())
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck, AtomicCapabilityId.UserLikedSongsWrite)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        coordinator.updateProviderLikedSongState(song, false)
+        val failed = async { coordinator.setProviderLikedSongState(song, true) }
+        yield()
+        gateway.writeCalls.last().result.complete(false)
+        assertFalse(failed.await())
+        assertEquals(ProviderSongLikedStatus.NotLiked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(song.trackRef)])
+        val stale = async { coordinator.setProviderLikedSongState(song, true) }
+        yield()
+        gateway.runtimeState.value = ExtensionRuntimeState(generation = 1, accountContextGeneration = 2)
+        gateway.writeCalls.last().result.complete(true)
+        assertFalse(stale.await())
+        assertEquals(ProviderSongLikedStatus.NotLiked, coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(song.trackRef)])
+        Unit
+    }
+
+    @Test
     fun likedSongsShareInFlightRequestsAndKeepTheLastSuccessfulSnapshotOnRefreshFailure() = runBlocking {
         withTimeout(5_000) {
             val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsList)
@@ -528,6 +634,7 @@ class ProviderLibraryCatalogCoordinatorTest {
         val detailCalls = mutableListOf<DetailCall>()
         val likedCalls = mutableListOf<Pair<ProviderLikedSongs, CompletableDeferred<List<ProviderSong>?>>>()
         val likedStateCalls = mutableListOf<LikedStateCall>()
+        val writeCalls = mutableListOf<WriteCall>()
         var albumCalls = 0
 
         override fun providerCapabilities(extensionId: String) = capabilities
@@ -572,6 +679,12 @@ class ProviderLibraryCatalogCoordinatorTest {
             return call.result.await()
         }
 
+        override suspend fun setProviderLikedSongState(extensionId: String, trackRef: ExtensionTrackRef, liked: Boolean, generation: Long, accountContextGeneration: Long): Boolean {
+            val call = WriteCall(trackRef, liked)
+            writeCalls += call
+            return call.result.await()
+        }
+
         class SongCall(
             val refresh: Boolean,
             val result: CompletableDeferred<List<ProviderSong>?> = CompletableDeferred()
@@ -583,5 +696,6 @@ class ProviderLibraryCatalogCoordinatorTest {
             val trackRefs: List<ExtensionTrackRef>,
             val result: CompletableDeferred<Map<ExtensionTrackRef, Boolean>?> = CompletableDeferred()
         )
+        class WriteCall(val trackRef: ExtensionTrackRef, val liked: Boolean, val result: CompletableDeferred<Boolean> = CompletableDeferred())
     }
 }

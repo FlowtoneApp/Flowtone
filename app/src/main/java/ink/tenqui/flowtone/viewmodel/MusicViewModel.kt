@@ -32,6 +32,7 @@ import ink.tenqui.flowtone.playback.PlaybackController
 import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.playback.PlaybackState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -404,6 +405,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadProviderLikedSongs(collection: ProviderLikedSongs) {
         providerLibraryCatalogCoordinator.loadProviderLikedSongs(collection)
+    }
+
+    suspend fun setProviderSongLiked(song: ProviderSong, liked: Boolean, generation: Long, accountGeneration: Long): Boolean =
+        viewModelScope.async { providerLibraryCatalogCoordinator.setProviderLikedSongState(song, liked, generation, accountGeneration) }.await()
+
+    fun refreshProviderSongLikedState(song: ProviderSong) {
+        providerLibraryCatalogCoordinator.loadProviderLikedSongStates(listOf(song), refresh = true)
     }
 
     fun refreshProviderLikedSongs(collection: ProviderLikedSongs) {

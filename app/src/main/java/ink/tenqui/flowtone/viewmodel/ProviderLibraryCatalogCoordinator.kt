@@ -32,6 +32,8 @@ internal data class ProviderLibraryState(
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
     val providerLikedSongs: Map<ProviderLikedSongs, ProviderLikedSongsState> = emptyMap(),
     val providerSongLikedStates: Map<ProviderSongLikedStateIdentity, ProviderSongLikedStatus> = emptyMap(),
+    val likedStateRuntimeGeneration: Long = -1,
+    val likedStateAccountGeneration: Long = -1,
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
@@ -76,6 +78,20 @@ internal class ProviderLibraryCatalogCoordinator(
     private val providerLikedSongStatusCache = linkedMapOf<ProviderLikedSongStatusCacheKey, CachedProviderLikedSongStatus>()
     private val providerLikedSongStatusLoads = mutableSetOf<ProviderLikedSongStatusCacheKey>()
     private val requestedProviderLikedSongChecks = linkedMapOf<ProviderSongLikedStateIdentity, ProviderSong>()
+    private val likedSongWrites = mutableSetOf<ProviderLikedSongStatusCacheKey>()
+    private val likedSongWriteVersions = mutableMapOf<ProviderLikedSongStatusCacheKey, Long>()
+
+    private fun ensureLikedStateContext(runtime: ExtensionRuntimeState) {
+        _state.update { state ->
+            if (state.likedStateRuntimeGeneration == runtime.generation &&
+                state.likedStateAccountGeneration == runtime.accountContextGeneration) state
+            else state.copy(
+                providerSongLikedStates = emptyMap(),
+                likedStateRuntimeGeneration = runtime.generation,
+                likedStateAccountGeneration = runtime.accountContextGeneration
+            )
+        }
+    }
 
     // 与 ViewModel 的 UI 状态更新一样，这些请求登记仅从主线程访问。
     fun beginRefresh(providerId: String): Long =
@@ -107,13 +123,16 @@ internal class ProviderLibraryCatalogCoordinator(
 
     /** Credential/configuration changes keep the runtime alive but invalidate account-scoped facts. */
     fun invalidateProviderLikedSongStates() {
+        likedSongsLoads.values.toList().forEach { it.cancel() }
+        likedSongsLoads.clear()
         providerLikedSongStatusCache.clear()
         providerLikedSongStatusLoads.clear()
-        _state.update { it.copy(providerSongLikedStates = emptyMap()) }
+        _state.update { it.copy(providerSongLikedStates = emptyMap(), providerLikedSongs = emptyMap(), likedStateRuntimeGeneration = -1, likedStateAccountGeneration = -1) }
         requestedProviderLikedSongChecks.values.toList()
             .groupBy(ProviderSong::providerId)
             .values
             .forEach { loadProviderLikedSongStates(it, refresh = true) }
+        requestedLikedSongs.toList().forEach { loadProviderLikedSongs(it) }
     }
 
     fun loadProviderLikedSongStates(songs: List<ProviderSong>, refresh: Boolean = false) {
@@ -125,6 +144,7 @@ internal class ProviderLibraryCatalogCoordinator(
                 if (runtime.isReloading ||
                     AtomicCapabilityId.UserLikedSongsCheck !in gateway.providerCapabilities(providerId)
                 ) return@forEach
+                ensureLikedStateContext(runtime)
 
                 val now = currentTimeMillis()
                 val uniqueSongs = providerSongs.distinctBy(ProviderSong::identity)
@@ -167,7 +187,7 @@ internal class ProviderLibraryCatalogCoordinator(
                 }
                 if (visibleStatuses.isNotEmpty()) {
                     _state.update { state ->
-                        state.copy(providerSongLikedStates = boundedProviderSongLikedStates(
+                        state.copy(likedStateRuntimeGeneration = runtime.generation, likedStateAccountGeneration = runtime.accountContextGeneration, providerSongLikedStates = boundedProviderSongLikedStates(
                             state.providerSongLikedStates,
                             visibleStatuses
                         ))
@@ -208,6 +228,7 @@ internal class ProviderLibraryCatalogCoordinator(
         if (runtime.isReloading ||
             AtomicCapabilityId.UserLikedSongsCheck !in gateway.providerCapabilities(song.providerId)
         ) return
+        ensureLikedStateContext(runtime)
         val status = if (liked) ProviderSongLikedStatus.Liked else ProviderSongLikedStatus.NotLiked
         val key = ProviderLikedSongStatusCacheKey(
             providerId = song.providerId,
@@ -222,8 +243,47 @@ internal class ProviderLibraryCatalogCoordinator(
                 providerSongLikedStates = boundedProviderSongLikedStates(
                     state.providerSongLikedStates,
                     mapOf(ProviderSongLikedStateIdentity(song.trackRef) to status)
-                )
+                ),
+                likedStateRuntimeGeneration = runtime.generation,
+                likedStateAccountGeneration = runtime.accountContextGeneration
             )
+        }
+    }
+
+    suspend fun setProviderLikedSongState(song: ProviderSong, liked: Boolean, expectedGeneration: Long? = null, expectedAccountGeneration: Long? = null): Boolean {
+        val runtime = gateway.runtimeState.value
+        if (runtime.isReloading || song.trackRef.extensionId != song.providerId ||
+            song.trackRef.opaqueId.isBlank() ||
+            (expectedGeneration != null && expectedGeneration != runtime.generation) ||
+            (expectedAccountGeneration != null && expectedAccountGeneration != runtime.accountContextGeneration) ||
+            AtomicCapabilityId.UserLikedSongsWrite !in gateway.providerCapabilities(song.providerId)
+        ) return false
+        val key = ProviderLikedSongStatusCacheKey(song.providerId, runtime.generation,
+            runtime.accountContextGeneration, song.trackRef.opaqueId)
+        if (!likedSongWrites.add(key)) return false
+        try {
+            val success = try {
+                gateway.setProviderLikedSongState(song.providerId, song.trackRef, liked, runtime.generation, runtime.accountContextGeneration)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("FlowtoneLibrary", "Provider liked-song write failed", error)
+                false
+            }
+            val current = gateway.runtimeState.value
+            if (!success || current.isReloading || current.generation != runtime.generation ||
+                current.accountContextGeneration != runtime.accountContextGeneration) return false
+            likedSongWriteVersions[key] = (likedSongWriteVersions[key] ?: 0L) + 1L
+            updateProviderLikedSongState(song, liked)
+            val collection = ProviderLikedSongs(song.providerId)
+            if (AtomicCapabilityId.UserLikedSongsList in gateway.providerCapabilities(song.providerId) &&
+                (collection in requestedLikedSongs || collection in _state.value.providerLikedSongs)) {
+                likedSongsLoads.remove(runtime.generation to collection)?.cancel()
+                requestLikedSongs(collection, runtime.generation, reportFailure = true)
+            }
+            return true
+        } finally {
+            likedSongWrites.remove(key)
         }
     }
 
@@ -235,6 +295,7 @@ internal class ProviderLibraryCatalogCoordinator(
         accountContextGeneration: Long
     ) {
         val now = currentTimeMillis()
+        val writeVersions = songs.associateWith { song -> likedSongWriteVersions[keys[song]] ?: 0L }
         val results = try {
             gateway.getProviderLikedSongStates(providerId, songs.map(ProviderSong::trackRef).distinct())
         } catch (cancelled: CancellationException) {
@@ -258,6 +319,7 @@ internal class ProviderLibraryCatalogCoordinator(
 
         val resolved = buildMap {
             songs.forEach { song ->
+                if ((likedSongWriteVersions[keys[song]] ?: 0L) != writeVersions[song]) return@forEach
                 val identity = ProviderSongLikedStateIdentity(song.trackRef)
                 val liked = results?.get(song.trackRef)
                 val status = when (liked) {
@@ -273,7 +335,7 @@ internal class ProviderLibraryCatalogCoordinator(
         }
         if (resolved.isNotEmpty()) {
             _state.update { state ->
-                state.copy(providerSongLikedStates = boundedProviderSongLikedStates(
+                state.copy(likedStateRuntimeGeneration = runtime.generation, likedStateAccountGeneration = runtime.accountContextGeneration, providerSongLikedStates = boundedProviderSongLikedStates(
                     state.providerSongLikedStates,
                     resolved
                 ))
@@ -419,8 +481,10 @@ internal class ProviderLibraryCatalogCoordinator(
     ): Deferred<Boolean> {
         val key = generation to collection
         likedSongsLoads[key]?.let { return it }
+        val accountGeneration = gateway.runtimeState.value.accountContextGeneration
         updateLikedSongs(collection) { it.copy(isLoading = true, loadFailed = false) }
-        val request = scope.async(start = CoroutineStart.LAZY) {
+        lateinit var request: Deferred<Boolean>
+        request = scope.async(start = CoroutineStart.LAZY) {
             var songs: List<ProviderSong>? = null
             var failure: Throwable? = null
             try {
@@ -432,9 +496,10 @@ internal class ProviderLibraryCatalogCoordinator(
                 failure = error
                 false
             } finally {
-                val registered = likedSongsLoads.remove(key) != null
+                val registered = likedSongsLoads.remove(key, request)
                 val runtime = gateway.runtimeState.value
-                if (registered && !runtime.isReloading && runtime.generation == generation) {
+                if (registered && !runtime.isReloading && runtime.generation == generation &&
+                    runtime.accountContextGeneration == accountGeneration) {
                     updateLikedSongs(collection) { previous ->
                         ProviderLikedSongsState(songs = songs ?: previous.songs, loadFailed = songs == null)
                     }
@@ -775,6 +840,7 @@ internal interface ProviderLibraryCatalogGateway {
         extensionId: String,
         trackRefs: List<ExtensionTrackRef>
     ): Map<ExtensionTrackRef, Boolean>? = null
+    suspend fun setProviderLikedSongState(extensionId: String, trackRef: ExtensionTrackRef, liked: Boolean, generation: Long, accountContextGeneration: Long): Boolean = false
     suspend fun getProviderPlaylistSongs(extensionId: String, playlistId: String): List<ProviderSong>?
 }
 
@@ -805,6 +871,9 @@ internal class ExtensionManagerProviderLibraryCatalogGateway(
         extensionId: String,
         trackRefs: List<ExtensionTrackRef>
     ): Map<ExtensionTrackRef, Boolean>? = extensionManager.getProviderLikedSongStates(extensionId, trackRefs)
+
+    override suspend fun setProviderLikedSongState(extensionId: String, trackRef: ExtensionTrackRef, liked: Boolean, generation: Long, accountContextGeneration: Long): Boolean =
+        extensionManager.setProviderLikedSongState(extensionId, trackRef, liked, generation, accountContextGeneration)
 
     override suspend fun getProviderPlaylistSongs(extensionId: String, playlistId: String): List<ProviderSong>? =
         extensionManager.getProviderPlaylistSongs(extensionId, playlistId)

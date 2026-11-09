@@ -44,6 +44,9 @@ interface MusicProvider : UserPlaylistProvider, HomePlaylistRecommendationProvid
     /** 查询当前账号对明确歌曲身份的喜欢状态；缺失的身份由 Host 视为未知。 */
     suspend fun getLikedSongStates(trackRefs: List<ExtensionTrackRef>): Map<ExtensionTrackRef, Boolean>? = null
 
+    /** Returns true only when the provider confirms the requested change. */
+    suspend fun setLikedSongState(trackRef: ExtensionTrackRef, liked: Boolean): Boolean = false
+
     suspend fun resolvePersistentSong(persistentId: String): ProviderSong?
 
     suspend fun getPlaybackResource(song: ProviderSong): ExtensionPlaybackResource?

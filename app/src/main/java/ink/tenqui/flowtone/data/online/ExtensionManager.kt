@@ -631,6 +631,22 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             }
         }
 
+    internal suspend fun setProviderLikedSongState(
+        extensionId: String,
+        trackRef: ExtensionTrackRef,
+        liked: Boolean,
+        generation: Long,
+        accountContextGeneration: Long
+    ): Boolean = runtimeLifecycle.execute {
+        val runtime = _runtimeState.value
+        if (runtime.isReloading || runtime.generation != generation ||
+            runtime.accountContextGeneration != accountContextGeneration) return@execute false
+        val provider = musicProviders[extensionId] ?: return@execute false
+        if (AtomicCapabilityId.UserLikedSongsWrite !in provider.capabilities) return@execute false
+        require(trackRef.extensionId == extensionId && trackRef.opaqueId.isNotBlank())
+        provider.setLikedSongState(trackRef, liked)
+    }
+
     internal suspend fun getProviderLikedSongStates(
         extensionId: String,
         trackRefs: List<ExtensionTrackRef>

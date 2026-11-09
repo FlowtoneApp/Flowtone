@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,12 +26,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
+import androidx.compose.ui.graphics.drawscope.clipRect
 
 @Composable
 internal fun FavoriteButton(
@@ -38,27 +42,37 @@ internal fun FavoriteButton(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    visualEnabled: Boolean = enabled
+    visualEnabled: Boolean = enabled,
+    providerStatus: ProviderSongLikedStatus? = null,
+    onLongClick: (() -> Unit)? = null
 ) {
     TransparentControlButton(
         onClick = onClick,
         enabled = enabled,
+        onLongClick = onLongClick,
         modifier = modifier
             .graphicsLayer {
                 alpha = if (visualEnabled) 1f else 0.45f
             }
     ) {
+        Box(Modifier.size(PlayerSideButtonIconSize), contentAlignment = Alignment.Center) {
+        val remoteLiked = favoriteBackgroundLiked(liked, providerStatus)
+        if (remoteLiked != null) {
+            Icon(
+                imageVector = if (remoteLiked) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
+                contentDescription = null,
+                tint = if (remoteLiked) Color(0xFFFF4D67) else Color.White.copy(alpha = 0.92f),
+                modifier = Modifier.offset(x = (-6).dp).size(PlayerSideButtonIconSize)
+                    .drawWithContent { clipRect(right = 6.dp.toPx()) { this@drawWithContent.drawContent() } }
+            )
+        }
         Icon(
             imageVector = if (liked) {
                 Icons.Rounded.Favorite
             } else {
                 Icons.Outlined.FavoriteBorder
             },
-            contentDescription = if (liked) {
-                "\u5df2\u559c\u6b22"
-            } else {
-                "\u6dfb\u52a0\u559c\u6b22"
-            },
+            contentDescription = favoriteStateDescription(liked, providerStatus),
             tint = if (liked) {
                 Color(0xFFFF4D67)
             } else {
@@ -66,6 +80,23 @@ internal fun FavoriteButton(
             },
             modifier = Modifier.size(PlayerSideButtonIconSize)
         )
+        }
+    }
+}
+
+internal fun favoriteBackgroundLiked(liked: Boolean, providerStatus: ProviderSongLikedStatus?): Boolean? =
+    when (providerStatus) {
+        ProviderSongLikedStatus.Liked -> true.takeIf { !liked }
+        ProviderSongLikedStatus.NotLiked -> false.takeIf { liked }
+        else -> null
+    }
+
+internal fun favoriteStateDescription(liked: Boolean, providerStatus: ProviderSongLikedStatus?): String {
+    val local = if (liked) "声流已喜欢" else "声流未喜欢"
+    return when (providerStatus) {
+        ProviderSongLikedStatus.Liked -> "$local，来源已喜欢"
+        ProviderSongLikedStatus.NotLiked -> "$local，来源未喜欢"
+        else -> local
     }
 }
 

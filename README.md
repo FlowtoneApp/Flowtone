@@ -127,6 +127,10 @@ Manifest v2 可声明 `user.liked.songs.list`，并在 `globalThis.flowtoneExten
 该能力不依赖 `user.liked.songs.list`，也不需要扩展下载完整喜欢列表。它只查询状态，不执行 Like / Unlike；
 声流本地红心仍与在线账号状态独立。旧扩展无需修改。
 
+扩展可选择声明 `user.liked.songs.write` 并实现异步方法
+`setLikedSongState({ trackRef: { id }, liked })`，成功时返回 `{ success: true }`。
+此能力独立于读取和查询能力；扩展必须明确确认成功。
+
 `song` 与 `album` 是可选能力。未声明这些能力、也未实现对应方法的旧 Provider 仍可继续使用搜索、Artist Profile 与既有播放能力。
 
 歌曲可提供 `artworkUrl`（普通封面）和 `largeArtworkUrl`（原图），两者均为可选 HTTPS 地址，由扩展决定提供的图片。歌曲列表继续使用普通封面；播放器会加载原图并在就绪后显示，未提供原图时回退到普通封面。

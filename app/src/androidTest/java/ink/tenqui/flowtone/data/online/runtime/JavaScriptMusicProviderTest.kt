@@ -206,6 +206,21 @@ class JavaScriptMusicProviderTest {
         assertNull(provider.getLikedSongStates(listOf(ExtensionTrackRef("example.music", "song-1"))))
     }
 
+    @Test fun likedSongWriteRequiresCapabilityAndExplicitSuccess() = runBlocking {
+        val script = """
+            globalThis.flowtoneExtension = { async setLikedSongState({trackRef, liked}) {
+              if (trackRef.id !== 'song-1') throw new Error('unexpected song');
+              return {success: liked};
+            }};
+        """.trimIndent()
+        val enabled = provider(script, capabilities = CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.UserLikedSongsWrite))
+        val disabled = provider(script, capabilities = CanonicalAtomicCapabilitySet.Empty)
+        val ref = ExtensionTrackRef("example.music", "song-1")
+        assertTrue(enabled.setLikedSongState(ref, true))
+        assertEquals(false, enabled.setLikedSongState(ref, false))
+        assertEquals(false, disabled.setLikedSongState(ref, true))
+    }
+
     @Test fun declaredProviderMethodsAreInvoked() = runBlocking {
         val provider = provider(
             script = """

@@ -696,6 +696,8 @@ fun FlowtoneApp(
             },
             onDeleteSongs = requestSongDeletion,
             onToggleSongLiked = ::toggleSongLiked,
+            onSetProviderSongLiked = musicViewModel::setProviderSongLiked,
+            onRefreshProviderSongLiked = musicViewModel::refreshProviderSongLikedState,
             onOpenSearch = ::enterSearchMode,
             onExitSearch = ::exitSearchMode,
             onSearchQueryChange = musicViewModel::updateSearchQuery,

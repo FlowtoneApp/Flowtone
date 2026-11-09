@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,7 @@ import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.data.online.ProviderSongLikedStateIdentity
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
@@ -78,7 +80,11 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
             .firstOrNull { it.queueId == state.playerUiState.currentQueueId }
             ?.runtimeProviderSong
     }
-    val providerLikedSongStatus = currentProviderSong?.let { song ->
+    val runtime by ExtensionManager.get(context).runtimeState.collectAsState()
+    val providerLikedSongStatus = currentProviderSong?.takeIf {
+        !runtime.isReloading && state.uiState.likedStateRuntimeGeneration == runtime.generation &&
+            state.uiState.likedStateAccountGeneration == runtime.accountContextGeneration
+    }?.let { song ->
         state.uiState.providerSongLikedStates[ProviderSongLikedStateIdentity(song.trackRef)]
     }
     MiniPlayer(
@@ -159,7 +165,11 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onPlayArtistSongQueue = callbacks.onPlaylistSongClick,
         likedSongKeys = state.likedSongKeys,
         providerLikedSongStatus = providerLikedSongStatus,
+        providerOptions = state.searchUiState.providerOptions,
         onToggleSongLiked = callbacks.onToggleSongLiked,
+        onSetTrackLiked = { track, liked -> callbacks.onSetTracksLiked(listOf(track), liked) },
+        onSetProviderSongLiked = callbacks.onSetProviderSongLiked,
+        onRefreshProviderSongLiked = callbacks.onRefreshProviderSongLiked,
         onOpenArtist = { artistName ->
             callbacks.onFullscreenChange(false)
             callbacks.onExpandedChange(false)

@@ -122,6 +122,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     onPlayNext: () -> Unit,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
+    onManageLiked: () -> Unit,
     onOpenQueue: () -> Unit,
     onArtistHostBack: () -> Unit,
     onArtistHostArtistClick: (String) -> Unit,
@@ -460,6 +461,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 expandedControlsTop = designExpandedControlsTop,
                 hasCurrentSong = hasCurrentSong,
                 isCurrentSongLiked = isCurrentSongLiked,
+                providerLikedSongStatus = providerLikedSongStatus,
                 playbackOrderMode = playerUiState.playbackOrderMode,
                 iconColor = controlIconColor,
                 fullscreenProgress = fullscreenProgress,
@@ -467,6 +469,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
                 moreMenuExpanded = expandedMoreMenu,
                 onMoreMenuExpandedChange = onMoreMenuExpandedChange,
                 onToggleLiked = onToggleLiked,
+                onManageLiked = onManageLiked,
                 onOpenQueue = onOpenQueue,
                 modifier = Modifier
                     .align(Alignment.TopStart)

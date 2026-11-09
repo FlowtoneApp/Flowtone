@@ -164,6 +164,15 @@ class JavaScriptMusicProvider internal constructor(
         }
     }
 
+    override suspend fun setLikedSongState(trackRef: ExtensionTrackRef, liked: Boolean): Boolean {
+        if (AtomicCapabilityId.UserLikedSongsWrite !in capabilities) return false
+        require(trackRef.extensionId == runtime.extensionId && trackRef.opaqueId.isNotBlank())
+        val request = JSONObject()
+            .put("trackRef", JSONObject().put("id", trackRef.opaqueId))
+            .put("liked", liked)
+        return JSONObject(runtime.invokeJson("setLikedSongState", request)).opt("success") == true
+    }
+
     private fun parseSongList(raw: String): List<ProviderSong> {
         val values = JSONArray(raw)
         return buildList {

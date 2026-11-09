@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import ink.tenqui.flowtone.core.model.PlaylistAppearanceColorKey
 import ink.tenqui.flowtone.ui.player.CrossfadeFlowCloudBackground
 import ink.tenqui.flowtone.ui.player.DefaultFlowCloudSpeed
@@ -43,6 +44,7 @@ internal fun PlaylistCardSurface(
     clickModifier: Modifier = Modifier,
     flowCloudSpeed: Float = DefaultFlowCloudSpeed,
     isFlowCloudPlaying: Boolean = true,
+    cloudBaseColor: Color? = null,
     content: @Composable BoxScope.(PlaylistCardContentColors) -> Unit
 ) {
     val style = remember(visualType) {
@@ -50,7 +52,8 @@ internal fun PlaylistCardSurface(
     }
     val visuals = rememberPlaylistCardVisuals(
         style = style,
-        appearanceColorKey = appearanceColorKey
+        appearanceColorKey = appearanceColorKey,
+        cloudBaseColor = cloudBaseColor
     )
     val animatesAppearanceColor = style.type == PlaylistCardVisualType.UserPlaylist
     val contentColors = animatedPlaylistCardContentColors(
@@ -177,13 +180,15 @@ private fun animatedPlaylistCardContentColors(
 @Composable
 private fun rememberPlaylistCardVisuals(
     style: PlaylistCardVisualStyle,
-    appearanceColorKey: PlaylistAppearanceColorKey?
+    appearanceColorKey: PlaylistAppearanceColorKey?,
+    cloudBaseColor: Color?
 ): PlaylistCardVisuals {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = colorScheme.background.luminance() <= 0.5f
     return remember(
         style.type,
         appearanceColorKey,
+        cloudBaseColor,
         isDarkTheme,
         colorScheme.surfaceContainer,
         colorScheme.onSurface,
@@ -191,7 +196,7 @@ private fun rememberPlaylistCardVisuals(
         colorScheme.primaryContainer,
         colorScheme.onPrimaryContainer
     ) {
-        playlistCardVisualsFor(
+        val defaults = playlistCardVisualsFor(
             type = style.type,
             appearanceColorKey = appearanceColorKey,
             isDarkTheme = isDarkTheme,
@@ -204,6 +209,19 @@ private fun rememberPlaylistCardVisuals(
                 actionColor = colorScheme.onSurface
             )
         )
+        if (cloudBaseColor == null || style.type != PlaylistCardVisualType.LikedMusic) defaults else {
+            val base = lerp(cloudBaseColor, if (isDarkTheme) Color.Black else Color.White, if (isDarkTheme) 0.58f else 0.76f)
+            val foreground = if (isDarkTheme) Color.White else Color(0xFF17121A)
+            defaults.copy(
+                containerColor = base,
+                contentColors = PlaylistCardContentColors(foreground, foreground, foreground, foreground, foreground),
+                cloudVisuals = defaults.cloudVisuals?.copy(colors = listOf(
+                    lerp(cloudBaseColor, Color.White, 0.25f),
+                    lerp(cloudBaseColor, Color(0xFFB4A5DF), 0.28f),
+                    lerp(cloudBaseColor, Color(0xFF91C4D8), 0.30f)
+                ))
+            )
+        }
     }
 }
 

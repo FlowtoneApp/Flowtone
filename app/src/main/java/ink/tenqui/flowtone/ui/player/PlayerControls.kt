@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.playback.PlaybackOrderMode
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 
 @Composable
 internal fun SharedPlaybackControls(
@@ -126,6 +127,7 @@ internal fun SideButtonsOverlay(
     expandedControlsTop: Dp,
     hasCurrentSong: Boolean,
     isCurrentSongLiked: Boolean,
+    providerLikedSongStatus: ProviderSongLikedStatus?,
     playbackOrderMode: PlaybackOrderMode,
     iconColor: Color,
     fullscreenProgress: Float,
@@ -133,6 +135,7 @@ internal fun SideButtonsOverlay(
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
+    onManageLiked: () -> Unit,
     onTogglePlaybackOrderMode: () -> Unit,
     onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier
@@ -173,6 +176,8 @@ internal fun SideButtonsOverlay(
         if (bottomFavoriteVisible) {
             FavoriteButton(
                 liked = isCurrentSongLiked,
+                providerStatus = providerLikedSongStatus,
+                onLongClick = onManageLiked,
                 enabled = hasCurrentSong && controlsEnabled,
                 onClick = {
                     collapseMoreMenu()
@@ -247,11 +252,13 @@ internal fun FullscreenSideActionsOverlay(
     lyricsControlsOffsetY: Dp,
     layoutMetrics: MiniPlayerFullscreenLayoutMetrics,
     liked: Boolean,
+    providerLikedSongStatus: ProviderSongLikedStatus?,
     hasCurrentSong: Boolean,
     iconColor: Color,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
+    onManageLiked: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onOpenSongInfo: () -> Unit,
     modifier: Modifier = Modifier
@@ -294,11 +301,13 @@ internal fun FullscreenSideActionsOverlay(
                     fullscreenProgress = visualProgress,
                     controlsExitProgress = layoutMetrics.fullscreenContentExitSharedProgress,
                     liked = liked,
+                    providerLikedSongStatus = providerLikedSongStatus,
                     hasCurrentSong = hasCurrentSong,
                     iconColor = iconColor,
                     moreMenuExpanded = moreMenuExpanded,
                     onMoreMenuExpandedChange = onMoreMenuExpandedChange,
                     onToggleLiked = onToggleLiked,
+                    onManageLiked = onManageLiked,
                     onAddToPlaylist = onAddToPlaylist,
                     onOpenSongInfo = onOpenSongInfo
                 )
@@ -314,11 +323,13 @@ private fun FullscreenSideActionsContent(
     fullscreenProgress: Float,
     controlsExitProgress: Float,
     liked: Boolean,
+    providerLikedSongStatus: ProviderSongLikedStatus?,
     hasCurrentSong: Boolean,
     iconColor: Color,
     moreMenuExpanded: Boolean,
     onMoreMenuExpandedChange: (Boolean) -> Unit,
     onToggleLiked: () -> Unit,
+    onManageLiked: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onOpenSongInfo: () -> Unit
 ) {
@@ -357,6 +368,8 @@ private fun FullscreenSideActionsContent(
     ) {
         FavoriteButton(
             liked = liked,
+            providerStatus = providerLikedSongStatus,
+            onLongClick = onManageLiked,
             enabled = hasCurrentSong && fullscreenFavoriteVisible && controlsEnabled,
             onClick = {
                 collapseMoreMenu()
