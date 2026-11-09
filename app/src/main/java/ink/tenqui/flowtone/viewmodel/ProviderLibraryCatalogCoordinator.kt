@@ -84,9 +84,18 @@ internal class ProviderLibraryCatalogCoordinator(
     fun reloadRequestedProviderData() {
         requestedProviderCollectionIds.toList().forEach(::loadProviderEntityCollections)
         requestedProviderUserPlaylistIds.toList().forEach(::loadProviderUserPlaylists)
-        requestedProviderPlaylists.values.toList()
-            .filter { gateway.isMusicProviderRuntimeAvailable(it.providerId) }
-            .forEach { playlist -> loadProviderPlaylist(playlist, preferEmbeddedSongs = false) }
+        requestedProviderPlaylists.values.toList().forEach { playlist ->
+            if (gateway.isMusicProviderRuntimeAvailable(playlist.providerId)) {
+                loadProviderPlaylist(playlist, preferEmbeddedSongs = false)
+            } else {
+                _state.update { state ->
+                    state.copy(
+                        providerPlaylistDetails = state.providerPlaylistDetails +
+                            (playlist.identity.stableKey to ProviderPlaylistDetailState(loadFailed = true))
+                    )
+                }
+            }
+        }
     }
 
     suspend fun refreshProviderLibrary(providerId: String, version: Long): Boolean {
@@ -133,12 +142,23 @@ internal class ProviderLibraryCatalogCoordinator(
         val normalizedProviderId = providerId.trim()
         if (normalizedProviderId.isEmpty()) return
         requestedProviderCollectionIds += normalizedProviderId
+        val requestRuntime = gateway.runtimeState.value
+        if (requestRuntime.isReloading) return
+        val capabilities = gateway.providerCapabilities(normalizedProviderId)
+        val supportsSongCatalog = AtomicCapabilityId.CatalogSongsList in capabilities
+        if (!supportsSongCatalog) {
+            _state.update { state ->
+                state.copy(
+                    providerSongCatalogLoadStates = state.providerSongCatalogLoadStates +
+                        (normalizedProviderId to ProviderCatalogLoadState.Unavailable)
+                )
+            }
+        }
         if (isRefreshing("extension:$normalizedProviderId")) return
         val refreshVersion = providerRefreshVersions[normalizedProviderId] ?: 0L
-        val capabilities = gateway.providerCapabilities(normalizedProviderId)
-        val runtimeGeneration = gateway.runtimeState.value.generation
+        val runtimeGeneration = requestRuntime.generation
 
-        if (AtomicCapabilityId.CatalogSongsList in capabilities) {
+        if (supportsSongCatalog) {
             val loadKey = "$runtimeGeneration:song:$normalizedProviderId"
             if (normalizedProviderId in _state.value.providerSongs) {
                 _state.update { state ->
@@ -353,6 +373,8 @@ internal class ProviderLibraryCatalogCoordinator(
     ) {
         val detailKey = playlist.identity.stableKey
         if (detailKey in _state.value.providerPlaylistDetails) return
+        val requestRuntime = gateway.runtimeState.value
+        if (requestRuntime.isReloading) return
         if (preferEmbeddedSongs && playlist.songs.isNotEmpty()) {
             _state.update { state ->
                 state.copy(
@@ -362,13 +384,13 @@ internal class ProviderLibraryCatalogCoordinator(
             }
             return
         }
-        val runtimeGeneration = gateway.runtimeState.value.generation
+        val runtimeGeneration = requestRuntime.generation
         val loadKey = "$runtimeGeneration:playlist:$detailKey"
         if (!providerCollectionLoads.add(loadKey)) return
         _state.update { state ->
             state.copy(
                 providerPlaylistDetails = state.providerPlaylistDetails +
-                    (detailKey to ProviderPlaylistDetailState(isLoading = true))
+                    (detailKey to ProviderPlaylistDetailState(songs = playlist.songs, isLoading = true))
             )
         }
         scope.launch {

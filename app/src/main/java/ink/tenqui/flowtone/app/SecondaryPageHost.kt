@@ -43,6 +43,8 @@ import ink.tenqui.flowtone.ui.components.FlowtoneTopBarContentHeight
 import ink.tenqui.flowtone.ui.library.AlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.ProviderAlbumDetailScreen
 import ink.tenqui.flowtone.ui.library.ProviderPlaylistDetailScreen
+import ink.tenqui.flowtone.ui.library.providerCatalogPresentation
+import ink.tenqui.flowtone.ui.library.providerPlaylistDetailPresentation
 import ink.tenqui.flowtone.ui.library.LikedSongsPlaylistScreen
 import ink.tenqui.flowtone.ui.library.LocalLibraryScreen
 import ink.tenqui.flowtone.ui.library.PlaylistDetailScreen
@@ -448,11 +450,11 @@ internal fun SecondaryPageHost(
                 val providerPlaylist = navigationDestination.providerPlaylist
                 if (providerPlaylist != null) {
                     val detail = uiState.providerPlaylistDetails[providerPlaylist.identity.stableKey]
+                    val songs = detail?.songs ?: providerPlaylist.songs
                     ProviderPlaylistDetailScreen(
                         playlist = providerPlaylist,
-                        songs = detail?.songs.orEmpty(),
-                        isLoading = detail?.isLoading == true,
-                        loadFailed = detail?.loadFailed == true,
+                        songs = songs,
+                        presentation = providerPlaylistDetailPresentation(songs.isNotEmpty(), detail),
                         presentationSessionKey = navigationEntryKey,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
@@ -592,13 +594,16 @@ internal fun SecondaryPageHost(
 
                     is AlbumDestinationIdentity.Provider -> {
                         val album = navigationDestination.providerAlbum ?: return@Box
-                        val songs = providerSongsForAlbum(
-                            uiState.providerSongs[identity.providerId].orEmpty(),
-                            album
-                        )
+                        val catalog = uiState.providerSongs[identity.providerId].orEmpty()
+                        val songs = remember(catalog, album) { providerSongsForAlbum(catalog, album) }
                         ProviderAlbumDetailScreen(
                             album = album,
                             songs = songs,
+                            presentation = providerCatalogPresentation(
+                                hasContent = songs.isNotEmpty(),
+                                loadState = uiState.providerSongCatalogLoadStates[identity.providerId],
+                                isRefreshing = "extension:${identity.providerId}" in uiState.libraryRefreshingSources
+                            ),
                             presentationSessionKey = navigationEntryKey,
                             currentSong = currentSong,
                             isPlaying = isPlaying,

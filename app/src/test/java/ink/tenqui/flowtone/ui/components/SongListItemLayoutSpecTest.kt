@@ -41,4 +41,12 @@ class SongListItemLayoutSpecTest {
         assertEquals(6.dp, compact.verticalPadding)
         assertEquals(0.dp, compact.titleToArtistSpacing)
     }
+
+    @Test fun selectableSongSlotsKeepTheStandardRowAndAddVerticalInsets() {
+        val standard = songListItemLayoutSpec(compact = false)
+        val selectable = songListItemLayoutSpec(compact = false, selectionSlotPadding = 2.dp)
+
+        assertEquals(standard.copy(outerMinHeight = 76.dp), selectable)
+        assertEquals(StandardSongListItemSpacing, selectable.outerMinHeight - selectable.rowMinHeight)
+    }
 }

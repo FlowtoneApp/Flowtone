@@ -75,6 +75,12 @@ import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.LocalLibraryDarkBackground
 import ink.tenqui.flowtone.ui.components.LocalLibraryLightBackground
 import ink.tenqui.flowtone.ui.components.playlistCardVisualTypeFor
+import ink.tenqui.flowtone.ui.components.skeletonPlaceholderColor
+
+internal val ProviderPlaylistItemHeight = 72.dp
+private val PlaylistListArtworkSize = 56.dp
+private val PlaylistListVerticalPadding = 8.dp
+private val PlaylistListTextPadding = 12.dp
 
 @Composable
 internal fun LibraryLocalPlaylistItem(
@@ -330,6 +336,32 @@ internal fun LibraryProviderPlaylistListItem(
 }
 
 @Composable
+internal fun PlaylistListItemSkeleton(modifier: Modifier = Modifier) {
+    val placeholderColor = skeletonPlaceholderColor()
+    val textShape = RoundedCornerShape(percent = 50)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(ProviderPlaylistItemHeight)
+            .padding(vertical = PlaylistListVerticalPadding),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(PlaylistListArtworkSize)
+                .background(placeholderColor, MaterialTheme.shapes.medium)
+        )
+        Column(Modifier.weight(1f).padding(horizontal = PlaylistListTextPadding)) {
+            Box(Modifier.fillMaxWidth(0.68f).height(16.dp).background(placeholderColor, textShape))
+            Box(
+                Modifier.padding(top = 8.dp).fillMaxWidth(0.42f).height(12.dp)
+                    .background(placeholderColor.copy(alpha = placeholderColor.alpha * 0.82f), textShape)
+            )
+        }
+    }
+}
+
+@Composable
 private fun LibraryCreatePlaylistListItem(
     modifier: Modifier,
     itemHeight: Dp,
@@ -369,7 +401,7 @@ private fun PlaylistListItemSurface(
             .height(itemHeight)
             .clip(MaterialTheme.shapes.medium)
             .then(clickModifier)
-            .padding(vertical = 8.dp)
+            .padding(vertical = PlaylistListVerticalPadding)
             .graphicsLayer {
                 val eased = FlowtoneMotion.Easing.transform(appearProgress.coerceIn(0f, 1f))
                 alpha = eased
@@ -391,7 +423,7 @@ private fun PlaylistListItemSurface(
             clickModifier = Modifier,
             flowCloudSpeed = flowCloudSpeed,
             isFlowCloudPlaying = isFlowCloudPlaying,
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier.size(PlaylistListArtworkSize)
         ) { contentColors ->
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (extensionArtwork != null) {
@@ -434,7 +466,7 @@ private fun RowScope.PlaylistListText(
     subtitle: String?,
     contentColors: PlaylistCardContentColors
 ) {
-    Column(modifier = Modifier.weight(1f).padding(start = 12.dp, end = 12.dp)) {
+    Column(modifier = Modifier.weight(1f).padding(horizontal = PlaylistListTextPadding)) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Normal, color = contentColors.titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
         subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = contentColors.subtitleColor, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp)) }
     }

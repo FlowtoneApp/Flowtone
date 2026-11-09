@@ -187,6 +187,9 @@ class ProviderLibraryCatalogCoordinatorTest {
             coordinator.invalidateRuntime()
             coordinator.reloadRequestedProviderData()
             yield()
+            val refreshingDetail = state.value.providerPlaylistDetails.getValue(playlist.identity.stableKey)
+            assertTrue(refreshingDetail.isLoading)
+            assertEquals(playlist.songs, refreshingDetail.songs)
             gateway.detailCalls.single().result.complete(null)
             yield()
 
@@ -195,6 +198,45 @@ class ProviderLibraryCatalogCoordinatorTest {
             assertFalse(detail.isLoading)
             assertFalse(detail.loadFailed)
             assertTrue(failures.isEmpty())
+        }
+    }
+
+    @Test
+    fun albumsFromSourcesWithoutSongCatalogFinishWithoutRequestingSongs() = runBlocking {
+        val gateway = FakeGateway(AtomicCapabilityId.CatalogAlbumsList)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+
+        coordinator.loadProviderEntityCollections("a")
+        yield()
+
+        assertEquals(ProviderCatalogLoadState.Unavailable, coordinator.state.value.providerSongCatalogLoadStates["a"])
+        assertTrue(gateway.songCalls.isEmpty())
+        assertEquals(1, gateway.albumCalls)
+    }
+
+    @Test
+    fun playlistDetailDistinguishesSuccessfulEmptyFromFailedRead() = runBlocking {
+        withTimeout(5_000) {
+            val gateway = FakeGateway()
+            val failures = mutableListOf<Throwable>()
+            val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, error -> failures += error })
+            val empty = ProviderPlaylistSearchItem(ProviderEntityIdentity("a", "empty"), "Empty", "")
+            val failed = ProviderPlaylistSearchItem(ProviderEntityIdentity("a", "failed"), "Failed", "")
+
+            coordinator.loadProviderPlaylist(empty)
+            coordinator.loadProviderPlaylist(failed)
+            val details = coordinator.state
+            assertEquals(ProviderPlaylistDetailState(isLoading = true), details.value.providerPlaylistDetails[empty.identity.stableKey])
+            assertEquals(ProviderPlaylistDetailState(isLoading = true), details.value.providerPlaylistDetails[failed.identity.stableKey])
+            yield()
+
+            gateway.detailCalls[0].result.complete(emptyList())
+            gateway.detailCalls[1].result.complete(null)
+            yield()
+
+            assertEquals(ProviderPlaylistDetailState(), details.value.providerPlaylistDetails[empty.identity.stableKey])
+            assertEquals(ProviderPlaylistDetailState(loadFailed = true), details.value.providerPlaylistDetails[failed.identity.stableKey])
+            assertEquals(1, failures.size)
         }
     }
 

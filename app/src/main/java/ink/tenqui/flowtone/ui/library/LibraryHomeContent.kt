@@ -67,6 +67,48 @@ internal fun LibraryHomeContent(
     val categories = remember(selectedSourceKey, selectedSource) { libraryCategories(selectedSourceKey, selectedSource) }
     var requestedCategory by remember(selectedSourceKey) { mutableStateOf<LibraryCategory?>(null) }
     val category = validLibraryCategory(categories, requestedCategory)
+    val providerPlaylists = if (provider != null && category == LibraryCategory.Playlists) {
+        uiState.providerUserPlaylists[provider].orEmpty()
+    } else emptyList()
+    val playlistPresentation = if (provider != null && category == LibraryCategory.Playlists) {
+        providerCatalogPresentation(
+            hasContent = providerPlaylists.isNotEmpty(),
+            loadState = uiState.providerUserPlaylistLoadStates[provider],
+            isRefreshing = selectedSourceKey in uiState.libraryRefreshingSources
+        )
+    } else null
+    val playlistRowKeys = remember(providerPlaylists) {
+        providerPlaylists.map { "provider-playlist:${it.identity.stableKey}" }
+    }
+    val initialPlaylistRowKeys = remember(provider, category) { playlistRowKeys.toSet() }
+    val listState = playlistController.listState
+    val playlistEnterScope = if (provider != null && playlistPresentation != null) {
+        val visiblePlaylistKeys by remember(listState, playlistRowKeys) {
+            val keySet = playlistRowKeys.toSet()
+            derivedStateOf {
+                listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                    (item.key as? String)?.takeIf(keySet::contains)
+                }
+            }
+        }
+        rememberProviderRowEnterScope(
+            sessionKey = "provider-playlists:$provider",
+            rowKeys = playlistRowKeys,
+            viewportKeys = visiblePlaylistKeys,
+            initiallyEnteredKeys = initialPlaylistRowKeys,
+            phase = pageTransition.phase
+        )
+    } else null
+    val playlistSkeletonKeys = remember(provider) {
+        provider?.let { id ->
+            List(ProviderPlaylistSkeletonCount) { index -> providerPlaylistSkeletonKey(id, index) }
+        }.orEmpty()
+    }
+    val skeletonEnterScope = if (playlistPresentation == ProviderLibraryPresentation.Loading) {
+        rememberProviderSkeletonEnterScope(
+            "provider-playlists-loading:$provider", playlistSkeletonKeys, pageTransition.phase
+        )
+    } else null
     val playlists = remember(playlistController.playlists, likedSongCount) {
         listOf(likedSongsPlaylistCard(likedSongCount)) + playlistController.playlists
     }
@@ -91,7 +133,7 @@ internal fun LibraryHomeContent(
     }
 
     Box(modifier = modifier) {
-    LazyColumn(state = playlistController.listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item(key = "header") {
             FlowtonePageHeader(
                 title = stringResource(R.string.top_level_library_title),
@@ -214,7 +256,6 @@ internal fun LibraryHomeContent(
                 }
             }
             provider != null -> {
-                val providerPlaylists = uiState.providerUserPlaylists[provider].orEmpty()
                 val providerAlbums = uiState.providerAlbums[provider].orEmpty()
                 val providerSongs = uiState.providerSongs[provider].orEmpty()
                 val loadState = when (category) {
@@ -223,26 +264,74 @@ internal fun LibraryHomeContent(
                     LibraryCategory.Songs -> uiState.providerSongCatalogLoadStates[provider]
                     else -> null
                 }
-                val loading = "extension:$provider" in uiState.libraryRefreshingSources || loadState == ProviderCatalogLoadState.Loading
+                val isRefreshing = "extension:$provider" in uiState.libraryRefreshingSources
+                val loading = isRefreshing || loadState == ProviderCatalogLoadState.Loading
                 val failed = loadState == ProviderCatalogLoadState.Failed
-                if (category == LibraryCategory.Playlists && providerPlaylists.isNotEmpty()) item(key = "provider-playlist-group-gap") { Spacer(Modifier.height(16.dp)) }
-                if (category == LibraryCategory.Playlists) itemsIndexed(providerPlaylists, key = { _, playlist -> "provider-playlist:${playlist.identity.stableKey}" }) { index, playlist ->
-                    val groupShape = playlistGroupRowShape(index, providerPlaylists.size)
-                    Box(Modifier.animateItem(
-                        fadeInSpec = tween(FlowtoneMotion.ShortDurationMillis), placementSpec = null,
-                        fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
-                    ).then(pageTransition.elementAppearanceModifierAt(pageTransition.progress, index.coerceAtMost(23)))
-                        .fillMaxWidth().padding(horizontal = 16.dp)
-                        .clip(groupShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.20f))
-                        .clickable { onOpenProviderPlaylist(ProviderPlaylistSearchItem(playlist.identity, playlist.title, playlist.creator, playlist.artwork, playlist.metadata)) }
-                        .padding(top = if (index == 0) 4.dp else 0.dp,
-                            bottom = if (index == providerPlaylists.lastIndex) 4.dp else 0.dp)) {
-                    LibraryProviderPlaylistListItem(playlist = playlist, itemHeight = 72.dp, flowCloudSpeed = flowCloudSpeed, isFlowCloudPlaying = false,
-                        onClick = { onOpenProviderPlaylist(ProviderPlaylistSearchItem(playlist.identity, playlist.title, playlist.creator, playlist.artwork, playlist.metadata)) },
-                        clickModifier = Modifier,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+                if (playlistPresentation == ProviderLibraryPresentation.Loading ||
+                    (playlistPresentation != null && providerPlaylists.isNotEmpty())
+                ) {
+                    item(key = "provider-playlist-group-gap") { Spacer(Modifier.height(16.dp)) }
+                }
+                when (playlistPresentation) {
+                    ProviderLibraryPresentation.Loading -> items(
+                        count = ProviderPlaylistSkeletonCount,
+                        key = playlistSkeletonKeys::get
+                    ) { index ->
+                        ProviderPlaylistGroupRow(
+                            index = index,
+                            count = ProviderPlaylistSkeletonCount,
+                            modifier = providerSkeletonRowModifier(
+                                skeletonEnterScope, playlistSkeletonKeys[index],
+                                pageTransition, index, ProviderPlaylistSkeletonCount
+                            )
+                        ) { rowModifier ->
+                            PlaylistListItemSkeleton(modifier = rowModifier)
+                        }
                     }
+                    ProviderLibraryPresentation.Ready,
+                    ProviderLibraryPresentation.Refreshing -> itemsIndexed(
+                        items = providerPlaylists,
+                        key = { index, _ -> playlistRowKeys[index] }
+                    ) { index, playlist ->
+                        val openPlaylist = {
+                            onOpenProviderPlaylist(
+                                ProviderPlaylistSearchItem(playlist.identity, playlist.title, playlist.creator, playlist.artwork, playlist.metadata)
+                            )
+                        }
+                        val rowKey = playlistRowKeys[index]
+                        val asyncEnterScope = playlistEnterScope?.takeIf { rowKey !in initialPlaylistRowKeys }
+                        val order = index.coerceAtMost(PageMotion.DefaultOrderCount - 1)
+                        val pageModifier = {
+                            pageTransition.elementAppearanceModifierAt(pageTransition.progress, order)
+                        }
+                        val rowMotion = if (asyncEnterScope != null) {
+                            asyncEnterScope.providerRowFadeModifier(
+                                rowKey, pageTransition, order, PageMotion.DefaultOrderCount,
+                                outgoingModifier = pageModifier
+                            )
+                        } else pageModifier()
+                        ProviderPlaylistGroupRow(
+                            index = index,
+                            count = providerPlaylists.size,
+                            onClick = openPlaylist,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = if (asyncEnterScope != null) null else tween(FlowtoneMotion.ShortDurationMillis),
+                                placementSpec = null,
+                                fadeOutSpec = tween(FlowtoneMotion.ShortDurationMillis)
+                            ).then(rowMotion)
+                        ) { rowModifier ->
+                            LibraryProviderPlaylistListItem(
+                                playlist = playlist,
+                                itemHeight = ProviderPlaylistItemHeight,
+                                flowCloudSpeed = flowCloudSpeed,
+                                isFlowCloudPlaying = false,
+                                onClick = openPlaylist,
+                                clickModifier = Modifier,
+                                modifier = rowModifier
+                            )
+                        }
+                    }
+                    else -> Unit
                 }
                 if (category == LibraryCategory.Albums) items(providerAlbums, key = { "provider-album:${it.identity.stableKey}" }) { album ->
                     ListItem(headlineContent = { Text(album.title, maxLines = 1) }, supportingContent = { Text(album.artist, maxLines = 1) },
@@ -256,7 +345,6 @@ internal fun LibraryHomeContent(
                         modifier = Modifier.padding(horizontal = 12.dp))
                 }
                 val activeEmpty = when (category) {
-                    LibraryCategory.Playlists -> providerPlaylists.isEmpty()
                     LibraryCategory.Albums -> providerAlbums.isEmpty()
                     LibraryCategory.Songs -> providerSongs.isEmpty()
                     else -> false
@@ -264,11 +352,13 @@ internal fun LibraryHomeContent(
                 if (category == LibraryCategory.Favorites) item(key = "favorites-unavailable") {
                     Text("收藏功能暂不可用", modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (activeEmpty && !failed) item(key = "provider-empty") {
-                    Text(if (loading) "正在加载来源内容" else "此来源暂无可浏览内容",
+                if (playlistPresentation == ProviderLibraryPresentation.Empty || activeEmpty && !failed) item(key = "provider-empty") {
+                    Text(if (playlistPresentation == null && loading) "正在加载来源内容" else "此来源暂无可浏览内容",
                         modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (category != LibraryCategory.Favorites && failed && !loading) item(key = "provider-error") {
+                if (playlistPresentation == ProviderLibraryPresentation.Error ||
+                    playlistPresentation == null && category != LibraryCategory.Favorites && failed && !loading
+                ) item(key = "provider-error") {
                     Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                         Text("部分来源内容加载失败", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         TextButton(onClick = { onRefreshLibrary("extension:$provider") }) { Text("重试") }
@@ -278,6 +368,30 @@ internal fun LibraryHomeContent(
             else -> item(key = "source-loading") { Text("正在加载来源", modifier = Modifier.padding(24.dp)) }
         }
     }
+    }
+}
+
+@Composable
+private fun ProviderPlaylistGroupRow(
+    index: Int,
+    count: Int,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable (Modifier) -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(playlistGroupRowShape(index, count))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.20f))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(
+                top = if (index == 0) 4.dp else 0.dp,
+                bottom = if (index == count - 1) 4.dp else 0.dp
+            )
+    ) {
+        content(Modifier.fillMaxWidth().padding(horizontal = 12.dp))
     }
 }
 

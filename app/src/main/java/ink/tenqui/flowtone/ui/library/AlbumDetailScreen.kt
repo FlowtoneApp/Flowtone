@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.ui.library
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
@@ -9,12 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.LocalAlbum
 import ink.tenqui.flowtone.core.model.PersistentTrack
@@ -36,16 +38,123 @@ import ink.tenqui.flowtone.data.online.ProviderEntityIdentity
 import ink.tenqui.flowtone.data.online.toPresentationSong
 import ink.tenqui.flowtone.playback.toPersistentTrackOrNull
 import ink.tenqui.flowtone.ui.components.FlowtoneArtwork
+import ink.tenqui.flowtone.ui.components.FlowtoneMotion
 import ink.tenqui.flowtone.ui.components.SongListItem
+import ink.tenqui.flowtone.ui.components.SongListItemSkeleton
 import ink.tenqui.flowtone.ui.components.StandardSongListItemSpacing
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
-import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
+import ink.tenqui.flowtone.ui.components.PageElementEnterScope
+
+internal val DetailSongRowHorizontalPadding = 8.dp
+
+private val ProviderDetailSkeletonKeys = List(ProviderDetailSkeletonCount, ::providerDetailSkeletonKey)
+private val ProviderDetailSkeletonFadeOut = tween<Float>(
+    durationMillis = FlowtoneMotion.ShortDurationMillis,
+    easing = FlowtoneMotion.Easing
+)
+
+private fun LazyListScope.providerDetailStatusRows(
+    presentation: ProviderLibraryPresentation,
+    emptyMessage: String,
+    errorMessage: String,
+    pageTransition: PageTransitionScope,
+    skeletonPageMotion: SongListViewportMotion?,
+    skeletonEnterScope: PageElementEnterScope?,
+    selectionSlotPadding: Dp = 0.dp
+) {
+    when (presentation) {
+        ProviderLibraryPresentation.Loading -> items(
+            count = ProviderDetailSkeletonCount,
+            key = ::providerDetailSkeletonKey
+        ) { index ->
+            val key = ProviderDetailSkeletonKeys[index]
+            val motion = checkNotNull(skeletonPageMotion)
+            val order = songListAnimationOrder(key, motion.keys)
+            val pageRowModifier = {
+                when {
+                    pageTransition.phase == PageTransitionPhase.Current -> Modifier
+                    !motion.enterGroupReady -> Modifier.graphicsLayer { alpha = 0f }
+                    else -> pageTransition.elementModifierAt(motion.progress, order.order, order.orderCount)
+                }
+            }
+            val rowMotion = skeletonEnterScope?.providerRowFadeModifier(
+                key, pageTransition, order.order, order.orderCount, outgoingModifier = pageRowModifier
+            ) ?: pageRowModifier()
+            SongListItemSkeleton(
+                // LazyColumn 仅保留已绘制的占位层用于渐出。正式行可以立即按正常尺寸排版。
+                modifier = Modifier.animateItem(
+                    fadeInSpec = null,
+                    placementSpec = null,
+                    fadeOutSpec = ProviderDetailSkeletonFadeOut
+                ).then(rowMotion).padding(horizontal = DetailSongRowHorizontalPadding),
+                selectionSlotPadding = selectionSlotPadding
+            )
+        }
+        ProviderLibraryPresentation.Empty, ProviderLibraryPresentation.Error -> {
+            item(key = "provider-detail-status") {
+                Text(
+                    text = if (presentation == ProviderLibraryPresentation.Error) errorMessage else emptyMessage,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
+                )
+            }
+        }
+        ProviderLibraryPresentation.Ready, ProviderLibraryPresentation.Refreshing -> Unit
+    }
+}
 
 internal data class SongListAnimationOrder(
     val order: Int,
     val orderCount: Int
 )
+
+private data class SongListViewportMotion(
+    val keys: List<String>,
+    val progress: Float,
+    val enterGroupReady: Boolean
+)
+
+@Composable
+private fun rememberSongListViewportMotion(
+    sessionKey: String,
+    pageTransition: PageTransitionScope,
+    visibleKeys: List<String>
+): SongListViewportMotion {
+    var frozenTransitionId by remember(sessionKey) { mutableStateOf<Int?>(null) }
+    var frozenViewportKeys by remember(sessionKey) { mutableStateOf<List<String>>(emptyList()) }
+    var capturedPageProgress by remember(sessionKey) { mutableStateOf(0f) }
+    LaunchedEffect(pageTransition.transitionId, pageTransition.phase, visibleKeys) {
+        if (pageTransition.phase == PageTransitionPhase.Current) {
+            frozenTransitionId = null
+            frozenViewportKeys = emptyList()
+            capturedPageProgress = 0f
+        } else if (frozenTransitionId != pageTransition.transitionId && visibleKeys.isNotEmpty()) {
+            frozenTransitionId = pageTransition.transitionId
+            frozenViewportKeys = visibleKeys
+            capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
+        }
+    }
+    val keys = when (pageTransition.phase) {
+        PageTransitionPhase.Current -> visibleKeys
+        PageTransitionPhase.Incoming -> frozenViewportKeys
+        PageTransitionPhase.Outgoing -> frozenViewportKeys.ifEmpty { visibleKeys }
+    }
+    val progress = when {
+        pageTransition.phase != PageTransitionPhase.Incoming -> pageTransition.progress
+        frozenViewportKeys.isEmpty() -> 0f
+        else -> {
+            val remaining = (1f - capturedPageProgress).coerceAtLeast(0.0001f)
+            ((pageTransition.progress - capturedPageProgress) / remaining).coerceIn(0f, 1f)
+        }
+    }
+    return SongListViewportMotion(
+        keys = keys,
+        progress = progress,
+        enterGroupReady = pageTransition.phase != PageTransitionPhase.Incoming || frozenViewportKeys.isNotEmpty()
+    )
+}
 
 internal fun providerPlaylistSelectionKeys(identities: List<ProviderEntityIdentity>): List<String> {
     val occurrences = mutableMapOf<String, Int>()
@@ -218,6 +327,7 @@ internal fun AlbumDetailScreen(
 internal fun ProviderAlbumDetailScreen(
     album: ProviderAlbum,
     songs: List<ProviderSong>,
+    presentation: ProviderLibraryPresentation,
     presentationSessionKey: String,
     currentSong: Song?,
     isPlaying: Boolean,
@@ -229,6 +339,7 @@ internal fun ProviderAlbumDetailScreen(
     headerModifier: Modifier = Modifier,
     useVinylArtwork: Boolean = true,
     emptyMessage: String = "未找到该专辑的在线歌曲",
+    errorMessage: String = "当前在线来源无法读取该专辑的歌曲",
     playlistBatchActions: PlaylistBatchActions? = null,
     modifier: Modifier = Modifier
 ) {
@@ -237,6 +348,21 @@ internal fun ProviderAlbumDetailScreen(
     val songKeys = remember(songs) { songs.map { it.identity.stableKey } }
     val currentUri = currentSong?.uri
     val vinylMotionActive = isPlaying && presentedSongs.any { it.uri == currentUri }
+    val skeletonPageMotion = if (presentation == ProviderLibraryPresentation.Loading) {
+        val visibleSkeletonKeys by remember(listState) {
+            derivedStateOf {
+                listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                    ProviderDetailSkeletonKeys.getOrNull(item.index - 1)?.takeIf { it == item.key }
+                }
+            }
+        }
+        rememberSongListViewportMotion("$presentationSessionKey:loading", pageTransition, visibleSkeletonKeys)
+    } else null
+    val skeletonEnterScope = if (presentation == ProviderLibraryPresentation.Loading) {
+        rememberProviderSkeletonEnterScope(
+            "$presentationSessionKey:loading", ProviderDetailSkeletonKeys, pageTransition.phase
+        )
+    } else null
     if (playlistBatchActions != null) {
         val entries = remember(songs) { providerPlaylistSelectableSongs(songs) }
         val indexByKey = remember(entries) { entries.mapIndexed { index, entry -> entry.selectionKey to index }.toMap() }
@@ -274,24 +400,24 @@ internal fun ProviderAlbumDetailScreen(
                 pageTransition = pageTransition,
                 itemModifier = itemModifier,
                 headerContent = {
-                    Column {
-                        AlbumMetadataHeader(
-                            vinylSeed = album.identity.stableKey.hashCode().toLong(),
-                            title = album.title,
-                            artist = album.artist.ifBlank { "未知艺术家" },
-                            songCount = presentedSongs.size.takeIf { it > 0 } ?: album.songCount ?: 0,
-                            releaseMetadata = album.releaseMetadata,
-                            artworkUri = null,
-                            extensionArtwork = album.artwork,
-                            useVinylArtwork = useVinylArtwork,
-                            vinylMotionActive = vinylMotionActive,
-                            modifier = pageTransition.elementModifier(0)
-                        )
-                        if (entries.isEmpty()) Text(emptyMessage,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp))
-                    }
+                    AlbumMetadataHeader(
+                        vinylSeed = album.identity.stableKey.hashCode().toLong(),
+                        title = album.title,
+                        artist = album.artist.ifBlank { "未知艺术家" },
+                        songCount = presentedSongs.size.takeIf { it > 0 } ?: album.songCount ?: 0,
+                        releaseMetadata = album.releaseMetadata,
+                        artworkUri = null,
+                        extensionArtwork = album.artwork,
+                        useVinylArtwork = useVinylArtwork,
+                        vinylMotionActive = vinylMotionActive,
+                        modifier = pageTransition.elementModifier(0)
+                    )
+                },
+                emptyRows = {
+                    providerDetailStatusRows(
+                        presentation, emptyMessage, errorMessage, pageTransition,
+                        skeletonPageMotion, skeletonEnterScope, SelectionSlotPadding
+                    )
                 }
             )
         }
@@ -300,61 +426,19 @@ internal fun ProviderAlbumDetailScreen(
     val visibleSongKeys by remember(listState, songKeys) {
         derivedStateOf {
             listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
-                songKeys.getOrNull(item.index - 1)
+                songKeys.getOrNull(item.index - 1)?.takeIf { it == item.key }
             }.distinct()
         }
     }
-    var frozenTransitionId by remember(presentationSessionKey) { mutableStateOf<Int?>(null) }
-    var frozenViewportKeys by remember(presentationSessionKey) {
-        mutableStateOf<List<String>>(emptyList())
-    }
-    var capturedPageProgress by remember(presentationSessionKey) { mutableStateOf(0f) }
-    LaunchedEffect(pageTransition.transitionId, pageTransition.phase, visibleSongKeys) {
-        if (pageTransition.phase == PageTransitionPhase.Current) {
-            frozenTransitionId = null
-            frozenViewportKeys = emptyList()
-            capturedPageProgress = 0f
-        } else if (
-            frozenTransitionId != pageTransition.transitionId &&
-            visibleSongKeys.isNotEmpty()
-        ) {
-            frozenTransitionId = pageTransition.transitionId
-            frozenViewportKeys = visibleSongKeys
-            capturedPageProgress = pageTransition.progress.coerceIn(0f, 1f)
-        }
-    }
-    val animationGroupKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
-        visibleSongKeys
-    } else if (pageTransition.phase == PageTransitionPhase.Incoming) {
-        frozenViewportKeys
-    } else {
-        frozenViewportKeys.ifEmpty { visibleSongKeys }
-    }
-    val listProgress = when {
-        pageTransition.phase != PageTransitionPhase.Incoming -> pageTransition.progress
-        frozenViewportKeys.isEmpty() -> 0f
-        else -> {
-            val remaining = (1f - capturedPageProgress).coerceAtLeast(0.0001f)
-            ((pageTransition.progress - capturedPageProgress) / remaining).coerceIn(0f, 1f)
-        }
-    }
-    val enterGroupReady = pageTransition.phase != PageTransitionPhase.Incoming ||
-        frozenViewportKeys.isNotEmpty()
+    val songPageMotion = rememberSongListViewportMotion(presentationSessionKey, pageTransition, visibleSongKeys)
     val initialSongKeys = remember(presentationSessionKey) { songKeys.toSet() }
-    val dynamicEnterScope = rememberPageElementEnterScope(
+    val dynamicEnterScope = rememberProviderRowEnterScope(
         sessionKey = presentationSessionKey,
-        elementKeys = if (pageTransition.phase == PageTransitionPhase.Current) {
-            songKeys
-        } else {
-            emptyList()
-        },
+        rowKeys = songKeys,
         viewportKeys = visibleSongKeys,
-        awaitViewportKeys = true,
-        initiallyEnteredKeys = initialSongKeys
+        initiallyEnteredKeys = initialSongKeys,
+        phase = pageTransition.phase
     )
-    if (pageTransition.phase != PageTransitionPhase.Current && songKeys.isNotEmpty()) {
-        SideEffect { dynamicEnterScope.markEntered(songKeys) }
-    }
 
     PlaylistDetailCollapsingHeaderScaffold(
         title = album.title,
@@ -384,41 +468,39 @@ internal fun ProviderAlbumDetailScreen(
                 )
             }
             if (presentedSongs.isEmpty()) {
-                item(key = "provider-album-empty") {
-                    Text(
-                        text = emptyMessage,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
-                    )
-                }
+                providerDetailStatusRows(
+                    presentation, emptyMessage, errorMessage, pageTransition,
+                    skeletonPageMotion, skeletonEnterScope
+                )
             } else {
                 itemsIndexed(
                     items = presentedSongs,
                     key = { index, _ -> songs[index].identity.stableKey }
                 ) { index, song ->
                     val songKey = songKeys[index]
-                    val animationOrder = songListAnimationOrder(songKey, animationGroupKeys)
-                    val pageItemModifier = if (enterGroupReady) {
+                    val animationOrder = songListAnimationOrder(songKey, songPageMotion.keys)
+                    val transitionModifier = {
                         itemModifier(
-                            listProgress,
+                            songPageMotion.progress,
                             animationOrder.order,
                             animationOrder.orderCount
                         )
-                    } else {
-                        Modifier.graphicsLayer { alpha = 0f }
+                    }
+                    val pageItemModifier = when {
+                        songKey !in initialSongKeys -> dynamicEnterScope.providerRowFadeModifier(
+                            songKey, pageTransition, animationOrder.order, animationOrder.orderCount,
+                            outgoingModifier = transitionModifier
+                        )
+                        pageTransition.phase == PageTransitionPhase.Current -> Modifier
+                        !songPageMotion.enterGroupReady -> Modifier.graphicsLayer { alpha = 0f }
+                        else -> transitionModifier()
                     }
                     SongListItem(
                         song = song,
                         isCurrentSong = currentUri == song.uri,
                         extensionArtwork = songs[index].artwork,
                         onClick = { onSongClick(songs, index) },
-                        modifier = if (pageTransition.phase == PageTransitionPhase.Current) {
-                            dynamicEnterScope.elementMotionModifier(songKey)
-                        } else {
-                            pageItemModifier
-                        }
-                            .padding(horizontal = 8.dp)
+                        modifier = pageItemModifier.padding(horizontal = DetailSongRowHorizontalPadding)
                     )
                 }
             }
@@ -431,8 +513,7 @@ internal fun ProviderAlbumDetailScreen(
 internal fun ProviderPlaylistDetailScreen(
     playlist: ProviderPlaylistSearchItem,
     songs: List<ProviderSong>,
-    isLoading: Boolean,
-    loadFailed: Boolean,
+    presentation: ProviderLibraryPresentation,
     presentationSessionKey: String,
     currentSong: Song?,
     isPlaying: Boolean,
@@ -463,6 +544,7 @@ internal fun ProviderPlaylistDetailScreen(
     ProviderAlbumDetailScreen(
         album = detailAdapter,
         songs = songs,
+        presentation = presentation,
         presentationSessionKey = presentationSessionKey,
         currentSong = currentSong,
         isPlaying = isPlaying,
@@ -473,11 +555,8 @@ internal fun ProviderPlaylistDetailScreen(
         onCollapseProgressStateChange = onCollapseProgressStateChange,
         headerModifier = headerModifier,
         useVinylArtwork = false,
-        emptyMessage = when {
-            isLoading -> "正在加载歌单歌曲"
-            loadFailed -> "当前在线来源无法读取该歌单"
-            else -> "该歌单暂无歌曲"
-        },
+        emptyMessage = "该歌单暂无歌曲",
+        errorMessage = "当前在线来源无法读取该歌单",
         modifier = modifier
     )
 }

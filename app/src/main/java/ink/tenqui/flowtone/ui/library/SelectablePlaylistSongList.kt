@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -82,8 +83,6 @@ import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
 import ink.tenqui.flowtone.ui.components.PlaylistCardSurface
 import ink.tenqui.flowtone.ui.components.PlaylistCardVisualType
 import ink.tenqui.flowtone.ui.components.PageTransitionPhase
-import ink.tenqui.flowtone.ui.components.rememberPageElementEnterScope
-import androidx.compose.runtime.SideEffect
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import ink.tenqui.flowtone.ui.components.SongListItem
 import ink.tenqui.flowtone.ui.player.MINI_PLAYER_ANIMATION_DURATION_MS
@@ -97,7 +96,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.channels.Channel
 import kotlin.math.abs
 
-private val SelectionSlotPadding = 2.dp
+internal val SelectionSlotPadding = 2.dp
 private val SelectionListContentPadding = 14.dp
 private val SelectionAutoScrollEdgeSize = 72.dp
 private val SelectionAutoScrollStep = 4.dp
@@ -189,6 +188,7 @@ internal fun SelectablePlaylistSongList(
     onlineReadOnly: Boolean = false,
     onAddProviderSongsNext: (List<ProviderSong>, (Boolean) -> Unit) -> Unit = { _, done -> done(false) },
     dynamicEnterSessionKey: String? = null,
+    emptyRows: (LazyListScope.() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val headerItemCount = if (headerContent == null) 0 else 1
@@ -223,7 +223,9 @@ internal fun SelectablePlaylistSongList(
     var lastReorderAnimationKey by remember(sourceKey) {
         mutableStateOf(reorderAnimationKey)
     }
-    var renderedEntries by remember(sourceKey) { mutableStateOf(entries) }
+    var sortableEntries by remember(sourceKey) { mutableStateOf(entries) }
+    // 在线歌单没有排序过渡，首批真实行与占位在同一次 LazyColumn 更新中替换。
+    val renderedEntries = if (onlineReadOnly) entries else sortableEntries
     var outgoingEntries by remember(sourceKey) {
         mutableStateOf<List<SelectablePlaylistSong>?>(null)
     }
@@ -254,28 +256,27 @@ internal fun SelectablePlaylistSongList(
     var frozenTransitionId by remember(sourceKey) { mutableStateOf<Int?>(null) }
     var frozenViewportKeys by remember(sourceKey) { mutableStateOf<List<String>>(emptyList()) }
     var capturedPageProgress by remember(sourceKey) { mutableStateOf(0f) }
-    val visibleSongKeys by remember(listState, renderedEntries, headerItemCount) {
+    val visibleSongKeys by remember(listState, renderedEntries, headerItemCount, onlineReadOnly) {
         derivedStateOf {
             listState.layoutInfo.visibleItemsInfo
                 .mapNotNull { item ->
                     renderedEntries.getOrNull(item.index - headerItemCount)?.selectionKey
+                        ?.takeIf { !onlineReadOnly || it == item.key }
                 }
                 .distinct()
         }
     }
+    val initialDynamicKeys = if (dynamicEnterSessionKey != null) {
+        remember(dynamicEnterSessionKey) { entryKeys.toSet() }
+    } else emptySet()
     val dynamicEnterScope = if (dynamicEnterSessionKey != null) {
-        val initialKeys = remember(dynamicEnterSessionKey) { entryKeys.toSet() }
-        rememberPageElementEnterScope(
+        rememberProviderRowEnterScope(
             sessionKey = dynamicEnterSessionKey,
-            elementKeys = if (pageTransition.phase == PageTransitionPhase.Current) entryKeys else emptyList(),
+            rowKeys = entryKeys,
             viewportKeys = visibleSongKeys,
-            awaitViewportKeys = true,
-            initiallyEnteredKeys = initialKeys
-        ).also { enterScope ->
-            if (pageTransition.phase != PageTransitionPhase.Current && entryKeys.isNotEmpty()) {
-                SideEffect { enterScope.markEntered(entryKeys) }
-            }
-        }
+            initiallyEnteredKeys = initialDynamicKeys,
+            phase = pageTransition.phase
+        )
     } else null
     LaunchedEffect(
         pageTransition.transitionId,
@@ -371,13 +372,13 @@ internal fun SelectablePlaylistSongList(
     LaunchedEffect(entries) {
         // 曲库扫描或歌单内容变更不应被误认为一次排序切换。
         if (reorderAnimationKey == lastReorderAnimationKey && outgoingEntries == null) {
-            renderedEntries = entries
+            sortableEntries = entries
         }
     }
 
     LaunchedEffect(reorderAnimationKey) {
         if (reorderAnimationKey == lastReorderAnimationKey) {
-            renderedEntries = entries
+            sortableEntries = entries
             return@LaunchedEffect
         }
 
@@ -391,7 +392,7 @@ internal fun SelectablePlaylistSongList(
         // 取消上一轮时不清理旧层。下一轮会先接管这层，避免中间露出空白帧。
         outgoingEntries = previousEntries
         reorderProgress.snapTo(0f)
-        renderedEntries = entries
+        sortableEntries = entries
         // 数据换序后再请求回顶，覆盖 LazyColumn 根据稳定 key 保持原可见歌曲的行为。
         listState.requestScrollToItem(0, 0)
         // 旧层保持完全可见，先让新列表完成重组与测量。
@@ -425,6 +426,7 @@ internal fun SelectablePlaylistSongList(
             return null
         }
         return latestEntries.getOrNull(visibleItem.index - headerItemCount)
+            ?.takeIf { !onlineReadOnly || it.selectionKey == visibleItem.key }
     }
 
     fun toggleSelectionAt(y: Float, force: Boolean = false) {
@@ -582,6 +584,7 @@ internal fun SelectablePlaylistSongList(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(sourceKey, entryKeys, descriptionEditing) {
+                    if (onlineReadOnly && entryKeys.isEmpty()) return@pointerInput
                     awaitEachGesture {
                         var secondaryPointerId: PointerId? = null
                         var secondaryDragDistance = 0f
@@ -825,6 +828,7 @@ internal fun SelectablePlaylistSongList(
                         header()
                     }
                 }
+                if (renderedEntries.isEmpty()) emptyRows?.invoke(this)
                 itemsIndexed(renderedEntries, key = { _, entry -> entry.selectionKey }) { index, entry ->
                 val (viewportOrder, viewportOrderCount) = animationOrderFor(entry.selectionKey)
                 val elapsedMillis = reorderProgress.value * reorderTotalDurationMillis
@@ -844,12 +848,15 @@ internal fun SelectablePlaylistSongList(
                     renderedEntries[index - 1].selectionKey in selectedKeySet
                 val isNextSelected = index < renderedEntries.lastIndex &&
                     renderedEntries[index + 1].selectionKey in selectedKeySet
-                val pageItemModifier = if (dynamicEnterScope != null && pageTransition.phase == PageTransitionPhase.Current) {
-                    dynamicEnterScope.elementMotionModifier(entry.selectionKey)
-                } else if (enterGroupReady) {
-                    itemModifier(listProgress, viewportOrder, viewportOrderCount)
-                } else {
-                    Modifier.graphicsLayer { alpha = 0f }
+                val pageItemModifier = when {
+                    dynamicEnterScope != null && entry.selectionKey !in initialDynamicKeys ->
+                        dynamicEnterScope.providerRowFadeModifier(
+                            entry.selectionKey, pageTransition, viewportOrder, viewportOrderCount
+                        ) { itemModifier(listProgress, viewportOrder, viewportOrderCount) }
+                    dynamicEnterScope != null && pageTransition.phase == PageTransitionPhase.Current ->
+                        Modifier
+                    !enterGroupReady -> Modifier.graphicsLayer { alpha = 0f }
+                    else -> itemModifier(listProgress, viewportOrder, viewportOrderCount)
                 }
                 // 在线歌单不使用排序转场，保持其原有页面动画的绘制层次。
                 val reorderItemModifier = if (!onlineReadOnly || reorderAnimationActive) {
@@ -891,7 +898,7 @@ internal fun SelectablePlaylistSongList(
                     onLongClick = null,
                     modifier = pageItemModifier
                         .then(reorderItemModifier)
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = DetailSongRowHorizontalPadding)
                 )
                 }
             }

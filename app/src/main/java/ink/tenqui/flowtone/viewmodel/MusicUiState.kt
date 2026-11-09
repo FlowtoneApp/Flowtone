@@ -59,7 +59,8 @@ internal fun MusicUiState.finishLibraryRefresh(sourceKey: String, failureId: Lon
 enum class ProviderCatalogLoadState {
     Loading,
     Loaded,
-    Failed
+    Failed,
+    Unavailable
 }
 
 data class ProviderPlaylistDetailState(

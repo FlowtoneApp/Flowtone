@@ -423,14 +423,8 @@ fun SongListItem(
     }
 }
 
-/**
- * A standalone loading visual. It owns no real-song identity, state, placement or geometry;
- * the caller supplies only the LoadingContent presentation modifier.
- */
 @Composable
-internal fun SongListItemSkeleton(
-    modifier: Modifier = Modifier
-) {
+internal fun skeletonPlaceholderColor(): Color {
     val breathingTransition = rememberInfiniteTransition(label = "SongListItemSkeleton")
     val breathingProgress by breathingTransition.animateFloat(
         initialValue = 0f,
@@ -441,28 +435,38 @@ internal fun SongListItemSkeleton(
         ),
         label = "SongListItemSkeletonBreathing"
     )
-    val placeholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+    return MaterialTheme.colorScheme.onSurfaceVariant.copy(
         alpha = 0.18f + 0.08f * breathingProgress
     )
+}
+
+@Composable
+internal fun SongListItemSkeleton(
+    modifier: Modifier = Modifier,
+    selectionSlotPadding: Dp = 0.dp
+) {
+    val layoutSpec = songListItemLayoutSpec(compact = false, selectionSlotPadding = selectionSlotPadding)
+    val placeholderColor = skeletonPlaceholderColor()
     val placeholderShape = RoundedCornerShape(percent = 50)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(vertical = selectionSlotPadding)
+            .heightIn(min = layoutSpec.rowMinHeight)
+            .padding(horizontal = layoutSpec.horizontalPadding, vertical = layoutSpec.verticalPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(layoutSpec.artworkSize)
                 .clip(MaterialTheme.shapes.medium)
                 .background(placeholderColor)
         )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp, end = 12.dp)
+                .padding(start = layoutSpec.artworkToTextSpacing, end = layoutSpec.textToTrailingSpacing)
         ) {
             Box(
                 modifier = Modifier
@@ -481,7 +485,7 @@ internal fun SongListItemSkeleton(
             )
         }
         Box(
-            modifier = Modifier.width(96.dp),
+            modifier = Modifier.width(layoutSpec.trailingWidth),
             contentAlignment = Alignment.CenterEnd
         ) {
             Box(
