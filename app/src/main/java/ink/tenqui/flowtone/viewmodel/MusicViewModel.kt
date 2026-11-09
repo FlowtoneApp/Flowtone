@@ -34,9 +34,11 @@ import ink.tenqui.flowtone.playback.PlaybackState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.SharingStarted
@@ -53,6 +55,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var libraryRefreshFailureSequence = 0L
     private val extensionContentFailureSequence = AtomicLong()
     private var observedExtensionRuntimeGeneration = extensionManager.runtimeState.value.generation
+    private var observedAccountContextGeneration = extensionManager.runtimeState.value.accountContextGeneration
     private var extensionRuntimeRefreshPending = extensionManager.runtimeState.value.isReloading
 
     private val playbackController: PlaybackController = PlaybackController(
@@ -138,6 +141,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         observeExtensionRuntime()
         observeExtensionImageFailures()
         observePlaybackFailures()
+        observeCurrentProviderLikedSongState()
         progressMonitor.start()
         playbackSession.start()
         lyricsSession.start()
@@ -200,6 +204,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun observeCurrentProviderLikedSongState() {
+        viewModelScope.launch {
+            playbackState
+                .map { state ->
+                    state.playbackQueue.getOrNull(state.currentQueueIndex)
+                        ?.takeIf { it.queueId == state.currentQueueId }
+                        ?.runtimeProviderSong
+                }
+                .distinctUntilChangedBy { it?.trackRef }
+                .collect { song ->
+                    song?.let { providerLibraryCatalogCoordinator.loadProviderLikedSongStates(listOf(it)) }
+                }
+        }
+    }
+
     private fun observeExtensionRuntime() {
         viewModelScope.launch {
             extensionManager.runtimeState.collect { runtimeState ->
@@ -216,6 +235,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     if (runtimeState.lastReloadErrorType == null && queryText.isNotBlank()) {
                         updateSearchQuery(queryText)
                     }
+                }
+                if (runtimeState.accountContextGeneration != observedAccountContextGeneration) {
+                    observedAccountContextGeneration = runtimeState.accountContextGeneration
+                    providerLibraryCatalogCoordinator.invalidateProviderLikedSongStates()
                 }
             }
         }
@@ -305,7 +328,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playProviderSongQueue(queue: List<ProviderSong>, startIndex: Int, source: PlaybackSource) =
-        playbackSession.playProviderSongQueue(queue, startIndex, source)
+        playbackSession.playProviderSongQueue(queue, startIndex, source).also {
+            val firstIndex = startIndex.coerceIn(0, queue.size)
+            providerLibraryCatalogCoordinator.loadProviderLikedSongStates(
+                queue.drop(firstIndex).take(ProviderLikedSongStatusBatchSize)
+            )
+        }
 
     fun playPersistentTrackQueue(
         tracks: List<PersistentTrack>,

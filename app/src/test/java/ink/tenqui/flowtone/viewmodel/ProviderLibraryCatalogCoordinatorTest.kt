@@ -8,6 +8,8 @@ import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStateIdentity
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import kotlinx.coroutines.CompletableDeferred
@@ -104,6 +106,119 @@ class ProviderLibraryCatalogCoordinatorTest {
 
             assertEquals(listOf(song("new")), coordinator.state.value.providerLikedSongs[collection]?.songs)
         }
+    }
+
+    @Test
+    fun likedSongStateChecksAreCapabilityGatedBatchedDeduplicatedAndUnknownOnMissingResults() = runBlocking {
+        val unsupported = FakeGateway()
+        val unsupportedSong = song("unavailable")
+        ProviderLibraryCatalogCoordinator(this, unsupported, { _, _, _ -> })
+            .loadProviderLikedSongStates(listOf(unsupportedSong))
+        yield()
+        assertTrue(unsupported.likedStateCalls.isEmpty())
+
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        val first = song("first")
+        val second = song("second")
+        coordinator.loadProviderLikedSongStates(listOf(first, second, first))
+        coordinator.loadProviderLikedSongStates(listOf(first, second))
+        yield()
+
+        val call = gateway.likedStateCalls.single()
+        assertEquals(listOf(first.trackRef, second.trackRef), call.trackRefs)
+        call.result.complete(mapOf(first.trackRef to true))
+        yield()
+        assertEquals(
+            ProviderSongLikedStatus.Liked,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(first.trackRef)]
+        )
+        assertEquals(
+            ProviderSongLikedStatus.Unknown,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(second.trackRef)]
+        )
+        coordinator.loadProviderLikedSongStates(listOf(first, second))
+        yield()
+        assertEquals(1, gateway.likedStateCalls.size)
+    }
+
+    @Test
+    fun likedSongStateCacheSeparatesProvidersAndCredentialContextsAndRefreshFailureStaysUnknown() = runBlocking {
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck)
+        val coordinator = ProviderLibraryCatalogCoordinator(this, gateway, { _, _, _ -> })
+        val firstProviderSong = ProviderSong(ExtensionTrackRef("a", "same-id"), "A", "Artist")
+        val secondProviderSong = ProviderSong(ExtensionTrackRef("b", "same-id"), "B", "Artist")
+        coordinator.loadProviderLikedSongStates(listOf(firstProviderSong, secondProviderSong))
+        yield()
+        assertEquals(2, gateway.likedStateCalls.size)
+        assertTrue(gateway.likedStateCalls.all { it.trackRefs.map(ExtensionTrackRef::extensionId).distinct().size == 1 })
+        gateway.likedStateCalls[0].result.complete(mapOf(firstProviderSong.trackRef to true))
+        gateway.likedStateCalls[1].result.complete(mapOf(secondProviderSong.trackRef to false))
+        yield()
+        assertEquals(
+            ProviderSongLikedStatus.Liked,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(firstProviderSong.trackRef)]
+        )
+        assertEquals(
+            ProviderSongLikedStatus.NotLiked,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(secondProviderSong.trackRef)]
+        )
+
+        gateway.runtimeState.value = ExtensionRuntimeState(generation = 1, accountContextGeneration = 2)
+        coordinator.invalidateProviderLikedSongStates()
+        yield()
+        assertEquals(4, gateway.likedStateCalls.size)
+        gateway.likedStateCalls[2].result.complete(null)
+        gateway.likedStateCalls[3].result.complete(mapOf(secondProviderSong.trackRef to true))
+        yield()
+        assertEquals(
+            ProviderSongLikedStatus.Unknown,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(firstProviderSong.trackRef)]
+        )
+        assertEquals(
+            ProviderSongLikedStatus.Liked,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(secondProviderSong.trackRef)]
+        )
+    }
+
+    @Test
+    fun likedSongStateRefreshBypassesCacheAndBatchesAtFiftyItems() = runBlocking {
+        var now = 10L
+        val gateway = FakeGateway(AtomicCapabilityId.UserLikedSongsCheck)
+        val coordinator = ProviderLibraryCatalogCoordinator(
+            scope = this,
+            gateway = gateway,
+            onFailure = { _, _, _ -> },
+            currentTimeMillis = { now }
+        )
+        val songs = (0..50).map { song("track-$it") }
+        coordinator.loadProviderLikedSongStates(songs)
+        yield()
+        assertEquals(listOf(50), gateway.likedStateCalls.map { it.trackRefs.size })
+        gateway.likedStateCalls[0].result.complete(gateway.likedStateCalls[0].trackRefs.associateWith { false })
+        yield()
+        assertEquals(listOf(50, 1), gateway.likedStateCalls.map { it.trackRefs.size })
+        gateway.likedStateCalls[1].result.complete(gateway.likedStateCalls[1].trackRefs.associateWith { false })
+        yield()
+        coordinator.loadProviderLikedSongStates(songs)
+        yield()
+        assertEquals(2, gateway.likedStateCalls.size)
+
+        coordinator.loadProviderLikedSongStates(songs.take(1), refresh = true)
+        yield()
+        assertEquals(3, gateway.likedStateCalls.size)
+        gateway.likedStateCalls.last().result.complete(null)
+        yield()
+        assertEquals(
+            ProviderSongLikedStatus.Unknown,
+            coordinator.state.value.providerSongLikedStates[ProviderSongLikedStateIdentity(songs.first().trackRef)]
+        )
+        now += 5_000L
+        coordinator.loadProviderLikedSongStates(songs.take(1))
+        yield()
+        assertEquals(4, gateway.likedStateCalls.size)
+        gateway.likedStateCalls.last().result.complete(mapOf(songs.first().trackRef to true))
+        yield()
     }
 
     @Test
@@ -412,6 +527,7 @@ class ProviderLibraryCatalogCoordinatorTest {
         val userPlaylistCalls = mutableListOf<CompletableDeferred<List<ProviderPlaylist>?>>()
         val detailCalls = mutableListOf<DetailCall>()
         val likedCalls = mutableListOf<Pair<ProviderLikedSongs, CompletableDeferred<List<ProviderSong>?>>>()
+        val likedStateCalls = mutableListOf<LikedStateCall>()
         var albumCalls = 0
 
         override fun providerCapabilities(extensionId: String) = capabilities
@@ -447,11 +563,25 @@ class ProviderLibraryCatalogCoordinatorTest {
             return result.await()
         }
 
+        override suspend fun getProviderLikedSongStates(
+            extensionId: String,
+            trackRefs: List<ExtensionTrackRef>
+        ): Map<ExtensionTrackRef, Boolean>? {
+            val call = LikedStateCall(extensionId, trackRefs)
+            likedStateCalls += call
+            return call.result.await()
+        }
+
         class SongCall(
             val refresh: Boolean,
             val result: CompletableDeferred<List<ProviderSong>?> = CompletableDeferred()
         )
 
         class DetailCall(val result: CompletableDeferred<List<ProviderSong>?> = CompletableDeferred())
+        class LikedStateCall(
+            val extensionId: String,
+            val trackRefs: List<ExtensionTrackRef>,
+            val result: CompletableDeferred<Map<ExtensionTrackRef, Boolean>?> = CompletableDeferred()
+        )
     }
 }

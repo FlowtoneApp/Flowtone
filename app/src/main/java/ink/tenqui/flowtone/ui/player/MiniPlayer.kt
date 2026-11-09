@@ -45,6 +45,7 @@ import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
 import ink.tenqui.flowtone.data.local.isSongLiked
 import ink.tenqui.flowtone.data.online.ExtensionManager
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 import ink.tenqui.flowtone.playback.PlaybackSource
 import ink.tenqui.flowtone.playback.PlaybackQueueItem
 import ink.tenqui.flowtone.ui.components.FlowtoneMotion
@@ -97,6 +98,7 @@ fun MiniPlayer(
     onPlayQueueSong: (Song) -> Unit = {},
     onPlayArtistSongQueue: (List<Song>, Int, PlaybackSource) -> Unit = { _, _, _ -> },
     likedSongKeys: List<String> = emptyList(),
+    providerLikedSongStatus: ProviderSongLikedStatus? = null,
     onToggleSongLiked: (Song) -> Unit = {},
     onOpenArtist: (String) -> Unit = {},
     forceHidden: Boolean = false,
@@ -916,6 +918,7 @@ fun MiniPlayer(
                         newlyCreatedPlaylistId = newlyCreatedPlaylistId,
                         addToPlaylistListState = state.addToPlaylistListState,
                         isCurrentSongLiked = isCurrentSongLiked,
+                        providerLikedSongStatus = providerLikedSongStatus,
                         expandedMoreMenu = state.expandedMoreMenu,
                         fullscreen = fullscreen,
                         expanded = expanded,

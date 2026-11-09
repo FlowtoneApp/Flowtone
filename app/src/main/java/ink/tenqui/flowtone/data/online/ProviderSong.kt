@@ -51,3 +51,22 @@ data class ProviderSong(
             }
         }
 }
+
+enum class ProviderSongLikedStatus {
+    Liked,
+    NotLiked,
+    Unknown
+}
+
+/** Identity is source-scoped; runtime/account versions live in the in-memory query cache key. */
+data class ProviderSongLikedStateIdentity(
+    val providerId: String,
+    val opaqueSongId: String
+) {
+    init {
+        require(providerId.isNotBlank())
+        require(opaqueSongId.isNotBlank())
+    }
+
+    constructor(trackRef: ExtensionTrackRef) : this(trackRef.extensionId, trackRef.opaqueId)
+}

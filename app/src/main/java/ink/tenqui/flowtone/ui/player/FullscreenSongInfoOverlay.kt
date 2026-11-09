@@ -33,10 +33,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 
 @Composable
 internal fun FullscreenSongInfoOverlay(
     song: Song?,
+    providerLikedSongStatus: ProviderSongLikedStatus?,
     progress: Float,
     topPadding: Dp,
     backGestureThresholdPx: Float,
@@ -48,8 +50,8 @@ internal fun FullscreenSongInfoOverlay(
         return
     }
 
-    val rows = remember(song) {
-        song?.toSongInfoRows().orEmpty()
+    val rows = remember(song, providerLikedSongStatus) {
+        song?.toSongInfoRows(providerLikedSongStatus).orEmpty()
     }
     val contentColor = Color.White
     val secondaryColor = Color.White.copy(alpha = 0.72f)
@@ -162,8 +164,10 @@ private fun copySongInfoValue(
     }
 }
 
-private fun Song.toSongInfoRows(): List<SongInfoRowData> {
-    return listOf(
+private fun Song.toSongInfoRows(
+    providerLikedSongStatus: ProviderSongLikedStatus?
+): List<SongInfoRowData> {
+    val rows = listOf(
         SongInfoRowData("标题", title.ifBlank { "未知" }),
         SongInfoRowData("艺术家", artist.ifBlank { "未知" }),
         SongInfoRowData("专辑", "未知"),
@@ -175,6 +179,15 @@ private fun Song.toSongInfoRows(): List<SongInfoRowData> {
         SongInfoRowData("Album ID", albumId?.toString() ?: "未知"),
         SongInfoRowData("Artwork Uri", artworkUri?.toString() ?: "未知")
     )
+    return providerLikedSongStatus?.let { status ->
+        rows + SongInfoRowData("来源喜欢状态", providerLikedSongStatusText(status))
+    } ?: rows
+}
+
+internal fun providerLikedSongStatusText(status: ProviderSongLikedStatus): String = when (status) {
+    ProviderSongLikedStatus.Liked -> "来源已喜欢"
+    ProviderSongLikedStatus.NotLiked -> "来源未喜欢"
+    ProviderSongLikedStatus.Unknown -> "来源喜欢状态未知"
 }
 
 private fun SourceType.toDisplayText(): String {

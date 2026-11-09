@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.data.online
 
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 
 interface UserPlaylistProvider {
@@ -39,6 +40,9 @@ interface MusicProvider : UserPlaylistProvider, HomePlaylistRecommendationProvid
 
     /** 当前账号喜欢的歌曲。空列表表示读取成功且没有喜欢的歌曲。 */
     suspend fun getLikedSongs(): List<ProviderSong>? = null
+
+    /** 查询当前账号对明确歌曲身份的喜欢状态；缺失的身份由 Host 视为未知。 */
+    suspend fun getLikedSongStates(trackRefs: List<ExtensionTrackRef>): Map<ExtensionTrackRef, Boolean>? = null
 
     suspend fun resolvePersistentSong(persistentId: String): ProviderSong?
 

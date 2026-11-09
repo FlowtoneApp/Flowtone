@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.isLikedSongsPlaylist
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStateIdentity
 import ink.tenqui.flowtone.data.repository.PlaylistMutationResult
 import ink.tenqui.flowtone.data.repository.PlaylistRepository
 import ink.tenqui.flowtone.ui.library.CreatePlaylistOverlay
@@ -68,6 +69,17 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
                     onClick = callbacks.onDismissExpandedPlayer
                 )
         )
+    }
+    val currentProviderSong = remember(
+        state.uiState.playbackQueueItems,
+        state.playerUiState.currentQueueId
+    ) {
+        state.uiState.playbackQueueItems
+            .firstOrNull { it.queueId == state.playerUiState.currentQueueId }
+            ?.runtimeProviderSong
+    }
+    val providerLikedSongStatus = currentProviderSong?.let { song ->
+        state.uiState.providerSongLikedStates[ProviderSongLikedStateIdentity(song.trackRef)]
     }
     MiniPlayer(
         playerUiState = state.playerUiState,
@@ -146,6 +158,7 @@ internal fun BoxScope.FlowtoneScaffoldOverlays(
         onPlayQueueSong = callbacks.onPlayQueueSong,
         onPlayArtistSongQueue = callbacks.onPlaylistSongClick,
         likedSongKeys = state.likedSongKeys,
+        providerLikedSongStatus = providerLikedSongStatus,
         onToggleSongLiked = callbacks.onToggleSongLiked,
         onOpenArtist = { artistName ->
             callbacks.onFullscreenChange(false)

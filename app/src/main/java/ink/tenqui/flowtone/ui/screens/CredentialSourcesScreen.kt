@@ -73,6 +73,7 @@ import ink.tenqui.flowtone.data.online.credential.CredentialSourceRepository
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceSaveException
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialType
+import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.ui.components.PageTransitionScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -203,6 +204,7 @@ internal fun CredentialSourceEditScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val repository = remember(context) { CredentialSourceRepository.from(context) }
+    val extensionManager = remember(context) { ExtensionManager.get(context) }
     val revealedSecret = remember(sourceId) { CredentialSecretRevealState() }
     val accessGate = remember(sourceId) { CredentialSecretAccessGate() }
     val hostActivity = remember(context) { context.findFragmentActivity() }
@@ -486,10 +488,12 @@ internal fun CredentialSourceEditScreen(
             }
             saving = false
             result.onSuccess { saved ->
+                extensionManager.invalidateCredentialContext()
                 existing = saved
                 leavePage()
             }.onFailure { failure ->
                 if (failure is CredentialSourceSaveException) {
+                    extensionManager.invalidateCredentialContext()
                     existing = withContext(Dispatchers.IO) {
                         repository.get(failure.persistedMetadata.id)
                     } ?: failure.persistedMetadata
@@ -677,7 +681,10 @@ internal fun CredentialSourceEditScreen(
                                             val result = runCatching { withContext(Dispatchers.IO) { repository.delete(id) } }
                                             deletingSource = false
                                             result.onSuccess { deleted ->
-                                                if (deleted) leavePage() else operationError = "凭据不存在，未完成删除。"
+                                                if (deleted) {
+                                                    extensionManager.invalidateCredentialContext()
+                                                    leavePage()
+                                                } else operationError = "凭据不存在，未完成删除。"
                                             }.onFailure { operationError = "无法完整删除凭据及敏感信息，请重试。" }
                                         }
                                     }

@@ -1,6 +1,7 @@
 package ink.tenqui.flowtone.viewmodel
 
 import android.util.Log
+import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.data.online.ExtensionManager
 import ink.tenqui.flowtone.data.online.ExtensionRuntimeState
 import ink.tenqui.flowtone.data.online.LibraryProviderOption
@@ -9,6 +10,8 @@ import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderPlaylistSearchItem
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStateIdentity
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 import ink.tenqui.flowtone.data.online.capability.AtomicCapabilityId
 import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import kotlinx.coroutines.CancellationException
@@ -28,6 +31,7 @@ internal data class ProviderLibraryState(
     val providerUserPlaylists: Map<String, List<ProviderPlaylist>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
     val providerLikedSongs: Map<ProviderLikedSongs, ProviderLikedSongsState> = emptyMap(),
+    val providerSongLikedStates: Map<ProviderSongLikedStateIdentity, ProviderSongLikedStatus> = emptyMap(),
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
@@ -35,13 +39,30 @@ internal data class ProviderLibraryState(
     val providerUserPlaylistLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap()
 )
 
+private data class ProviderLikedSongStatusCacheKey(
+    val providerId: String,
+    val runtimeGeneration: Long,
+    val accountContextGeneration: Long,
+    val opaqueSongId: String
+)
+
+private data class CachedProviderLikedSongStatus(
+    val status: ProviderSongLikedStatus,
+    val lastAttemptAtMillis: Long
+)
+
+internal const val ProviderLikedSongStatusBatchSize = 50
+private const val UnknownRetryCooldownMillis = 5_000L
+private const val MaxCachedLikedSongStatuses = 500
+
 /** 统一持有曲库请求的去重与刷新版本；Runtime 和集合缓存仍由 ExtensionManager 管理。 */
 internal class ProviderLibraryCatalogCoordinator(
     private val scope: CoroutineScope,
     private val gateway: ProviderLibraryCatalogGateway,
     private val onFailure: (title: String, context: String, error: Throwable) -> Unit,
     initialState: ProviderLibraryState = ProviderLibraryState(),
-    private val isRefreshing: (String) -> Boolean = { false }
+    private val isRefreshing: (String) -> Boolean = { false },
+    private val currentTimeMillis: () -> Long = System::currentTimeMillis
 ) {
     private val _state = MutableStateFlow(initialState)
     val state: StateFlow<ProviderLibraryState> = _state.asStateFlow()
@@ -52,6 +73,9 @@ internal class ProviderLibraryCatalogCoordinator(
     private val requestedProviderPlaylists = mutableMapOf<String, ProviderPlaylistSearchItem>()
     private val requestedLikedSongs = mutableSetOf<ProviderLikedSongs>()
     private val likedSongsLoads = mutableMapOf<Pair<Long, ProviderLikedSongs>, Deferred<Boolean>>()
+    private val providerLikedSongStatusCache = linkedMapOf<ProviderLikedSongStatusCacheKey, CachedProviderLikedSongStatus>()
+    private val providerLikedSongStatusLoads = mutableSetOf<ProviderLikedSongStatusCacheKey>()
+    private val requestedProviderLikedSongChecks = linkedMapOf<ProviderSongLikedStateIdentity, ProviderSong>()
 
     // 与 ViewModel 的 UI 状态更新一样，这些请求登记仅从主线程访问。
     fun beginRefresh(providerId: String): Long =
@@ -69,12 +93,233 @@ internal class ProviderLibraryCatalogCoordinator(
                 providerUserPlaylists = emptyMap(),
                 providerPlaylistDetails = emptyMap(),
                 providerLikedSongs = emptyMap(),
+                providerSongLikedStates = emptyMap(),
                 providerSongCatalogLoadStates = emptyMap(),
                 providerAlbumCatalogLoadStates = emptyMap(),
                 providerUserPlaylistLoadStates = emptyMap(),
                 libraryProviderSourcesResolved = false
             )
         }
+        providerLikedSongStatusCache.clear()
+        providerLikedSongStatusLoads.clear()
+        requestedProviderLikedSongChecks.clear()
+    }
+
+    /** Credential/configuration changes keep the runtime alive but invalidate account-scoped facts. */
+    fun invalidateProviderLikedSongStates() {
+        providerLikedSongStatusCache.clear()
+        providerLikedSongStatusLoads.clear()
+        _state.update { it.copy(providerSongLikedStates = emptyMap()) }
+        requestedProviderLikedSongChecks.values.toList()
+            .groupBy(ProviderSong::providerId)
+            .values
+            .forEach { loadProviderLikedSongStates(it, refresh = true) }
+    }
+
+    fun loadProviderLikedSongStates(songs: List<ProviderSong>, refresh: Boolean = false) {
+        songs.asSequence()
+            .filter { it.trackRef.extensionId == it.providerId && it.id.isNotBlank() }
+            .groupBy(ProviderSong::providerId)
+            .forEach { (providerId, providerSongs) ->
+                val runtime = gateway.runtimeState.value
+                if (runtime.isReloading ||
+                    AtomicCapabilityId.UserLikedSongsCheck !in gateway.providerCapabilities(providerId)
+                ) return@forEach
+
+                val now = currentTimeMillis()
+                val uniqueSongs = providerSongs.distinctBy(ProviderSong::identity)
+                val keys = uniqueSongs.associateWith { song ->
+                    ProviderLikedSongStatusCacheKey(
+                        providerId = providerId,
+                        runtimeGeneration = runtime.generation,
+                        accountContextGeneration = runtime.accountContextGeneration,
+                        opaqueSongId = song.trackRef.opaqueId
+                    )
+                }
+                val requestSongs = mutableListOf<ProviderSong>()
+                val visibleStatuses = mutableMapOf<ProviderSongLikedStateIdentity, ProviderSongLikedStatus>()
+                uniqueSongs.forEach { song ->
+                    val identity = ProviderSongLikedStateIdentity(song.trackRef)
+                    val key = requireNotNull(keys[song])
+                    val cached = providerLikedSongStatusCache[key]
+                    if (cached != null) visibleStatuses[identity] = cached.status
+                    val shouldQuery = when {
+                        key in providerLikedSongStatusLoads -> false
+                        refresh -> true
+                        cached == null -> true
+                        cached.status == ProviderSongLikedStatus.Unknown ->
+                            now - cached.lastAttemptAtMillis >= UnknownRetryCooldownMillis
+                        else -> false
+                    }
+                    if (shouldQuery) {
+                        requestSongs += song
+                        rememberProviderLikedSongCheck(identity, song)
+                        visibleStatuses[identity] = ProviderSongLikedStatus.Unknown
+                        cacheProviderLikedSongStatus(
+                            key,
+                            CachedProviderLikedSongStatus(
+                                status = ProviderSongLikedStatus.Unknown,
+                                lastAttemptAtMillis = now
+                            )
+                        )
+                        providerLikedSongStatusLoads += key
+                    }
+                }
+                if (visibleStatuses.isNotEmpty()) {
+                    _state.update { state ->
+                        state.copy(providerSongLikedStates = boundedProviderSongLikedStates(
+                            state.providerSongLikedStates,
+                            visibleStatuses
+                        ))
+                    }
+                }
+                if (requestSongs.isNotEmpty()) {
+                    scope.launch {
+                        val pendingSongs = requestSongs.toMutableSet()
+                        try {
+                            requestSongs.chunked(ProviderLikedSongStatusBatchSize).forEach { batch ->
+                                queryProviderLikedSongStatusBatch(
+                                    providerId = providerId,
+                                    songs = batch,
+                                    keys = keys,
+                                    runtimeGeneration = runtime.generation,
+                                    accountContextGeneration = runtime.accountContextGeneration
+                                )
+                                pendingSongs.removeAll(batch.toSet())
+                            }
+                        } finally {
+                            pendingSongs.forEach { song ->
+                                keys[song]?.let { key ->
+                                    providerLikedSongStatusLoads.remove(key)
+                                    if (providerLikedSongStatusCache[key]?.status == ProviderSongLikedStatus.Unknown) {
+                                        providerLikedSongStatusCache.remove(key)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+    /** Future write operations can update the read cache without coupling it to local likes. */
+    fun updateProviderLikedSongState(song: ProviderSong, liked: Boolean) {
+        val runtime = gateway.runtimeState.value
+        if (runtime.isReloading ||
+            AtomicCapabilityId.UserLikedSongsCheck !in gateway.providerCapabilities(song.providerId)
+        ) return
+        val status = if (liked) ProviderSongLikedStatus.Liked else ProviderSongLikedStatus.NotLiked
+        val key = ProviderLikedSongStatusCacheKey(
+            providerId = song.providerId,
+            runtimeGeneration = runtime.generation,
+            accountContextGeneration = runtime.accountContextGeneration,
+            opaqueSongId = song.trackRef.opaqueId
+        )
+        cacheProviderLikedSongStatus(key, CachedProviderLikedSongStatus(status, currentTimeMillis()))
+        rememberProviderLikedSongCheck(ProviderSongLikedStateIdentity(song.trackRef), song)
+        _state.update { state ->
+            state.copy(
+                providerSongLikedStates = boundedProviderSongLikedStates(
+                    state.providerSongLikedStates,
+                    mapOf(ProviderSongLikedStateIdentity(song.trackRef) to status)
+                )
+            )
+        }
+    }
+
+    private suspend fun queryProviderLikedSongStatusBatch(
+        providerId: String,
+        songs: List<ProviderSong>,
+        keys: Map<ProviderSong, ProviderLikedSongStatusCacheKey>,
+        runtimeGeneration: Long,
+        accountContextGeneration: Long
+    ) {
+        val now = currentTimeMillis()
+        val results = try {
+            gateway.getProviderLikedSongStates(providerId, songs.map(ProviderSong::trackRef).distinct())
+        } catch (cancelled: CancellationException) {
+            songs.forEach { song ->
+                keys[song]?.let { key ->
+                    providerLikedSongStatusLoads.remove(key)
+                    providerLikedSongStatusCache.remove(key)
+                }
+            }
+            throw cancelled
+        } catch (error: Throwable) {
+            Log.w("FlowtoneLibrary", "Provider $providerId liked-song status check failed", error)
+            null
+        }
+        val runtime = gateway.runtimeState.value
+        val isCurrentContext = !runtime.isReloading &&
+            runtime.generation == runtimeGeneration &&
+            runtime.accountContextGeneration == accountContextGeneration
+        songs.forEach { song -> keys[song]?.let(providerLikedSongStatusLoads::remove) }
+        if (!isCurrentContext) return
+
+        val resolved = buildMap {
+            songs.forEach { song ->
+                val identity = ProviderSongLikedStateIdentity(song.trackRef)
+                val liked = results?.get(song.trackRef)
+                val status = when (liked) {
+                    true -> ProviderSongLikedStatus.Liked
+                    false -> ProviderSongLikedStatus.NotLiked
+                    null -> ProviderSongLikedStatus.Unknown
+                }
+                keys[song]?.let { key ->
+                    cacheProviderLikedSongStatus(key, CachedProviderLikedSongStatus(status, now))
+                    put(identity, status)
+                }
+            }
+        }
+        if (resolved.isNotEmpty()) {
+            _state.update { state ->
+                state.copy(providerSongLikedStates = boundedProviderSongLikedStates(
+                    state.providerSongLikedStates,
+                    resolved
+                ))
+            }
+        }
+    }
+
+    private fun rememberProviderLikedSongCheck(identity: ProviderSongLikedStateIdentity, song: ProviderSong) {
+        requestedProviderLikedSongChecks.remove(identity)
+        requestedProviderLikedSongChecks[identity] = song
+        while (requestedProviderLikedSongChecks.size > MaxCachedLikedSongStatuses) {
+            val oldest = requestedProviderLikedSongChecks.keys.first()
+            requestedProviderLikedSongChecks.remove(oldest)
+            providerLikedSongStatusCache.keys.removeAll { key ->
+                key.providerId == oldest.providerId && key.opaqueSongId == oldest.opaqueSongId
+            }
+            _state.update { state ->
+                state.copy(providerSongLikedStates = state.providerSongLikedStates - oldest)
+            }
+        }
+    }
+
+    private fun cacheProviderLikedSongStatus(
+        key: ProviderLikedSongStatusCacheKey,
+        status: CachedProviderLikedSongStatus
+    ) {
+        providerLikedSongStatusCache.remove(key)
+        providerLikedSongStatusCache[key] = status
+        while (providerLikedSongStatusCache.size > MaxCachedLikedSongStatuses) {
+            val oldestKey = providerLikedSongStatusCache.keys.first()
+            providerLikedSongStatusCache.remove(oldestKey)
+            val identity = ProviderSongLikedStateIdentity(oldestKey.providerId, oldestKey.opaqueSongId)
+            requestedProviderLikedSongChecks.remove(identity)
+            _state.update { state ->
+                state.copy(providerSongLikedStates = state.providerSongLikedStates - identity)
+            }
+        }
+    }
+
+    private fun boundedProviderSongLikedStates(
+        current: Map<ProviderSongLikedStateIdentity, ProviderSongLikedStatus>,
+        updates: Map<ProviderSongLikedStateIdentity, ProviderSongLikedStatus>
+    ): Map<ProviderSongLikedStateIdentity, ProviderSongLikedStatus> = LinkedHashMap<ProviderSongLikedStateIdentity, ProviderSongLikedStatus>().apply {
+        putAll(current)
+        putAll(updates)
+        while (size > MaxCachedLikedSongStatuses) remove(keys.first())
     }
 
     fun updateSources(options: List<LibraryProviderOption>, resolved: Boolean) {
@@ -526,6 +771,10 @@ internal interface ProviderLibraryCatalogGateway {
     suspend fun getProviderAlbums(extensionId: String, refresh: Boolean = false): List<ProviderAlbum>?
     suspend fun getProviderUserPlaylists(extensionId: String): List<ProviderPlaylist>?
     suspend fun getProviderLikedSongs(collection: ProviderLikedSongs): List<ProviderSong>?
+    suspend fun getProviderLikedSongStates(
+        extensionId: String,
+        trackRefs: List<ExtensionTrackRef>
+    ): Map<ExtensionTrackRef, Boolean>? = null
     suspend fun getProviderPlaylistSongs(extensionId: String, playlistId: String): List<ProviderSong>?
 }
 
@@ -551,6 +800,11 @@ internal class ExtensionManagerProviderLibraryCatalogGateway(
 
     override suspend fun getProviderLikedSongs(collection: ProviderLikedSongs): List<ProviderSong>? =
         extensionManager.getProviderLikedSongs(collection)
+
+    override suspend fun getProviderLikedSongStates(
+        extensionId: String,
+        trackRefs: List<ExtensionTrackRef>
+    ): Map<ExtensionTrackRef, Boolean>? = extensionManager.getProviderLikedSongStates(extensionId, trackRefs)
 
     override suspend fun getProviderPlaylistSongs(extensionId: String, playlistId: String): List<ProviderSong>? =
         extensionManager.getProviderPlaylistSongs(extensionId, playlistId)

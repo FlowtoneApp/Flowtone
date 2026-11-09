@@ -11,6 +11,7 @@ enum class AtomicCapabilityId(val value: String) {
     PlaylistSongsRead("playlist.songs.read"),
     UserPlaylistsList("user.playlists.list"),
     UserLikedSongsList("user.liked.songs.list"),
+    UserLikedSongsCheck("user.liked.songs.check"),
     HomePlaylistRecommendationsGet("home.playlist.recommendations.get"),
     SongPersistentResolve("song.persistent.resolve"),
     PlaybackResourceResolve("playback.resource.resolve"),
@@ -105,6 +106,12 @@ object AtomicCapabilityDefinitions {
             AtomicCapabilityGroup.Playlist,
             "读取账号喜欢的歌曲",
             order = 86
+        ),
+        AtomicCapabilityDefinition(
+            AtomicCapabilityId.UserLikedSongsCheck,
+            AtomicCapabilityGroup.Playlist,
+            "查询歌曲喜欢状态",
+            order = 87
         ),
         AtomicCapabilityDefinition(
             AtomicCapabilityId.SongPersistentResolve,

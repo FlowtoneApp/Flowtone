@@ -136,6 +136,34 @@ class JavaScriptMusicProvider internal constructor(
         return parseSongList(runtime.invokeJson("getLikedSongs"))
     }
 
+    override suspend fun getLikedSongStates(
+        trackRefs: List<ExtensionTrackRef>
+    ): Map<ExtensionTrackRef, Boolean>? {
+        if (AtomicCapabilityId.UserLikedSongsCheck !in capabilities) return null
+        val requested = trackRefs
+            .asSequence()
+            .filter { it.extensionId == runtime.extensionId && it.opaqueId.isNotBlank() }
+            .distinct()
+            .toList()
+        if (requested.isEmpty()) return emptyMap()
+        val request = JSONObject().put(
+            "trackRefs",
+            JSONArray().apply {
+                requested.forEach { ref -> put(JSONObject().put("id", ref.opaqueId)) }
+            }
+        )
+        val results = JSONArray(runtime.invokeJson("getLikedSongStates", request))
+        val requestedById = requested.associateBy(ExtensionTrackRef::opaqueId)
+        return buildMap {
+            repeat(results.length()) { index ->
+                val item = results.optJSONObject(index) ?: return@repeat
+                val ref = requestedById[item.optString("id").trim()] ?: return@repeat
+                val liked = item.opt("liked") as? Boolean ?: return@repeat
+                put(ref, liked)
+            }
+        }
+    }
+
     private fun parseSongList(raw: String): List<ProviderSong> {
         val values = JSONArray(raw)
         return buildList {

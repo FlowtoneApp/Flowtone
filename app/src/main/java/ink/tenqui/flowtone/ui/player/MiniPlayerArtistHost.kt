@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import ink.tenqui.flowtone.core.model.Song
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 import ink.tenqui.flowtone.playback.PlaybackSource
 
 @Composable
@@ -19,6 +20,7 @@ internal fun BoxScope.MiniPlayerArtistHost(
     artistPlaceholderActive: Boolean,
     artistPlaceholderProgress: Float,
     currentSong: Song?,
+    providerLikedSongStatus: ProviderSongLikedStatus?,
     fullscreenSwipeThresholdPx: Float,
     visualPanelHeight: Dp,
     songInfoProgress: Float,
@@ -62,6 +64,7 @@ internal fun BoxScope.MiniPlayerArtistHost(
     ) {
         FullscreenSongInfoOverlay(
             song = currentSong,
+            providerLikedSongStatus = providerLikedSongStatus,
             progress = songInfoProgress,
             topPadding = songInfoTopPadding,
             backGestureThresholdPx = fullscreenSwipeThresholdPx,

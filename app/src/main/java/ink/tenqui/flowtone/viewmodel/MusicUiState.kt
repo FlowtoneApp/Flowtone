@@ -9,6 +9,8 @@ import ink.tenqui.flowtone.data.online.ProviderAlbum
 import ink.tenqui.flowtone.data.online.ProviderLikedSongs
 import ink.tenqui.flowtone.data.online.ProviderPlaylist
 import ink.tenqui.flowtone.data.online.ProviderSong
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStateIdentity
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 import ink.tenqui.flowtone.playback.PlaybackQueueItem
 
 data class ExtensionContentFailure(
@@ -39,6 +41,7 @@ data class MusicUiState(
     val providerUserPlaylists: Map<String, List<ProviderPlaylist>> = emptyMap(),
     val providerPlaylistDetails: Map<String, ProviderPlaylistDetailState> = emptyMap(),
     val providerLikedSongs: Map<ProviderLikedSongs, ProviderLikedSongsState> = emptyMap(),
+    val providerSongLikedStates: Map<ProviderSongLikedStateIdentity, ProviderSongLikedStatus> = emptyMap(),
     val libraryProviderOptions: List<LibraryProviderOption> = emptyList(),
     val libraryProviderSourcesResolved: Boolean = false,
     val providerSongCatalogLoadStates: Map<String, ProviderCatalogLoadState> = emptyMap(),
@@ -111,6 +114,7 @@ internal fun assembleMusicUiState(
     providerUserPlaylists = provider.providerUserPlaylists,
     providerPlaylistDetails = provider.providerPlaylistDetails,
     providerLikedSongs = provider.providerLikedSongs,
+    providerSongLikedStates = provider.providerSongLikedStates,
     libraryProviderOptions = provider.libraryProviderOptions,
     libraryProviderSourcesResolved = provider.libraryProviderSourcesResolved,
     providerSongCatalogLoadStates = provider.providerSongCatalogLoadStates,

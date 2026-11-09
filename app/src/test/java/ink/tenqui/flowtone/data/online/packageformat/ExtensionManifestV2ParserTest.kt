@@ -19,16 +19,22 @@ import org.junit.Test
 
 class ExtensionManifestV2ParserTest {
     @Test
-    fun likedSongsIsAnOptionalV2CapabilityThatCanRegisterAMusicProviderOnItsOwn() {
+    fun likedCollectionAndStateCheckAreIndependentOptionalV2Capabilities() {
         val legacy = ExtensionManifestParser.parseNormalized(v2Manifest())
         val likedOnly = ExtensionManifestParser.parseNormalized(
             v2Manifest(capabilities = listOf("user.liked.songs.list"))
+        )
+        val checkOnly = ExtensionManifestParser.parseNormalized(
+            v2Manifest(capabilities = listOf("user.liked.songs.check"))
         )
 
         assertTrue(AtomicCapabilityId.UserLikedSongsList !in legacy.canonicalCapabilities)
         assertEquals(setOf(AtomicCapabilityId.UserLikedSongsList), likedOnly.canonicalCapabilities.values)
         assertTrue(likedOnly.unknownAtomicCapabilityIds.isEmpty())
         assertTrue(ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(likedOnly.canonicalCapabilities))
+        assertEquals(setOf(AtomicCapabilityId.UserLikedSongsCheck), checkOnly.canonicalCapabilities.values)
+        assertTrue(checkOnly.unknownAtomicCapabilityIds.isEmpty())
+        assertTrue(ExtensionRuntimeCapabilityPolicy.requiresMusicProviderRuntime(checkOnly.canonicalCapabilities))
     }
 
     @Test

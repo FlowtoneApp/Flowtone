@@ -39,6 +39,7 @@ import ink.tenqui.flowtone.data.online.runtime.JavaScriptMusicProvider
 import ink.tenqui.flowtone.data.search.SearchProviderOption
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptSandboxHost
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResource
+import ink.tenqui.flowtone.core.online.ExtensionTrackRef
 import ink.tenqui.flowtone.core.online.ExtensionPlaybackResourceType
 import ink.tenqui.flowtone.core.online.ArtistAvatar
 import ink.tenqui.flowtone.core.online.ArtistMetadata
@@ -56,6 +57,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -65,6 +67,7 @@ import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.svg.SvgDecoder
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 
 enum class ExtensionRuntimeReloadReason(val logValue: String) {
@@ -77,6 +80,8 @@ enum class ExtensionRuntimeReloadReason(val logValue: String) {
 
 data class ExtensionRuntimeState(
     val generation: Long = 0L,
+    /** Changes when account credentials/configuration changes without replacing the JS runtime. */
+    val accountContextGeneration: Long = 0L,
     val isReloading: Boolean = false,
     val installedExtensionCount: Int = 0,
     val providerIds: Set<String> = emptySet(),
@@ -101,6 +106,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val configStore = ExtensionConfigStore.from(appContext)
     private val credentialGrantStore = CredentialGrantStore.from(appContext)
     private val mutex = Mutex()
+    private val accountContextGeneration = AtomicLong()
     private val runtimeLifecycle = ExtensionRuntimeLifecycle { requestGeneration, currentGeneration ->
         Log.d(
             LogTag,
@@ -283,8 +289,17 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
 
     /** Refreshes one running isolate's Host-owned ordinary configuration snapshot. */
     internal suspend fun refreshRuntimeConfiguration(extensionId: String): Boolean = mutex.withLock {
+        invalidateCredentialContext()
         val runtime = runtimes[extensionId] ?: return@withLock false
         runtimeLifecycle.execute { runtime.refreshConfiguration() }
+    }
+
+    /** Invalidates account-scoped in-memory results after a credential source or grant changes. */
+    internal fun invalidateCredentialContext() {
+        synchronized(accountContextGeneration) {
+            val nextGeneration = accountContextGeneration.incrementAndGet()
+            _runtimeState.update { it.copy(accountContextGeneration = nextGeneration) }
+        }
     }
 
     /** 由 Flowtone Host 调用；JS 只提供资源字段，扩展身份不从 JS 参数读取。 */
@@ -616,6 +631,26 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             }
         }
 
+    internal suspend fun getProviderLikedSongStates(
+        extensionId: String,
+        trackRefs: List<ExtensionTrackRef>
+    ): Map<ExtensionTrackRef, Boolean>? = runtimeLifecycle.execute {
+        val provider = musicProviders[extensionId] ?: return@execute null
+        if (AtomicCapabilityId.UserLikedSongsCheck !in provider.capabilities) return@execute null
+        require(trackRefs.all { it.extensionId == extensionId }) {
+            "喜欢状态查询不能混合不同来源的歌曲"
+        }
+        val requested = trackRefs.distinct()
+        if (requested.isEmpty()) return@execute emptyMap()
+        provider.getLikedSongStates(requested)?.let { results ->
+            val allowed = requested.toSet()
+            require(results.keys.all { it in allowed }) {
+                "喜欢状态查询返回了请求范围之外的歌曲"
+            }
+            results
+        }
+    }
+
     internal suspend fun getProviderHomePlaylistRecommendations(
         extensionId: String
     ): List<ProviderPlaylist>? = runtimeLifecycle.execute {
@@ -663,6 +698,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         val generation = runtimeLifecycle.beginReload()
         _runtimeState.value = ExtensionRuntimeState(
             generation = generation,
+            accountContextGeneration = accountContextGeneration.get(),
             isReloading = true
         )
         Log.i(
@@ -684,6 +720,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             runtimeLifecycle.completeReload(generation)
             _runtimeState.value = ExtensionRuntimeState(
                 generation = generation,
+                accountContextGeneration = accountContextGeneration.get(),
                 installedExtensionCount = installed.size,
                 providerIds = musicProviders.keys.toSet()
             )
@@ -699,6 +736,7 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
             runtimeLifecycle.completeReload(generation)
             _runtimeState.value = ExtensionRuntimeState(
                 generation = generation,
+                accountContextGeneration = accountContextGeneration.get(),
                 lastReloadErrorType = error.javaClass.simpleName
             )
             Log.e(

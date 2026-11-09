@@ -169,6 +169,43 @@ class JavaScriptMusicProviderTest {
         assertNull(selection[1].track)
     }
 
+    @Test fun likedSongStateCheckUsesOnlyRequestedProviderTrackIdsAndKeepsMissingResultsUnknown() = runBlocking {
+        val provider = provider(
+            script = """
+                globalThis.flowtoneExtension = {
+                  async getLikedSongStates({trackRefs}) {
+                    if (trackRefs.map(ref => ref.id).join(',') !== 'liked-1,not-liked-1,missing-1') {
+                      throw new Error('unexpected track refs');
+                    }
+                    return [
+                      {id:'liked-1',liked:true},
+                      {id:'not-liked-1',liked:false},
+                      {id:'not-boolean',liked:'false'},
+                      {id:'outside-request',liked:true}
+                    ];
+                  }
+                };
+            """.trimIndent(),
+            capabilities = CanonicalAtomicCapabilitySet.of(AtomicCapabilityId.UserLikedSongsCheck)
+        )
+        val liked = ExtensionTrackRef("example.music", "liked-1")
+        val notLiked = ExtensionTrackRef("example.music", "not-liked-1")
+        val missing = ExtensionTrackRef("example.music", "missing-1")
+
+        val states = requireNotNull(provider.getLikedSongStates(listOf(liked, notLiked, missing, liked)))
+
+        assertEquals(mapOf(liked to true, notLiked to false), states)
+    }
+
+    @Test fun undeclaredLikedSongStateMethodIsNotInvoked() = runBlocking {
+        val provider = provider(
+            script = """globalThis.flowtoneExtension = { async getLikedSongStates() { throw new Error('state check invoked'); } };""",
+            capabilities = CanonicalAtomicCapabilitySet.Empty
+        )
+
+        assertNull(provider.getLikedSongStates(listOf(ExtensionTrackRef("example.music", "song-1"))))
+    }
+
     @Test fun declaredProviderMethodsAreInvoked() = runBlocking {
         val provider = provider(
             script = """

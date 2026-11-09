@@ -29,6 +29,7 @@ import coil3.ImageLoader
 import ink.tenqui.flowtone.core.model.LibraryPlaylistCard
 import ink.tenqui.flowtone.core.model.Song
 import ink.tenqui.flowtone.core.model.SourceType
+import ink.tenqui.flowtone.data.online.ProviderSongLikedStatus
 import ink.tenqui.flowtone.lyrics.SongLyricsState
 import ink.tenqui.flowtone.playback.PlaybackPositionSnapshot
 import ink.tenqui.flowtone.ui.player.lyrics.LyricsActiveLineScreenYFraction
@@ -94,6 +95,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
     newlyCreatedPlaylistId: String?,
     addToPlaylistListState: LazyListState,
     isCurrentSongLiked: Boolean,
+    providerLikedSongStatus: ProviderSongLikedStatus?,
     expandedMoreMenu: Boolean,
     fullscreen: Boolean,
     expanded: Boolean,
@@ -514,6 +516,7 @@ internal fun BoxScope.MiniPlayerFullscreenLayout(
             artistPlaceholderActive = artistPlaceholderActive,
             artistPlaceholderProgress = artistPlaceholderProgress,
             currentSong = playerUiState.currentSong,
+            providerLikedSongStatus = providerLikedSongStatus,
             fullscreenSwipeThresholdPx = fullscreenSwipeThresholdPx,
             visualPanelHeight = designVisualPanelHeight,
             songInfoProgress = songInfoProgress,

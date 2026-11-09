@@ -228,6 +228,7 @@ internal fun ExtensionCredentialGrantsScreen(
                         revoking = false
                         revokeRequest = null
                         if (result.isSuccess) refresh() else error = "撤销授权失败，请重试。"
+                        if (result.getOrDefault(false)) extensionManager.invalidateCredentialContext()
                     }
                 }
             }
@@ -451,6 +452,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
             selectedSource = null
             authenticating = false
             if (result.isSuccess) {
+                extensionManager.invalidateCredentialContext()
                 onBack()
             } else {
                 authError = "授权未完成。请检查扩展请求和凭据状态后重试。"
