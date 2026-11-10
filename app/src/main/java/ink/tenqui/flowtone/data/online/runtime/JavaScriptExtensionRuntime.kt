@@ -9,6 +9,7 @@ import androidx.javascriptengine.MessagePortClient
 import ink.tenqui.flowtone.data.online.network.AdmissionAwareExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
+import ink.tenqui.flowtone.data.online.network.MaxExtensionRequestBytes
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkResourceExhaustedException
 import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
@@ -154,9 +155,9 @@ class JavaScriptExtensionRuntime(
     private suspend fun handleHttpRequest(id: String, payload: JSONObject?, admission: GlobalExtensionNetworkLimiter.Admission?): JSONObject {
         var delegated = false
         return try {
-            if (payload == null || payload.optString("method", "GET") != "GET") return failure(id, "INVALID_REQUEST", "只允许 GET 请求")
-            val headers = payload.optJSONObject("headers")?.let { json -> json.keys().asSequence().associateWith { json.getString(it) } }.orEmpty()
-            val request = ExtensionHttpRequest(ExtensionHttpMethod.Get, payload.getString("url"), headers)
+            val request = try { parseExtensionHttpRequest(payload) } catch (_: IllegalArgumentException) {
+                return failure(id, "INVALID_REQUEST", "HTTP 请求参数非法")
+            }
             val response = if (admission != null && network is AdmissionAwareExtensionNetworkClient) {
                 delegated = true; network.executeAdmitted(request, admission)
             } else network.execute(request)
@@ -277,4 +278,33 @@ class JavaScriptExtensionRuntime(
         const val ConfigRefreshTimeoutMillis = 20_000L
         const val LogTag = "FlowtoneExtension"
     }
+}
+
+internal fun parseExtensionHttpRequest(payload: JSONObject?): ExtensionHttpRequest {
+    require(payload != null)
+    val methodValue = if (payload.has("method")) payload.opt("method") as? String else "GET"
+    val method = ExtensionHttpMethod.entries.firstOrNull { it.name.uppercase() == methodValue }
+    require(method != null)
+    val url = payload.opt("url") as? String
+    require(!url.isNullOrBlank())
+    val uri = runCatching { java.net.URI(url) }.getOrNull()
+    require(uri != null && uri.isAbsolute && uri.host != null && uri.userInfo == null && uri.fragment == null &&
+        (uri.scheme.equals("https", true) || uri.scheme.equals("http", true)))
+    val headers = if (payload.has("headers")) {
+        val json = payload.opt("headers") as? JSONObject
+        require(json != null)
+        json.keys().asSequence().associateWith { key ->
+            require(key.isNotEmpty() && key.all { it.code in 33..126 && it !in "()<>@,;:/[]?={}\\\"" })
+            val value = json.opt(key) as? String
+            require(value != null && value.all { it == '\t' || it.code in 32..126 })
+            value
+        }
+    } else emptyMap()
+    val body = if (payload.has("body")) {
+        val bodyText = payload.opt("body") as? String
+        require(bodyText != null)
+        bodyText.toByteArray(Charsets.UTF_8).also { require(it.size <= MaxExtensionRequestBytes) }
+    } else null
+    require(method != ExtensionHttpMethod.Get || body == null)
+    return ExtensionHttpRequest(method, url, headers, body)
 }

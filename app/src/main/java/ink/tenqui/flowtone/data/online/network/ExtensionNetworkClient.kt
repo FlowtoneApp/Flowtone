@@ -12,7 +12,9 @@ data class ExtensionHttpRequest(
     val body: ByteArray? = null
 )
 
-enum class ExtensionHttpMethod { Get }
+enum class ExtensionHttpMethod { Get, Post, Put, Patch, Delete }
+
+internal const val MaxExtensionRequestBytes = 256 * 1024
 
 data class ExtensionHttpResponse(
     val statusCode: Int,

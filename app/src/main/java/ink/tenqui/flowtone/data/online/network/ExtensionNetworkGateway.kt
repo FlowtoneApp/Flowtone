@@ -14,10 +14,14 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import androidx.media3.common.C
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /** Flowtone 控制的扩展网络网关，也是唯一实际执行 HTTP 的位置。 */
 class ExtensionNetworkGateway(
-    private val transport: ExtensionHttpTransport = HttpUrlConnectionTransport(),
+    private val transport: ExtensionHttpTransport = OkHttpExtensionTransport(),
     private val streamTransport: ExtensionStreamTransport = HttpUrlConnectionStreamTransport(),
     private val logger: ExtensionCoreLogger = AndroidExtensionCoreLogger,
     private val limiter: GlobalExtensionNetworkLimiter = GlobalExtensionNetworkLimiter()
@@ -238,60 +242,62 @@ private class BoundExtensionStreamClient(
     }
 }
 
-private class HttpUrlConnectionTransport : ExtensionHttpTransport {
-    override suspend fun execute(
-        request: ExtensionHttpRequest,
-        authorizeUrl: (String) -> Unit
-    ): ExtensionHttpResponse = withContext(Dispatchers.IO) {
-        var currentUrl = request.url
-        repeat(MaxRedirects + 1) { redirectCount ->
-            authorizeUrl(currentUrl)
-            val connection = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = request.method.name.uppercase()
-                connectTimeout = DefaultTimeoutMillis
-                readTimeout = DefaultTimeoutMillis
-                instanceFollowRedirects = false
-                doInput = true
-                request.headers.forEach { (name, value) -> setRequestProperty(name, value) }
-            }
-            try {
-                val statusCode = connection.responseCode
-                if (statusCode in RedirectStatuses) {
-                    require(redirectCount < MaxRedirects) { "HTTP 重定向次数过多" }
-                    val location = connection.getHeaderField("Location")
-                        ?: error("HTTP 重定向缺少 Location")
-                    currentUrl = URL(URL(currentUrl), location).toString()
-                    authorizeUrl(currentUrl)
-                    return@repeat
-                }
-                val stream = if (statusCode in 200..299) connection.inputStream else connection.errorStream
-                val body = stream?.use { input ->
-                    val output = ByteArrayOutputStream()
-                    val buffer = ByteArray(8192)
-                    var total = 0
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        require(total <= MaxResponseBytes) { "扩展 HTTP 响应超过 2 MiB" }
-                        output.write(buffer, 0, read)
-                    }
-                    output.toByteArray()
-                } ?: ByteArray(0)
-                return@withContext ExtensionHttpResponse(
-                    statusCode = statusCode,
-                    headers = connection.headerFields.filterKeys { it != null }.mapKeys { it.key!! },
-                    body = body
-                )
-            } finally {
-                connection.disconnect()
-            }
-        }
-        error("HTTP 重定向失败")
-    }
+internal class OkHttpExtensionTransport : ExtensionHttpTransport {
+    private val client = OkHttpClient.Builder()
+        .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+        .connectTimeout(10, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS).build()
 
+    override suspend fun execute(request: ExtensionHttpRequest, authorizeUrl: (String) -> Unit): ExtensionHttpResponse =
+        withContext(Dispatchers.IO) {
+            require((request.body?.size ?: 0) <= MaxExtensionRequestBytes) { "请求体超过 256 KiB" }
+            require(request.method != ExtensionHttpMethod.Get || request.body == null) { "GET 不支持请求体" }
+            var currentUrl = request.url
+            var headers = request.headers
+            repeat(MaxRedirects + 1) { redirectCount ->
+                authorizeUrl(currentUrl)
+                val body = when (request.method) {
+                    ExtensionHttpMethod.Get -> null
+                    ExtensionHttpMethod.Post, ExtensionHttpMethod.Put, ExtensionHttpMethod.Patch ->
+                        (request.body ?: ByteArray(0)).toRequestBody()
+                    ExtensionHttpMethod.Delete -> request.body?.toRequestBody()
+                }
+                val builder = Request.Builder().url(currentUrl).method(request.method.name.uppercase(), body)
+                headers.forEach { (name, value) -> builder.header(name, value) }
+                client.newCall(builder.build()).execute().use { response ->
+                    if (request.method == ExtensionHttpMethod.Get && response.code in RedirectStatuses) {
+                        require(redirectCount < MaxRedirects) { "HTTP 重定向次数过多" }
+                        val location = response.header("Location") ?: error("HTTP 重定向缺少 Location")
+                        val nextUrl = URL(URL(currentUrl), location).toString()
+                        authorizeUrl(nextUrl)
+                        if (!sameOrigin(currentUrl, nextUrl)) headers = emptyMap()
+                        currentUrl = nextUrl
+                        return@repeat
+                    }
+                    val bytes = response.body?.byteStream()?.use { input ->
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        var total = 0
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            total += read
+                            require(total <= MaxResponseBytes) { "扩展 HTTP 响应超过 2 MiB" }
+                            output.write(buffer, 0, read)
+                        }
+                        output.toByteArray()
+                    } ?: ByteArray(0)
+                    return@withContext ExtensionHttpResponse(response.code, response.headers.toMultimap(), bytes)
+                }
+            }
+            error("HTTP 重定向失败")
+        }
+
+    private fun sameOrigin(first: String, second: String): Boolean {
+        val a = URL(first); val b = URL(second)
+        return a.protocol.equals(b.protocol, true) && a.host.equals(b.host, true) &&
+            (if (a.port == -1) a.defaultPort else a.port) == (if (b.port == -1) b.defaultPort else b.port)
+    }
     private companion object {
-        const val DefaultTimeoutMillis = 10_000
         const val MaxRedirects = 5
         const val MaxResponseBytes = 2 * 1024 * 1024
         val RedirectStatuses = setOf(301, 302, 303, 307, 308)
@@ -434,17 +440,11 @@ internal fun requestLogDetails(request: ExtensionHttpRequest): String {
         ?.split("&")
         ?.joinToString("&") { part ->
             val name = part.substringBefore("=")
-            if (isSensitiveName(name)) "$name=****" else part
+            "$name=****"
         }
         .orEmpty()
     return "method=${request.method} host=${uri.host.orEmpty()} path=${uri.rawPath.orEmpty()} " +
         "query=${if (query.isEmpty()) "<none>" else query} requestBytes=${request.body?.size ?: 0}"
-}
-
-private fun isSensitiveName(name: String): Boolean {
-    val normalized = name.lowercase()
-    return listOf("api_key", "token", "access_token", "authorization", "cookie", "secret", "password", "key", "signature")
-        .any { sensitive -> normalized == sensitive || normalized.contains(sensitive) }
 }
 
 private fun elapsedMillis(startedAt: Long): Long = (System.nanoTime() - startedAt) / 1_000_000
