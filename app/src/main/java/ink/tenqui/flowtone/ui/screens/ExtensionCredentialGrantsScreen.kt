@@ -373,7 +373,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
                         it.credentialType == CredentialType.GenericAccount && it.realm == currentRequest.contract.realm
                     } else sources
                     val matches = if (currentRequest == null) emptyList() else filtered.map {
-                        CredentialCandidate(it, sourceRepository.match(it, currentRequest))
+                        CredentialCandidate(it, sourceRepository.matchForExtension(it, currentRequest, requireNotNull(current)))
                     }
                     Triple(current, currentRequest, matches)
                 }
@@ -650,6 +650,11 @@ internal fun ExtensionCredentialSourcePickerScreen(
                     )
                     if (currentRequest?.named != null && candidate.match.contractCompatible) {
                         NamedCredentialFields(source = candidate.source, installed = liveInstalled, request = currentRequest, onChanged = ::refresh)
+                        liveInstalled?.let { current ->
+                            current.descriptor.credentialAcquisition.filter { it.realm == candidate.source.realm }.forEach { method ->
+                                OAuthLoginEntry(current, candidate.source, method, onSaved = ::refresh)
+                            }
+                        }
                     }
                     if (index != entries.lastIndex) HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f)
@@ -735,6 +740,7 @@ private fun CredentialCandidateCard(
 }
 
 internal fun candidateReason(source: CredentialSource, request: CredentialRequestDefinition?, match: CredentialSourceMatch): String = when {
+    match.restrictedFields.isNotEmpty() -> "OAuth 字段待兼容性授权：${match.restrictedFields.joinToString("、")}"
     match.missingRequiredFields.isNotEmpty() -> "缺少必需字段：${match.missingRequiredFields.joinToString("、")}"
     match.unavailableRequiredFields.isNotEmpty() -> "必需字段不可用：${match.unavailableRequiredFields.joinToString("、")}"
     match.fullyReady && match.optionalIssues.isNotEmpty() -> "可选择 · 可选字段未就绪：${match.optionalIssues.joinToString("、")}"

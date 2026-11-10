@@ -53,8 +53,8 @@ internal fun NamedCredentialFields(
             if (fields.isEmpty() && !loadError) Text("尚无具名字段", style = MaterialTheme.typography.bodySmall)
             fields.forEach { entry ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) { Text(entry.field.id); Text("${entry.field.type} · ${namedStatusLabel(entry.state)}", style = MaterialTheme.typography.bodySmall) }
-                    TextButton(onClick = { chosen = entry.field; editing = true; error = null }, enabled = !busy) { Text("替换") }
+                    Column(Modifier.weight(1f)) { Text(entry.field.id); Text("${entry.field.type} · ${namedStatusLabel(entry.state)}${if (entry.oauthRestricted) " · OAuth 身份未验证，受 client 限制" else ""}", style = MaterialTheme.typography.bodySmall) }
+                    TextButton(onClick = { chosen = entry.field; editing = true; error = null }, enabled = !busy && !entry.oauthRestricted) { Text("替换") }
                     TextButton(onClick = { deleting = entry.field }, enabled = !busy) { Text("删除") }
                 }
             }
@@ -66,9 +66,9 @@ internal fun NamedCredentialFields(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(field.id)
-                        Text("${field.type} · ${if (field.required) "必需" else "可选"} · ${if (mismatch) "类型不匹配" else namedStatusLabel(saved?.state ?: CredentialSecretState.NotConfigured)}", style = MaterialTheme.typography.bodySmall)
+                        Text("${field.type} · ${if (field.required) "必需" else "可选"} · ${if (mismatch) "类型不匹配" else namedStatusLabel(saved?.state ?: CredentialSecretState.NotConfigured)}${if (saved?.oauthRestricted == true) " · OAuth 身份未验证，受 client 限制" else ""}", style = MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(onClick = { chosen = NamedSecretField(field.id, field.type); editing = true; error = null }, enabled = !busy && !loadError && !mismatch) {
+                    TextButton(onClick = { chosen = NamedSecretField(field.id, field.type); editing = true; error = null }, enabled = !busy && !loadError && !mismatch && saved?.oauthRestricted != true) {
                         Text(if (saved == null) "手动补充" else "替换")
                     }
                 }

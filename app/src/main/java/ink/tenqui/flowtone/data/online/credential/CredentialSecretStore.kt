@@ -147,7 +147,7 @@ class CredentialSecretStore internal constructor(
             check(parts.size == 2) { "动态凭据元数据不可识别" }
             val field = NamedSecretField(parts[0], NamedSecretType.entries.firstOrNull { it.name == parts[1] }
                 ?: error("动态凭据类型不可识别"))
-            NamedSecretStatus(field, namedState(sourceId, field))
+            NamedSecretStatus(field, namedState(sourceId, field), oauthGuard(sourceId, field).exists())
         }.also { fields -> check(fields.map { it.field.id }.distinct().size == fields.size) }
     }
 
@@ -158,13 +158,41 @@ class CredentialSecretStore internal constructor(
         putFile(namedFile(sourceId, field), sourceId, namedAad(field), plaintext)
     }
 
+    internal fun oauthBinding(sourceId: String, field: NamedSecretField): OAuthCredentialBinding? {
+        val guard = oauthGuard(sourceId, field)
+        if (!guard.exists()) return null
+        val json = org.json.JSONObject(guard.readText(StandardCharsets.UTF_8))
+        require(json.keys().asSequence().toSet() == setOf("version", "profile", "client", "realm", "scopes"))
+        require(json.getInt("version") == 1 && listOf("profile", "client", "realm").all { json.opt(it) is String })
+        val array = json.getJSONArray("scopes")
+        val scopes = List(array.length()) { array.get(it) as? String ?: error("scope") }
+        return OAuthCredentialBinding(json.getString("profile"), json.getString("client"), json.getString("realm"), scopes)
+    }
+
+    internal fun putOAuthNamed(sourceId: String, field: NamedSecretField, plaintext: String, binding: OAuthCredentialBinding, replaceConfirmed: Boolean) {
+        val all = namedFields(sourceId)
+        val existing = all.firstOrNull { it.field.id == field.id }
+        require(existing == null || existing.field == field)
+        require(existing == null || replaceConfirmed)
+        require(existing != null || all.size < 64)
+        val guard = oauthGuard(sourceId, field)
+        if (guard.exists()) require(oauthBinding(sourceId, field) == binding) { "OAuth client 不兼容" }
+        val json = org.json.JSONObject().put("version", 1).put("profile", binding.profileId).put("client", binding.clientId)
+            .put("realm", binding.realm).put("scopes", org.json.JSONArray(binding.scopes))
+        guard.parentFile?.let(::ensureDirectory)
+        atomicWrite(guard, json.toString().toByteArray(StandardCharsets.UTF_8))
+        putFile(namedFile(sourceId, field), sourceId, namedAad(field) + ":oauth", plaintext)
+    }
+
+    internal fun isOAuthRestricted(sourceId: String, field: NamedSecretField): Boolean = oauthGuard(sourceId, field).exists()
+
     internal fun namedState(sourceId: String, field: NamedSecretField): CredentialSecretState {
         val file = namedFile(sourceId, field)
         return try {
             val parent = requireNotNull(file.parentFile)
             if (parent.exists() && !parent.isDirectory) return CredentialSecretState.Unavailable
             if (!file.exists()) return CredentialSecretState.NotConfigured
-            val bytes = decrypt(file.readBytes(), sourceId, namedAad(field))
+            val bytes = decrypt(file.readBytes(), sourceId, namedAad(field) + if (isOAuthRestricted(sourceId, field)) ":oauth" else "")
             bytes.fill(0)
             CredentialSecretState.Configured
         } catch (_: Exception) { CredentialSecretState.Unavailable }
@@ -178,7 +206,7 @@ class CredentialSecretStore internal constructor(
                 return CredentialSecretReadResult.Unavailable(CredentialSecretFailure.StorageUnavailable)
             }
             if (!file.exists()) return CredentialSecretReadResult.NotConfigured
-            val bytes = decrypt(file.readBytes(), sourceId, namedAad(field))
+            val bytes = decrypt(file.readBytes(), sourceId, namedAad(field) + if (isOAuthRestricted(sourceId, field)) ":oauth" else "")
             try {
                 CredentialSecretReadResult.Available(String(bytes, StandardCharsets.UTF_8))
             } finally { bytes.fill(0) }
@@ -194,6 +222,9 @@ class CredentialSecretStore internal constructor(
         try {
             Files.deleteIfExists(file.toPath())
             deleteTemporaryFiles(file)
+            val guard = oauthGuard(sourceId, field)
+            Files.deleteIfExists(guard.toPath())
+            deleteTemporaryFiles(guard)
             removeEmptyParent(file.parentFile)
             removeEmptyParent(sourceDirectory(sourceId))
         } catch (e: Exception) {
@@ -207,6 +238,8 @@ class CredentialSecretStore internal constructor(
     }
     private fun namedFile(sourceId: String, field: NamedSecretField): File =
         File(namedDirectory(sourceId), field.id + "~" + field.type.name + ".secret")
+    private fun oauthGuard(sourceId: String, field: NamedSecretField): File =
+        File(namedDirectory(sourceId), field.id + "~" + field.type.name + ".oauth")
     private fun namedAad(field: NamedSecretField): String = "named-v1:" + field.id + ":" + field.type.name
 
     fun deleteAll(sourceId: String) {
@@ -227,7 +260,7 @@ class CredentialSecretStore internal constructor(
                 if (!named.isDirectory) throw GeneralSecurityException()
                 val entries = named.listFiles() ?: throw GeneralSecurityException()
                 entries.forEach { entry ->
-                    if (!entry.isFile || (!entry.name.endsWith(".secret") && !entry.name.endsWith(".tmp"))) throw GeneralSecurityException()
+                    if (!entry.isFile || (!entry.name.endsWith(".secret") && !entry.name.endsWith(".oauth") && !entry.name.endsWith(".tmp"))) throw GeneralSecurityException()
                     Files.deleteIfExists(entry.toPath())
                 }
                 Files.deleteIfExists(named.toPath())

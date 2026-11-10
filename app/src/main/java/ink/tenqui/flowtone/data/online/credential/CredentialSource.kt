@@ -153,7 +153,8 @@ data class CredentialSourceMatch(
     val secretReady: Boolean,
     val missingRequiredFields: List<String> = emptyList(),
     val unavailableRequiredFields: List<String> = emptyList(),
-    val optionalIssues: List<String> = emptyList()
+    val optionalIssues: List<String> = emptyList(),
+    val restrictedFields: List<String> = emptyList()
 ) {
     val fullyReady: Boolean get() = contractCompatible && metadataCompatible && secretReady
 }
@@ -206,4 +207,7 @@ internal data class NamedSecretField(val id: String, val type: NamedSecretType) 
 }
 
 enum class NamedSecretType { Cookie, Token, Opaque }
-internal data class NamedSecretStatus(val field: NamedSecretField, val state: CredentialSecretState)
+internal data class NamedSecretStatus(val field: NamedSecretField, val state: CredentialSecretState, val oauthRestricted: Boolean = false)
+
+/** Non-secret provenance; an OAuth result is not proof of account identity. */
+internal data class OAuthCredentialBinding(val profileId: String, val clientId: String, val realm: String, val scopes: List<String>)

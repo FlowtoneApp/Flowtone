@@ -4,6 +4,7 @@ import ink.tenqui.flowtone.data.online.capability.CanonicalAtomicCapabilitySet
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationSchema
 import ink.tenqui.flowtone.data.online.credential.CredentialAtLeastOneGroup
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
+import ink.tenqui.flowtone.data.online.credential.CredentialAcquisitionDefinition
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import org.json.JSONObject
 
@@ -53,7 +54,8 @@ data class NormalizedExtensionDescriptor(
     val configurationSchema: ConfigurationSchema,
     val credentialRequests: List<CredentialRequestDefinition>,
     val networkPermissions: Set<NetworkOriginPermission>,
-    val credentialAtLeastOneGroups: List<CredentialAtLeastOneGroup> = emptyList()
+    val credentialAtLeastOneGroups: List<CredentialAtLeastOneGroup> = emptyList(),
+    val credentialAcquisition: List<CredentialAcquisitionDefinition> = emptyList()
 ) {
     val identity: ExtensionIdentity get() = ExtensionIdentity.from(manifest)
 }

@@ -31,7 +31,7 @@ class CredentialGrantRepository(
         }
         val source = sources.get(grant.credentialSourceId)
             ?: return CredentialGrantEvaluation(grant, false, invalidReason = CredentialGrantInvalidReason.CredentialSourceMissing)
-        val match = sources.match(source, request)
+        val match = sources.matchForExtension(source, request, installed)
         if (!match.contractCompatible) {
             return CredentialGrantEvaluation(
                 grant, false, sourceMatch = match, sourceLabel = source.label,
@@ -67,7 +67,7 @@ class CredentialGrantRepository(
             ?: throw IllegalArgumentException("Credential request is invalid")
         require(contract == confirmedContract) { "Credential request changed" }
         val source = sources.get(sourceId) ?: throw IllegalArgumentException("Credential source is unavailable")
-        require(sources.match(source, request).fullyReady) {
+        require(sources.matchForExtension(source, request, current).fullyReady) {
             "Credential source is not ready"
         }
         val grant = CredentialGrant(

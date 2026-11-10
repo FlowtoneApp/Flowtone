@@ -24,6 +24,9 @@ import ink.tenqui.flowtone.data.online.credential.NamedCredentialRequestField
 import ink.tenqui.flowtone.data.online.credential.NamedCredentialRequestContract
 import ink.tenqui.flowtone.data.online.credential.CredentialInjection
 import ink.tenqui.flowtone.data.online.credential.CredentialTargetOrigin
+import ink.tenqui.flowtone.data.online.credential.CredentialAcquisitionDefinition
+import ink.tenqui.flowtone.data.online.credential.CredentialAcquisitionOutput
+import ink.tenqui.flowtone.data.online.credential.NamedSecretField
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import org.json.JSONObject
@@ -73,8 +76,45 @@ internal object ExtensionManifestV2Parser {
             configurationSchema = configuration,
             credentialRequests = credentialRequests,
             networkPermissions = networkPermissions,
-            credentialAtLeastOneGroups = credentialAtLeastOneGroups
+            credentialAtLeastOneGroups = credentialAtLeastOneGroups,
+            credentialAcquisition = parseCredentialAcquisition(json)
         )
+    }
+
+    private fun parseCredentialAcquisition(json: JSONObject): List<CredentialAcquisitionDefinition> {
+        if (!json.has("credentialAcquisition")) return emptyList()
+        val items = json.getJSONArray("credentialAcquisition")
+        require(items.length() <= 16)
+        val ids = mutableSetOf<String>()
+        return List(items.length()) { index ->
+            val item = items.getJSONObject(index)
+            require(item.keys().asSequence().toSet() == setOf("methodId", "type", "realm", "label", "description", "providerProfile", "outputs", "scopes"))
+            fun text(key: String): String = (item.opt(key) as? String) ?: throw IllegalArgumentException("获取契约字段非法")
+            val id = text("methodId")
+            require(id.matches(Regex("[A-Za-z][A-Za-z0-9._-]{0,63}")) && ids.add(id))
+            require(text("type") == "authorization_code_pkce")
+            val realm = CredentialRealm.normalize(text("realm"))
+            require(CredentialRealm.isValid(realm))
+            val label = text("label"); val description = text("description"); val profile = text("providerProfile")
+            require(label.isNotBlank() && label.length <= 80 && description.isNotBlank() && description.length <= 300)
+            require(profile.matches(Regex("[a-z][a-z0-9._-]{0,63}")))
+            val array = item.getJSONArray("outputs")
+            require(array.length() in 1..2)
+            val outputs = List(array.length()) { fieldIndex ->
+                val field = array.getJSONObject(fieldIndex)
+                require(field.keys().asSequence().toSet() == setOf("fieldId", "type", "required"))
+                val fieldId = field.opt("fieldId") as? String ?: throw IllegalArgumentException("字段非法")
+                require(field.opt("type") == "token" && field.opt("required") is Boolean)
+                NamedSecretField(fieldId, NamedSecretType.Token)
+                CredentialAcquisitionOutput(fieldId, field.getBoolean("required"))
+            }
+            require(outputs.map { it.fieldId }.distinct().size == outputs.size)
+            val scopeArray = item.getJSONArray("scopes")
+            require(scopeArray.length() <= 32)
+            val scopes = List(scopeArray.length()) { scopeArray.get(it) as? String ?: throw IllegalArgumentException("scope 非法") }
+            require(scopes.distinct().size == scopes.size && scopes.all { it.isNotEmpty() && it.length <= 128 && it.all { c -> c.code in 33..126 && c != '"' && c != '\\' } })
+            CredentialAcquisitionDefinition(id, realm, label, description, profile, outputs, scopes)
+        }
     }
 
     private fun parseConfiguration(json: JSONObject?): ConfigurationSchema {

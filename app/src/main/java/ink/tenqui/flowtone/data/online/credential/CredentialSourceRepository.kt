@@ -22,7 +22,14 @@ class CredentialSourceRepository(
             secretStore.namedFields(sourceId)
         }
 
-    fun match(source: CredentialSource, request: CredentialRequestDefinition): CredentialSourceMatch {
+    fun match(source: CredentialSource, request: CredentialRequestDefinition): CredentialSourceMatch = matchInternal(source, request, null)
+
+    internal fun matchForExtension(source: CredentialSource, request: CredentialRequestDefinition,
+                                   installed: ink.tenqui.flowtone.data.online.packageformat.InstalledExtension): CredentialSourceMatch =
+        matchInternal(source, request, installed)
+
+    private fun matchInternal(source: CredentialSource, request: CredentialRequestDefinition,
+                              installed: ink.tenqui.flowtone.data.online.packageformat.InstalledExtension?): CredentialSourceMatch {
         val named = request.named ?: return CredentialSourceMatcher.match(source, request)
         if (source.credentialType != CredentialType.GenericAccount || source.realm != request.contract.realm) {
             return CredentialSourceMatch(false, false, false)
@@ -31,17 +38,34 @@ class CredentialSourceRepository(
         val missing = mutableListOf<String>()
         val unavailable = mutableListOf<String>()
         val optional = mutableListOf<String>()
+        val restricted = mutableListOf<String>()
         named.fields.sortedBy { it.id }.forEach { field ->
             val actual = available[field.id]
-            val ready = actual?.field?.type == field.type && actual.state == CredentialSecretState.Configured
+            val compatible = actual?.oauthRestricted != true || (installed != null && isOAuthCompatible(source.id, actual.field, installed))
+            val ready = actual?.field?.type == field.type && actual.state == CredentialSecretState.Configured && compatible
             if (!ready) {
-                if (!field.required) optional += field.id
+                if (!compatible && field.required) restricted += field.id
+                else if (!field.required) optional += field.id
                 else if (actual != null && actual.field.type == field.type && actual.state == CredentialSecretState.Unavailable) unavailable += field.id
                 else missing += field.id
             }
         }
-        return CredentialSourceMatch(true, true, missing.isEmpty() && unavailable.isEmpty(), missing, unavailable, optional)
+        return CredentialSourceMatch(true, true, missing.isEmpty() && unavailable.isEmpty() && restricted.isEmpty(), missing, unavailable, optional, restricted)
     }
+
+    /** Until a general client-compatibility contract exists, only the fixed debug fixture is recognized. */
+    internal fun isOAuthCompatible(sourceId: String, field: NamedSecretField,
+                                   installed: ink.tenqui.flowtone.data.online.packageformat.InstalledExtension): Boolean =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            val binding = runCatching { secretStore.oauthBinding(sourceId, field) }.getOrNull() ?: return@withSource false
+            ink.tenqui.flowtone.BuildConfig.DEBUG && installed.manifest.id == "flowtone.oauth.test" &&
+                binding.profileId == "flowtone-debug-test" && binding.clientId == "flowtone-debug-public" &&
+                binding.realm == "example.test" && binding.scopes.isEmpty() &&
+                installed.descriptor.credentialAcquisition.any { method ->
+                    method.providerProfile == binding.profileId && method.realm == binding.realm && method.scopes.sorted() == binding.scopes &&
+                        method.outputs.size == 1 && method.outputs.single().fieldId == field.id && method.outputs.single().required
+                }
+        }
 
     internal fun namedSecretState(sourceId: String, field: NamedSecretField): CredentialSecretState =
         CredentialGrantLifecycleLocks.withSource(sourceId) {
@@ -58,6 +82,7 @@ class CredentialSourceRepository(
     internal fun putNamedSecret(sourceId: String, field: NamedSecretField, plaintext: String) =
         CredentialGrantLifecycleLocks.withSource(sourceId) {
             requireGenericSource(sourceId)
+            require(!secretStore.isOAuthRestricted(sourceId, field)) { "OAuth 字段需要先删除后再手动导入" }
             secretStore.putNamed(sourceId, field, plaintext)
         }
 
@@ -82,8 +107,26 @@ class CredentialSourceRepository(
         importNamedSecretLocked(sourceId, field, plaintext, replaceConfirmed)
     }
 
+    internal fun saveOAuthAccessToken(
+        extensionId: String, instanceId: String, declaration: CredentialAcquisitionDefinition,
+        sourceId: String, binding: OAuthCredentialBinding, plaintext: String, replaceConfirmed: Boolean,
+        currentInstalled: () -> ink.tenqui.flowtone.data.online.packageformat.InstalledExtension?
+    ) = CredentialGrantLifecycleLocks.withGrantBinding(extensionId, sourceId) {
+        val installed = currentInstalled()
+        require(installed?.manifest?.id == extensionId && installed.installationInstanceId == instanceId)
+        require(declaration in installed.descriptor.credentialAcquisition)
+        require(declaration.providerProfile == binding.profileId && declaration.realm == binding.realm && declaration.scopes.sorted() == binding.scopes)
+        require(declaration.outputs.size == 1 && declaration.outputs.single().fieldId == "oauth.access_token" && declaration.outputs.single().required)
+        val source = sourceStore.get(sourceId)
+        require(source?.credentialType == CredentialType.GenericAccount && source.realm == declaration.realm)
+        val field = NamedSecretField("oauth.access_token", NamedSecretType.Token)
+        secretStore.putOAuthNamed(sourceId, field, plaintext, binding, replaceConfirmed)
+        check(secretStore.namedState(sourceId, field) == CredentialSecretState.Configured)
+    }
+
     private fun importNamedSecretLocked(sourceId: String, field: NamedSecretField, plaintext: String, replaceConfirmed: Boolean) {
         requireGenericSource(sourceId)
+        require(!secretStore.isOAuthRestricted(sourceId, field)) { "OAuth 字段需要先删除后再手动导入" }
         val existing = secretStore.namedFields(sourceId).firstOrNull { it.field.id == field.id }
         require(existing == null || existing.field == field) { "字段类型冲突" }
         require(existing == null || replaceConfirmed) { "替换需要确认" }

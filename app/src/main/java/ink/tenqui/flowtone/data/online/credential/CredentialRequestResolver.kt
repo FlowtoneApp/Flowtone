@@ -66,6 +66,10 @@ internal class CredentialRequestResolver(
                 var bearer: String? = null
                 for (field in snapshot.named.fields.sortedBy { it.id }) {
                     val stored = available[field.id]
+                    if (stored?.oauthRestricted == true && !sources.isOAuthCompatible(source.id, stored.field, installed)) {
+                        if (field.required) fail(CredentialResolutionError.CREDENTIAL_SCHEME_UNSUPPORTED)
+                        continue
+                    }
                     if (stored != null && stored.field.type != field.type) fail(CredentialResolutionError.CREDENTIAL_SCHEME_UNSUPPORTED)
                     val secret = when (val result = sources.readNamedSecret(source.id, NamedSecretField(field.id, field.type))) {
                         is CredentialSecretReadResult.Available -> result.plaintext
