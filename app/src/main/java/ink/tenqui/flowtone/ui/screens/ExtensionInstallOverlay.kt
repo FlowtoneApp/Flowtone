@@ -268,6 +268,10 @@ internal fun CredentialRequestSection(preview: ExtensionInstallPreview) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 3.dp)
             )
+            if (request.named != null) {
+                Text(extensionCredentialContractDescription(request), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp))
+            }
             Text(
                 text = "配置级别：${extensionRequirementLabel(request.effectiveRequirement)}",
                 style = MaterialTheme.typography.bodySmall,

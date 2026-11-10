@@ -87,7 +87,12 @@ internal fun extensionCredentialRequestPresentation(
         label = request.label,
         typeLabel = request.credentialType.label,
         realm = contract.realm,
-        fields = contract.fields.map { it.label },
+        fields = contract.fields.map { it.label } + contract.named?.let { named ->
+            listOf("目标：${named.origin}") + named.fields.sortedBy { it.id }.map { field ->
+                val mapping = if (field.cookieName != null) "Cookie (${field.cookieName})" else "Bearer"
+                "${field.id} · ${field.type.name} · $mapping · ${if (field.required) "必需" else "可选"}"
+            }
+        }.orEmpty(),
         identityConstraint = contract.identifiers
             .takeIf { it.isNotEmpty() }
             ?.map { it.field.label }

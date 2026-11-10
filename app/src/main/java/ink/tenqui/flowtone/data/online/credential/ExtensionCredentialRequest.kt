@@ -2,6 +2,42 @@ package ink.tenqui.flowtone.data.online.credential
 
 import ink.tenqui.flowtone.data.online.ExtensionRequirementLevel
 import java.util.Locale
+import java.net.URI
+
+enum class CredentialInjection { Cookie, Bearer }
+
+data class NamedCredentialRequestField(
+    val id: String,
+    val type: NamedSecretType,
+    val required: Boolean,
+    val injection: CredentialInjection,
+    val cookieName: String? = null
+)
+
+/** 精确目标与字段声明不代表用户已经授予凭据权限。 */
+data class NamedCredentialRequestContract(
+    val origin: String,
+    val fields: Set<NamedCredentialRequestField>
+)
+
+object CredentialTargetOrigin {
+    fun normalize(value: String): String {
+        val uri = URI(value)
+        require(uri.scheme.equals("https", true) && uri.rawUserInfo == null && uri.host != null &&
+            uri.rawPath.isNullOrEmpty() && uri.rawQuery == null && uri.rawFragment == null)
+        val host = uri.host.lowercase(Locale.ROOT)
+        require(CredentialRealm.isValid(host) && uri.port in -1..65535 && uri.port != 0)
+        if (host.all { it.isDigit() || it == '.' }) {
+            val parts = host.split('.')
+            require(parts.size == 4 && parts.all { part ->
+                part.isNotEmpty() && (part == "0" || !part.startsWith('0')) &&
+                    part.toIntOrNull()?.let { it in 0..255 } == true
+            })
+        }
+        require(uri.rawAuthority.lowercase(Locale.ROOT) == host + if (uri.port == -1) "" else ":${uri.port}")
+        return "https://$host" + if (uri.port == -1 || uri.port == 443) "" else ":${uri.port}"
+    }
+}
 
 enum class CredentialType(val value: String, val label: String) {
     WebDav("webdav", "WebDAV 凭证"),
@@ -146,7 +182,8 @@ data class CredentialRequestContract(
     val credentialType: CredentialType,
     val identifiers: Set<CredentialIdentifierType>,
     val realm: String? = null,
-    val genericFieldIds: Set<CredentialFieldId> = emptySet()
+    val genericFieldIds: Set<CredentialFieldId> = emptySet(),
+    val named: NamedCredentialRequestContract? = null
 ) {
     val fields: List<CredentialFieldDefinition>
         get() = when (credentialType) {
@@ -192,7 +229,8 @@ data class CredentialRequestDefinition(
     val identifiers: List<CredentialIdentifierType> = emptyList(),
     val realm: String? = null,
     val genericFieldIds: List<CredentialFieldId> = emptyList(),
-    val requirement: ExtensionRequirementLevel? = null
+    val requirement: ExtensionRequirementLevel? = null,
+    val named: NamedCredentialRequestContract? = null
 ) {
     val effectiveRequirement: ExtensionRequirementLevel
         get() = requirement ?: if (required) {
@@ -206,7 +244,8 @@ data class CredentialRequestDefinition(
             credentialType = credentialType,
             identifiers = identifiers.toSet(),
             realm = realm?.let(CredentialRealm::normalize),
-            genericFieldIds = genericFieldIds.toSet()
+            genericFieldIds = genericFieldIds.toSet(),
+            named = named
         )
 }
 
@@ -254,6 +293,21 @@ object CredentialRequestValidator {
         val ids = mutableSetOf<String>()
         requests.forEachIndexed { index, request ->
             val path = "credentialRequests[$index]"
+            request.named?.let { named ->
+                if (request.credentialType != CredentialType.GenericAccount || request.genericFieldIds.isNotEmpty()) add(CredentialRequestViolation(path, "具名字段仅用于独立的通用账户请求"))
+                if (request.description.isNullOrBlank()) add(CredentialRequestViolation("$path.description", "具名字段请求必须说明用途"))
+                if (runCatching { CredentialTargetOrigin.normalize(named.origin) == named.origin }.getOrDefault(false).not()) add(CredentialRequestViolation("$path.origin", "Origin 非法"))
+                if (named.fields.size !in 1..16 || named.fields.map { it.id }.distinct().size != named.fields.size) add(CredentialRequestViolation("$path.namedFields", "字段数量非法或 ID 重复"))
+                val cookies = mutableSetOf<String>()
+                named.fields.forEach { field ->
+                    if (runCatching { NamedSecretField(field.id, field.type) }.isFailure) add(CredentialRequestViolation("$path.namedFields", "字段 ID 非法"))
+                    when (field.injection) {
+                        CredentialInjection.Cookie -> if (field.type != NamedSecretType.Cookie || field.cookieName == null || !Regex("[!#\\$%&'*+.^_`|~0-9A-Za-z-]{1,128}").matches(field.cookieName) || !cookies.add(field.cookieName)) add(CredentialRequestViolation("$path.namedFields", "Cookie 映射非法或重复"))
+                        CredentialInjection.Bearer -> if (field.type != NamedSecretType.Token || field.cookieName != null) add(CredentialRequestViolation("$path.namedFields", "Bearer 映射非法"))
+                    }
+                }
+                if (named.fields.count { it.injection == CredentialInjection.Bearer } > 1) add(CredentialRequestViolation("$path.namedFields", "Bearer 映射重复"))
+            }
             if (request.id.length > CredentialRequestLimits.MaxIdLength || !SafeId.matches(request.id)) {
                 add(CredentialRequestViolation("$path.id", "ID 必须使用安全稳定字符且长度不超过上限"))
             }
@@ -308,7 +362,7 @@ object CredentialRequestValidator {
                     if (request.realm == null || !CredentialRealm.isValid(request.realm)) {
                         add(CredentialRequestViolation("$path.realm", "realm 必须是规范的 hostname-like 服务标识"))
                     }
-                    if (request.genericFieldIds.isEmpty()) {
+                    if (request.genericFieldIds.isEmpty() && request.named == null) {
                         add(CredentialRequestViolation("$path.fields", "通用账户凭证至少需要一个字段"))
                     }
                     if (request.genericFieldIds.size != request.genericFieldIds.toSet().size) {

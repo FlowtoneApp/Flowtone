@@ -21,6 +21,24 @@ import org.junit.Test
 
 class ExtensionInstallPreviewTest {
     @Test
+    fun namedCredentialTargetAndMappingChangesAreReported() {
+        val field = ink.tenqui.flowtone.data.online.credential.NamedCredentialRequestField(
+            "oauth.access_token", ink.tenqui.flowtone.data.online.credential.NamedSecretType.Token, true,
+            ink.tenqui.flowtone.data.online.credential.CredentialInjection.Bearer
+        )
+        val old = genericAccount(fields = emptyList()).copy(named =
+            ink.tenqui.flowtone.data.online.credential.NamedCredentialRequestContract("https://api.example.com", setOf(field)))
+        val changedOrigin = old.copy(named = old.named!!.copy(origin = "https://api.example.com:8443"))
+        val changedMapping = old.copy(named = old.named!!.copy(fields = setOf(field.copy(
+            type = ink.tenqui.flowtone.data.online.credential.NamedSecretType.Cookie,
+            injection = ink.tenqui.flowtone.data.online.credential.CredentialInjection.Cookie, cookieName = "sid"
+        ))))
+        for (incoming in listOf(changedOrigin, changedMapping)) {
+            val diff = ExtensionUpdateDiff.between(snapshot(credentialRequests = listOf(old)), snapshot(credentialRequests = listOf(incoming)))
+            assertEquals(listOf(CredentialRequestChange(old, incoming)), diff.changedCredentialRequests)
+        }
+    }
+    @Test
     fun previewUsesCanonicalDescriptorWithoutRuntimeWork() {
         val config = ConfigurationSchema(
             fields = listOf(

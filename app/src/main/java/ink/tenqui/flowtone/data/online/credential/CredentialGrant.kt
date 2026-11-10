@@ -5,9 +5,15 @@ data class CredentialRequestContractSnapshot(
     val credentialType: CredentialType,
     val realm: String?,
     val requestedFieldIds: Set<CredentialFieldId>,
-    val identityConstraints: Set<CredentialIdentifierType>
+    val identityConstraints: Set<CredentialIdentifierType>,
+    val named: NamedCredentialRequestContract? = null
 ) {
     fun isWellFormed(): Boolean {
+        if (named != null) {
+            if (credentialType != CredentialType.GenericAccount || requestedFieldIds.isNotEmpty() || identityConstraints.isNotEmpty()) return false
+            val request = CredentialRequestDefinition("snapshot", credentialType, "snapshot", description = "snapshot", realm = realm, named = named)
+            return CredentialRequestValidator.validate(listOf(request)).isEmpty()
+        }
         val canonicalRealm = realm?.let(CredentialRealm::normalize)
         if (realm != canonicalRealm) return false
         val expectedFields = when (credentialType) {
@@ -48,7 +54,8 @@ data class CredentialRequestContractSnapshot(
                 credentialType = contract.credentialType,
                 realm = contract.realm?.let(CredentialRealm::normalize),
                 requestedFieldIds = contract.fields.mapTo(mutableSetOf()) { it.id },
-                identityConstraints = contract.identifiers.toSet()
+                identityConstraints = contract.identifiers.toSet(),
+                named = contract.named
             ).takeIf(CredentialRequestContractSnapshot::isWellFormed)
         }
     }

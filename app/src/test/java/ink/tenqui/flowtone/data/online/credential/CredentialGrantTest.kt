@@ -15,6 +15,19 @@ import org.junit.Test
 
 class CredentialGrantTest {
     @Test
+    fun namedContractCannotUseOrSilentlyRemoveLegacyGrant() {
+        val store = CredentialGrantStore(Files.createTempDirectory("grant-named").toFile())
+        val old = grant()
+        store.putOrReplace(old)
+        val request = CredentialRequestDefinition("login", CredentialType.GenericAccount, "Account",
+            realm = "example.com", named = NamedCredentialRequestContract("https://example.com", setOf(
+                NamedCredentialRequestField("oauth.token", NamedSecretType.Token, true, CredentialInjection.Bearer)
+            )))
+        assertNull(CredentialRequestContractSnapshot.from(request))
+        assertEquals(0, store.reconcileExtension(old.extensionId, old.extensionInstanceId, listOf(request)))
+        assertEquals(old, store.find(old.extensionId, "login"))
+    }
+    @Test
     fun grantStorePersistsAcrossInstancesAndIsolatesExtensionAndRequest() {
         val root = Files.createTempDirectory("credential-grants").toFile()
         val store = CredentialGrantStore(root)

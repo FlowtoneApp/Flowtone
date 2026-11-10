@@ -157,6 +157,8 @@ data class CredentialSourceMatch(
 
 object CredentialSourceMatcher {
     fun match(source: CredentialSource, request: CredentialRequestDefinition): CredentialSourceMatch {
+        // 具名字段授权尚未接入，不能把旧的固定字段匹配当作可授权结果。
+        if (request.named != null) return CredentialSourceMatch(false, false, false)
         val contractCompatible = source.credentialType == request.credentialType && when (request.credentialType) {
             CredentialType.GenericAccount -> source.realm == request.contract.realm &&
                 request.contract.fields.map { it.id }.all {
@@ -200,5 +202,5 @@ internal data class NamedSecretField(val id: String, val type: NamedSecretType) 
     }
 }
 
-internal enum class NamedSecretType { Cookie, Token, Opaque }
+enum class NamedSecretType { Cookie, Token, Opaque }
 internal data class NamedSecretStatus(val field: NamedSecretField, val state: CredentialSecretState)

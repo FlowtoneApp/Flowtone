@@ -68,7 +68,8 @@ class CredentialGrantStore(private val directory: File) {
             }.toMap()
             val updated = records.filterNot { grant ->
                 grant.extensionId == extensionId &&
-                    (grant.extensionInstanceId != extensionInstanceId || contracts[grant.credentialRequestId] != grant.requestContract)
+                    (grant.extensionInstanceId != extensionInstanceId ||
+                        contracts[grant.credentialRequestId] != grant.requestContract)
             }
             Triple(updated, records.size - updated.size, updated.size != records.size)
         }
@@ -86,12 +87,13 @@ class CredentialGrantStore(private val directory: File) {
         try {
             val root = JSONObject(file.readText(StandardCharsets.UTF_8))
             require(root.keys().asSequence().toSet() == setOf("formatVersion", "grants"))
-            require(root.getInt("formatVersion") == FormatVersion)
+            val version = root.getInt("formatVersion")
+            require(version == 1 || version == FormatVersion)
             val array = root.getJSONArray("grants")
             val records = ArrayList<CredentialGrant>(array.length())
             val keys = mutableSetOf<Pair<String, String>>()
             repeat(array.length()) { index ->
-                val grant = parseGrant(array.getJSONObject(index))
+                val grant = parseGrant(array.getJSONObject(index), version)
                 validate(grant)
                 require(keys.add(grant.extensionId to grant.credentialRequestId))
                 records += grant
@@ -102,10 +104,10 @@ class CredentialGrantStore(private val directory: File) {
         }
     }
 
-    private fun parseGrant(json: JSONObject): CredentialGrant {
+    private fun parseGrant(json: JSONObject, version: Int): CredentialGrant {
         require(json.keys().asSequence().toSet() == GrantKeys)
         val contractJson = json.getJSONObject("requestContract")
-        require(contractJson.keys().asSequence().toSet() == ContractKeys)
+        require(contractJson.keys().asSequence().toSet() == if (version == 1) ContractKeys else ContractKeys + "named")
         val fieldsJson = contractJson.getJSONArray("requestedFieldIds")
         val fields = buildSet {
             repeat(fieldsJson.length()) { index ->
@@ -132,10 +134,29 @@ class CredentialGrantStore(private val directory: File) {
                     ?: throw IllegalArgumentException(),
                 realm = if (contractJson.isNull("realm")) null else contractJson.getString("realm"),
                 requestedFieldIds = fields,
-                identityConstraints = identities
+                identityConstraints = identities,
+                named = if (version == 1 || contractJson.isNull("named")) null else parseNamed(contractJson.getJSONObject("named"))
             ),
             createdAtEpochMillis = json.getLong("createdAtEpochMillis")
         )
+    }
+
+    private fun parseNamed(json: JSONObject): NamedCredentialRequestContract {
+        require(json.keys().asSequence().toSet() == setOf("origin", "fields"))
+        val array = json.getJSONArray("fields")
+        val fields = buildSet {
+            repeat(array.length()) { index ->
+                val item = array.getJSONObject(index)
+                require(item.keys().asSequence().toSet() == setOf("id", "type", "required", "injection", "cookieName"))
+                require(item.opt("required") is Boolean && (item.isNull("cookieName") || item.opt("cookieName") is String))
+                require(add(NamedCredentialRequestField(
+                    item.getString("id"), NamedSecretType.valueOf(item.getString("type")), item.getBoolean("required"),
+                    CredentialInjection.valueOf(item.getString("injection")),
+                    if (item.isNull("cookieName")) null else item.getString("cookieName")
+                )))
+            }
+        }
+        return NamedCredentialRequestContract(json.getString("origin"), fields)
     }
 
     private fun writeRecords(records: List<CredentialGrant>) {
@@ -173,6 +194,15 @@ class CredentialGrantStore(private val directory: File) {
                 .put("realm", grant.requestContract.realm ?: JSONObject.NULL)
                 .put("requestedFieldIds", fields)
                 .put("identityConstraints", identities)
+                .put("named", grant.requestContract.named?.let { named ->
+                    JSONObject().put("origin", named.origin).put("fields", JSONArray().also { array ->
+                        named.fields.sortedBy { it.id }.forEach { field ->
+                            array.put(JSONObject().put("id", field.id).put("type", field.type.name)
+                                .put("required", field.required).put("injection", field.injection.name)
+                                .put("cookieName", field.cookieName ?: JSONObject.NULL))
+                        }
+                    })
+                } ?: JSONObject.NULL)
             grants.put(
                 JSONObject()
                     .put("extensionId", grant.extensionId)
@@ -199,7 +229,7 @@ class CredentialGrantStore(private val directory: File) {
     private val recordsFile: File get() = File(directory, "grants.json")
 
     companion object {
-        private const val FormatVersion = 1
+        private const val FormatVersion = 2
         private val ExtensionId = Regex("[a-zA-Z0-9._-]{1,128}")
         private val RequestId = Regex("[a-zA-Z][a-zA-Z0-9._-]{0,63}")
         private val SourceId = Regex("cs_[a-zA-Z0-9-]{8,128}")

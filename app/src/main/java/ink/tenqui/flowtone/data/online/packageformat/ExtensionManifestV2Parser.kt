@@ -19,6 +19,11 @@ import ink.tenqui.flowtone.data.online.credential.CredentialRealm
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestDefinition
 import ink.tenqui.flowtone.data.online.credential.CredentialRequestValidator
 import ink.tenqui.flowtone.data.online.credential.CredentialType
+import ink.tenqui.flowtone.data.online.credential.NamedSecretType
+import ink.tenqui.flowtone.data.online.credential.NamedCredentialRequestField
+import ink.tenqui.flowtone.data.online.credential.NamedCredentialRequestContract
+import ink.tenqui.flowtone.data.online.credential.CredentialInjection
+import ink.tenqui.flowtone.data.online.credential.CredentialTargetOrigin
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermission
 import ink.tenqui.flowtone.data.online.permission.NetworkOriginPermissionParser
 import org.json.JSONObject
@@ -171,6 +176,32 @@ internal object ExtensionManifestV2Parser {
                 val item = array.getJSONObject(index)
                 val type = CredentialType.fromValue(item.getString("type").lowercase())
                     ?: throw IllegalArgumentException("未知 credential request type")
+                val named = if (item.has("namedFields") || item.has("origin")) {
+                    require(type == CredentialType.GenericAccount && !item.has("fields"))
+                    require(item.opt("description") is String && item.getString("description").isNotBlank())
+                    val array = item.getJSONArray("namedFields")
+                    require(array.length() in 1..16)
+                    val fields = List(array.length()) { fieldIndex ->
+                        val field = array.getJSONObject(fieldIndex)
+                        val fieldType = when (field.getString("type")) {
+                            "cookie" -> NamedSecretType.Cookie
+                            "token" -> NamedSecretType.Token
+                            "opaque" -> NamedSecretType.Opaque
+                            else -> throw IllegalArgumentException("未知具名字段类型")
+                        }
+                        val injection = when (field.getString("injection")) {
+                            "cookie" -> CredentialInjection.Cookie
+                            "bearer" -> CredentialInjection.Bearer
+                            else -> throw IllegalArgumentException("未知认证方式")
+                        }
+                        require(field.opt("required") is Boolean)
+                        require(!field.has("cookieName") || field.opt("cookieName") is String)
+                        NamedCredentialRequestField(field.getString("id"), fieldType, field.getBoolean("required"), injection,
+                            if (field.has("cookieName")) field.getString("cookieName") else null)
+                    }
+                    require(fields.map { it.id }.distinct().size == fields.size)
+                    NamedCredentialRequestContract(CredentialTargetOrigin.normalize(item.getString("origin")), fields.toSet())
+                } else null
                 val contract = when (type) {
                     CredentialType.WebDav -> {
                         require(!item.has("realm")) {
@@ -212,11 +243,9 @@ internal object ExtensionManifestV2Parser {
                             "GenericAccount credential request 必须声明 realm"
                         }
                         val fieldsJson = item.optJSONArray("fields")
-                            ?: throw IllegalArgumentException(
-                                "GenericAccount credential request 必须声明 fields"
-                            )
-                        val fields = List(fieldsJson.length()) { fieldIndex ->
-                            val value = fieldsJson.getString(fieldIndex)
+                        require(fieldsJson != null || named != null) { "GenericAccount credential request 必须声明字段" }
+                        val fields = List(fieldsJson?.length() ?: 0) { fieldIndex ->
+                            val value = fieldsJson!!.getString(fieldIndex)
                             CredentialFieldId.fromValue(value)
                                 ?: throw IllegalArgumentException("未知 generic account credential field")
                         }
@@ -240,7 +269,8 @@ internal object ExtensionManifestV2Parser {
                     identifiers = contract.identifiers,
                     realm = contract.realm,
                     genericFieldIds = contract.genericFieldIds,
-                    requirement = requirement
+                    requirement = requirement,
+                    named = named
                 )
             }
         }.orEmpty()
