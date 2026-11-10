@@ -13,6 +13,7 @@ import ink.tenqui.flowtone.data.online.network.MaxExtensionRequestBytes
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkResourceExhaustedException
 import ink.tenqui.flowtone.data.online.network.GlobalExtensionNetworkLimiter
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionException
 import ink.tenqui.flowtone.data.online.configuration.ConfigurationValue
 import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
 import ink.tenqui.flowtone.data.online.configuration.extensionRuntimeConfigurationSnapshot
@@ -163,12 +164,8 @@ class JavaScriptExtensionRuntime(
             } else network.execute(request)
             success(id, JSONObject().put("status", response.statusCode).put("headers", JSONObject(response.headers.mapValues { it.value.joinToString(",") })).put("body", response.body.decodeToString()))
         } catch (error: Exception) {
-            val type = when (error) {
-                is ExtensionNetworkResourceExhaustedException -> "RESOURCE_EXHAUSTED"
-                is SocketTimeoutException, is TimeoutException -> "TIMEOUT"
-                else -> "NETWORK_ERROR"
-            }
-            failure(id, type, error.javaClass.simpleName)
+            val type = extensionHttpErrorType(error)
+            failure(id, type, type)
         } finally { if (!delegated) admission?.close() }
     }
 
@@ -306,5 +303,21 @@ internal fun parseExtensionHttpRequest(payload: JSONObject?): ExtensionHttpReque
         bodyText.toByteArray(Charsets.UTF_8).also { require(it.size <= MaxExtensionRequestBytes) }
     } else null
     require(method != ExtensionHttpMethod.Get || body == null)
-    return ExtensionHttpRequest(method, url, headers, body)
+    val credentialRequestId = if (payload.has("credential")) {
+        val credential = payload.opt("credential") as? JSONObject
+        require(credential != null && credential.keys().asSequence().toSet() == setOf("requestId"))
+        val id = credential.opt("requestId") as? String
+        require(id != null && CredentialRequestId.matches(id))
+        id
+    } else null
+    return ExtensionHttpRequest(method, url, headers, body, credentialRequestId)
+}
+
+private val CredentialRequestId = Regex("[a-zA-Z][a-zA-Z0-9._-]{0,63}")
+
+internal fun extensionHttpErrorType(error: Exception): String = when (error) {
+    is CredentialResolutionException -> error.code.name
+    is ExtensionNetworkResourceExhaustedException -> "RESOURCE_EXHAUSTED"
+    is SocketTimeoutException, is TimeoutException -> "TIMEOUT"
+    else -> "NETWORK_ERROR"
 }

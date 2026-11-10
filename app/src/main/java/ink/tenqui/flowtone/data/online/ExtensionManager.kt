@@ -31,6 +31,10 @@ import ink.tenqui.flowtone.data.online.runtime.ExtensionResultCache
 import ink.tenqui.flowtone.data.online.runtime.ExtensionPrivateCache
 import ink.tenqui.flowtone.data.online.configuration.ExtensionConfigStore
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantStore
+import ink.tenqui.flowtone.data.online.credential.CredentialRequestResolver
+import ink.tenqui.flowtone.data.online.credential.CredentialSourceRepository
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionException
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionError
 import ink.tenqui.flowtone.data.online.credential.CredentialGrantLifecycleLocks
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistAvatarExtension
 import ink.tenqui.flowtone.data.online.runtime.JavaScriptArtistMetadataExtension
@@ -105,6 +109,9 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
     private val privateCache = ExtensionPrivateCache(appContext.filesDir.resolve("extension-data"))
     private val configStore = ExtensionConfigStore.from(appContext)
     private val credentialGrantStore = CredentialGrantStore.from(appContext)
+    private val credentialRequestResolver = CredentialRequestResolver(
+        credentialGrantStore, CredentialSourceRepository.from(appContext)
+    ) { id -> installer.scan().firstOrNull { it.manifest.id == id } }
     private val mutex = Mutex()
     private val accountContextGeneration = AtomicLong()
     private val runtimeLifecycle = ExtensionRuntimeLifecycle { requestGeneration, currentGeneration ->
@@ -796,10 +803,15 @@ class ExtensionManager private constructor(context: Context) : AutoCloseable {
         val requirements = ExtensionRuntimeCapabilityPolicy.registrationRequirements(capabilities)
         if (!requirements.requiresRuntime) return false
         val isolate = sandboxHost.createIsolate() ?: return false
-        val networkClient = gateway.createClientFor(
+        val networkClient = gateway.createCredentialClientFor(
             extensionId = installed.manifest.id,
             capability = "host_api",
-            allowedPermissions = installed.descriptor.networkPermissions
+            allowedPermissions = installed.descriptor.networkPermissions,
+            commit = { admission, requestId, url ->
+                val instanceId = installed.installationInstanceId
+                    ?: throw CredentialResolutionException(CredentialResolutionError.CREDENTIAL_NOT_AUTHORIZED)
+                credentialRequestResolver.commit(admission, installed.manifest.id, instanceId, requestId, url)
+            }
         )
         val streamClient = gateway.createStreamClientFor(
             extensionId = installed.manifest.id,

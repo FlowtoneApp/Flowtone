@@ -8,6 +8,8 @@ import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpRequest
 import ink.tenqui.flowtone.data.online.network.ExtensionHttpResponse
 import ink.tenqui.flowtone.data.online.network.ExtensionNetworkClient
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionError
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionException
 import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifestParser
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import java.io.File
@@ -56,7 +58,10 @@ class JavaScriptExtensionHttpRpcTest {
         val network = object : ExtensionNetworkClient {
             override suspend fun execute(request: ExtensionHttpRequest): ExtensionHttpResponse {
                 requests.add(request)
-                return ExtensionHttpResponse(403, mapOf("Content-Type" to listOf("application/json")), "拒绝访问".toByteArray(Charsets.UTF_8))
+                CredentialResolutionError.entries.firstOrNull { it.name == request.credentialRequestId }?.let {
+                    throw CredentialResolutionException(it)
+                }
+                return ExtensionHttpResponse(if (request.url.endsWith("/unauthorized")) 401 else 403, mapOf("Content-Type" to listOf("application/json")), "拒绝访问".toByteArray(Charsets.UTF_8))
             }
         }
         runtime = JavaScriptExtensionRuntime(
@@ -121,5 +126,40 @@ class JavaScriptExtensionHttpRpcTest {
         assertEquals("https://example.com/legacy", request.url)
         assertEquals(emptyMap<String, String>(), request.headers)
         assertNull(request.body)
+        assertNull(request.credentialRequestId)
+    }
+
+    @Test fun credentialPostAndPatchReachHost() = runBlocking {
+        for (method in listOf("POST", "PATCH")) {
+            val options = JSONObject().put("url", "https://example.com/api").put("method", method)
+                .put("credential", JSONObject().put("requestId", "session")).put("body", "{}")
+            assertEquals(403, runtime.invokeObject("request", options).getJSONObject("response").getInt("status"))
+        }
+        assertEquals(listOf(ExtensionHttpMethod.Post, ExtensionHttpMethod.Patch), requests.map { it.method })
+        assertEquals(listOf("session", "session"), requests.map { it.credentialRequestId })
+    }
+
+    @Test fun invalidCredentialDoesNotReachHost() = runBlocking {
+        val values = listOf<Any>(JSONObject.NULL, "bad", JSONObject(), JSONObject().put("requestId", ""),
+            JSONObject().put("requestId", 4), JSONObject().put("requestId", "session").put("sourceId", "internal"))
+        values.forEach { value ->
+            val options = JSONObject().put("url", "https://example.com/api").put("credential", value)
+            assertEquals("INVALID_REQUEST", runtime.invokeObject("request", options).getString("error"))
+        }
+        assertEquals(0, requests.size)
+    }
+
+    @Test fun hostCredentialErrorsAndHttpStatusStayDistinct() = runBlocking {
+        CredentialResolutionError.entries.forEach { code ->
+            val options = JSONObject().put("url", "https://example.com/api")
+                .put("credential", JSONObject().put("requestId", code.name))
+            assertEquals(code.name, runtime.invokeObject("request", options).getString("error"))
+        }
+        for (path in listOf("unauthorized" to 401, "forbidden" to 403)) {
+            val result = runtime.invokeObject("request", JSONObject().put("url", "https://example.com/${path.first}")
+                .put("credential", JSONObject().put("requestId", "session")))
+            assertEquals(path.second, result.getJSONObject("response").getInt("status"))
+            assertEquals("拒绝访问", result.getJSONObject("response").getString("body"))
+        }
     }
 }

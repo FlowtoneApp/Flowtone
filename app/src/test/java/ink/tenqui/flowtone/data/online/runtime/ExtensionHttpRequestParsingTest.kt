@@ -4,8 +4,27 @@ import ink.tenqui.flowtone.data.online.network.ExtensionHttpMethod
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionError
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionException
 
 class ExtensionHttpRequestParsingTest {
+    @Test fun credentialReferenceIsStrictAndErrorsAreStable() {
+        for (method in listOf("POST", "PATCH")) {
+            val request = parseExtensionHttpRequest(JSONObject().put("url", "https://example.com")
+                .put("method", method).put("credential", JSONObject().put("requestId", "session")))
+            assertEquals("session", request.credentialRequestId)
+        }
+        assertNull(parseExtensionHttpRequest(JSONObject().put("url", "https://example.com")).credentialRequestId)
+        val invalid = listOf<Any>(JSONObject.NULL, "session", 1, JSONObject(), JSONObject().put("requestId", ""),
+            JSONObject().put("requestId", 1), JSONObject().put("requestId", " "),
+            JSONObject().put("requestId", "session").put("sourceId", "internal"))
+        invalid.forEach { value ->
+            assertTrue(runCatching { parseExtensionHttpRequest(JSONObject().put("url", "https://example.com").put("credential", value)) }.isFailure)
+        }
+        CredentialResolutionError.entries.forEach { code ->
+            assertEquals(code.name, extensionHttpErrorType(CredentialResolutionException(code)))
+        }
+    }
     @Test fun acceptsTextAndDefaultsToGet() {
         assertEquals(ExtensionHttpMethod.Get, parseExtensionHttpRequest(JSONObject().put("url", "https://example.com")).method)
         val request = parseExtensionHttpRequest(JSONObject().put("url", "https://example.com").put("method", "POST").put("body", "音乐").put("headers", JSONObject().put("Content-Type", "application/json")))

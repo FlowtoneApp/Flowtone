@@ -18,6 +18,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import ink.tenqui.flowtone.data.online.credential.CommittedCredentialHeaders
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionError
+import ink.tenqui.flowtone.data.online.credential.CredentialResolutionException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 
 /** Flowtone 控制的扩展网络网关，也是唯一实际执行 HTTP 的位置。 */
 class ExtensionNetworkGateway(
@@ -41,6 +48,15 @@ class ExtensionNetworkGateway(
         )
     }
 
+    internal fun createCredentialClientFor(
+        extensionId: String,
+        capability: String,
+        allowedPermissions: Set<NetworkOriginPermission>,
+        commit: CredentialCommitter
+    ): ExtensionNetworkClient = BoundExtensionNetworkClient(
+        extensionId, capability, ExtensionNetworkAccessPolicy(allowedPermissions), transport, logger, limiter, commit
+    )
+
     fun createStreamClientFor(
         extensionId: String,
         capability: String,
@@ -55,6 +71,10 @@ class ExtensionNetworkGateway(
             limiter = limiter
         )
     }
+}
+
+internal fun interface CredentialCommitter {
+    fun commit(admission: GlobalExtensionNetworkLimiter.Admission, requestId: String, targetUrl: String): CommittedCredentialHeaders
 }
 
 fun interface ExtensionHttpTransport {
@@ -87,7 +107,8 @@ private class BoundExtensionNetworkClient(
     private val accessPolicy: ExtensionNetworkAccessPolicy,
     private val transport: ExtensionHttpTransport,
     private val logger: ExtensionCoreLogger,
-    private val limiter: GlobalExtensionNetworkLimiter
+    private val limiter: GlobalExtensionNetworkLimiter,
+    private val credentialCommitter: CredentialCommitter? = null
 ) : AdmissionAwareExtensionNetworkClient {
     override suspend fun execute(request: ExtensionHttpRequest): ExtensionHttpResponse {
         val admission = tryAcquireAdmission() ?: throw ExtensionNetworkResourceExhaustedException()
@@ -112,13 +133,46 @@ private class BoundExtensionNetworkClient(
     ): ExtensionHttpResponse {
         val requestDetails = requestLogDetails(request)
         val startedAt = System.nanoTime()
+        var committed: CommittedCredentialHeaders? = null
+        var mergedHeaders: MutableMap<String, String>? = null
         return try {
-            accessPolicy.requireAllowed(request.url)
+            val credentialId = request.credentialRequestId
+            if (credentialId != null) validateCredentialRequest(request)
+            if (credentialId == null) {
+                accessPolicy.requireAllowed(request.url)
+            } else {
+                try { accessPolicy.requireAllowed(request.url) }
+                catch (_: SecurityException) { throw CredentialResolutionException(CredentialResolutionError.CREDENTIAL_ORIGIN_DENIED) }
+            }
             logger.log("extension.http.prepared", identityDetails() + " $requestDetails")
-            val queued = admission.acquireActive()
+            val queued = if (credentialId != null) runInterruptible(Dispatchers.IO) { admission.acquireActive() }
+                else admission.acquireActive()
             if (queued) logQueued()
+            currentCoroutineContext().ensureActive()
+            val outgoing = if (credentialId != null) {
+                val committer = credentialCommitter ?: throw CredentialResolutionException(CredentialResolutionError.CREDENTIAL_NOT_AUTHORIZED)
+                committed = try {
+                    committer.commit(admission, credentialId, request.url)
+                } catch (error: CredentialResolutionException) {
+                    throw error
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    throw CredentialResolutionException(CredentialResolutionError.CREDENTIAL_UNAVAILABLE)
+                }
+                mergedHeaders = request.headers.toMutableMap().apply { putAll(committed!!.forTransport()) }
+                request.copy(headers = mergedHeaders!!)
+            } else request
+            currentCoroutineContext().ensureActive()
             logger.log("extension.http.started", identityDetails() + " $requestDetails")
-            val response = transport.execute(request, accessPolicy::requireAllowed)
+            val response = try {
+                transport.execute(outgoing, accessPolicy::requireAllowed)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (credentialId == null) throw error
+                throw IOException("认证 HTTP 请求失败")
+            }
             val durationMs = elapsedMillis(startedAt)
             logger.log(
                 "extension.http.response",
@@ -133,6 +187,8 @@ private class BoundExtensionNetworkClient(
             )
             throw error
         } finally {
+            mergedHeaders?.clear()
+            committed?.close()
             admission.close()
         }
     }
@@ -146,6 +202,18 @@ private class BoundExtensionNetworkClient(
             identityDetails() + " active=${snapshot.active} inFlight=${snapshot.inFlight} " +
                 "maxActive=${limiter.maxActiveRequests} maxInFlight=${limiter.maxInFlightRequests}"
         )
+    }
+}
+
+private fun validateCredentialRequest(request: ExtensionHttpRequest) {
+    require(request.credentialRequestId?.matches(Regex("[a-zA-Z][a-zA-Z0-9._-]{0,63}")) == true) { "凭据请求 ID 非法" }
+    require((request.body?.size ?: 0) <= MaxExtensionRequestBytes) { "请求体超过 256 KiB" }
+    require(request.method != ExtensionHttpMethod.Get || request.body == null) { "GET 不支持请求体" }
+    val forbidden = setOf("authorization", "cookie", "proxy-authorization", "host", "connection", "proxy-connection", "transfer-encoding", "content-length")
+    request.headers.forEach { (name, value) ->
+        require(name.lowercase(java.util.Locale.ROOT) !in forbidden) { "认证请求头冲突" }
+        require(name.isNotEmpty() && name.all { it.code in 33..126 && it !in "()<>@,;:\\\"/[]?={} \t" } &&
+            value.all { it == '\t' || it.code in 32..126 }) { "HTTP 请求头非法" }
     }
 }
 
@@ -264,7 +332,7 @@ internal class OkHttpExtensionTransport : ExtensionHttpTransport {
                 val builder = Request.Builder().url(currentUrl).method(request.method.name.uppercase(), body)
                 headers.forEach { (name, value) -> builder.header(name, value) }
                 client.newCall(builder.build()).execute().use { response ->
-                    if (request.method == ExtensionHttpMethod.Get && response.code in RedirectStatuses) {
+                    if (request.credentialRequestId == null && request.method == ExtensionHttpMethod.Get && response.code in RedirectStatuses) {
                         require(redirectCount < MaxRedirects) { "HTTP 重定向次数过多" }
                         val location = response.header("Location") ?: error("HTTP 重定向缺少 Location")
                         val nextUrl = URL(URL(currentUrl), location).toString()

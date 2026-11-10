@@ -9,8 +9,11 @@ data class ExtensionHttpRequest(
     val method: ExtensionHttpMethod,
     val url: String,
     val headers: Map<String, String> = emptyMap(),
-    val body: ByteArray? = null
-)
+    val body: ByteArray? = null,
+    val credentialRequestId: String? = null
+) {
+    override fun toString(): String = "ExtensionHttpRequest(method=$method, [redacted])"
+}
 
 enum class ExtensionHttpMethod { Get, Post, Put, Patch, Delete }
 
