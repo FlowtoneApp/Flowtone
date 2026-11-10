@@ -5,8 +5,41 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import org.junit.Assert.*
 import org.junit.Test
+import ink.tenqui.flowtone.data.online.packageformat.ExtensionManifestParser
+import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
+import java.util.UUID
 
 class NamedCredentialSecretTest {
+    @Test fun importChecksAccountContractAndReplacementWithoutCreatingGrant() {
+        val root = Files.createTempDirectory("manual-import").toFile()
+        val ids = listOf("cs_manual-first", "cs_manual-second").iterator()
+        val grants = CredentialGrantStore(root.resolve("grants"))
+        val secrets = CredentialSecretStore(root.resolve("secrets"), Keys())
+        val repository = CredentialSourceRepository(CredentialSourceStore(root.resolve("sources")) { ids.next() }, secrets, grants)
+        val a = repository.save(null, input, emptyMap())
+        val b = repository.save(null, input.copy(label = "Second"), emptyMap())
+        val descriptor = ExtensionManifestParser.parseNormalized("""{"formatVersion":2,"id":"example.ext","name":"Example","version":"1","author":"Test","entry":"main.js","capabilities":["artist.avatar.lookup"],"credentialRequests":[{"id":"session","type":"generic_account","label":"Session","realm":"example.com","description":"Test","origin":"https://example.com","namedFields":[{"id":"cookie.session_key","type":"cookie","required":true,"injection":"cookie","cookieName":"sid"},{"id":"oauth.refresh_token","type":"token","required":false,"injection":"bearer"}]}],"permissions":{"network":{"origins":["https://example.com"]}}}""")
+        val installed = InstalledExtension(descriptor, root, true, UUID.randomUUID().toString())
+        val request = descriptor.credentialRequests.single()
+        fun import(source: String, field: NamedSecretField, value: String, replace: Boolean = false, current: InstalledExtension? = installed) =
+            repository.importNamedSecretForRequest(installed.manifest.id, installed.installationInstanceId!!, request.id, request, source, field, value, replace) { current }
+        assertFalse(repository.match(a, request).fullyReady)
+        import(b.id, first, "private-secret")
+        assertTrue(repository.match(b, request).fullyReady)
+        assertFalse(repository.match(a, request).fullyReady)
+        assertTrue(repository.match(b, request).optionalIssues.contains(second.id))
+        assertTrue(grants.grantsForExtension(installed.manifest.id).isEmpty())
+        assertTrue(runCatching { import(b.id, first, "replace") }.isFailure)
+        assertEquals("private-secret", (secrets.readNamed(b.id, first) as CredentialSecretReadResult.Available).plaintext)
+        import(b.id, first, "replacement", true)
+        assertTrue(runCatching { repository.importNamedSecret(b.id, first.copy(type = NamedSecretType.Token), "wrong", true) }.isFailure)
+        val changed = installed.copy(descriptor = descriptor.copy(credentialRequests = listOf(request.copy(named = request.named!!.copy(origin = "https://other.example.com")))))
+        assertTrue(runCatching { import(a.id, first, "stale", current = changed) }.isFailure)
+        assertTrue(runCatching { import(a.id, NamedSecretField("cookie.undeclared", NamedSecretType.Cookie), "wrong") }.isFailure)
+        assertTrue(repository.delete(a.id))
+        assertTrue(runCatching { import(a.id, first, "removed") }.isFailure)
+        assertFalse(root.resolve("sources/sources.json").readText().contains("private-secret"))
+    }
     private class Keys : CredentialSecretKeyProvider {
         var key: SecretKey? = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
         override fun getExistingKey() = key

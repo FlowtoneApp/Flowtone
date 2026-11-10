@@ -61,6 +61,36 @@ class CredentialSourceRepository(
             secretStore.putNamed(sourceId, field, plaintext)
         }
 
+    internal fun importNamedSecret(sourceId: String, field: NamedSecretField, plaintext: String, replaceConfirmed: Boolean) =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            importNamedSecretLocked(sourceId, field, plaintext, replaceConfirmed)
+        }
+
+    internal fun importNamedSecretForRequest(
+        extensionId: String, instanceId: String, requestId: String,
+        confirmedRequest: CredentialRequestDefinition, sourceId: String,
+        field: NamedSecretField, plaintext: String, replaceConfirmed: Boolean,
+        currentInstalled: () -> ink.tenqui.flowtone.data.online.packageformat.InstalledExtension?
+    ) = CredentialGrantLifecycleLocks.withGrantBinding(extensionId, sourceId) {
+        val installed = currentInstalled()
+        require(installed?.manifest?.id == extensionId && installed.installationInstanceId == instanceId)
+        val request = installed.descriptor.credentialRequests.firstOrNull { it.id == requestId }
+        require(request != null && request == confirmedRequest && CredentialRequestContractSnapshot.from(request) != null)
+        require(request.named?.fields?.any { it.id == field.id && it.type == field.type } == true)
+        val source = sourceStore.get(sourceId)
+        require(source?.credentialType == CredentialType.GenericAccount && source.realm == request.contract.realm)
+        importNamedSecretLocked(sourceId, field, plaintext, replaceConfirmed)
+    }
+
+    private fun importNamedSecretLocked(sourceId: String, field: NamedSecretField, plaintext: String, replaceConfirmed: Boolean) {
+        requireGenericSource(sourceId)
+        val existing = secretStore.namedFields(sourceId).firstOrNull { it.field.id == field.id }
+        require(existing == null || existing.field == field) { "字段类型冲突" }
+        require(existing == null || replaceConfirmed) { "替换需要确认" }
+        secretStore.putNamed(sourceId, field, plaintext)
+        check(secretStore.namedState(sourceId, field) == CredentialSecretState.Configured) { "字段保存后不可用" }
+    }
+
     internal fun deleteNamedSecret(sourceId: String, field: NamedSecretField) =
         CredentialGrantLifecycleLocks.withSource(sourceId) {
             requireGenericSource(sourceId)

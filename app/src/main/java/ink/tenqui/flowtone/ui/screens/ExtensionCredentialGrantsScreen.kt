@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -64,6 +66,8 @@ import ink.tenqui.flowtone.data.online.credential.CredentialSourceMatch
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceMatcher
 import ink.tenqui.flowtone.data.online.credential.CredentialSourceRepository
 import ink.tenqui.flowtone.data.online.credential.CredentialSecretState
+import ink.tenqui.flowtone.data.online.credential.CredentialSourceInput
+import ink.tenqui.flowtone.data.online.credential.CredentialType
 import ink.tenqui.flowtone.data.online.packageformat.InstalledExtension
 import ink.tenqui.flowtone.ui.components.FlowtoneModalOverlayShell
 import ink.tenqui.flowtone.ui.components.FlowtoneModalPanel
@@ -348,6 +352,9 @@ internal fun ExtensionCredentialSourcePickerScreen(
     var authError by remember(installed.manifest.id, requestId) { mutableStateOf<String?>(null) }
     var refreshGeneration by remember(installed.manifest.id, requestId) { mutableStateOf(0) }
     var hasBeenCurrent by remember(installed.manifest.id, requestId) { mutableStateOf(false) }
+    var createAccount by remember(installed.manifest.id, requestId) { mutableStateOf(false) }
+    var accountName by remember(installed.manifest.id, requestId) { mutableStateOf("") }
+    var creatingAccount by remember(installed.manifest.id, requestId) { mutableStateOf(false) }
     val hostActivity = remember(context) { context.findGrantFragmentActivity() }
     val authenticator = remember(hostActivity) { hostActivity?.let(::CredentialSecretAuthenticator) }
 
@@ -362,7 +369,10 @@ internal fun ExtensionCredentialSourcePickerScreen(
                         .firstOrNull { it.manifest.id == installed.manifest.id }
                     val currentRequest = current?.descriptor?.credentialRequests?.firstOrNull { it.id == requestId }
                     val sources = sourceRepository.list()
-                    val matches = if (currentRequest == null) emptyList() else sources.map {
+                    val filtered = if (currentRequest?.named != null) sources.filter {
+                        it.credentialType == CredentialType.GenericAccount && it.realm == currentRequest.contract.realm
+                    } else sources
+                    val matches = if (currentRequest == null) emptyList() else filtered.map {
                         CredentialCandidate(it, sourceRepository.match(it, currentRequest))
                     }
                     Triple(current, currentRequest, matches)
@@ -615,6 +625,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
                             },
                             modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                         ) { Text("前往凭据管理") }
+                        if (currentRequest?.named != null) TextButton(onClick = { accountName = ""; createAccount = true }) { Text("为此服务创建新账户") }
                     }
                 }
             }
@@ -637,6 +648,9 @@ internal fun ExtensionCredentialSourcePickerScreen(
                         modifier = pageScope.elementModifier(headingOrder + index + 1, candidates.size + sections.size + 1),
                         onClick = { if (candidate.match.fullyReady && !authenticating) selectedSource = candidate.source }
                     )
+                    if (currentRequest?.named != null && candidate.match.contractCompatible) {
+                        NamedCredentialFields(source = candidate.source, installed = liveInstalled, request = currentRequest, onChanged = ::refresh)
+                    }
                     if (index != entries.lastIndex) HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f)
                     )
@@ -645,6 +659,33 @@ internal fun ExtensionCredentialSourcePickerScreen(
             }
         }
         authError?.let { message -> item { GrantInfoCard(message, Modifier) } }
+    }
+
+    if (createAccount && request?.named != null) {
+        AlertDialog(onDismissRequest = { if (!creatingAccount) createAccount = false }, title = { Text("创建服务账户") },
+            text = { Column {
+                Text("服务：${request?.realm.orEmpty()}。账户由你命名，身份未经验证。")
+                OutlinedTextField(value = accountName, onValueChange = { accountName = it }, label = { Text("账户名称") }, singleLine = true)
+            } },
+            confirmButton = { TextButton(enabled = !creatingAccount && accountName.isNotBlank(), onClick = {
+                val realm = request?.realm ?: return@TextButton
+                val expectedRequest = request
+                val expectedInstanceId = liveInstalled?.installationInstanceId ?: return@TextButton
+                val name = accountName
+                creatingAccount = true
+                scope.launch {
+                    val result = runCatching { withContext(Dispatchers.IO) {
+                        val current = extensionManager.installedExtensions().firstOrNull { it.manifest.id == installed.manifest.id }
+                        val currentRequest = current?.descriptor?.credentialRequests?.firstOrNull { it.id == requestId }
+                        require(current?.installationInstanceId == expectedInstanceId && currentRequest == expectedRequest)
+                        sourceRepository.save(null, CredentialSourceInput(CredentialType.GenericAccount, name, realm), emptyMap())
+                    } }
+                    creatingAccount = false
+                    result.onSuccess { createAccount = false; extensionManager.invalidateCredentialContext(); refresh() }
+                        .onFailure { authError = "创建账户失败，请检查名称及扩展状态。" }
+                }
+            }) { Text(if (creatingAccount) "创建中…" else "创建") } },
+            dismissButton = { TextButton(enabled = !creatingAccount, onClick = { createAccount = false }) { Text("取消") } })
     }
 
     selectedSource?.let { source ->

@@ -662,6 +662,13 @@ internal fun CredentialSourceEditScreen(
                 }
             }
             item {
+                existing?.takeIf { it.credentialType == CredentialType.GenericAccount }?.let { source ->
+                    CredentialSourceGroup(pageScope.elementModifier(1)) {
+                        NamedCredentialFields(source = source)
+                    }
+                }
+            }
+            item {
                 if (existing != null) {
                     TextButton(
                         onClick = {
