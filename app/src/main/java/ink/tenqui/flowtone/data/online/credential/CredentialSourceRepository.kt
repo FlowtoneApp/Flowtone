@@ -49,6 +49,12 @@ class CredentialSourceRepository(
             secretStore.namedState(sourceId, field)
         }
 
+    internal fun readNamedSecret(sourceId: String, field: NamedSecretField): CredentialSecretReadResult =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            requireGenericSource(sourceId)
+            secretStore.readNamed(sourceId, field)
+        }
+
     internal fun putNamedSecret(sourceId: String, field: NamedSecretField, plaintext: String) =
         CredentialGrantLifecycleLocks.withSource(sourceId) {
             requireGenericSource(sourceId)
@@ -68,6 +74,12 @@ class CredentialSourceRepository(
     fun save(
         id: String?,
         input: CredentialSourceInput,
+        secretMutations: Map<CredentialFieldId, CredentialSecretMutation>
+    ): CredentialSource = if (id == null) saveLocked(null, input, secretMutations) else
+        CredentialGrantLifecycleLocks.withSource(id) { saveLocked(id, input, secretMutations) }
+
+    private fun saveLocked(
+        id: String?, input: CredentialSourceInput,
         secretMutations: Map<CredentialFieldId, CredentialSecretMutation>
     ): CredentialSource {
         val metadataViolations = CredentialSourceValidator.validateInput(input)

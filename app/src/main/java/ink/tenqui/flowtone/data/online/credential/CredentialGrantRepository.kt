@@ -82,7 +82,8 @@ class CredentialGrantRepository(
         grant
     }
 
-    fun revoke(extensionId: String, requestId: String): Boolean = store.revoke(extensionId, requestId)
+    fun revoke(extensionId: String, requestId: String): Boolean =
+        CredentialGrantLifecycleLocks.withExtension(extensionId) { store.revoke(extensionId, requestId) }
 
     companion object {
         fun from(context: Context): CredentialGrantRepository = CredentialGrantRepository(

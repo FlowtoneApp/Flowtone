@@ -3,6 +3,7 @@ package ink.tenqui.flowtone.data.online.packageformat
 import java.io.File
 import java.io.InputStream
 import java.util.UUID
+import ink.tenqui.flowtone.data.online.credential.CredentialGrantLifecycleLocks
 
 class ExtensionPackageInstaller(private val extensionsRoot: File) {
     fun install(fileName: String, source: InputStream): InstalledExtension {
@@ -10,16 +11,18 @@ class ExtensionPackageInstaller(private val extensionsRoot: File) {
         val staging = File(extensionsRoot.resolve(".staging"), UUID.randomUUID().toString())
         try {
             val prepared = ExtensionPackageArchive.prepare(fileName, source, staging)
+            return CredentialGrantLifecycleLocks.withExtension(prepared.descriptor.identity.id) {
             val finalDirectory = File(extensionsRoot, prepared.descriptor.identity.id)
             val instanceId = readInstallationInstanceId(finalDirectory) ?: UUID.randomUUID().toString()
             File(prepared.unpackedDirectory, InstallInstanceFile).writeText(instanceId, Charsets.UTF_8)
             ExtensionPackageArchive.replaceAtomically(prepared.unpackedDirectory, finalDirectory)
-            return InstalledExtension(
+            InstalledExtension(
                 descriptor = prepared.descriptor,
                 directory = finalDirectory,
                 runtimeAvailable = false,
                 installationInstanceId = instanceId
             )
+            }
         } finally {
             staging.deleteRecursively()
         }

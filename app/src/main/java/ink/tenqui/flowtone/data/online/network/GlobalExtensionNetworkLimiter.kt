@@ -48,6 +48,9 @@ class GlobalExtensionNetworkLimiter(
     @Synchronized
     fun snapshot(): Snapshot = Snapshot(active = active, inFlight = inFlight)
 
+    @Synchronized
+    private fun isActive(admission: Admission): Boolean = admission.wasActive() && !admission.isClosed()
+
     internal class Admission internal constructor(
         private val limiter: GlobalExtensionNetworkLimiter
     ) : AutoCloseable {
@@ -55,6 +58,8 @@ class GlobalExtensionNetworkLimiter(
         private var closed = false
 
         fun acquireActive(): Boolean = limiter.acquireActive(this)
+
+        internal fun requireActive() = check(limiter.isActive(this)) { "网络配额尚未进入活动状态" }
 
         override fun close() = limiter.release(this)
 
@@ -64,6 +69,8 @@ class GlobalExtensionNetworkLimiter(
         }
 
         internal fun wasActive(): Boolean = active
+
+        internal fun isClosed(): Boolean = closed
 
         internal fun markClosed(): Boolean {
             if (closed) return true
