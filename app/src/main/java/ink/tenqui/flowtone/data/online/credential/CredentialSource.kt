@@ -189,3 +189,16 @@ object CredentialSourceMatcher {
     private fun CredentialSource.hasPublic(field: CredentialFieldId): Boolean =
         !publicFields[field].isNullOrBlank()
 }
+
+/** 字段名仅标识数据；类型是描述性元数据，不授予认证权限。 */
+internal data class NamedSecretField(val id: String, val type: NamedSecretType) {
+    init {
+        require(IdPattern.matches(id) && id.length <= 64) { "动态字段标识非法" }
+    }
+    companion object {
+        private val IdPattern = Regex("[a-z][a-z0-9_]{0,30}(\\.[a-z][a-z0-9_]{0,30})+")
+    }
+}
+
+internal enum class NamedSecretType { Cookie, Token, Opaque }
+internal data class NamedSecretStatus(val field: NamedSecretField, val state: CredentialSecretState)

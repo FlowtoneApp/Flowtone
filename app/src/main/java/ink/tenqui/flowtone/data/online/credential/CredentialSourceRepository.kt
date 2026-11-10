@@ -16,6 +16,34 @@ class CredentialSourceRepository(
     internal fun readSecret(sourceId: String, fieldId: CredentialFieldId): CredentialSecretReadResult =
         secretStore.get(sourceId, fieldId)
 
+    internal fun namedSecretFields(sourceId: String): List<NamedSecretStatus> =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            requireGenericSource(sourceId)
+            secretStore.namedFields(sourceId)
+        }
+
+    internal fun namedSecretState(sourceId: String, field: NamedSecretField): CredentialSecretState =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            requireGenericSource(sourceId)
+            secretStore.namedState(sourceId, field)
+        }
+
+    internal fun putNamedSecret(sourceId: String, field: NamedSecretField, plaintext: String) =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            requireGenericSource(sourceId)
+            secretStore.putNamed(sourceId, field, plaintext)
+        }
+
+    internal fun deleteNamedSecret(sourceId: String, field: NamedSecretField) =
+        CredentialGrantLifecycleLocks.withSource(sourceId) {
+            requireGenericSource(sourceId)
+            secretStore.deleteNamed(sourceId, field)
+        }
+
+    private fun requireGenericSource(sourceId: String) {
+        require(sourceStore.get(sourceId)?.credentialType == CredentialType.GenericAccount) { "账户不可用或类型不支持" }
+    }
+
     fun save(
         id: String?,
         input: CredentialSourceInput,

@@ -48,9 +48,12 @@ class CredentialSecretStore internal constructor(
     private val keyProvider: CredentialSecretKeyProvider = AndroidCredentialSecretKeyProvider()
 ) {
     fun put(sourceId: String, fieldId: CredentialFieldId, plaintext: String) {
+        putFile(secretFile(sourceId, fieldId), sourceId, fieldId.value, plaintext)
+    }
+
+    private fun putFile(target: File, sourceId: String, aadField: String, plaintext: String) {
         if (plaintext.isEmpty()) throw CredentialSecretStoreException(CredentialSecretFailure.InvalidInput)
         try {
-            val target = secretFile(sourceId, fieldId)
             var cipher = Cipher.getInstance(Transformation)
             try {
                 cipher.init(Cipher.ENCRYPT_MODE, keyProvider.getOrCreateKey())
@@ -60,7 +63,7 @@ class CredentialSecretStore internal constructor(
                 cipher.init(Cipher.ENCRYPT_MODE, keyProvider.recreateKey())
             }
             val iv = cipher.iv ?: throw GeneralSecurityException()
-            cipher.updateAAD(aad(sourceId, fieldId))
+            cipher.updateAAD(aad(sourceId, aadField))
             val plaintextBytes = plaintext.toByteArray(StandardCharsets.UTF_8)
             try {
                 val ciphertext = cipher.doFinal(plaintextBytes)
@@ -89,7 +92,7 @@ class CredentialSecretStore internal constructor(
         }
         return try {
             if (!file.exists()) return CredentialSecretReadResult.NotConfigured
-            val bytes = decrypt(file.readBytes(), sourceId, fieldId)
+            val bytes = decrypt(file.readBytes(), sourceId, fieldId.value)
             try {
                 CredentialSecretReadResult.Available(String(bytes, StandardCharsets.UTF_8))
             } finally {
@@ -111,7 +114,7 @@ class CredentialSecretStore internal constructor(
         }
         return try {
             if (!file.exists()) return CredentialSecretState.NotConfigured
-            val bytes = decrypt(file.readBytes(), sourceId, fieldId)
+            val bytes = decrypt(file.readBytes(), sourceId, fieldId.value)
             bytes.fill(0)
             CredentialSecretState.Configured
         } catch (_: Exception) {
@@ -134,6 +137,78 @@ class CredentialSecretStore internal constructor(
         }
     }
 
+    internal fun namedFields(sourceId: String): List<NamedSecretStatus> {
+        val directory = namedDirectory(sourceId)
+        if (!directory.exists()) return emptyList()
+        check(directory.isDirectory) { "动态凭据存储不可用" }
+        val files = directory.listFiles() ?: error("动态凭据存储不可用")
+        return files.filter { it.isFile && it.name.endsWith(".secret") }.map { file ->
+            val parts = file.name.removeSuffix(".secret").split("~")
+            check(parts.size == 2) { "动态凭据元数据不可识别" }
+            val field = NamedSecretField(parts[0], NamedSecretType.entries.firstOrNull { it.name == parts[1] }
+                ?: error("动态凭据类型不可识别"))
+            NamedSecretStatus(field, namedState(sourceId, field))
+        }.also { fields -> check(fields.map { it.field.id }.distinct().size == fields.size) }
+    }
+
+    internal fun putNamed(sourceId: String, field: NamedSecretField, plaintext: String) {
+        val existing = namedFields(sourceId)
+        require(existing.none { it.field.id == field.id && it.field != field }) { "字段类型不可修改" }
+        require(existing.size < 64 || existing.any { it.field == field }) { "动态字段数量超过上限" }
+        putFile(namedFile(sourceId, field), sourceId, namedAad(field), plaintext)
+    }
+
+    internal fun namedState(sourceId: String, field: NamedSecretField): CredentialSecretState {
+        val file = namedFile(sourceId, field)
+        return try {
+            val parent = requireNotNull(file.parentFile)
+            if (parent.exists() && !parent.isDirectory) return CredentialSecretState.Unavailable
+            if (!file.exists()) return CredentialSecretState.NotConfigured
+            val bytes = decrypt(file.readBytes(), sourceId, namedAad(field))
+            bytes.fill(0)
+            CredentialSecretState.Configured
+        } catch (_: Exception) { CredentialSecretState.Unavailable }
+    }
+
+    internal fun readNamed(sourceId: String, field: NamedSecretField): CredentialSecretReadResult {
+        return try {
+            val file = namedFile(sourceId, field)
+            val parent = requireNotNull(file.parentFile)
+            if (parent.exists() && !parent.isDirectory) {
+                return CredentialSecretReadResult.Unavailable(CredentialSecretFailure.StorageUnavailable)
+            }
+            if (!file.exists()) return CredentialSecretReadResult.NotConfigured
+            val bytes = decrypt(file.readBytes(), sourceId, namedAad(field))
+            try {
+                CredentialSecretReadResult.Available(String(bytes, StandardCharsets.UTF_8))
+            } finally { bytes.fill(0) }
+        } catch (e: SecretReadException) {
+            CredentialSecretReadResult.Unavailable(e.reason)
+        } catch (_: Exception) {
+            CredentialSecretReadResult.Unavailable(CredentialSecretFailure.StorageUnavailable)
+        }
+    }
+
+    internal fun deleteNamed(sourceId: String, field: NamedSecretField) {
+        val file = namedFile(sourceId, field)
+        try {
+            Files.deleteIfExists(file.toPath())
+            deleteTemporaryFiles(file)
+            removeEmptyParent(file.parentFile)
+            removeEmptyParent(sourceDirectory(sourceId))
+        } catch (e: Exception) {
+            throw CredentialSecretStoreException(CredentialSecretFailure.StorageUnavailable, e)
+        }
+    }
+
+    private fun namedDirectory(sourceId: String): File {
+        validateSourceId(sourceId)
+        return File(sourceDirectory(sourceId), "named-v1")
+    }
+    private fun namedFile(sourceId: String, field: NamedSecretField): File =
+        File(namedDirectory(sourceId), field.id + "~" + field.type.name + ".secret")
+    private fun namedAad(field: NamedSecretField): String = "named-v1:" + field.id + ":" + field.type.name
+
     fun deleteAll(sourceId: String) {
         validateSourceId(sourceId)
         val directory = sourceDirectory(sourceId)
@@ -147,7 +222,17 @@ class CredentialSecretStore internal constructor(
                     Files.deleteIfExists(file.toPath())
                     deleteTemporaryFiles(file)
                 }
-            val remaining = directory.listFiles().orEmpty()
+            val named = namedDirectory(sourceId)
+            if (named.exists()) {
+                if (!named.isDirectory) throw GeneralSecurityException()
+                val entries = named.listFiles() ?: throw GeneralSecurityException()
+                entries.forEach { entry ->
+                    if (!entry.isFile || (!entry.name.endsWith(".secret") && !entry.name.endsWith(".tmp"))) throw GeneralSecurityException()
+                    Files.deleteIfExists(entry.toPath())
+                }
+                Files.deleteIfExists(named.toPath())
+            }
+            val remaining = directory.listFiles() ?: throw GeneralSecurityException()
             if (remaining.isNotEmpty()) throw GeneralSecurityException()
             Files.deleteIfExists(directory.toPath())
         } catch (e: Exception) {
@@ -155,7 +240,7 @@ class CredentialSecretStore internal constructor(
         }
     }
 
-    private fun decrypt(envelopeBytes: ByteArray, sourceId: String, fieldId: CredentialFieldId): ByteArray {
+    private fun decrypt(envelopeBytes: ByteArray, sourceId: String, aadField: String): ByteArray {
         val envelope = try {
             decodeEnvelope(envelopeBytes)
         } catch (e: Exception) {
@@ -169,7 +254,7 @@ class CredentialSecretStore internal constructor(
         return try {
             Cipher.getInstance(Transformation).run {
                 init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TagBits, envelope.iv))
-                updateAAD(aad(sourceId, fieldId))
+                updateAAD(aad(sourceId, aadField))
                 doFinal(envelope.ciphertext)
             }
         } catch (e: AEADBadTagException) {
@@ -274,9 +359,9 @@ class CredentialSecretStore internal constructor(
         return Envelope(iv, ciphertext)
     }
 
-    private fun aad(sourceId: String, fieldId: CredentialFieldId): ByteArray {
+    private fun aad(sourceId: String, aadField: String): ByteArray {
         val sourceBytes = sourceId.toByteArray(StandardCharsets.UTF_8)
-        val fieldBytes = fieldId.value.toByteArray(StandardCharsets.UTF_8)
+        val fieldBytes = aadField.toByteArray(StandardCharsets.UTF_8)
         val prefix = AadDomain.toByteArray(StandardCharsets.UTF_8)
         return ByteBuffer.allocate(12 + prefix.size + sourceBytes.size + fieldBytes.size)
             .putInt(prefix.size).put(prefix)
