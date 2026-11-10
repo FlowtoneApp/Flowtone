@@ -22,6 +22,27 @@ class CredentialSourceRepository(
             secretStore.namedFields(sourceId)
         }
 
+    fun match(source: CredentialSource, request: CredentialRequestDefinition): CredentialSourceMatch {
+        val named = request.named ?: return CredentialSourceMatcher.match(source, request)
+        if (source.credentialType != CredentialType.GenericAccount || source.realm != request.contract.realm) {
+            return CredentialSourceMatch(false, false, false)
+        }
+        val available = namedSecretFields(source.id).associateBy { it.field.id }
+        val missing = mutableListOf<String>()
+        val unavailable = mutableListOf<String>()
+        val optional = mutableListOf<String>()
+        named.fields.sortedBy { it.id }.forEach { field ->
+            val actual = available[field.id]
+            val ready = actual?.field?.type == field.type && actual.state == CredentialSecretState.Configured
+            if (!ready) {
+                if (!field.required) optional += field.id
+                else if (actual != null && actual.field.type == field.type && actual.state == CredentialSecretState.Unavailable) unavailable += field.id
+                else missing += field.id
+            }
+        }
+        return CredentialSourceMatch(true, true, missing.isEmpty() && unavailable.isEmpty(), missing, unavailable, optional)
+    }
+
     internal fun namedSecretState(sourceId: String, field: NamedSecretField): CredentialSecretState =
         CredentialGrantLifecycleLocks.withSource(sourceId) {
             requireGenericSource(sourceId)

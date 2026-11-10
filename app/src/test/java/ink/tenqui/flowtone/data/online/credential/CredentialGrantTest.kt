@@ -15,15 +15,82 @@ import org.junit.Test
 
 class CredentialGrantTest {
     @Test
+    fun namedGrantsRequireReadyFieldsAndReevaluateWithoutRevoking() {
+        val root = Files.createTempDirectory("named-grants").toFile()
+        val grants = CredentialGrantStore(root.resolve("grants"))
+        val ids = listOf("cs_account-one", "cs_account-two").iterator()
+        val sourceStore = CredentialSourceStore(root.resolve("sources")) { ids.next() }
+        val secrets = CredentialSecretStore(root.resolve("secrets"), TestKeyProvider())
+        val sources = CredentialSourceRepository(sourceStore, secrets, grants)
+        val first = sourceStore.create(CredentialSourceInput(CredentialType.GenericAccount, "One", realm = "example.com"))
+        val second = sourceStore.create(CredentialSourceInput(CredentialType.GenericAccount, "Two", realm = "example.com"))
+        val field = NamedCredentialRequestField("cookie.sid", NamedSecretType.Cookie, true, CredentialInjection.Cookie, "sid")
+        val optional = NamedCredentialRequestField("oauth.token", NamedSecretType.Token, false, CredentialInjection.Bearer)
+        val request = CredentialRequestDefinition("login", CredentialType.GenericAccount, "Login", description = "Use", realm = "example.com",
+            named = NamedCredentialRequestContract("https://example.com", setOf(field, optional)))
+        val base = installed()
+        val installed = base.copy(descriptor = base.descriptor.copy(credentialRequests = listOf(request)))
+        val snapshot = CredentialRequestContractSnapshot.from(request)!!
+        val repo = CredentialGrantRepository(grants, sources) { 42L }
+        assertThrows(IllegalArgumentException::class.java) {
+            repo.createOrReplace(installed, "login", first.id, snapshot, installed.installationInstanceId!!) { installed }
+        }
+        sources.putNamedSecret(first.id, NamedSecretField(field.id, field.type), "fixture-private-value")
+        val created = repo.createOrReplace(installed, "login", first.id, snapshot, installed.installationInstanceId!!) { installed }
+        assertTrue(repo.evaluate(installed, "login").usable)
+        assertEquals(listOf(optional.id), repo.evaluate(installed, "login").sourceMatch!!.optionalIssues)
+        assertThrows(IllegalArgumentException::class.java) {
+            repo.createOrReplace(installed, "login", second.id, snapshot, installed.installationInstanceId!!) { installed }
+        }
+        val other = installed(extensionId = "extension.two").let { it.copy(descriptor = it.descriptor.copy(credentialRequests = listOf(request))) }
+        repo.createOrReplace(other, "login", first.id, snapshot, other.installationInstanceId!!) { other }
+        assertEquals(2, listOf(repo.evaluate(installed, "login"), repo.evaluate(other, "login")).count { it.usable })
+        assertFalse(root.resolve("grants/grants.json").readText().contains("fixture-private-value"))
+        val changed = request.copy(named = request.named!!.copy(origin = "https://other.example.com"))
+        assertEquals(CredentialGrantInvalidReason.RequestContractChanged, repo.evaluate(installed.copy(descriptor = installed.descriptor.copy(credentialRequests = listOf(changed))), "login").invalidReason)
+        assertEquals(CredentialGrantInvalidReason.ExtensionInstallationChanged, repo.evaluate(installed.copy(installationInstanceId = uuid()), "login").invalidReason)
+        root.resolve("secrets/${first.id}/named-v1/${field.id}~Cookie.secret").writeText("damaged")
+        assertTrue(repo.evaluate(installed, "login").authorizationValid)
+        assertFalse(repo.evaluate(installed, "login").sourceReady)
+        assertEquals(listOf(field.id), repo.evaluate(installed, "login").sourceMatch!!.unavailableRequiredFields)
+        assertTrue(repo.revoke(installed.manifest.id, "login"))
+        assertEquals(CredentialGrantInvalidReason.NotGranted, repo.evaluate(installed, "login").invalidReason)
+        assertEquals(created.requestContract, snapshot)
+    }
+
+    @Test
+    fun versionOneMigratesAndMixedRecordsFailClosed() {
+        val root = Files.createTempDirectory("grant-migration").toFile()
+        val store = CredentialGrantStore(root)
+        val old = grant()
+        store.putOrReplace(old)
+        val file = root.resolve("grants.json")
+        val legacy = org.json.JSONObject(file.readText())
+        legacy.put("formatVersion", 1)
+        legacy.getJSONArray("grants").getJSONObject(0).getJSONObject("requestContract").remove("named")
+        file.writeText(legacy.toString())
+        assertEquals(old, CredentialGrantStore(root).find(old.extensionId, old.credentialRequestId))
+        val named = NamedCredentialRequestContract("https://example.com", setOf(NamedCredentialRequestField("oauth.token", NamedSecretType.Token, true, CredentialInjection.Bearer)))
+        val snapshot = CredentialRequestContractSnapshot(CredentialType.GenericAccount, "example.com", emptySet(), emptySet(), named)
+        val newer = old.copy(extensionId = "extension.two", requestContract = snapshot)
+        store.putOrReplace(newer)
+        assertEquals(old, CredentialGrantStore(root).find(old.extensionId, old.credentialRequestId))
+        assertEquals(newer, CredentialGrantStore(root).find(newer.extensionId, newer.credentialRequestId))
+        val corrupted = file.readText().replace("\"Bearer\"", "\"Unknown\"")
+        file.writeText(corrupted)
+        assertThrows(CredentialGrantStoreException::class.java) { store.revoke(old.extensionId, old.credentialRequestId) }
+        assertEquals(corrupted, file.readText())
+    }
+    @Test
     fun namedContractCannotUseOrSilentlyRemoveLegacyGrant() {
         val store = CredentialGrantStore(Files.createTempDirectory("grant-named").toFile())
         val old = grant()
         store.putOrReplace(old)
         val request = CredentialRequestDefinition("login", CredentialType.GenericAccount, "Account",
-            realm = "example.com", named = NamedCredentialRequestContract("https://example.com", setOf(
+            realm = "example.com", description = "Test", named = NamedCredentialRequestContract("https://example.com", setOf(
                 NamedCredentialRequestField("oauth.token", NamedSecretType.Token, true, CredentialInjection.Bearer)
             )))
-        assertNull(CredentialRequestContractSnapshot.from(request))
+        assertTrue(CredentialRequestContractSnapshot.from(request) != old.requestContract)
         assertEquals(0, store.reconcileExtension(old.extensionId, old.extensionInstanceId, listOf(request)))
         assertEquals(old, store.find(old.extensionId, "login"))
     }

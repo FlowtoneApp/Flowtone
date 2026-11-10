@@ -67,9 +67,11 @@ class CredentialGrantStore(private val directory: File) {
                 CredentialRequestContractSnapshot.from(request)?.let { request.id to it }
             }.toMap()
             val updated = records.filterNot { grant ->
+                val current = contracts[grant.credentialRequestId]
+                val preserveLegacy = grant.requestContract.named == null && current?.named != null
                 grant.extensionId == extensionId &&
                     (grant.extensionInstanceId != extensionInstanceId ||
-                        contracts[grant.credentialRequestId] != grant.requestContract)
+                        (!preserveLegacy && current != grant.requestContract))
             }
             Triple(updated, records.size - updated.size, updated.size != records.size)
         }
@@ -143,11 +145,13 @@ class CredentialGrantStore(private val directory: File) {
 
     private fun parseNamed(json: JSONObject): NamedCredentialRequestContract {
         require(json.keys().asSequence().toSet() == setOf("origin", "fields"))
+        require(json.opt("origin") is String)
         val array = json.getJSONArray("fields")
         val fields = buildSet {
             repeat(array.length()) { index ->
                 val item = array.getJSONObject(index)
                 require(item.keys().asSequence().toSet() == setOf("id", "type", "required", "injection", "cookieName"))
+                require(listOf("id", "type", "injection").all { item.opt(it) is String })
                 require(item.opt("required") is Boolean && (item.isNull("cookieName") || item.opt("cookieName") is String))
                 require(add(NamedCredentialRequestField(
                     item.getString("id"), NamedSecretType.valueOf(item.getString("type")), item.getBoolean("required"),

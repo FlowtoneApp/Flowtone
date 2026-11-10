@@ -15,7 +15,7 @@ class NamedCredentialDeclarationTest {
         val request = parse()
         assertEquals("https://api.example.com", request.named!!.origin)
         assertEquals(2, request.named!!.fields.size)
-        assertNull(CredentialRequestContractSnapshot.from(request))
+        assertEquals(request.named, CredentialRequestContractSnapshot.from(request)!!.named)
         val summary = extensionCredentialContractDescription(request)
         assertTrue(summary.contains("cookie.session_key"))
         assertTrue(summary.contains("Bearer"))

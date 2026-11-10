@@ -150,7 +150,10 @@ internal fun CredentialSourceInput.normalized(): CredentialSourceInput = copy(
 data class CredentialSourceMatch(
     val contractCompatible: Boolean,
     val metadataCompatible: Boolean,
-    val secretReady: Boolean
+    val secretReady: Boolean,
+    val missingRequiredFields: List<String> = emptyList(),
+    val unavailableRequiredFields: List<String> = emptyList(),
+    val optionalIssues: List<String> = emptyList()
 ) {
     val fullyReady: Boolean get() = contractCompatible && metadataCompatible && secretReady
 }

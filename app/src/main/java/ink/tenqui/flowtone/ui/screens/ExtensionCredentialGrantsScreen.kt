@@ -274,6 +274,9 @@ private fun CredentialGrantRequestCard(
         request.realm?.let {
             Text("服务：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
         }
+        if (request.named != null) {
+            Text(extensionCredentialContractDescription(request), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+        }
         evaluation.grant?.let {
             Text(
                 "绑定凭证：${evaluation.sourceLabel ?: "来源不可用"}",
@@ -359,13 +362,13 @@ internal fun ExtensionCredentialSourcePickerScreen(
                         .firstOrNull { it.manifest.id == installed.manifest.id }
                     val currentRequest = current?.descriptor?.credentialRequests?.firstOrNull { it.id == requestId }
                     val sources = sourceRepository.list()
-                    Triple(current, currentRequest, sources)
-                }
-            }.onSuccess { (current, currentRequest, sources) ->
-                if (generation == refreshGeneration) {
-                    val updatedCandidates = if (currentRequest == null) emptyList() else sources.map {
-                        CredentialCandidate(it, CredentialSourceMatcher.match(it, currentRequest))
+                    val matches = if (currentRequest == null) emptyList() else sources.map {
+                        CredentialCandidate(it, sourceRepository.match(it, currentRequest))
                     }
+                    Triple(current, currentRequest, matches)
+                }
+            }.onSuccess { (current, currentRequest, updatedCandidates) ->
+                if (generation == refreshGeneration) {
                     if (authToken != null && (liveInstalled?.installationInstanceId != current?.installationInstanceId || request != currentRequest || updatedCandidates.none { it.source.id == selectedSource?.id && it.match.fullyReady })) {
                         gate.cancel(authToken)
                         authenticator?.cancel()
@@ -583,6 +586,7 @@ internal fun ExtensionCredentialSourcePickerScreen(
                     Text("${liveInstalled?.manifest?.name ?: installed.manifest.name} · ${currentRequest.label}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(currentRequest.credentialType.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                     currentRequest.realm?.let { Text("服务：$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp)) }
+                    if (currentRequest.named != null) Text(extensionCredentialContractDescription(currentRequest), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
                     Text("所需字段：${currentRequest.contract.fields.joinToString("、") { it.label }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                     Text("只有你明确确认并通过系统身份认证后，才会保存这条授权。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }
@@ -690,6 +694,9 @@ private fun CredentialCandidateCard(
 }
 
 internal fun candidateReason(source: CredentialSource, request: CredentialRequestDefinition?, match: CredentialSourceMatch): String = when {
+    match.missingRequiredFields.isNotEmpty() -> "缺少必需字段：${match.missingRequiredFields.joinToString("、")}"
+    match.unavailableRequiredFields.isNotEmpty() -> "必需字段不可用：${match.unavailableRequiredFields.joinToString("、")}"
+    match.fullyReady && match.optionalIssues.isNotEmpty() -> "可选择 · 可选字段未就绪：${match.optionalIssues.joinToString("、")}"
     match.fullyReady -> "兼容且就绪 · 可选择"
     request == null -> "请求已不可用"
     !match.contractCompatible && source.credentialType != request.credentialType -> "凭据类型不符合请求"
@@ -759,6 +766,15 @@ private fun GrantConsentOverlay(
                 }
                 request?.realm?.let { Text("服务范围：$it", style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 5.dp)) }
+                request?.description?.takeIf { it.isNotBlank() }?.let { Text("用途：$it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp)) }
+                request?.named?.let { named ->
+                    Text("目标：${named.origin}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
+                    Text("授权固定组合：必需字段全部使用；可选字段仅在可用时使用，映射不可由扩展更改。", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
+                    named.fields.sortedBy { it.id }.forEach { field ->
+                        val mapping = field.cookieName?.let { "Cookie ($it)" } ?: "Bearer"
+                        Text("${field.id} · ${field.type.name} · ${if (field.required) "必需" else "可选"} · $mapping", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
                 Text("请求字段：${request?.contract?.fields?.joinToString("、") { it.label }.orEmpty()}",
                     style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                 request?.identifiers?.takeIf { it.isNotEmpty() }?.let { identifiers ->
